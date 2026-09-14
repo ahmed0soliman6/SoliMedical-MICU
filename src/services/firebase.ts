@@ -43,7 +43,8 @@ import { db } from '../db/icuSyncDb.ts';
 // Firebase Initialization
 // -------------------------------------------------------------
 export const firebaseApp = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
-export const firestore = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
+// Bind directly to default Cloud Firestore database instance (matching (default) in console)
+export const firestore = getFirestore(firebaseApp);
 export const auth = getAuth(firebaseApp);
 export const googleProvider = new GoogleAuthProvider();
 
@@ -285,23 +286,27 @@ export async function registerInitialSuperAdminWithFirebaseAuth(data: {
       ? rawUsername.toLowerCase()
       : `${rawUsername.toLowerCase().replace(/\s+/g, '')}@solimedical-micu.org`;
 
+    // Firebase Auth requires passwords >= 6 characters. Format/pad if shorter:
+    const authPassword = data.password.length >= 6 
+      ? data.password 
+      : data.password.padEnd(6, '0');
+
     let uid: string;
 
-    // 1. Create user account in REAL Firebase Authentication (or generate robust fallback UID if Auth provider is disabled)
+    // 1. Create user account in REAL Firebase Authentication
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, data.password);
+      const userCredential = await createUserWithEmailAndPassword(auth, email, authPassword);
       uid = userCredential.user.uid;
     } catch (authErr: any) {
-      console.warn('Firebase Auth notice (falling back to direct Firestore/Dexie registration):', authErr?.code || authErr);
+      console.warn('Firebase Auth notice:', authErr?.code || authErr);
       if (authErr.code === 'auth/email-already-in-use') {
         try {
-          const signInCred = await signInWithEmailAndPassword(auth, email, data.password);
+          const signInCred = await signInWithEmailAndPassword(auth, email, authPassword);
           uid = signInCred.user.uid;
         } catch (signInErr: any) {
           uid = `admin_usr_${Date.now()}`;
         }
       } else {
-        // Safe fallback UID for operation-not-allowed or restricted auth provider
         uid = `admin_usr_${Date.now()}`;
       }
     }
@@ -355,6 +360,56 @@ export async function registerInitialSuperAdminWithFirebaseAuth(data: {
       success: false,
       message: err.message || 'حدث خطأ أثناء إنشاء أول مستخدم في Firebase'
     };
+  }
+}
+
+/**
+ * Forces synchronization of an Admin account directly into Firebase Authentication Users table and Firestore (default) database
+ */
+export async function syncAdminAccountToFirebaseConsole(user: IcuUser): Promise<void> {
+  try {
+    const email = user.email.toLowerCase();
+    const rawPin = user.pinCode || '123456';
+    const authPassword = rawPin.length >= 6 ? rawPin : rawPin.padEnd(6, '0');
+
+    let finalUid = user.uid;
+
+    try {
+      const cred = await createUserWithEmailAndPassword(auth, email, authPassword);
+      finalUid = cred.user.uid;
+      console.log('Successfully created user in Firebase Auth Users list:', email, finalUid);
+    } catch (authErr: any) {
+      if (authErr.code === 'auth/email-already-in-use') {
+        try {
+          const signCred = await signInWithEmailAndPassword(auth, email, authPassword);
+          finalUid = signCred.user.uid;
+          console.log('Successfully signed in existing user in Firebase Auth Users list:', email, finalUid);
+        } catch (e) {
+          console.warn('Sign-in fallback during sync:', e);
+        }
+      } else {
+        console.warn('Firebase Auth create error during sync:', authErr?.code || authErr);
+      }
+    }
+
+    const updatedUser = { ...user, uid: finalUid };
+    
+    // Save to Firestore (default) database
+    await setDoc(doc(firestore, 'users', finalUid), updatedUser, { merge: true });
+    await setDoc(doc(firestore, 'admins', finalUid), {
+      uid: finalUid,
+      email,
+      nameAr: user.nameAr,
+      nameEn: user.nameEn,
+      jobTitle: user.department,
+      createdAt: user.createdAt || new Date().toISOString(),
+    }, { merge: true });
+
+    // Save to local IndexedDB
+    await db.users.put(updatedUser);
+    console.log('Successfully synced Admin to Firestore (default) database and Dexie DB.');
+  } catch (err) {
+    console.warn('Error during syncAdminAccountToFirebaseConsole:', err);
   }
 }
 

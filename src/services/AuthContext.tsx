@@ -13,7 +13,8 @@ import {
   saveUserAccount,
   fetchAllUsers,
   getDefaultPermissionsForRole,
-  testFirestoreConnection
+  testFirestoreConnection,
+  syncAdminAccountToFirebaseConsole
 } from './firebase.ts';
 import { signInWithPopup, signOut as firebaseSignOut, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, User as FirebaseUser } from 'firebase/auth';
 import { db } from '../db/icuSyncDb.ts';
@@ -82,9 +83,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
-      // Fetch users list
+      // Fetch users list and auto-sync admin profile to Firebase Console ((default) DB + Auth)
       const users = await fetchAllUsers();
       setAllUsers(users);
+
+      const adminUser = users.find(u => u.role === StaffRole.ADMIN || u.isSuperAdmin);
+      if (adminUser) {
+        syncAdminAccountToFirebaseConsole(adminUser).catch(err => {
+          console.warn('Auto-sync admin warning:', err);
+        });
+      }
     } catch (e) {
       console.warn('Auth check fallback:', e);
       // Fallback: check localStorage
