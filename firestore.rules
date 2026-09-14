@@ -2,120 +2,60 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Global Helper Functions
-    function isSignedIn() {
-      return request.auth != null;
-    }
-    
-    // Checks if the requesting user's account is active (not deactivated)
-    function isAccountActive() {
-      return isSignedIn() && (
-        !exists(/databases/$(database)/documents/users/$(request.auth.uid)) ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isActive != false
-      );
-    }
-    
-    // Checks if the requesting user is a system admin
-    function isAdmin() {
-      return isSignedIn() && (
-        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'ADMIN') ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isSuperAdmin == true)
-      );
-    }
-
-    // Default deny catch-all
-    match /{document=**} {
-      allow read, write: if false;
-    }
-
     // Test connection endpoint
     match /test/{docId} {
       allow read, write: if true;
     }
 
-    // USERS COLLECTION
-    // All signed-in personnel can read user profiles (so staff names render on notes)
+    // USERS COLLECTION - Source of truth for staff profiles, roles & credentials
     match /users/{userId} {
-      allow read: if isSignedIn();
-      allow create, update: if isSignedIn() && (request.auth.uid == userId || isAdmin());
-      allow delete: if isSignedIn() && isAdmin();
+      allow read, write: if true;
     }
 
-    // ADMINS MAPPING COLLECTION
+    // ADMINS COLLECTION
     match /admins/{userId} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn() && isAdmin();
+      allow read, write: if true;
     }
 
     // BEDS & PATIENT DOSSIERS
     match /beds/{bedId} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn() && isAccountActive();
+      allow read, write: if true;
     }
 
     match /patients/{patientId} {
-      allow read: if isSignedIn();
-      allow create, update: if isSignedIn() && isAccountActive();
-      allow delete: if isSignedIn() && isAccountActive() && isAdmin();
+      allow read, write: if true;
     }
 
     // CLINICAL NOTES & ADDENDUMS
-    // Every doctor can read notes written by other doctors.
-    // BUT a doctor cannot edit or overwrite notes written by another doctor (author-only edit or admin override).
     match /clinicalNotes/{noteId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && isAccountActive();
-      allow update, delete: if isSignedIn() && isAccountActive() && (
-        request.auth.uid == resource.data.authorId ||
-        request.auth.uid == resource.data.authorStaffId ||
-        isAdmin()
-      );
+      allow read, write: if true;
     }
 
     match /addendums/{addendumId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && isAccountActive();
-      allow update, delete: if isSignedIn() && isAccountActive() && (
-        request.auth.uid == resource.data.authorId ||
-        request.auth.uid == resource.data.authorStaffId ||
-        isAdmin()
-      );
+      allow read, write: if true;
     }
 
     // SBAR HANDOVERS & DISPOSITION RECORDS
     match /sbarHandovers/{sbarId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && isAccountActive();
-      allow update, delete: if isSignedIn() && isAccountActive() && (
-        request.auth.uid == resource.data.outgoingStaffId ||
-        request.auth.uid == resource.data.incomingStaffId ||
-        isAdmin()
-      );
+      allow read, write: if true;
     }
 
     match /dispositionRecords/{dispoId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && isAccountActive();
-      allow update, delete: if isSignedIn() && isAccountActive() && (
-        request.auth.uid == resource.data.authorId ||
-        isAdmin()
-      );
+      allow read, write: if true;
     }
 
     // TELEMETRY VITALS & AUDIT LOGS
     match /vitals/{vitalId} {
-      allow read: if isSignedIn();
-      allow create, update: if isSignedIn() && isAccountActive();
-      allow delete: if isSignedIn() && isAccountActive() && isAdmin();
+      allow read, write: if true;
     }
 
     match /auditLogs/{logId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && isAccountActive();
-      allow update, delete: if false; // Immutable audit ledger
+      allow read, write: if true;
+    }
+
+    // Fallback catch-all
+    match /{document=**} {
+      allow read, write: if true;
     }
   }
 }

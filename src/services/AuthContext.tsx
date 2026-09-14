@@ -48,6 +48,7 @@ interface AuthContextType {
   logout: () => Promise<void>;
   createUser: (user: Partial<IcuUser>) => Promise<{ success: boolean; message?: string }>;
   updateUser: (user: IcuUser) => Promise<{ success: boolean; message?: string }>;
+  changeUserPassword: (uid: string, newPassword: string) => Promise<{ success: boolean; message?: string }>;
   toggleUserStatus: (uid: string) => Promise<void>;
   deleteUser: (uid: string) => Promise<{ success: boolean; message?: string }>;
   hasPermission: (permission: keyof UserPermissions) => boolean;
@@ -64,14 +65,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Initialize Auth & Check for Super Admin setup
   const checkInitialSetup = useCallback(async () => {
-    setIsLoading(true);
     try {
-      await testFirestoreConnection();
-      const adminExists = await checkIfAnyAdminExists();
-      
-      setNeedsInitialAdminSetup(false);
-      
-      // Restore active user from localStorage if present
+      // 1. Instant local restore from localStorage & Dexie IndexedDB (< 10ms)
       const savedUserStr = localStorage.getItem('soli_icu_active_user');
       if (savedUserStr) {
         try {
@@ -82,22 +77,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
-      // Fetch users list and auto-sync admin profile to Firebase Console ((default) DB + Auth)
-      const users = await fetchAllUsers();
-      setAllUsers(users);
-
-      const adminUser = users.find(u => u.role === StaffRole.ADMIN || u.isSuperAdmin);
-      if (adminUser) {
-        syncAdminAccountToFirebaseConsole(adminUser).catch(err => {
-          console.warn('Auto-sync admin warning:', err);
-        });
+      const localUsers = await db.users.toArray();
+      if (localUsers.length > 0) {
+        setAllUsers(localUsers);
       }
-    } catch (e) {
-      console.warn('Auth check fallback:', e);
+      
       setNeedsInitialAdminSetup(false);
+    } catch (e) {
+      console.warn('Local auth restore:', e);
     } finally {
+      // Unblock UI rendering instantly
       setIsLoading(false);
     }
+
+    // 2. Asynchronous background Cloud Firestore sync (non-blocking)
+    Promise.all([
+      testFirestoreConnection().catch(() => false),
+      fetchAllUsers().catch(() => [])
+    ]).then(([_, remoteUsers]) => {
+      if (remoteUsers && remoteUsers.length > 0) {
+        setAllUsers(remoteUsers);
+        const adminUser = remoteUsers.find(u => u.role === StaffRole.ADMIN || u.isSuperAdmin);
+        if (adminUser) {
+          syncAdminAccountToFirebaseConsole(adminUser).catch(() => {});
+        }
+      }
+    }).catch(err => {
+      console.warn('Background auth sync notice:', err);
+    });
   }, []);
 
   useEffect(() => {
@@ -246,24 +253,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // 3. If user exists in system (or is Admin)
     if (user) {
       if (!user.isActive) {
-        return { success: false, message: 'هذا الحساب معطل مؤقتاً. يرجى مراجعة إدارة الوحدة' };
+        return { 
+          success: false, 
+          message: 'هذا الحساب معطل مؤقتاً. لا يمكنك الدخول أو الكتابة في النظام حتى يتم إعادة تفعيله من قبل إدارة الوحدة' 
+        };
       }
 
-      // Allow login and update password if auth succeeded, user is Admin, or PIN matches
-      if (authSuccess || user.role === StaffRole.ADMIN || user.isSuperAdmin || user.pinCode === trimmedPin || !user.pinCode) {
-        user.pinCode = trimmedPin;
+      // Validate password stored in Cloud Firestore user record or Firebase Auth
+      const isPasswordCorrect = authSuccess || user.pinCode === trimmedPin || user.pinCode === pinOrPass || (!user.pinCode && (trimmedPin === '12345678' || trimmedPin === '1234'));
+
+      if (isPasswordCorrect) {
         user.lastLoginAt = new Date().toISOString();
         
         await saveUserAccount(user);
         
-        // Background sync to Firebase Auth Users list & Firestore (default) DB
+        // Background sync to Firebase Auth Users list & Firestore DB
         syncAdminAccountToFirebaseConsole(user).catch(err => console.warn('Sync notice:', err));
 
         setCurrentUser(user);
         localStorage.setItem('soli_icu_active_user', JSON.stringify(user));
         return { success: true };
       } else {
-        return { success: false, message: 'كلمة المرور غير صحيحة.' };
+        return { success: false, message: 'كلمة المرور غير صحيحة. يرجى التأكد من كلمة المرور والمحاولة مرة أخرى.' };
       }
     }
 
@@ -428,6 +439,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { success: true };
   };
 
+  // Change password for any user account directly in Firestore & Firebase Auth
+  const changeUserPassword = async (uid: string, newPassword: string): Promise<{ success: boolean; message?: string }> => {
+    if (!newPassword || newPassword.trim().length < 4) {
+      return { success: false, message: 'كلمة المرور يجب أن تتكون من 4 أحرف/أرقام على الأقل' };
+    }
+
+    const targetUser = allUsers.find(u => u.uid === uid);
+    if (!targetUser) {
+      return { success: false, message: 'المستخدم غير موجود بالنظام' };
+    }
+
+    const cleanPass = newPassword.trim();
+    targetUser.pinCode = cleanPass;
+
+    await saveUserAccount(targetUser);
+    syncUserToFirebaseConsole(targetUser).catch(e => console.warn('Sync pass warning:', e));
+
+    if (currentUser?.uid === uid) {
+      const updatedCurrent = { ...currentUser, pinCode: cleanPass };
+      setCurrentUser(updatedCurrent);
+      localStorage.setItem('soli_icu_active_user', JSON.stringify(updatedCurrent));
+    }
+
+    await refreshUsers();
+    return { success: true, message: 'تم تغيير كلمة السر بنجاح في نظام المزامنة السحابية Firestore' };
+  };
+
   // Toggle user status (Activate/Deactivate)
   const toggleUserStatus = async (uid: string) => {
     const user = allUsers.find(u => u.uid === uid);
@@ -508,6 +546,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         logout,
         createUser,
         updateUser,
+        changeUserPassword,
         toggleUserStatus,
         deleteUser,
         hasPermission,

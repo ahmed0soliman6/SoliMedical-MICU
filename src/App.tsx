@@ -127,8 +127,8 @@ export default function App() {
       await reloadData();
       setIsReady(true);
 
-      // Seed & sync with Firestore
-      await seedInitialDataToFirestore();
+      // Seed & sync with Firestore asynchronously in background (non-blocking)
+      seedInitialDataToFirestore().catch(e => console.warn('Background Firestore sync:', e));
     }
     init();
 
@@ -196,26 +196,27 @@ export default function App() {
         onDismissAlert={() => setActiveAlertMessage(null)}
       />
 
-      {/* Responsive Slide-out Sidebar Drawer */}
-      <Sidebar
-        isOpen={isSidebarOpen}
-        onClose={() => setIsSidebarOpen(false)}
-        activeTab={activeTab}
-        onTabChange={(tab) => {
-          setSelectedBedNumber(null);
-          setActiveTab(tab as any);
-        }}
-        onOpenAdmission={handleSmartAdmission}
-        onOpenSearch={() => setIsSearchOpen(true)}
-        onOpenSettings={() => setIsSettingsOpen(true)}
-        onOpenUserManagement={() => setIsUserManagementOpen(true)}
-        beds={beds}
-        patients={patients}
-      />
+      {/* Main Container: Persistent Sidebar on Desktop + Clinical Canvas */}
+      <div className="flex-1 max-w-[1600px] w-full mx-auto flex flex-col lg:flex-row items-start">
+        {/* Responsive Slide-out Sidebar Drawer */}
+        <Sidebar
+          isOpen={isSidebarOpen}
+          onClose={() => setIsSidebarOpen(false)}
+          activeTab={activeTab}
+          onTabChange={(tab) => {
+            setSelectedBedNumber(null);
+            setActiveTab(tab as any);
+          }}
+          onOpenAdmission={handleSmartAdmission}
+          onOpenSearch={() => setIsSearchOpen(true)}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenUserManagement={() => setIsUserManagementOpen(true)}
+          beds={beds}
+          patients={patients}
+        />
 
-
-      {/* Main Clinical Canvas */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-6 space-y-5">
+        {/* Main Clinical Canvas */}
+        <main className="flex-1 min-w-0 w-full p-3 sm:p-6 space-y-5">
         {selectedBedNumber && selectedBed && selectedPatient ? (
           /* Bedside Deep Dive Flowsheet */
           <BedsideFlowsheet
@@ -344,6 +345,7 @@ export default function App() {
           />
         )}
       </main>
+    </div>
 
       {/* System Settings & Customization Modal */}
       <SettingsModal

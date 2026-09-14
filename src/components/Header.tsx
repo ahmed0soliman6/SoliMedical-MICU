@@ -17,7 +17,6 @@ import { BedRecord, PatientDossier } from '../types/schema.ts';
 import { requestNotificationPermission, playIcuAlarmAudio } from '../services/firebase.ts';
 import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
-import { SoliLogo } from './SoliLogo.tsx';
 
 interface HeaderProps {
   beds: BedRecord[];
@@ -112,13 +111,13 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       )}
 
-      <div className="max-w-7xl mx-auto flex items-center justify-between gap-2">
-        {/* Left Side: Sidebar Navigation Button & Official Logo */}
+      <div className="max-w-[1600px] mx-auto flex items-center justify-between gap-2">
+        {/* Left Side: Sidebar Navigation Toggle (Mobile & Tablet) */}
         <div className="flex items-center gap-3">
-          {/* Hamburger Menu Button */}
+          {/* Hamburger Menu Button for Mobile/Tablet */}
           <button
             onClick={onOpenSidebar}
-            className="flex items-center gap-2 px-3 py-1.5 sm:py-2 rounded-xl bg-[#0f172a] hover:bg-teal-950/50 hover:border-teal-500/60 border border-slate-700 text-teal-400 transition-all active:scale-95 shadow-sm cursor-pointer"
+            className="lg:hidden flex items-center gap-2 px-3 py-1.5 sm:py-2 rounded-xl bg-[#0f172a] hover:bg-teal-950/50 hover:border-teal-500/60 border border-slate-700 text-teal-400 transition-all active:scale-95 shadow-sm cursor-pointer"
             title={lang === 'ar' ? 'القائمة الجانبية والصفحات' : 'Open Sidebar & Navigation'}
             aria-label="Toggle navigation menu"
           >
@@ -128,17 +127,12 @@ export const Header: React.FC<HeaderProps> = ({
             </span>
           </button>
 
-          {/* Official Soli Medical MICU Logo Badge */}
-          <div className="flex items-center gap-2.5 pl-1">
-            <SoliLogo className="w-8 h-8 sm:w-9 sm:h-9 drop-shadow-md" />
-            <div className="hidden sm:block">
-              <h1 className="text-xs sm:text-sm font-extrabold tracking-tight text-white leading-none">
-                Soli Medical <span className="text-teal-400">MICU</span>
-              </h1>
-              <p className="text-[10px] text-slate-400 font-mono mt-0.5">
-                {lang === 'ar' ? 'العناية المركزة الباطنة' : 'Intensive Care Unit'}
-              </p>
-            </div>
+          {/* Active View / Unit Title */}
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            <h1 className="text-xs sm:text-sm font-extrabold tracking-tight text-white leading-none">
+              {lang === 'ar' ? 'وحدة العناية المركزة الباطنة (MICU)' : 'Soli Medical MICU System'}
+            </h1>
           </div>
         </div>
 

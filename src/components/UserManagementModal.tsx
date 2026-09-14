@@ -34,7 +34,7 @@ interface UserManagementModalProps {
 }
 
 export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClose }) => {
-  const { allUsers, currentUser, createUser, updateUser, toggleUserStatus, deleteUser } = useAuth();
+  const { allUsers, currentUser, createUser, updateUser, changeUserPassword, toggleUserStatus, deleteUser } = useAuth();
   const { lang, isRTL } = useTranslation();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -43,6 +43,12 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
   const [editingUser, setEditingUser] = useState<IcuUser | null>(null);
   const [showFormPassword, setShowFormPassword] = useState(false);
   const [userToDelete, setUserToDelete] = useState<IcuUser | null>(null);
+
+  // Change Password state
+  const [userToChangePassword, setUserToChangePassword] = useState<IcuUser | null>(null);
+  const [newPasswordInput, setNewPasswordInput] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [changePassStatus, setChangePassStatus] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Form states for creating/editing user
   const [formUsername, setFormUsername] = useState('');
@@ -86,6 +92,41 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
     setFormPermissions(user.permissions || getDefaultPermissionsForRole(user.role));
     setIsAddMode(true);
     setStatusMsg(null);
+  };
+
+  const handleOpenChangePassword = (user: IcuUser) => {
+    setUserToChangePassword(user);
+    setNewPasswordInput('');
+    setShowNewPassword(false);
+    setChangePassStatus(null);
+  };
+
+  const handleSaveNewPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userToChangePassword) return;
+    if (!newPasswordInput.trim() || newPasswordInput.trim().length < 4) {
+      setChangePassStatus({
+        type: 'error',
+        text: lang === 'ar' ? 'كلمة المرور يجب أن تتكون من 4 أحرف/أرقام على الأقل' : 'Password must be at least 4 characters'
+      });
+      return;
+    }
+
+    const res = await changeUserPassword(userToChangePassword.uid, newPasswordInput.trim());
+    if (res.success) {
+      setChangePassStatus({
+        type: 'success',
+        text: res.message || (lang === 'ar' ? 'تم تغيير كلمة السر بنجاح في قاعدة البيانات السحابية' : 'Password updated successfully')
+      });
+      setTimeout(() => {
+        setUserToChangePassword(null);
+      }, 1200);
+    } else {
+      setChangePassStatus({
+        type: 'error',
+        text: res.message || 'Error changing password'
+      });
+    }
   };
 
   const handleConfirmDelete = async () => {

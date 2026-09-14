@@ -71,23 +71,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
     onClose();
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden" dir={isRTL ? 'rtl' : 'ltr'}>
-      {/* Backdrop overlay */}
-      <div 
-        onClick={onClose} 
-        className="fixed inset-0 bg-black/80 backdrop-blur-sm transition-opacity animate-fade-in"
-      />
+    <>
+      {/* Mobile Backdrop overlay (only visible on mobile when isOpen is true) */}
+      {isOpen && (
+        <div 
+          onClick={onClose} 
+          className="lg:hidden fixed inset-0 z-40 bg-black/80 backdrop-blur-sm transition-opacity animate-fade-in"
+        />
+      )}
 
-      {/* Slide-out Drawer Menu (Docked Right in RTL Arabic, Docked Left in LTR English) */}
+      {/* Sidebar Panel (Persistent on Desktop lg:flex, Slide-out Drawer on Mobile) */}
       <aside 
-        className={`fixed top-0 bottom-0 z-10 w-80 max-w-[85vw] h-full bg-[#070d1a] text-white flex flex-col shadow-2xl overflow-hidden transition-transform duration-300 ${
-          isRTL ? 'right-0 border-l border-slate-800' : 'left-0 border-r border-slate-800'
-        }`}
+        className={`
+          ${isOpen ? 'translate-x-0' : (isRTL ? 'translate-x-full lg:translate-x-0' : '-translate-x-full lg:translate-x-0')}
+          fixed lg:sticky top-0 lg:top-16 bottom-0 z-50 lg:z-10 w-72 shrink-0 h-full lg:h-[calc(100vh-4rem)] bg-[#070d1a] text-white flex flex-col shadow-2xl lg:shadow-none overflow-y-auto transition-transform duration-300 ${
+            isRTL ? 'right-0 border-l border-slate-800' : 'left-0 border-r border-slate-800'
+          }
+        `}
       >
-        {/* Sidebar Header: Logo, Branding, Language Switcher & Close button */}
+        {/* Sidebar Header: Logo, Branding, Language Switcher & Mobile Close button */}
         <div className="p-4 bg-[#0a1224] border-b border-slate-800/80 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2.5">
             <SoliLogo className="w-9 h-9 flex-shrink-0 drop-shadow-md" />
@@ -112,10 +115,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <span className="font-mono text-[11px]">{lang === 'ar' ? 'EN' : 'عربي'}</span>
             </button>
 
-            {/* Close Button */}
+            {/* Close Button for Mobile */}
             <button
               onClick={onClose}
-              className="w-8 h-8 rounded-lg bg-slate-800/60 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-all cursor-pointer"
+              className="lg:hidden w-8 h-8 rounded-lg bg-slate-800/60 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-all cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
@@ -334,6 +337,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </div>
       </aside>
-    </div>
+    </>
   );
 };
