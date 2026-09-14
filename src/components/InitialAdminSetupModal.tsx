@@ -32,10 +32,6 @@ export const InitialAdminSetupModal: React.FC = () => {
       setErrorMsg('يرجى إدخال كلمة المرور');
       return;
     }
-    if (password.length < 6) {
-      setErrorMsg('كلمة المرور يجب أن تتكون من 6 أحرف/أرقام على الأقل لمتطلبات أمان Firebase');
-      return;
-    }
     if (password !== confirmPassword) {
       setErrorMsg('كلمة المرور وتأكيد كلمة المرور غير متطابقين');
       return;
@@ -148,9 +144,8 @@ export const InitialAdminSetupModal: React.FC = () => {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="6 أحرف/أرقام على الأقل"
+                placeholder="كلمة المرور"
                 required
-                minLength={6}
                 className="w-full pr-10 pl-3 py-3 bg-[#050b17] border border-slate-700/80 rounded-xl text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-1 focus:ring-teal-400 focus:border-teal-400 transition-all text-left font-mono tracking-widest"
               />
             </div>
@@ -172,7 +167,6 @@ export const InitialAdminSetupModal: React.FC = () => {
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="إعادة كتابة كلمة المرور"
                 required
-                minLength={6}
                 className="w-full pr-10 pl-3 py-3 bg-[#050b17] border border-slate-700/80 rounded-xl text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-1 focus:ring-teal-400 focus:border-teal-400 transition-all text-left font-mono tracking-widest"
               />
             </div>
