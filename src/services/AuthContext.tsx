@@ -15,7 +15,7 @@ import {
   getDefaultPermissionsForRole,
   testFirestoreConnection
 } from './firebase.ts';
-import { signInWithPopup, signOut as firebaseSignOut, onAuthStateChanged, signInWithEmailAndPassword, User as FirebaseUser } from 'firebase/auth';
+import { signInWithPopup, signOut as firebaseSignOut, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, User as FirebaseUser } from 'firebase/auth';
 import { db } from '../db/icuSyncDb.ts';
 
 interface AuthContextType {
@@ -268,6 +268,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Verify PIN / Password locally
     if (user.pinCode && user.pinCode !== trimmedPin) {
       return { success: false, message: 'كلمة المرور غير صحيحة.' };
+    }
+
+    // Attempt auto-provisioning into Firebase Auth Users list now that Email/Password is enabled
+    try {
+      const newAuthCred = await createUserWithEmailAndPassword(auth, user.email, trimmedPin);
+      if (newAuthCred.user) {
+        user.uid = newAuthCred.user.uid;
+      }
+    } catch (createErr: any) {
+      console.warn('Auto-provisioning to Firebase Auth Users list:', createErr?.code || createErr);
     }
 
     user.lastLoginAt = new Date().toISOString();
