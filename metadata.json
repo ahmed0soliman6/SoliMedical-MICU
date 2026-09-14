@@ -1,0 +1,6 @@
+{
+  "name": "Soli Medical MICU (ICU-Sync)",
+  "description": "Medical Intensive Care Unit (MICU) Clinical Handover, Telemetry & Intelligent Longitudinal Patient Archive System",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

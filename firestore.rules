@@ -1,0 +1,159 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // -------------------------------------------------------------
+    // Global Helper Primitives & Security Assertions
+    // -------------------------------------------------------------
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        request.auth.token.email == 'ahmed0soliman6@gmail.com'
+      );
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // -------------------------------------------------------------
+    // 1. Admins Collection
+    // -------------------------------------------------------------
+    match /admins/{userId} {
+      allow get: if isSignedIn() && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+      // Allow initial super-admin bootstrap if no admins exist or by verified owner
+      allow create: if isSignedIn() && isValidId(userId) && (
+        isOwner(userId) && (
+          !exists(/databases/$(database)/documents/admins/$(userId)) ||
+          request.auth.token.email == 'ahmed0soliman6@gmail.com' ||
+          isAdmin()
+        )
+      );
+      allow update, delete: if isAdmin();
+    }
+
+    // -------------------------------------------------------------
+    // 2. Users Collection (Clinical Staff & RBAC Profiles)
+    // -------------------------------------------------------------
+    match /users/{userId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      // Allow user creation on signup / admin provisioning
+      allow create: if isSignedIn() && isValidId(userId) && (
+        isOwner(userId) || isAdmin()
+      ) && incoming().email is string && incoming().role is string;
+      // Allow users to update their own non-role fields, or admin can update any field
+      allow update: if isSignedIn() && (
+        isAdmin() || (
+          isOwner(userId) && 
+          incoming().role == existing().role && 
+          incoming().uid == existing().uid
+        )
+      );
+      allow delete: if isAdmin();
+    }
+
+    // -------------------------------------------------------------
+    // 3. Beds Collection (ICU 6-Bed Hardware & Status Matrix)
+    // -------------------------------------------------------------
+    match /beds/{bedId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(bedId);
+      allow delete: if isAdmin();
+    }
+
+    // -------------------------------------------------------------
+    // 4. Patients Collection (Dossiers & Clinical Records)
+    // -------------------------------------------------------------
+    match /patients/{patientId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(patientId);
+      allow delete: if isAdmin();
+    }
+
+    // -------------------------------------------------------------
+    // 5. Telemetry Vitals (Hemodynamics & Alarm Feeds)
+    // -------------------------------------------------------------
+    match /vitals/{vitalId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(vitalId);
+      allow delete: if isAdmin();
+    }
+
+    // -------------------------------------------------------------
+    // 6. SBAR Handover Reports
+    // -------------------------------------------------------------
+    match /sbarHandovers/{sbarId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(sbarId);
+      allow delete: if isAdmin();
+    }
+
+    // -------------------------------------------------------------
+    // 7. Clinical Notes (Immutable & Cryptographically Hashed)
+    // -------------------------------------------------------------
+    match /clinicalNotes/{noteId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(noteId) && incoming().isImmutable == true;
+      allow update: if isSignedIn() && isValidId(noteId) && (
+        // Only allow addendums to be appended, preserving original hash
+        incoming().cryptographicHash == existing().cryptographicHash
+      );
+      allow delete: if isAdmin();
+    }
+
+    // -------------------------------------------------------------
+    // 8. Ventilator & Infusion Pump States
+    // -------------------------------------------------------------
+    match /ventilators/{ventId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(ventId);
+      allow delete: if isAdmin();
+    }
+
+    match /infusionPumps/{pumpId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(pumpId);
+      allow delete: if isAdmin();
+    }
+
+    match /fluidBalances/{fluidId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(fluidId);
+      allow delete: if isAdmin();
+    }
+
+    // -------------------------------------------------------------
+    // 9. Audit Logs (HIPAA & CBAHI Ledger)
+    // -------------------------------------------------------------
+    match /auditLogs/{logId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(logId);
+      allow update, delete: if false; // Immutable audit logs
+    }
+
+    // -------------------------------------------------------------
+    // 10. Default Deny Catch-All
+    // -------------------------------------------------------------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

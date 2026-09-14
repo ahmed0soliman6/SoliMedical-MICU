@@ -1,0 +1,193 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Healthcare staff and clinical personnel user account in MICU",
+      "type": "object",
+      "required": ["uid", "email", "nameEn", "nameAr", "role", "licenseNumber", "isActive", "createdAt"],
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "maxLength": 256 },
+        "nameEn": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "nameAr": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "role": { 
+          "type": "string", 
+          "enum": ["ADMIN", "CONSULTANT", "SPECIALIST", "RESIDENT", "LEAD_RN", "BEDSIDE_RN", "CLINICAL_PHARMACIST", "RESPIRATORY_THERAPIST", "AUDITOR"] 
+        },
+        "licenseNumber": { "type": "string", "minLength": 3, "maxLength": 50 },
+        "department": { "type": "string", "maxLength": 100 },
+        "badgeId": { "type": "string", "maxLength": 50 },
+        "isActive": { "type": "boolean" },
+        "isSuperAdmin": { "type": "boolean" },
+        "pinCode": { "type": "string", "maxLength": 8 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "lastLoginAt": { "type": "string", "format": "date-time" },
+        "permissions": {
+          "type": "object",
+          "properties": {
+            "canAdmitPatient": { "type": "boolean" },
+            "canDischargePatient": { "type": "boolean" },
+            "canSignNotes": { "type": "boolean" },
+            "canAddAddendum": { "type": "boolean" },
+            "canSignSbar": { "type": "boolean" },
+            "canTitrateMedications": { "type": "boolean" },
+            "canManageUsers": { "type": "boolean" },
+            "canManageSettings": { "type": "boolean" },
+            "canViewAuditLogs": { "type": "boolean" },
+            "canEditVitals": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "Admin": {
+      "title": "Admin",
+      "description": "System administrator mapping for secure role-based access control",
+      "type": "object",
+      "required": ["uid", "email", "createdAt"],
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "maxLength": 256 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "Bed": {
+      "title": "Bed",
+      "description": "ICU Bed record for bed management and status tracking",
+      "type": "object",
+      "required": ["bedNumber", "status"],
+      "properties": {
+        "bedNumber": { "type": "string", "enum": ["01", "02", "03", "04", "05", "06"] },
+        "status": { "type": "string", "enum": ["OCCUPIED", "VACANT", "TRANSFER_PENDING", "DECONTAMINATING", "LOCKED"] },
+        "currentPatientId": { "type": "string", "maxLength": 128 },
+        "lastTelemetryPingUtc": { "type": "string", "format": "date-time" },
+        "activeNotes": { "type": "string", "maxLength": 1000 }
+      }
+    },
+    "Patient": {
+      "title": "Patient",
+      "description": "ICU Patient Dossier record compliant with clinical standards",
+      "type": "object",
+      "required": ["id", "mrn", "fullNameEn", "fullNameAr", "age", "gender", "acuityLevel", "admissionDate", "codeStatus"],
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "mrn": { "type": "string", "minLength": 4, "maxLength": 64 },
+        "fullNameEn": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "fullNameAr": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "age": { "type": "number" },
+        "gender": { "type": "string", "enum": ["MALE", "FEMALE", "OTHER"] },
+        "acuityLevel": { "type": "string", "enum": ["CRITICAL_STAT", "GUARDED_STABLE", "STEP_DOWN", "HIGH_VIGILANCE", "VACANT"] },
+        "admissionDate": { "type": "string", "format": "date-time" },
+        "codeStatus": { "type": "string", "enum": ["FULL_CODE", "DNR", "DNI_ONLY", "PALLIATIVE_COMFORT"] },
+        "currentBedId": { "type": "string", "maxLength": 8 }
+      }
+    },
+    "TelemetryVitals": {
+      "title": "TelemetryVitals",
+      "description": "Real-time hemodynamic telemetry record for ICU bedside monitors",
+      "type": "object",
+      "required": ["id", "bedId", "patientId", "timestamp", "heartRateBpm", "systolicBpMmHg", "diastolicBpMmHg", "meanArterialPressureMmHg", "spo2Percent"],
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "bedId": { "type": "string", "maxLength": 8 },
+        "patientId": { "type": "string", "maxLength": 128 },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "heartRateBpm": { "type": "number" },
+        "systolicBpMmHg": { "type": "number" },
+        "diastolicBpMmHg": { "type": "number" },
+        "meanArterialPressureMmHg": { "type": "number" },
+        "spo2Percent": { "type": "number" },
+        "respiratoryRate": { "type": "number" },
+        "temperatureCelsius": { "type": "number" }
+      }
+    },
+    "SbarHandover": {
+      "title": "SbarHandover",
+      "description": "Structured SBAR shift handover report for clinical shift sign-off",
+      "type": "object",
+      "required": ["id", "bedId", "patientId", "timestamp", "shift", "outgoingStaffId", "situation", "background", "assessment", "recommendation"],
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "bedId": { "type": "string", "maxLength": 8 },
+        "patientId": { "type": "string", "maxLength": 128 },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "shift": { "type": "string", "enum": ["DAY", "NIGHT"] },
+        "outgoingStaffId": { "type": "string", "maxLength": 128 },
+        "incomingStaffId": { "type": "string", "maxLength": 128 },
+        "situation": { "type": "string", "maxLength": 2000 },
+        "background": { "type": "string", "maxLength": 2000 },
+        "assessment": { "type": "string", "maxLength": 2000 },
+        "recommendation": { "type": "string", "maxLength": 2000 },
+        "isDualSigned": { "type": "boolean" }
+      }
+    },
+    "ClinicalNote": {
+      "title": "ClinicalNote",
+      "description": "Immutable clinical note with cryptographic hash validation",
+      "type": "object",
+      "required": ["id", "patientId", "noteType", "title", "content", "authorId", "authorName", "authorRole", "timestamp", "isImmutable", "cryptographicHash"],
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "patientId": { "type": "string", "maxLength": 128 },
+        "bedId": { "type": "string", "maxLength": 8 },
+        "noteType": { "type": "string", "maxLength": 64 },
+        "title": { "type": "string", "minLength": 2, "maxLength": 250 },
+        "content": { "type": "string", "minLength": 1 },
+        "authorId": { "type": "string", "maxLength": 128 },
+        "authorName": { "type": "string", "maxLength": 120 },
+        "authorRole": { "type": "string", "maxLength": 64 },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "isImmutable": { "type": "boolean" },
+        "cryptographicHash": { "type": "string", "maxLength": 64 }
+      }
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "System and clinical action audit log for HIPAA and CBAHI compliance",
+      "type": "object",
+      "required": ["id", "timestamp", "eventType", "description", "immutableHash"],
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "eventType": { "type": "string", "maxLength": 64 },
+        "description": { "type": "string", "maxLength": 1000 },
+        "targetBedId": { "type": "string", "maxLength": 8 },
+        "targetPatientMrn": { "type": "string", "maxLength": 64 },
+        "immutableHash": { "type": "string", "maxLength": 64 }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "entities/User" },
+      "description": "Healthcare professionals and clinical users"
+    },
+    "/admins/{userId}": {
+      "schema": { "$ref": "entities/Admin" },
+      "description": "Designated system administrators and medical directors"
+    },
+    "/beds/{bedId}": {
+      "schema": { "$ref": "entities/Bed" },
+      "description": "MICU 6-bed matrix hardware and occupancy states"
+    },
+    "/patients/{patientId}": {
+      "schema": { "$ref": "entities/Patient" },
+      "description": "Inpatient dossiers and admission data"
+    },
+    "/vitals/{vitalId}": {
+      "schema": { "$ref": "entities/TelemetryVitals" },
+      "description": "Real-time hemodynamic telemetry feeds"
+    },
+    "/sbarHandovers/{sbarId}": {
+      "schema": { "$ref": "entities/SbarHandover" },
+      "description": "Clinical shift handover and transfer records"
+    },
+    "/clinicalNotes/{noteId}": {
+      "schema": { "$ref": "entities/ClinicalNote" },
+      "description": "Cryptographically hashed physician and nurse notes"
+    },
+    "/auditLogs/{logId}": {
+      "schema": { "$ref": "entities/AuditLog" },
+      "description": "HIPAA compliance audit ledger"
+    }
+  }
+}
