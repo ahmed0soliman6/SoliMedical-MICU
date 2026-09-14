@@ -16,7 +16,12 @@ import {
   Sparkles,
   Sliders,
   Search,
-  Filter
+  Filter,
+  Eye,
+  EyeOff,
+  Trash2,
+  AlertTriangle,
+  UserX
 } from 'lucide-react';
 import { useAuth } from '../services/AuthContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
@@ -29,23 +34,21 @@ interface UserManagementModalProps {
 }
 
 export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClose }) => {
-  const { allUsers, currentUser, createUser, updateUser, toggleUserStatus } = useAuth();
+  const { allUsers, currentUser, createUser, updateUser, toggleUserStatus, deleteUser } = useAuth();
   const { lang, isRTL } = useTranslation();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('ALL');
   const [isAddMode, setIsAddMode] = useState(false);
   const [editingUser, setEditingUser] = useState<IcuUser | null>(null);
+  const [showFormPassword, setShowFormPassword] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<IcuUser | null>(null);
 
   // Form states for creating/editing user
-  const [formNameAr, setFormNameAr] = useState('');
-  const [formNameEn, setFormNameEn] = useState('');
-  const [formEmail, setFormEmail] = useState('');
+  const [formUsername, setFormUsername] = useState('');
+  const [formDisplayName, setFormDisplayName] = useState('');
+  const [formPassword, setFormPassword] = useState('');
   const [formRole, setFormRole] = useState<StaffRole>(StaffRole.BEDSIDE_RN);
-  const [formLicense, setFormLicense] = useState('');
-  const [formDept, setFormDept] = useState('Medical Intensive Care');
-  const [formBadge, setFormBadge] = useState('');
-  const [formPin, setFormPin] = useState('1234');
   const [formPermissions, setFormPermissions] = useState<UserPermissions>(
     getDefaultPermissionsForRole(StaffRole.BEDSIDE_RN)
   );
@@ -60,14 +63,11 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
 
   const handleOpenAdd = () => {
     setEditingUser(null);
-    setFormNameAr('');
-    setFormNameEn('');
-    setFormEmail('');
+    setFormUsername('');
+    setFormDisplayName('');
+    setFormPassword('');
+    setShowFormPassword(false);
     setFormRole(StaffRole.BEDSIDE_RN);
-    setFormLicense(`EMS-EGYPT-${Math.floor(10000 + Math.random() * 90000)}`);
-    setFormDept('MICU');
-    setFormBadge(`STF-${Math.floor(100 + Math.random() * 900)}`);
-    setFormPin('1234');
     setFormPermissions(getDefaultPermissionsForRole(StaffRole.BEDSIDE_RN));
     setIsAddMode(true);
     setStatusMsg(null);
@@ -75,35 +75,49 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
 
   const handleOpenEdit = (user: IcuUser) => {
     setEditingUser(user);
-    setFormNameAr(user.nameAr);
-    setFormNameEn(user.nameEn);
-    setFormEmail(user.email);
+    const uname = user.email.includes('@solimedical-micu.org') 
+      ? user.email.replace('@solimedical-micu.org', '') 
+      : (user.email.split('@')[0] || user.badgeId);
+    setFormUsername(uname);
+    setFormDisplayName(user.nameAr || user.nameEn);
+    setFormPassword(user.pinCode || '12345678');
+    setShowFormPassword(false);
     setFormRole(user.role);
-    setFormLicense(user.licenseNumber);
-    setFormDept(user.department);
-    setFormBadge(user.badgeId);
-    setFormPin(user.pinCode || '1234');
     setFormPermissions(user.permissions || getDefaultPermissionsForRole(user.role));
     setIsAddMode(true);
     setStatusMsg(null);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!userToDelete) return;
+    setStatusMsg(null);
+    const res = await deleteUser(userToDelete.uid);
+    if (res.success) {
+      setStatusMsg({ type: 'success', text: res.message || (lang === 'ar' ? 'تم حذف الحساب بنجاح' : 'User deleted successfully') });
+    } else {
+      setStatusMsg({ type: 'error', text: res.message || (lang === 'ar' ? 'خطأ أثناء حذف الحساب' : 'Error deleting user') });
+    }
+    setUserToDelete(null);
   };
 
   const handleSaveUser = async (e: React.FormEvent) => {
     e.preventDefault();
     setStatusMsg(null);
 
+    const cleanUsername = formUsername.trim().toLowerCase().replace(/\s+/g, '');
+    const userEmail = cleanUsername.includes('@') ? cleanUsername : `${cleanUsername}@solimedical-micu.org`;
+    const cleanDisplayName = formDisplayName.trim() || cleanUsername;
+    const cleanPassword = formPassword.length >= 6 ? formPassword : formPassword.padEnd(6, '0');
+
     if (editingUser) {
       // Update
       const updated: IcuUser = {
         ...editingUser,
-        nameAr: formNameAr,
-        nameEn: formNameEn,
-        email: formEmail,
+        nameAr: cleanDisplayName,
+        nameEn: cleanDisplayName,
+        email: userEmail,
         role: formRole,
-        licenseNumber: formLicense,
-        department: formDept,
-        badgeId: formBadge,
-        pinCode: formPin,
+        pinCode: cleanPassword,
         permissions: formPermissions,
       };
       const res = await updateUser(updated);
@@ -116,14 +130,14 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
     } else {
       // Create
       const res = await createUser({
-        nameAr: formNameAr,
-        nameEn: formNameEn,
-        email: formEmail,
+        nameAr: cleanDisplayName,
+        nameEn: cleanDisplayName,
+        email: userEmail,
         role: formRole,
-        licenseNumber: formLicense,
-        department: formDept,
-        badgeId: formBadge,
-        pinCode: formPin,
+        licenseNumber: `LIC-${Math.floor(100000 + Math.random() * 900000)}`,
+        department: 'Medical Intensive Care Unit',
+        badgeId: cleanUsername,
+        pinCode: cleanPassword,
         permissions: formPermissions,
       });
       if (res.success) {
@@ -219,27 +233,40 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
             <form onSubmit={handleSaveUser} className="space-y-4 bg-[#080f1e] p-4 sm:p-5 rounded-2xl border border-slate-800">
               <div className="flex items-center justify-between pb-2 border-b border-slate-800">
                 <h3 className="text-sm font-bold text-teal-300 flex items-center gap-2">
-                  <BadgeCheck className="w-4 h-4" />
-                  <span>{editingUser ? (lang === 'ar' ? 'تعديل بيانات وصلاحيات الكادر' : 'Edit Staff Profile') : (lang === 'ar' ? 'إضافة مستخدم جديد وتعيين الدور' : 'New Staff Member Registration')}</span>
+                  <UserPlus className="w-4 h-4 text-teal-400" />
+                  <span>{editingUser ? (lang === 'ar' ? 'تعديل بيانات المستخدم' : 'Edit User Profile') : (lang === 'ar' ? 'إضافة مستخدم جديد إلى المنظومة:' : 'Add New User to System:')}</span>
                 </h3>
                 <button
                   type="button"
                   onClick={() => setIsAddMode(false)}
-                  className="text-xs text-slate-400 hover:text-white px-2 py-1 rounded-lg bg-slate-800/60"
+                  className="text-xs text-slate-400 hover:text-white px-2.5 py-1 rounded-lg bg-slate-800/60 transition-colors"
                 >
-                  {lang === 'ar' ? 'إلغاء والعودة للقائمة' : 'Cancel'}
+                  {lang === 'ar' ? 'إلغاء' : 'Cancel'}
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                    {lang === 'ar' ? 'الاسم بالعربية *' : 'Name (Arabic) *'}
+                  <label className="block text-[11px] font-semibold text-teal-300 mb-1">
+                    {lang === 'ar' ? 'اسم المستخدم (Username) *' : 'Username *'}
                   </label>
                   <input
                     type="text"
-                    value={formNameAr}
-                    onChange={(e) => setFormNameAr(e.target.value)}
+                    value={formUsername}
+                    onChange={(e) => setFormUsername(e.target.value)}
+                    required
+                    className="w-full bg-[#0a1224] border border-slate-700 focus:border-teal-400 rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-mono"
+                    placeholder="admin"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-teal-300 mb-1">
+                    {lang === 'ar' ? 'الاسم الظاهر (Display Name) *' : 'Display Name *'}
+                  </label>
+                  <input
+                    type="text"
+                    value={formDisplayName}
+                    onChange={(e) => setFormDisplayName(e.target.value)}
                     required
                     className="w-full bg-[#0a1224] border border-slate-700 focus:border-teal-400 rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
                     placeholder="د. أحمد سليمان"
@@ -247,110 +274,61 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
                 </div>
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                    {lang === 'ar' ? 'الاسم بالإنجليزية *' : 'Name (English) *'}
+                    {lang === 'ar' ? 'كلمة المرور (6 أحرف فأكثر) *' : 'Password (6+ chars) *'}
                   </label>
-                  <input
-                    type="text"
-                    value={formNameEn}
-                    onChange={(e) => setFormNameEn(e.target.value)}
-                    required
-                    className="w-full bg-[#0a1224] border border-slate-700 focus:border-teal-400 rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
-                    placeholder="Dr. Ahmed Soliman"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                    {lang === 'ar' ? 'البريد الإلكتروني *' : 'Email *'}
-                  </label>
-                  <input
-                    type="email"
-                    value={formEmail}
-                    onChange={(e) => setFormEmail(e.target.value)}
-                    required
-                    className="w-full bg-[#0a1224] border border-slate-700 focus:border-teal-400 rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
-                    placeholder="doctor@hospital.org"
-                  />
+                  <div className="relative">
+                    <input
+                      type={showFormPassword ? 'text' : 'password'}
+                      value={formPassword}
+                      onChange={(e) => setFormPassword(e.target.value)}
+                      required
+                      minLength={6}
+                      className="w-full bg-[#0a1224] border border-slate-700 focus:border-teal-400 rounded-xl pl-3 pr-9 py-2 text-xs text-white focus:outline-none font-mono"
+                      placeholder="••••••••"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowFormPassword(!showFormPassword)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-teal-300 p-1 rounded-md transition-colors cursor-pointer"
+                      title={showFormPassword ? (lang === 'ar' ? 'إخفاء كلمة المرور' : 'Hide password') : (lang === 'ar' ? 'إظهار كلمة المرور' : 'Show password')}
+                    >
+                      {showFormPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                    {lang === 'ar' ? 'الدور السريري (Staff Role) *' : 'Clinical Role *'}
+                    {lang === 'ar' ? 'الدور والصلاحية (Role) *' : 'Role & Permissions *'}
                   </label>
                   <select
                     value={formRole}
                     onChange={(e) => handleRoleChange(e.target.value as StaffRole)}
                     className="w-full bg-[#0a1224] border border-slate-700 focus:border-teal-400 rounded-xl px-3 py-2 text-xs text-teal-300 focus:outline-none"
                   >
-                    <option value={StaffRole.ADMIN}>👑 المشرف العام (ADMIN)</option>
-                    <option value={StaffRole.CONSULTANT}>🩺 استشاري عناية (CONSULTANT)</option>
-                    <option value={StaffRole.SPECIALIST}>👨‍⚕️ أخصائي عناية (SPECIALIST)</option>
-                    <option value={StaffRole.RESIDENT}>👨‍⚕️ مقيم عناية (RESIDENT)</option>
-                    <option value={StaffRole.LEAD_RN}>👩‍⚕️ مسؤول تمريض (LEAD_RN)</option>
-                    <option value={StaffRole.BEDSIDE_RN}>💉 تمريض سريري (BEDSIDE_RN)</option>
-                    <option value={StaffRole.CLINICAL_PHARMACIST}>💊 صيدلي إكلينيكي (PHARMACIST)</option>
-                    <option value={StaffRole.RESPIRATORY_THERAPIST}>🫁 علاج تنفسي (RT)</option>
-                    <option value={StaffRole.AUDITOR}>📋 مدقق جودة (AUDITOR)</option>
+                    <option value={StaffRole.ADMIN}>مدير النظام (Admin)</option>
+                    <option value={StaffRole.CONSULTANT}>استشاري عناية (Consultant)</option>
+                    <option value={StaffRole.SPECIALIST}>أخصائي عناية (Specialist)</option>
+                    <option value={StaffRole.RESIDENT}>طبيب مقيم (Resident)</option>
+                    <option value={StaffRole.LEAD_RN}>مسؤول تمريض (Charge Nurse)</option>
+                    <option value={StaffRole.BEDSIDE_RN}>تمريض سريري (Bedside RN)</option>
+                    <option value={StaffRole.CLINICAL_PHARMACIST}>صيدلي إكلينيكي (Pharmacist)</option>
+                    <option value={StaffRole.RESPIRATORY_THERAPIST}>علاج تنفسي (RT)</option>
+                    <option value={StaffRole.AUDITOR}>سكرتير (استقبال وحجوزات)</option>
                   </select>
                 </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                    {lang === 'ar' ? 'ترخيص نقابة أطباء مصر (EMS) *' : 'License Number (EMS) *'}
-                  </label>
-                  <input
-                    type="text"
-                    value={formLicense}
-                    onChange={(e) => setFormLicense(e.target.value)}
-                    required
-                    className="w-full bg-[#0a1224] border border-slate-700 focus:border-teal-400 rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-mono"
-                  />
-                </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                    {lang === 'ar' ? 'القسم / الوحدة' : 'Department'}
-                  </label>
-                  <input
-                    type="text"
-                    value={formDept}
-                    onChange={(e) => setFormDept(e.target.value)}
-                    className="w-full bg-[#0a1224] border border-slate-700 focus:border-teal-400 rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                    {lang === 'ar' ? 'معرف البطاقة (Badge ID)' : 'Badge ID'}
-                  </label>
-                  <input
-                    type="text"
-                    value={formBadge}
-                    onChange={(e) => setFormBadge(e.target.value)}
-                    className="w-full bg-[#0a1224] border border-slate-700 focus:border-teal-400 rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                    {lang === 'ar' ? 'رمز PIN السريري' : 'Clinical PIN'}
-                  </label>
-                  <input
-                    type="password"
-                    value={formPin}
-                    onChange={(e) => setFormPin(e.target.value)}
-                    className="w-full bg-[#0a1224] border border-slate-700 focus:border-teal-400 rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-mono text-center"
-                    placeholder="••••"
-                  />
-                </div>
-              </div>
-
-              {/* Granular Permission Matrix */}
+              {/* System Pages Permission Matrix */}
               <div className="mt-4 pt-3 border-t border-slate-800">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-bold text-teal-300 flex items-center gap-1.5">
                     <Sliders className="w-3.5 h-3.5" />
-                    <span>{lang === 'ar' ? 'مصفوفة الصلاحيات الممنوحة لهذا المستخدم' : 'Fine-Grained Permissions'}</span>
+                    <span>
+                      {lang === 'ar' 
+                        ? `تخصيص صفحات النظام المسموحة قبل الإنشاء (${Object.values(formPermissions).filter(Boolean).length} من ${Object.keys(formPermissions).length} صفحة محددة)`
+                        : `System Permissions Allowed (${Object.values(formPermissions).filter(Boolean).length} of ${Object.keys(formPermissions).length} granted)`
+                      }
+                    </span>
                   </span>
                   <button
                     type="button"
@@ -393,7 +371,10 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
                   type="submit"
                   className="px-5 py-2 rounded-xl bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-slate-950 font-bold text-xs shadow-md"
                 >
-                  {lang === 'ar' ? 'حفظ وتطبيق الصلاحيات' : 'Save User & Permissions'}
+                  {editingUser 
+                    ? (lang === 'ar' ? 'حفظ التعديلات' : 'Save Changes')
+                    : (lang === 'ar' ? '+ إنشاء المستخدم' : '+ Create User')
+                  }
                 </button>
               </div>
             </form>
@@ -479,39 +460,69 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <button
+                            type="button"
                             onClick={() => handleOpenEdit(user)}
-                            className="p-1.5 rounded-lg bg-slate-800/60 hover:bg-slate-700 text-slate-400 hover:text-teal-300 transition-colors"
+                            className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-teal-300 text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer border border-slate-700/60"
                             title={lang === 'ar' ? 'تعديل البيانات والصلاحيات' : 'Edit profile & permissions'}
                           >
-                            <Edit className="w-3.5 h-3.5" />
+                            <Edit className="w-3.5 h-3.5 text-teal-400" />
+                            <span>{lang === 'ar' ? 'تعديل' : 'Edit'}</span>
                           </button>
-                          {!user.isSuperAdmin && (
+
+                          {!isCurrent && (
                             <button
+                              type="button"
                               onClick={() => toggleUserStatus(user.uid)}
-                              className={`p-1.5 rounded-lg transition-colors ${
+                              className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer border ${
                                 user.isActive 
-                                  ? 'bg-red-950/40 hover:bg-red-900/60 text-red-400' 
-                                  : 'bg-teal-950/40 hover:bg-teal-900/60 text-teal-400'
+                                  ? 'bg-amber-950/50 hover:bg-amber-900/70 text-amber-300 border-amber-800/50' 
+                                  : 'bg-emerald-950/50 hover:bg-emerald-900/70 text-emerald-300 border-emerald-800/50'
                               }`}
-                              title={user.isActive ? (lang === 'ar' ? 'تعطيل الحساب' : 'Deactivate') : (lang === 'ar' ? 'تفعيل الحساب' : 'Activate')}
+                              title={user.isActive ? (lang === 'ar' ? 'إيقاف الحساب مؤقتاً' : 'Deactivate') : (lang === 'ar' ? 'إعادة تفعيل الحساب' : 'Activate')}
                             >
-                              {user.isActive ? <XCircle className="w-3.5 h-3.5" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                              {user.isActive ? (
+                                <>
+                                  <UserX className="w-3.5 h-3.5 text-amber-400" />
+                                  <span>{lang === 'ar' ? 'تعطيل' : 'Disable'}</span>
+                                </>
+                              ) : (
+                                <>
+                                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                                  <span>{lang === 'ar' ? 'تفعيل' : 'Activate'}</span>
+                                </>
+                              )}
+                            </button>
+                          )}
+
+                          {!isCurrent && (
+                            <button
+                              type="button"
+                              onClick={() => setUserToDelete(user)}
+                              className="px-2.5 py-1 rounded-lg bg-red-950/60 hover:bg-red-900/80 text-red-300 border border-red-800/60 text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer shadow-sm"
+                              title={lang === 'ar' ? 'حذف الحساب نهائياً' : 'Delete Account'}
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                              <span>{lang === 'ar' ? 'حذف' : 'Delete'}</span>
                             </button>
                           )}
                         </div>
                       </div>
 
-                      {/* Meta Tags */}
+                      {/* Meta Tags & Status */}
                       <div className="mt-3 pt-2.5 border-t border-slate-800/60 flex flex-wrap items-center justify-between gap-2 text-[10px] text-slate-400 font-mono">
                         <div className="flex items-center gap-2">
                           <span className="text-teal-400 font-bold">{user.role}</span>
                           <span>•</span>
                           <span>{user.badgeId}</span>
                         </div>
-                        <div>
-                          <span>LIC: {user.licenseNumber}</span>
+                        <div className="flex items-center gap-2">
+                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                            user.isActive ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-800/40' : 'bg-red-950/80 text-red-300 border border-red-800/40'
+                          }`}>
+                            {user.isActive ? (lang === 'ar' ? 'نشط' : 'Active') : (lang === 'ar' ? 'موقوف' : 'Deactivated')}
+                          </span>
                         </div>
                       </div>
 
@@ -558,6 +569,57 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
         </div>
 
       </div>
+
+      {/* Delete User Confirmation Modal */}
+      {userToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+          <div className="w-full max-w-md bg-[#0a1224] border border-red-900/60 rounded-3xl p-6 text-slate-100 shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-red-950/80 border border-red-500/50 flex items-center justify-center text-red-400 shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">
+                  {lang === 'ar' ? `تأكيد حذف حساب المستخدم: ${userToDelete.nameAr || userToDelete.nameEn}` : `Confirm Deleting User: ${userToDelete.nameEn}`}
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  {userToDelete.email} • {userToDelete.role}
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 text-xs text-slate-300 space-y-2">
+              <div className="flex items-center gap-2 text-amber-300 font-bold">
+                <ShieldCheck className="w-4 h-4 text-amber-400" />
+                <span>{lang === 'ar' ? 'حماية الأرشيف السريري وسجلات المرضى' : 'Clinical Record Integrity Guarantee'}</span>
+              </div>
+              <p className="text-[11px] leading-relaxed text-slate-300">
+                {lang === 'ar'
+                  ? 'عند حذف هذا الحساب، لن يتمكن الكادر من تسجيل الدخول مجدداً. ومراعاةً للمعايير الطبية الدولية (CBAHI / JCI)، تظل جميع السجلات الطبية والملاحظات والتقارير (SBAR) المكتوبة مسبقاً باسمه محفوظة بأسماء أصحابها التاريخية في ملفات المرضى.'
+                  : 'Upon deletion, this staff member will no longer be able to log in. In compliance with CBAHI/JCI regulations, all historic clinical notes, SBAR reports, and vital sign logs recorded by this user will remain fully preserved under their original name in patient files.'}
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setUserToDelete(null)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 cursor-pointer"
+              >
+                {lang === 'ar' ? 'إلغاء الأمر' : 'Cancel'}
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-bold text-xs shadow-md shadow-red-950/50 flex items-center gap-1.5 cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{lang === 'ar' ? 'حذف الحساب نهائياً' : 'Delete Account'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

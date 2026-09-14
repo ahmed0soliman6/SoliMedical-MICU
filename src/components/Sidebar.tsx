@@ -25,6 +25,7 @@ import { BedRecord, PatientDossier, StaffRole } from '../types/schema.ts';
 import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
 import { useAuth } from '../services/AuthContext.tsx';
+import { SoliLogo } from './SoliLogo.tsx';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -89,11 +90,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Sidebar Header: Logo, Branding, Language Switcher & Close button */}
         <div className="p-4 bg-[#0a1224] border-b border-slate-800/80 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-teal-600 to-cyan-500 p-0.5 shadow-lg shadow-teal-500/20 flex-shrink-0">
-              <div className="w-full h-full bg-[#070d1a] rounded-[10px] flex items-center justify-center text-teal-400">
-                <Activity className="w-4 h-4 animate-pulse" />
-              </div>
-            </div>
+            <SoliLogo className="w-9 h-9 flex-shrink-0 drop-shadow-md" />
             <div>
               <h2 className="text-xs font-black tracking-tight text-white">
                 {lang === 'ar' ? 'سولي ميديكال' : 'SOLI MEDICAL'}

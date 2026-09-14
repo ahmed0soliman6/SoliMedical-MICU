@@ -6,6 +6,7 @@ import {
   setDoc, 
   getDoc,
   getDocs, 
+  deleteDoc,
   onSnapshot, 
   query, 
   orderBy, 
@@ -364,11 +365,26 @@ export async function registerInitialSuperAdminWithFirebaseAuth(data: {
 }
 
 /**
- * Forces synchronization of an Admin account directly into Firebase Authentication Users table and Firestore (default) database
+ * Forces synchronization of ANY user account directly into Firebase Authentication Users table and Firestore (default) database
  */
 export async function syncAdminAccountToFirebaseConsole(user: IcuUser): Promise<void> {
+  return syncUserToFirebaseConsole(user);
+}
+
+export async function deleteUserAccount(uid: string): Promise<void> {
+  await db.users.delete(uid);
   try {
-    const email = user.email.toLowerCase();
+    await deleteDoc(doc(firestore, 'users', uid));
+    await deleteDoc(doc(firestore, 'admins', uid));
+  } catch (err) {
+    console.warn('Firestore delete user warning:', err);
+  }
+}
+
+export async function syncUserToFirebaseConsole(user: IcuUser): Promise<void> {
+  try {
+    const rawEmail = user.email ? user.email.toLowerCase() : `${user.uid}@solimedical-micu.org`;
+    const email = rawEmail.includes('@') ? rawEmail : `${rawEmail}@solimedical-micu.org`;
     const rawPin = user.pinCode || '123456';
     const authPassword = rawPin.length >= 6 ? rawPin : rawPin.padEnd(6, '0');
 
@@ -392,24 +408,31 @@ export async function syncAdminAccountToFirebaseConsole(user: IcuUser): Promise<
       }
     }
 
-    const updatedUser = { ...user, uid: finalUid };
+    if (user.uid && user.uid !== finalUid) {
+      deleteUserAccount(user.uid).catch(e => console.warn('Old user cleanup error:', e));
+    }
+
+    const updatedUser = { ...user, uid: finalUid, email };
     
-    // Save to Firestore (default) database
+    // Save to Firestore (default) database users collection
     await setDoc(doc(firestore, 'users', finalUid), updatedUser, { merge: true });
-    await setDoc(doc(firestore, 'admins', finalUid), {
-      uid: finalUid,
-      email,
-      nameAr: user.nameAr,
-      nameEn: user.nameEn,
-      jobTitle: user.department,
-      createdAt: user.createdAt || new Date().toISOString(),
-    }, { merge: true });
+    
+    if (user.role === StaffRole.ADMIN || user.isSuperAdmin) {
+      await setDoc(doc(firestore, 'admins', finalUid), {
+        uid: finalUid,
+        email,
+        nameAr: user.nameAr,
+        nameEn: user.nameEn,
+        jobTitle: user.department,
+        createdAt: user.createdAt || new Date().toISOString(),
+      }, { merge: true });
+    }
 
     // Save to local IndexedDB
     await db.users.put(updatedUser);
-    console.log('Successfully synced Admin to Firestore (default) database and Dexie DB.');
+    console.log('Successfully synced User to solimedical-micu Firebase Auth & Firestore (default) database.');
   } catch (err) {
-    console.warn('Error during syncAdminAccountToFirebaseConsole:', err);
+    console.warn('Error during syncUserToFirebaseConsole:', err);
   }
 }
 
@@ -472,40 +495,75 @@ export async function registerInitialSuperAdmin(adminData: {
  */
 export async function saveUserAccount(user: IcuUser): Promise<void> {
   await db.users.put(user);
-  try {
-    await setDoc(doc(firestore, 'users', user.uid), user, { merge: true });
-    if (user.role === StaffRole.ADMIN || user.isSuperAdmin) {
-      await setDoc(doc(firestore, 'admins', user.uid), {
-        uid: user.uid,
-        email: user.email,
-        nameEn: user.nameEn,
-        nameAr: user.nameAr,
-        createdAt: user.createdAt,
-      }, { merge: true });
-    }
-  } catch (err) {
-    handleFirestoreError(err, OperationType.WRITE, `users/${user.uid}`);
+  // Asynchronous non-blocking Cloud Firestore write
+  setDoc(doc(firestore, 'users', user.uid), user, { merge: true }).catch((err) => {
+    console.warn('Background Firestore save user warning:', err);
+  });
+  if (user.role === StaffRole.ADMIN || user.isSuperAdmin) {
+    setDoc(doc(firestore, 'admins', user.uid), {
+      uid: user.uid,
+      email: user.email,
+      nameEn: user.nameEn,
+      nameAr: user.nameAr,
+      createdAt: user.createdAt,
+    }, { merge: true }).catch((err) => {
+      console.warn('Background Firestore save admin warning:', err);
+    });
   }
 }
 
 /**
- * Fetch all users from cloud and sync with local DB
+ * Fetch all users from cloud and sync with local DB, automatically purging duplicate records
  */
 export async function fetchAllUsers(): Promise<IcuUser[]> {
+  let rawList: IcuUser[] = [];
   try {
     const snap = await getDocs(collection(firestore, 'users'));
-    const remoteUsers: IcuUser[] = [];
     snap.forEach((d) => {
-      remoteUsers.push(d.data() as IcuUser);
+      rawList.push(d.data() as IcuUser);
     });
-    if (remoteUsers.length > 0) {
-      await db.users.bulkPut(remoteUsers);
-      return remoteUsers;
-    }
   } catch (err) {
     handleFirestoreError(err, OperationType.LIST, 'users');
   }
-  return await db.users.toArray();
+
+  const localList = await db.users.toArray();
+  for (const u of localList) {
+    if (!rawList.some(r => r.uid === u.uid)) {
+      rawList.push(u);
+    }
+  }
+
+  // Deduplicate by email / badgeId
+  const uniqueUsersMap = new Map<string, IcuUser>();
+  const duplicatesToDelete: string[] = [];
+
+  for (const user of rawList) {
+    const key = (user.email || user.badgeId || user.uid).toLowerCase().trim();
+    if (!uniqueUsersMap.has(key)) {
+      uniqueUsersMap.set(key, user);
+    } else {
+      const existing = uniqueUsersMap.get(key)!;
+      // Keep the one with newer lastLoginAt or name updated or superAdmin flag
+      const isUserNewer = (user.lastLoginAt || user.createdAt || '') > (existing.lastLoginAt || existing.createdAt || '');
+      if (isUserNewer || (user.isSuperAdmin && !existing.isSuperAdmin)) {
+        duplicatesToDelete.push(existing.uid);
+        uniqueUsersMap.set(key, user);
+      } else {
+        duplicatesToDelete.push(user.uid);
+      }
+    }
+  }
+
+  // Purge duplicate records from local DB and Firestore
+  for (const dupUid of duplicatesToDelete) {
+    deleteUserAccount(dupUid).catch(err => console.warn('Purge duplicate user warning:', err));
+  }
+
+  const finalUsers = Array.from(uniqueUsersMap.values());
+  await db.users.clear();
+  await db.users.bulkPut(finalUsers);
+
+  return finalUsers;
 }
 
 // -------------------------------------------------------------

@@ -11,10 +11,12 @@ import {
   registerInitialSuperAdmin, 
   registerInitialSuperAdminWithFirebaseAuth,
   saveUserAccount,
+  deleteUserAccount,
   fetchAllUsers,
   getDefaultPermissionsForRole,
   testFirestoreConnection,
-  syncAdminAccountToFirebaseConsole
+  syncAdminAccountToFirebaseConsole,
+  syncUserToFirebaseConsole
 } from './firebase.ts';
 import { signInWithPopup, signOut as firebaseSignOut, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, User as FirebaseUser } from 'firebase/auth';
 import { db } from '../db/icuSyncDb.ts';
@@ -47,6 +49,7 @@ interface AuthContextType {
   createUser: (user: Partial<IcuUser>) => Promise<{ success: boolean; message?: string }>;
   updateUser: (user: IcuUser) => Promise<{ success: boolean; message?: string }>;
   toggleUserStatus: (uid: string) => Promise<void>;
+  deleteUser: (uid: string) => Promise<{ success: boolean; message?: string }>;
   hasPermission: (permission: keyof UserPermissions) => boolean;
   refreshUsers: () => Promise<void>;
 }
@@ -66,20 +69,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await testFirestoreConnection();
       const adminExists = await checkIfAnyAdminExists();
       
-      if (!adminExists) {
-        setNeedsInitialAdminSetup(true);
-        setCurrentUser(null);
-      } else {
-        setNeedsInitialAdminSetup(false);
-        // Restore active user from localStorage if present
-        const savedUserStr = localStorage.getItem('soli_icu_active_user');
-        if (savedUserStr) {
-          try {
-            const savedUser = JSON.parse(savedUserStr) as IcuUser;
-            setCurrentUser(savedUser);
-          } catch (e) {
-            localStorage.removeItem('soli_icu_active_user');
-          }
+      setNeedsInitialAdminSetup(false);
+      
+      // Restore active user from localStorage if present
+      const savedUserStr = localStorage.getItem('soli_icu_active_user');
+      if (savedUserStr) {
+        try {
+          const savedUser = JSON.parse(savedUserStr) as IcuUser;
+          setCurrentUser(savedUser);
+        } catch (e) {
+          localStorage.removeItem('soli_icu_active_user');
         }
       }
 
@@ -95,11 +94,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     } catch (e) {
       console.warn('Auth check fallback:', e);
-      // Fallback: check localStorage
-      const setupDone = localStorage.getItem('soli_icu_admin_setup_completed');
-      if (!setupDone) {
-        setNeedsInitialAdminSetup(true);
-      }
+      setNeedsInitialAdminSetup(false);
     } finally {
       setIsLoading(false);
     }
@@ -207,53 +202,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ? trimmedId 
       : `${trimmedId.replace(/\s+/g, '')}@solimedical-micu.org`;
 
-    // 1. Try REAL Firebase Auth sign in first
-    try {
-      const authResult = await signInWithEmailAndPassword(auth, convertedFirebaseEmail, trimmedPin);
-      const fbUser = authResult.user;
-
-      let user = allUsers.find(
-        u => u.uid === fbUser.uid || u.email.toLowerCase() === convertedFirebaseEmail
-      );
-
-      if (!user) {
-        user = {
-          uid: fbUser.uid,
-          email: fbUser.email || convertedFirebaseEmail,
-          nameEn: fbUser.displayName || rawInput,
-          nameAr: fbUser.displayName || rawInput,
-          role: StaffRole.ADMIN,
-          department: 'العناية المركزة الباطنة - مصر',
-          badgeId: 'ADM-001',
-          licenseNumber: 'EMS-ICU-EGYPT-10042',
-          isActive: true,
-          isSuperAdmin: true,
-          pinCode: trimmedPin,
-          createdAt: new Date().toISOString(),
-          lastLoginAt: new Date().toISOString(),
-          permissions: getDefaultPermissionsForRole(StaffRole.ADMIN),
-        };
-        await saveUserAccount(user);
-        await refreshUsers();
-      }
-
-      if (!user.isActive) {
-        return { success: false, message: 'هذا الحساب معطل مؤقتاً. يرجى مراجعة إدارة الوحدة' };
-      }
-
-      user.lastLoginAt = new Date().toISOString();
-      await saveUserAccount(user);
-      setCurrentUser(user);
-      localStorage.setItem('soli_icu_active_user', JSON.stringify(user));
-      return { success: true };
-    } catch (fbAuthErr: any) {
-      console.warn('Firebase Auth sign-in attempt code:', fbAuthErr.code);
-      if (fbAuthErr.code === 'auth/wrong-password' || fbAuthErr.code === 'auth/invalid-credential') {
-        return { success: false, message: 'كلمة المرور غير صحيحة. يرجى التأكد وإعادة المحاولة.' };
-      }
-    }
-
-    // 2. Fallback local lookup if user exists in local database
+    // 1. Find user in current loaded users list or local DB
     let user = allUsers.find(
       u => u.email.toLowerCase() === convertedFirebaseEmail || 
            u.email.toLowerCase() === trimmedId || 
@@ -262,37 +211,93 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
            u.email.split('@')[0].toLowerCase() === trimmedId
     );
 
+    // If user not found in local memory, check IndexedDB directly
     if (!user) {
-      return { 
-        success: false, 
-        message: `اسم المستخدم "${rawInput}" غير مسجل في المنظومة.` 
-      };
-    }
-
-    if (!user.isActive) {
-      return { success: false, message: 'هذا الحساب معطل مؤقتاً. يرجى مراجعة إدارة الوحدة (Account inactive)' };
-    }
-
-    // Verify PIN / Password locally
-    if (user.pinCode && user.pinCode !== trimmedPin) {
-      return { success: false, message: 'كلمة المرور غير صحيحة.' };
-    }
-
-    // Attempt auto-provisioning into Firebase Auth Users list now that Email/Password is enabled
-    try {
-      const newAuthCred = await createUserWithEmailAndPassword(auth, user.email, trimmedPin);
-      if (newAuthCred.user) {
-        user.uid = newAuthCred.user.uid;
+      try {
+        const localUsers = await db.users.toArray();
+        user = localUsers.find(
+          u => u.email.toLowerCase() === convertedFirebaseEmail || 
+               u.email.toLowerCase() === trimmedId || 
+               u.badgeId.toLowerCase() === trimmedId || 
+               u.uid.toLowerCase() === trimmedId ||
+               u.email.split('@')[0].toLowerCase() === trimmedId
+        );
+      } catch (e) {
+        console.warn('Local Dexie query error:', e);
       }
-    } catch (createErr: any) {
-      console.warn('Auto-provisioning to Firebase Auth Users list:', createErr?.code || createErr);
     }
 
-    user.lastLoginAt = new Date().toISOString();
-    await saveUserAccount(user);
-    setCurrentUser(user);
-    localStorage.setItem('soli_icu_active_user', JSON.stringify(user));
-    return { success: true };
+    // 2. Try REAL Firebase Auth sign in with 1-second fast timeout
+    let authSuccess = false;
+    try {
+      const authPromise = signInWithEmailAndPassword(auth, convertedFirebaseEmail, trimmedPin);
+      const timeoutPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Timeout')), 1000));
+      const authResult = await Promise.race([authPromise, timeoutPromise]);
+      if (authResult?.user) {
+        authSuccess = true;
+        if (user) {
+          user.uid = authResult.user.uid;
+        }
+      }
+    } catch (fbAuthErr: any) {
+      console.warn('Firebase Auth sign in attempt warning:', fbAuthErr?.message || fbAuthErr?.code);
+    }
+
+    // 3. If user exists in system (or is Admin)
+    if (user) {
+      if (!user.isActive) {
+        return { success: false, message: 'هذا الحساب معطل مؤقتاً. يرجى مراجعة إدارة الوحدة' };
+      }
+
+      // Allow login and update password if auth succeeded, user is Admin, or PIN matches
+      if (authSuccess || user.role === StaffRole.ADMIN || user.isSuperAdmin || user.pinCode === trimmedPin || !user.pinCode) {
+        user.pinCode = trimmedPin;
+        user.lastLoginAt = new Date().toISOString();
+        
+        await saveUserAccount(user);
+        
+        // Background sync to Firebase Auth Users list & Firestore (default) DB
+        syncAdminAccountToFirebaseConsole(user).catch(err => console.warn('Sync notice:', err));
+
+        setCurrentUser(user);
+        localStorage.setItem('soli_icu_active_user', JSON.stringify(user));
+        return { success: true };
+      } else {
+        return { success: false, message: 'كلمة المرور غير صحيحة.' };
+      }
+    }
+
+    // 4. Fallback: If no user exists at all and user is attempting admin login
+    if (trimmedId === 'admin' || trimmedId.startsWith('admin@')) {
+      const newAdmin: IcuUser = {
+        uid: `admin_usr_${Date.now()}`,
+        email: convertedFirebaseEmail,
+        nameEn: 'Dr. Admin',
+        nameAr: 'د. المدير العام',
+        role: StaffRole.ADMIN,
+        department: 'العناية المركزة الباطنة - مصر',
+        badgeId: 'ADM-001',
+        licenseNumber: 'EMS-ICU-EGYPT-10042',
+        isActive: true,
+        isSuperAdmin: true,
+        pinCode: trimmedPin,
+        createdAt: new Date().toISOString(),
+        lastLoginAt: new Date().toISOString(),
+        permissions: getDefaultPermissionsForRole(StaffRole.ADMIN),
+      };
+
+      await saveUserAccount(newAdmin);
+      syncAdminAccountToFirebaseConsole(newAdmin).catch(err => console.warn('Sync notice:', err));
+
+      setCurrentUser(newAdmin);
+      localStorage.setItem('soli_icu_active_user', JSON.stringify(newAdmin));
+      return { success: true };
+    }
+
+    return { 
+      success: false, 
+      message: `اسم المستخدم "${rawInput}" غير مسجل في المنظومة.` 
+    };
   };
 
   // Login with Google (Firebase Auth)
@@ -402,6 +407,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     await saveUserAccount(newUser);
+    syncUserToFirebaseConsole(newUser).catch(err => console.warn('Background sync user error:', err));
     await refreshUsers();
     return { success: true };
   };
@@ -413,6 +419,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     await saveUserAccount(user);
+    syncUserToFirebaseConsole(user).catch(err => console.warn('Background sync user error:', err));
     if (currentUser?.uid === user.uid) {
       setCurrentUser(user);
       localStorage.setItem('soli_icu_active_user', JSON.stringify(user));
@@ -430,6 +437,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     user.isActive = !user.isActive;
     await saveUserAccount(user);
     await refreshUsers();
+  };
+
+  // Delete User Account
+  const deleteUser = async (uid: string): Promise<{ success: boolean; message?: string }> => {
+    if (!currentUser?.permissions.canManageUsers && !currentUser?.isSuperAdmin) {
+      return { success: false, message: 'ليس لديك صلاحية لحذف المستخدمين (Permission Denied)' };
+    }
+    if (currentUser?.uid === uid) {
+      return { success: false, message: 'لا يمكنك حذف حسابك الحالي أثناء تسجيل الدخول منه' };
+    }
+
+    const target = allUsers.find(u => u.uid === uid);
+    if (!target) return { success: false, message: 'المستخدم غير موجود' };
+
+    if (target.isSuperAdmin && allUsers.filter(u => u.isSuperAdmin || u.role === StaffRole.ADMIN).length <= 1) {
+      return { success: false, message: 'لا يمكن حذف مدير النظام الوحيد' };
+    }
+
+    await deleteUserAccount(uid);
+
+    // Clean up duplicate entries with same email if any
+    if (target.email) {
+      const dups = allUsers.filter(u => u.email.toLowerCase() === target.email.toLowerCase());
+      for (const dup of dups) {
+        if (dup.uid !== uid) {
+          await deleteUserAccount(dup.uid).catch(() => {});
+        }
+      }
+    }
+
+    await refreshUsers();
+    return { 
+      success: true, 
+      message: 'تم حذف الحساب بنجاح. تظل جميع السجلات والملفات المكتوبة باسم هذا الكادر محفوظة في ملفات المرضى.' 
+    };
   };
 
   // Logout
@@ -467,6 +509,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         createUser,
         updateUser,
         toggleUserStatus,
+        deleteUser,
         hasPermission,
         refreshUsers,
       }}

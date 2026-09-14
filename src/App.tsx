@@ -12,7 +12,6 @@ import {
 import { UserPlus } from 'lucide-react';
 import { Header } from './components/Header.tsx';
 import { Sidebar } from './components/Sidebar.tsx';
-import { BottomNav } from './components/BottomNav.tsx';
 import { BedMatrixCard } from './components/BedMatrixCard.tsx';
 import { BedsideFlowsheet } from './components/BedsideFlowsheet.tsx';
 import { AddVitalsModal } from './components/AddVitalsModal.tsx';
@@ -31,7 +30,6 @@ import {
 import { useTranslation } from './services/i18n.ts';
 import { useAuth } from './services/AuthContext.tsx';
 import { LoginScreen } from './components/LoginScreen.tsx';
-import { InitialAdminSetupModal } from './components/InitialAdminSetupModal.tsx';
 import { UserManagementModal } from './components/UserManagementModal.tsx';
 
 export default function App() {
@@ -155,10 +153,6 @@ export default function App() {
     };
   }, [reloadData, lang]);
 
-  if (needsInitialAdminSetup) {
-    return <InitialAdminSetupModal />;
-  }
-
   if (!isAuthenticated && !isAuthLoading) {
     return <LoginScreen />;
   }
@@ -183,7 +177,7 @@ export default function App() {
     : null;
 
   return (
-    <div className="min-h-screen bg-[#070d18] text-[#dbe2fd] flex flex-col pb-20 lg:pb-6 selection:bg-teal-500 selection:text-teal-950 font-sans">
+    <div className="min-h-screen bg-[#070d18] text-[#dbe2fd] flex flex-col pb-6 selection:bg-teal-500 selection:text-teal-950 font-sans">
       {/* Universal Header with Firebase Cloud Status and Alarm Banner */}
       <Header
         beds={beds}
@@ -350,21 +344,6 @@ export default function App() {
           />
         )}
       </main>
-
-      {/* Mobile Bottom Navigation Bar */}
-      <BottomNav
-        activeTab={activeTab}
-        onTabChange={(tab) => {
-          setSelectedBedNumber(null);
-          setActiveTab(tab as any);
-        }}
-        onOpenAdmission={() => {
-          setAdmissionTargetBed(null);
-          setIsAdmissionOpen(true);
-        }}
-        onOpenSearch={() => setIsSearchOpen(true)}
-        onOpenSettings={() => setIsSettingsOpen(true)}
-      />
 
       {/* System Settings & Customization Modal */}
       <SettingsModal

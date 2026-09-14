@@ -10,6 +10,8 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../services/AuthContext.tsx';
 
+import { SoliLogo } from './SoliLogo.tsx';
+
 export const LoginScreen: React.FC = () => {
   const { loginWithEmailOrBadge } = useAuth();
 
@@ -46,21 +48,14 @@ export const LoginScreen: React.FC = () => {
     >
       {/* HEADER SECTION: Clinic Logo, Monogram Badge & Title */}
       <header className="w-full flex flex-col items-center text-center mt-2 mb-6" data-purpose="clinic-branding">
-        {/* Glowing SM Monogram / MICU Pulse Badge */}
+        {/* Glowing Official Soli Medical MICU Logo */}
         <div 
-          className="w-24 h-24 rounded-2xl bg-gradient-to-b from-[#091f3a] to-[#040e1e] flex items-center justify-center p-3 relative mb-5 shadow-2xl backdrop-blur-md"
+          className="w-28 h-28 rounded-3xl bg-transparent flex items-center justify-center p-1 relative mb-4 shadow-2xl"
           style={{
-            boxShadow: '0 0 35px -5px rgba(0, 229, 255, 0.25)',
-            border: '1px solid rgba(0, 229, 255, 0.3)'
+            filter: 'drop-shadow(0 0 25px rgba(0, 229, 255, 0.35))'
           }}
         >
-          <svg aria-label="Soli Medical Icon" className="w-full h-full text-[#00f2fe]" fill="none" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-            {/* Background Monogram Lettering S & M Silhouette */}
-            <text fill="#ffffff" fontFamily="serif" fontSize="46" fontWeight="900" opacity="0.88" textAnchor="middle" x="26" y="66">S</text>
-            <text fill="#38bdf8" fontFamily="serif" fontSize="46" fontWeight="900" opacity="0.75" textAnchor="middle" x="70" y="66">M</text>
-            {/* Dynamic Glowing Pulse Wave Overlay */}
-            <path d="M12 56 L34 56 L42 36 L52 74 L60 48 L68 56 L88 56" filter="drop-shadow(0 0 6px #00f2fe)" stroke="#00f2fe" strokeLinecap="round" strokeLinejoin="round" strokeWidth="4.5"></path>
-          </svg>
+          <SoliLogo className="w-full h-full" />
         </div>
 
         {/* Main Title */}
