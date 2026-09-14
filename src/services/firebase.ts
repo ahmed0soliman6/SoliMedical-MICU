@@ -36,7 +36,11 @@ import {
   ClinicalNote,
   IcuUser,
   StaffRole,
-  UserPermissions
+  UserPermissions,
+  StatLabPanel,
+  TransfusionTracker,
+  Addendum,
+  WardAuditLog
 } from '../types/schema.ts';
 import { db } from '../db/icuSyncDb.ts';
 
@@ -759,6 +763,104 @@ export function subscribeToRealtimeFirestore(
     }, (err) => handleFirestoreError(err, OperationType.GET, 'users'));
     unsubscribers.push(unsubUsers);
 
+    // 7. Subscribe to Ventilators
+    const ventilatorsCol = collection(firestore, 'ventilators');
+    const unsubVentilators = onSnapshot(ventilatorsCol, async (snapshot) => {
+      const remoteVents: VentilatorParameters[] = [];
+      snapshot.forEach((docSnap) => {
+        remoteVents.push(docSnap.data() as VentilatorParameters);
+      });
+      if (remoteVents.length > 0) {
+        await db.ventilators.bulkPut(remoteVents);
+        onDataUpdate();
+      }
+    }, (err) => handleFirestoreError(err, OperationType.GET, 'ventilators'));
+    unsubscribers.push(unsubVentilators);
+
+    // 8. Subscribe to Infusion Pumps
+    const infusionPumpsCol = collection(firestore, 'infusionPumps');
+    const unsubInfusionPumps = onSnapshot(infusionPumpsCol, async (snapshot) => {
+      const remotePumps: InfusionPumpLine[] = [];
+      snapshot.forEach((docSnap) => {
+        remotePumps.push(docSnap.data() as InfusionPumpLine);
+      });
+      if (remotePumps.length > 0) {
+        await db.infusionPumps.bulkPut(remotePumps);
+        onDataUpdate();
+      }
+    }, (err) => handleFirestoreError(err, OperationType.GET, 'infusionPumps'));
+    unsubscribers.push(unsubInfusionPumps);
+
+    // 9. Subscribe to Fluid Balances
+    const fluidBalancesCol = collection(firestore, 'fluidBalances');
+    const unsubFluidBalances = onSnapshot(fluidBalancesCol, async (snapshot) => {
+      const remoteFluids: FluidBalance24H[] = [];
+      snapshot.forEach((docSnap) => {
+        remoteFluids.push(docSnap.data() as FluidBalance24H);
+      });
+      if (remoteFluids.length > 0) {
+        await db.fluidBalances.bulkPut(remoteFluids);
+        onDataUpdate();
+      }
+    }, (err) => handleFirestoreError(err, OperationType.GET, 'fluidBalances'));
+    unsubscribers.push(unsubFluidBalances);
+
+    // 10. Subscribe to Stat Labs
+    const statLabsCol = collection(firestore, 'statLabs');
+    const unsubStatLabs = onSnapshot(statLabsCol, async (snapshot) => {
+      const remoteLabs: StatLabPanel[] = [];
+      snapshot.forEach((docSnap) => {
+        remoteLabs.push(docSnap.data() as StatLabPanel);
+      });
+      if (remoteLabs.length > 0) {
+        await db.statLabs.bulkPut(remoteLabs);
+        onDataUpdate();
+      }
+    }, (err) => handleFirestoreError(err, OperationType.GET, 'statLabs'));
+    unsubscribers.push(unsubStatLabs);
+
+    // 11. Subscribe to Transfusions
+    const transfusionsCol = collection(firestore, 'transfusions');
+    const unsubTransfusions = onSnapshot(transfusionsCol, async (snapshot) => {
+      const remoteTransfusions: TransfusionTracker[] = [];
+      snapshot.forEach((docSnap) => {
+        remoteTransfusions.push(docSnap.data() as TransfusionTracker);
+      });
+      if (remoteTransfusions.length > 0) {
+        await db.transfusions.bulkPut(remoteTransfusions);
+        onDataUpdate();
+      }
+    }, (err) => handleFirestoreError(err, OperationType.GET, 'transfusions'));
+    unsubscribers.push(unsubTransfusions);
+
+    // 12. Subscribe to Addendums
+    const addendumsCol = collection(firestore, 'addendums');
+    const unsubAddendums = onSnapshot(addendumsCol, async (snapshot) => {
+      const remoteAddendums: Addendum[] = [];
+      snapshot.forEach((docSnap) => {
+        remoteAddendums.push(docSnap.data() as Addendum);
+      });
+      if (remoteAddendums.length > 0) {
+        await db.addendums.bulkPut(remoteAddendums);
+        onDataUpdate();
+      }
+    }, (err) => handleFirestoreError(err, OperationType.GET, 'addendums'));
+    unsubscribers.push(unsubAddendums);
+
+    // 13. Subscribe to Audit Logs
+    const auditLogsCol = collection(firestore, 'auditLogs');
+    const unsubAuditLogs = onSnapshot(auditLogsCol, async (snapshot) => {
+      const remoteLogs: WardAuditLog[] = [];
+      snapshot.forEach((docSnap) => {
+        remoteLogs.push(docSnap.data() as WardAuditLog);
+      });
+      if (remoteLogs.length > 0) {
+        await db.auditLogs.bulkPut(remoteLogs);
+        onDataUpdate();
+      }
+    }, (err) => handleFirestoreError(err, OperationType.GET, 'auditLogs'));
+    unsubscribers.push(unsubAuditLogs);
+
   } catch (e) {
     console.warn('Could not establish Firestore real-time listener:', e);
   }
@@ -889,3 +991,13 @@ export async function seedInitialDataToFirestore(): Promise<void> {
     console.warn('Could not complete initial Firestore cloud seed:', e);
   }
 }
+
+export async function syncStatLabsToCloud(labs: StatLabPanel): Promise<void> {
+  try {
+    const labsRef = doc(firestore, 'statLabs', labs.id);
+    await setDoc(labsRef, labs, { merge: true });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, `statLabs/${labs.id}`);
+  }
+}
+

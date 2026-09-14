@@ -117,7 +117,7 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Hamburger Menu Button for Mobile/Tablet */}
           <button
             onClick={onOpenSidebar}
-            className="lg:hidden flex items-center gap-2 px-3 py-1.5 sm:py-2 rounded-xl bg-[#0f172a] hover:bg-teal-950/50 hover:border-teal-500/60 border border-slate-700 text-teal-400 transition-all active:scale-95 shadow-sm cursor-pointer"
+            className="md:hidden flex items-center gap-2 px-3 py-1.5 sm:py-2 rounded-xl bg-[#0f172a] hover:bg-teal-950/50 hover:border-teal-500/60 border border-slate-700 text-teal-400 transition-all active:scale-95 shadow-sm cursor-pointer"
             title={lang === 'ar' ? 'القائمة الجانبية والصفحات' : 'Open Sidebar & Navigation'}
             aria-label="Toggle navigation menu"
           >
@@ -252,7 +252,7 @@ export const Header: React.FC<HeaderProps> = ({
       )}
 
       {/* Desktop Tab Navigation Bar (Respecting Feature Flags & Bilingual) */}
-      <div className="max-w-7xl mx-auto hidden lg:flex items-center gap-1 mt-2 pt-2 border-t border-slate-800/60">
+      <div className="max-w-7xl mx-auto hidden md:flex items-center gap-1 mt-2 pt-2 border-t border-slate-800/60">
         {settings.features.enableBedMatrix && (
           <button
             onClick={() => onTabChange('beds')}

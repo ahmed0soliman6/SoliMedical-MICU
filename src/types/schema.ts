@@ -317,6 +317,8 @@ export interface StatLabPanel {
     hemoglobinGPerDl: number;
     hematocritPercent: number;
     plateletCountKPerUl: number;
+    differential?: string;
+    typeAnemia?: string;
   };
   coagulation: {
     inr: number;
@@ -333,6 +335,21 @@ export interface StatLabPanel {
     albuminGPerDl: number;
     procalcitoninNgPerMl?: number;
     crpMgPerL?: number;
+    calciumMeqPerL?: number;
+    phosphorusMeqPerL?: number;
+    magnesiumMeqPerL?: number;
+    altUPerL?: number;
+    astUPerL?: number;
+    alpUPerL?: number;
+    ggtUPerL?: number;
+    amylaseUPerL?: number;
+    lipaseUPerL?: number;
+    troponinNgPerMl?: number;
+    ckUPerL?: number;
+    ckMbUPerL?: number;
+    esrMmHr?: number;
+    ureaMgPerDl?: number;
+    uricAcidMgPerDl?: number;
   };
   isCriticalAlert: boolean;
   reviewedByDoctorName?: string;
@@ -471,6 +488,9 @@ export interface PatientDossier {
   fluidRestrictionDailyMl?: number;
   highAlertWarnings?: string[];
   mortalityRecord?: MortalityAuditRecord;
+  history?: string;
+  presentingComplaint?: string;
+  chronicDiseases?: string;
   createdAt: string;
   updatedAt: string;
 }

@@ -119,6 +119,9 @@ export interface DirectAdmissionInput {
   };
   isolationPrecautions?: string[];
   initialAdmissionNote?: string;
+  history?: string;
+  presentingComplaint?: string;
+  chronicDiseases?: string;
 }
 
 /**
@@ -187,6 +190,9 @@ export async function admitPatient(input: DirectAdmissionInput): Promise<{ patie
       attendingPhysician: input.attendingDoctor,
       primaryNurse: input.assignedNurse,
       isolationPrecautions: input.isolationPrecautions || [],
+      history: input.history || '',
+      presentingComplaint: input.presentingComplaint || '',
+      chronicDiseases: input.chronicDiseases || '',
       createdAt: nowIso,
       updatedAt: nowIso,
     };

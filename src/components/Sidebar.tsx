@@ -21,7 +21,7 @@ import {
   ShieldCheck,
   UserCircle
 } from 'lucide-react';
-import { BedRecord, PatientDossier, StaffRole } from '../types/schema.ts';
+import { BedRecord, PatientDossier, StaffRole, BedNumber } from '../types/schema.ts';
 import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
 import { useAuth } from '../services/AuthContext.tsx';
@@ -38,6 +38,8 @@ interface SidebarProps {
   onOpenUserManagement?: () => void;
   beds: BedRecord[];
   patients: PatientDossier[];
+  selectedBedNumber: BedNumber | null;
+  onSelectBed: (bed: BedNumber | null) => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -51,6 +53,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenUserManagement,
   beds,
   patients,
+  selectedBedNumber,
+  onSelectBed,
 }) => {
   const { settings } = useSystemSettings();
   const { t, lang, setLanguage, isRTL } = useTranslation();
@@ -77,15 +81,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {isOpen && (
         <div 
           onClick={onClose} 
-          className="lg:hidden fixed inset-0 z-40 bg-black/80 backdrop-blur-sm transition-opacity animate-fade-in"
+          className="md:hidden fixed inset-0 z-40 bg-black/80 backdrop-blur-sm transition-opacity animate-fade-in"
         />
       )}
 
-      {/* Sidebar Panel (Persistent on Desktop lg:flex, Slide-out Drawer on Mobile) */}
+      {/* Sidebar Panel (Persistent on Desktop md:flex, Slide-out Drawer on Mobile) */}
       <aside 
         className={`
-          ${isOpen ? 'translate-x-0' : (isRTL ? 'translate-x-full lg:translate-x-0' : '-translate-x-full lg:translate-x-0')}
-          fixed lg:sticky top-0 lg:top-16 bottom-0 z-50 lg:z-10 w-72 shrink-0 h-full lg:h-[calc(100vh-4rem)] bg-[#070d1a] text-white flex flex-col shadow-2xl lg:shadow-none overflow-y-auto transition-transform duration-300 ${
+          ${isOpen ? 'translate-x-0' : (isRTL ? 'translate-x-full md:translate-x-0' : '-translate-x-full md:translate-x-0')}
+          fixed md:sticky top-0 md:top-16 bottom-0 z-50 md:z-10 w-72 shrink-0 h-full md:h-[calc(100vh-4rem)] bg-[#070d1a] text-white flex flex-col shadow-2xl md:shadow-none overflow-y-auto transition-transform duration-300 ${
             isRTL ? 'right-0 border-l border-slate-800' : 'left-0 border-r border-slate-800'
           }
         `}
@@ -118,7 +122,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {/* Close Button for Mobile */}
             <button
               onClick={onClose}
-              className="lg:hidden w-8 h-8 rounded-lg bg-slate-800/60 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-all cursor-pointer"
+              className="md:hidden w-8 h-8 rounded-lg bg-slate-800/60 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-all cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
@@ -228,6 +232,42 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {isRTL ? <ChevronLeft className="w-4 h-4 text-slate-500" /> : <ChevronRight className="w-4 h-4 text-slate-500" />}
             </button>
           )}
+
+          {/* 6 ICU Beds Pages */}
+          <div className="pt-2">
+            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-3 py-1.5 border-t border-slate-850/60">
+              {lang === 'ar' ? 'مراقبة أسِرّة العناية (ICU Beds)' : 'Bedside Care Pages'}
+            </div>
+            <div className="space-y-1">
+              {beds.map((b) => {
+                const patient = b.currentPatientId ? patients.find(p => p.id === b.currentPatientId) : null;
+                const isSelected = selectedBedNumber === b.bedNumber;
+                return (
+                  <button
+                    key={b.bedNumber}
+                    onClick={() => {
+                      onSelectBed(b.bedNumber as BedNumber);
+                      onClose();
+                    }}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                      isSelected
+                        ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 font-bold'
+                        : 'text-slate-300 hover:bg-slate-800/60 hover:text-white border border-transparent'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 truncate">
+                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${patient ? 'bg-red-500 animate-pulse' : 'bg-emerald-500'}`} />
+                      <span className="font-mono font-bold text-slate-200">{b.bedNumber}</span>
+                      <span className="truncate max-w-[120px] text-slate-400 text-[10px] font-semibold">
+                        {patient ? (lang === 'ar' ? patient.fullNameAr : patient.fullNameEn) : (lang === 'ar' ? 'شاغر' : 'Vacant')}
+                      </span>
+                    </div>
+                    {isRTL ? <ChevronLeft className="w-3.5 h-3.5 text-slate-600" /> : <ChevronRight className="w-3.5 h-3.5 text-slate-600" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
           <div className="pt-2">
             <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-3 py-1.5">

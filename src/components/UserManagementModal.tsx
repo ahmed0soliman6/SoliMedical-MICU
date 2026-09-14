@@ -512,6 +512,16 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
                             <span>{lang === 'ar' ? 'تعديل' : 'Edit'}</span>
                           </button>
 
+                          <button
+                            type="button"
+                            onClick={() => handleOpenChangePassword(user)}
+                            className="px-2.5 py-1 rounded-lg bg-[#0d2a2a] hover:bg-teal-900/60 text-teal-300 hover:text-teal-200 text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer border border-teal-800/40"
+                            title={lang === 'ar' ? 'تغيير كلمة السر' : 'Change Password'}
+                          >
+                            <KeyRound className="w-3.5 h-3.5 text-teal-400" />
+                            <span>{lang === 'ar' ? 'كلمة السر' : 'Password'}</span>
+                          </button>
+
                           {!isCurrent && (
                             <button
                               type="button"
@@ -658,6 +668,88 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
                 <span>{lang === 'ar' ? 'حذف الحساب نهائياً' : 'Delete Account'}</span>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Change Password Modal */}
+      {userToChangePassword && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-[#0a1224] border border-teal-500/40 rounded-3xl p-6 text-slate-100 shadow-2xl space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center gap-3 border-b border-slate-800 pb-3">
+              <div className="w-9 h-9 rounded-xl bg-teal-500/10 border border-teal-500/30 flex items-center justify-center text-teal-400">
+                <KeyRound className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-white">
+                  {lang === 'ar' ? `تغيير كلمة السر للمستخدم:` : 'Change Password for User:'}
+                </h3>
+                <p className="text-xs text-teal-300 font-bold font-mono mt-0.5">
+                  {lang === 'ar' ? userToChangePassword.nameAr : userToChangePassword.nameEn} ({userToChangePassword.badgeId})
+                </p>
+              </div>
+            </div>
+
+            {changePassStatus && (
+              <div className={`p-3 rounded-xl text-xs flex items-center gap-2 ${
+                changePassStatus.type === 'success' 
+                  ? 'bg-teal-950/60 border border-teal-500/50 text-teal-200' 
+                  : 'bg-red-950/60 border border-red-500/50 text-red-200'
+              }`}>
+                {changePassStatus.type === 'success' ? (
+                  <CheckCircle2 className="w-4 h-4 text-teal-400" />
+                ) : (
+                  <XCircle className="w-4 h-4 text-red-400" />
+                )}
+                <span>{changePassStatus.text}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveNewPassword} className="space-y-4">
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                  {lang === 'ar' ? 'كلمة السر الجديدة *' : 'New Password *'}
+                </label>
+                <div className="relative">
+                  <input
+                    type={showNewPassword ? 'text' : 'password'}
+                    value={newPasswordInput}
+                    onChange={(e) => setNewPasswordInput(e.target.value)}
+                    required
+                    minLength={4}
+                    className="w-full bg-[#070d1a] border border-slate-700 focus:border-teal-400 rounded-xl pl-3 pr-9 py-2.5 text-xs text-white focus:outline-none font-mono"
+                    placeholder={lang === 'ar' ? 'أدخل كلمة السر الجديدة' : 'Enter new password'}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword(!showNewPassword)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-teal-300 p-1 rounded-md transition-colors cursor-pointer"
+                  >
+                    {showNewPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  {lang === 'ar' ? 'الرجاء اختيار كلمة سر قوية وسهلة الحفظ (مثال: رقم سري من 4 أرقام على الأقل).' : 'Please enter a secure password/pin (minimum 4 characters).'}
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setUserToChangePassword(null)}
+                  className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 cursor-pointer"
+                >
+                  {lang === 'ar' ? 'إلغاء' : 'Cancel'}
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shadow-lg shadow-teal-500/20 transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <KeyRound className="w-3.5 h-3.5" />
+                  <span>{lang === 'ar' ? 'تحديث كلمة السر' : 'Update Password'}</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -31,6 +31,7 @@ import { useTranslation } from './services/i18n.ts';
 import { useAuth } from './services/AuthContext.tsx';
 import { LoginScreen } from './components/LoginScreen.tsx';
 import { UserManagementModal } from './components/UserManagementModal.tsx';
+import { FullPageAdmission } from './components/FullPageAdmission.tsx';
 
 export default function App() {
   const { t, lang, isRTL } = useTranslation();
@@ -66,8 +67,7 @@ export default function App() {
   const handleSmartAdmission = useCallback(() => {
     const vacantBed = beds.find(b => b.status === BedStatus.VACANT || !b.currentPatientId);
     if (vacantBed) {
-      setAdmissionTargetBed(vacantBed.bedNumber as BedNumber);
-      setIsAdmissionOpen(true);
+      setSelectedBedNumber(vacantBed.bedNumber as BedNumber);
     } else {
       setActiveAlertMessage(
         lang === 'ar' 
@@ -197,7 +197,7 @@ export default function App() {
       />
 
       {/* Main Container: Persistent Sidebar on Desktop + Clinical Canvas */}
-      <div className="flex-1 max-w-[1600px] w-full mx-auto flex flex-col lg:flex-row items-start">
+      <div className="flex-1 max-w-[1600px] w-full mx-auto flex flex-col md:flex-row items-start">
         {/* Responsive Slide-out Sidebar Drawer */}
         <Sidebar
           isOpen={isSidebarOpen}
@@ -213,40 +213,55 @@ export default function App() {
           onOpenUserManagement={() => setIsUserManagementOpen(true)}
           beds={beds}
           patients={patients}
+          selectedBedNumber={selectedBedNumber}
+          onSelectBed={(bedNum) => {
+            setSelectedBedNumber(bedNum);
+          }}
         />
 
         {/* Main Clinical Canvas */}
         <main className="flex-1 min-w-0 w-full p-3 sm:p-6 space-y-5">
-        {selectedBedNumber && selectedBed && selectedPatient ? (
-          /* Bedside Deep Dive Flowsheet */
-          <BedsideFlowsheet
-            bed={selectedBed}
-            patient={selectedPatient}
-            onBack={() => setSelectedBedNumber(null)}
-            onOpenAddVitals={() => {
-              setVitalsTarget({
-                bedNumber: selectedBed.bedNumber,
-                patientId: selectedPatient.id,
-                patientName: selectedPatient.fullNameAr,
-              });
-              setIsQuickVitalsOpen(true);
-            }}
-            onOpenAddAddendum={(noteId, author) => {
-              setAddendumTarget({ noteId, patientId: selectedPatient.id, author });
-              setIsAddendumOpen(true);
-            }}
-            onOpenSbarSign={() => {
-              setSbarTarget({
-                bedNumber: selectedBed.bedNumber,
-                patientId: selectedPatient.id,
-                patientName: selectedPatient.fullNameAr,
-                diagnosis: selectedPatient.primaryDiagnosisAr || selectedPatient.primaryDiagnosisEn,
-                codeStatus: selectedPatient.codeStatus,
-              });
-              setIsSbarModalOpen(true);
-            }}
-            onDataUpdated={reloadData}
-          />
+        {selectedBedNumber && selectedBed ? (
+          selectedPatient ? (
+            /* Bedside Deep Dive Flowsheet */
+            <BedsideFlowsheet
+              bed={selectedBed}
+              patient={selectedPatient}
+              onBack={() => setSelectedBedNumber(null)}
+              onOpenAddVitals={() => {
+                setVitalsTarget({
+                  bedNumber: selectedBed.bedNumber,
+                  patientId: selectedPatient.id,
+                  patientName: selectedPatient.fullNameAr,
+                });
+                setIsQuickVitalsOpen(true);
+              }}
+              onOpenAddAddendum={(noteId, author) => {
+                setAddendumTarget({ noteId, patientId: selectedPatient.id, author });
+                setIsAddendumOpen(true);
+              }}
+              onOpenSbarSign={() => {
+                setSbarTarget({
+                  bedNumber: selectedBed.bedNumber,
+                  patientId: selectedPatient.id,
+                  patientName: selectedPatient.fullNameAr,
+                  diagnosis: selectedPatient.primaryDiagnosisAr || selectedPatient.primaryDiagnosisEn,
+                  codeStatus: selectedPatient.codeStatus,
+                });
+                setIsSbarModalOpen(true);
+              }}
+              onDataUpdated={reloadData}
+            />
+          ) : (
+            /* Full-Page Bed Vacant Direct Admission Screen */
+            <FullPageAdmission
+              bedNumber={selectedBedNumber}
+              onCancel={() => setSelectedBedNumber(null)}
+              onAdmissionSuccess={() => {
+                reloadData();
+              }}
+            />
+          )
         ) : activeTab === 'beds' ? (
           /* 6-Bed Matrix Grid (Central Station Overview) */
           <div className="space-y-4">
