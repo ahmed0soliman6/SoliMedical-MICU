@@ -9,12 +9,13 @@ import {
   googleProvider, 
   checkIfAnyAdminExists, 
   registerInitialSuperAdmin, 
+  registerInitialSuperAdminWithFirebaseAuth,
   saveUserAccount,
   fetchAllUsers,
   getDefaultPermissionsForRole,
   testFirestoreConnection
 } from './firebase.ts';
-import { signInWithPopup, signOut as firebaseSignOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
+import { signInWithPopup, signOut as firebaseSignOut, onAuthStateChanged, signInWithEmailAndPassword, User as FirebaseUser } from 'firebase/auth';
 import { db } from '../db/icuSyncDb.ts';
 
 interface AuthContextType {
@@ -26,6 +27,12 @@ interface AuthContextType {
   loginWithEmailOrBadge: (identifier: string, pinOrPass: string) => Promise<{ success: boolean; message?: string }>;
   loginWithGoogle: () => Promise<{ success: boolean; message?: string }>;
   quickDemoLogin: (role: StaffRole) => Promise<void>;
+  registerFirstUser: (data: {
+    username: string;
+    password: string;
+    fullName: string;
+    jobTitle: string;
+  }) => Promise<{ success: boolean; message?: string }>;
   registerSuperAdmin: (data: {
     email: string;
     nameEn: string;
@@ -127,7 +134,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         [StaffRole.BEDSIDE_RN]: { en: 'RN Fatima Al-Zahrani', ar: 'م. فاطمة الزهراني', dept: 'Bedside Critical Care', badge: 'RN-502' },
         [StaffRole.CLINICAL_PHARMACIST]: { en: 'Pharm. Zaid Al-Otaibi', ar: 'ص. زيد العتيبي', dept: 'Clinical Pharmacy', badge: 'PHM-601' },
         [StaffRole.RESPIRATORY_THERAPIST]: { en: 'RT Hisham Mahmoud', ar: 'أ. هشام محمود', dept: 'Respiratory Therapy', badge: 'RT-701' },
-        [StaffRole.AUDITOR]: { en: 'Eng. Mona Al-Harbi', ar: 'أ. منى الحربي', dept: 'CBAHI & JCI Quality', badge: 'AUD-801' },
+        [StaffRole.AUDITOR]: { en: 'Eng. Mona Mahmoud', ar: 'أ. منى محمود', dept: 'GAHAR & MoHP Egyptian Quality', badge: 'AUD-801' },
       };
 
       const meta = nameMapping[role] || { en: 'Clinical Staff', ar: 'كادر سريري', dept: 'MICU', badge: 'STAFF-01' };
@@ -157,30 +164,110 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem('soli_icu_active_user', JSON.stringify(target));
   };
 
-  // Login with Email or Badge ID + PIN/Password
+  // Register First User (Super Admin Setup Screen)
+  const registerFirstUser = async (data: {
+    username: string;
+    password: string;
+    fullName: string;
+    jobTitle: string;
+  }): Promise<{ success: boolean; message?: string }> => {
+    setIsLoading(true);
+    const res = await registerInitialSuperAdminWithFirebaseAuth(data);
+    setIsLoading(false);
+    if (res.success) {
+      setNeedsInitialAdminSetup(false);
+      await refreshUsers();
+    }
+    return res;
+  };
+
+  // Login with Username / Email / Badge ID + Password / PIN
   const loginWithEmailOrBadge = async (
     identifier: string, 
     pinOrPass: string
   ): Promise<{ success: boolean; message?: string }> => {
-    const trimmedId = identifier.trim().toLowerCase();
+    const rawInput = identifier.trim();
+    const trimmedId = rawInput.toLowerCase();
     const trimmedPin = pinOrPass.trim();
 
-    // Look up in allUsers
-    const user = allUsers.find(
-      u => u.email.toLowerCase() === trimmedId || u.badgeId.toLowerCase() === trimmedId || u.uid.toLowerCase() === trimmedId
+    if (!rawInput || !trimmedPin) {
+      return { success: false, message: 'يرجى إدخال اسم المستخدم وكلمة المرور' };
+    }
+
+    // Automatically convert username into Firebase email format if not already an email
+    const convertedFirebaseEmail = trimmedId.includes('@') 
+      ? trimmedId 
+      : `${trimmedId.replace(/\s+/g, '')}@solimedical-micu.org`;
+
+    // 1. Try REAL Firebase Auth sign in first
+    try {
+      const authResult = await signInWithEmailAndPassword(auth, convertedFirebaseEmail, trimmedPin);
+      const fbUser = authResult.user;
+
+      let user = allUsers.find(
+        u => u.uid === fbUser.uid || u.email.toLowerCase() === convertedFirebaseEmail
+      );
+
+      if (!user) {
+        user = {
+          uid: fbUser.uid,
+          email: fbUser.email || convertedFirebaseEmail,
+          nameEn: fbUser.displayName || rawInput,
+          nameAr: fbUser.displayName || rawInput,
+          role: StaffRole.ADMIN,
+          department: 'العناية المركزة الباطنة - مصر',
+          badgeId: 'ADM-001',
+          licenseNumber: 'EMS-ICU-EGYPT-10042',
+          isActive: true,
+          isSuperAdmin: true,
+          pinCode: trimmedPin,
+          createdAt: new Date().toISOString(),
+          lastLoginAt: new Date().toISOString(),
+          permissions: getDefaultPermissionsForRole(StaffRole.ADMIN),
+        };
+        await saveUserAccount(user);
+        await refreshUsers();
+      }
+
+      if (!user.isActive) {
+        return { success: false, message: 'هذا الحساب معطل مؤقتاً. يرجى مراجعة إدارة الوحدة' };
+      }
+
+      user.lastLoginAt = new Date().toISOString();
+      await saveUserAccount(user);
+      setCurrentUser(user);
+      localStorage.setItem('soli_icu_active_user', JSON.stringify(user));
+      return { success: true };
+    } catch (fbAuthErr: any) {
+      console.warn('Firebase Auth sign-in attempt code:', fbAuthErr.code);
+      if (fbAuthErr.code === 'auth/wrong-password' || fbAuthErr.code === 'auth/invalid-credential') {
+        return { success: false, message: 'كلمة المرور غير صحيحة. يرجى التأكد وإعادة المحاولة.' };
+      }
+    }
+
+    // 2. Fallback local lookup if user exists in local database
+    let user = allUsers.find(
+      u => u.email.toLowerCase() === convertedFirebaseEmail || 
+           u.email.toLowerCase() === trimmedId || 
+           u.badgeId.toLowerCase() === trimmedId || 
+           u.uid.toLowerCase() === trimmedId ||
+           u.email.split('@')[0].toLowerCase() === trimmedId
     );
 
     if (!user) {
-      return { success: false, message: 'اسم المستخدم أو المعرف غير مسجل في المنظومة (User not found)' };
+      return { 
+        success: false, 
+        message: `اسم المستخدم "${rawInput}" غير مسجل في المنظومة.` 
+      };
     }
 
     if (!user.isActive) {
       return { success: false, message: 'هذا الحساب معطل مؤقتاً. يرجى مراجعة إدارة الوحدة (Account inactive)' };
     }
 
-    // Verify PIN or default
-    if (user.pinCode && user.pinCode !== trimmedPin && trimmedPin !== '1234') {
-      return { success: false, message: 'رمز الدخول أو كلمة المرور غير صحيحة (Invalid PIN / Password)' };
+    // Verify PIN / Password locally
+    if (user.pinCode && user.pinCode !== trimmedPin) {
+      return { success: false, message: 'كلمة المرور غير صحيحة.' };
     }
 
     user.lastLoginAt = new Date().toISOString();
@@ -206,8 +293,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             email: fbUser.email || 'admin@solimedical-micu.org',
             nameEn: fbUser.displayName || 'Super Administrator',
             nameAr: 'المشرف العام للمنظومة',
-            licenseNumber: 'CBAHI-ADMIN-01',
-            department: 'MICU Administration',
+            licenseNumber: 'EMS-ICU-EGYPT-10042',
+            department: 'العناية المركزة الباطنة - مصر',
             badgeId: 'ADM-001',
             pinCode: '1234'
           });
@@ -356,6 +443,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loginWithEmailOrBadge,
         loginWithGoogle,
         quickDemoLogin,
+        registerFirstUser,
         registerSuperAdmin,
         logout,
         createUser,

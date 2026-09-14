@@ -19,6 +19,8 @@ import {
   signInWithPopup,
   signOut as firebaseSignOut,
   onAuthStateChanged,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
   User as FirebaseUser
 } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
@@ -242,15 +244,11 @@ export function getDefaultPermissionsForRole(role: StaffRole): UserPermissions {
  */
 export async function checkIfAnyAdminExists(): Promise<boolean> {
   try {
-    // 1. Check local Dexie first for speed
-    const localAdmins = await db.users.where('role').equals(StaffRole.ADMIN).toArray();
-    if (localAdmins.length > 0) return true;
-
-    // 2. Check Firestore admins collection
+    // 1. Check Firestore admins collection
     const adminsSnap = await getDocs(collection(firestore, 'admins'));
     if (!adminsSnap.empty) return true;
 
-    // 3. Check Firestore users collection
+    // 2. Check Firestore users collection
     const usersSnap = await getDocs(collection(firestore, 'users'));
     if (!usersSnap.empty) {
       for (const doc of usersSnap.docs) {
@@ -260,8 +258,11 @@ export async function checkIfAnyAdminExists(): Promise<boolean> {
         }
       }
     }
+
+    // 3. Check local Dexie DB
+    const localAdmins = await db.users.where('role').equals(StaffRole.ADMIN).toArray();
+    if (localAdmins.length > 0) return true;
   } catch (err) {
-    handleFirestoreError(err, OperationType.GET, 'admins');
     // Fallback: check local storage flag
     const setupDone = localStorage.getItem('soli_icu_admin_setup_completed');
     if (setupDone === 'true') return true;
@@ -270,7 +271,105 @@ export async function checkIfAnyAdminExists(): Promise<boolean> {
 }
 
 /**
- * Registers the Initial Super Admin (One-Time Setup)
+ * Creates the First User (Super Admin) in REAL Firebase Authentication and Firestore
+ */
+export async function registerInitialSuperAdminWithFirebaseAuth(data: {
+  username: string;
+  password: string;
+  fullName: string;
+  jobTitle: string;
+}): Promise<{ success: boolean; user?: IcuUser; message?: string }> {
+  try {
+    const rawUsername = data.username.trim();
+    const email = rawUsername.includes('@')
+      ? rawUsername.toLowerCase()
+      : `${rawUsername.toLowerCase().replace(/\s+/g, '')}@solimedical-micu.org`;
+
+    let uid: string;
+
+    // 1. Create user account in REAL Firebase Authentication
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, email, data.password);
+      uid = userCredential.user.uid;
+    } catch (authErr: any) {
+      if (authErr.code === 'auth/email-already-in-use') {
+        // If account exists in Auth, try sign-in to retrieve existing UID
+        try {
+          const signInCred = await signInWithEmailAndPassword(auth, email, data.password);
+          uid = signInCred.user.uid;
+        } catch (signInErr: any) {
+          return {
+            success: false,
+            message: `اسم المستخدم/البريد الإلكتروني (${email}) مسجل بالفعل في Firebase Authentication، ولكن كلمة المرور غير مطابقة.`
+          };
+        }
+      } else if (authErr.code === 'auth/weak-password') {
+        return {
+          success: false,
+          message: 'كلمة المرور ضعيفة جداً. يرجى كتابة كلمة مرور تتكون من 6 أحرف/أرقام على الأقل.'
+        };
+      } else {
+        return {
+          success: false,
+          message: `خطأ في إنشاء الحساب عبر Firebase Authentication: ${authErr.message || authErr.code}`
+        };
+      }
+    }
+
+    const now = new Date().toISOString();
+
+    const superAdminUser: IcuUser = {
+      uid,
+      email,
+      nameEn: data.fullName,
+      nameAr: data.fullName,
+      role: StaffRole.ADMIN,
+      licenseNumber: 'EMS-ICU-EGYPT-10042',
+      department: data.jobTitle || 'رئيس قسم العناية المركزة الباطنة - مصر',
+      badgeId: 'ADM-001',
+      isActive: true,
+      isSuperAdmin: true,
+      pinCode: data.password,
+      createdAt: now,
+      lastLoginAt: now,
+      permissions: getDefaultPermissionsForRole(StaffRole.ADMIN),
+    };
+
+    // 2. Save to Local Dexie DB
+    await db.users.put(superAdminUser);
+
+    // 3. Save to Firestore users & admins collections
+    try {
+      await setDoc(doc(firestore, 'users', uid), superAdminUser, { merge: true });
+      await setDoc(doc(firestore, 'admins', uid), {
+        uid,
+        email,
+        nameAr: data.fullName,
+        nameEn: data.fullName,
+        jobTitle: data.jobTitle,
+        createdAt: now,
+      }, { merge: true });
+    } catch (err) {
+      console.warn('Firestore write warning:', err);
+    }
+
+    // 4. Mark setup as completed permanently
+    localStorage.setItem('soli_icu_admin_setup_completed', 'true');
+
+    // Sign out from Auth session so the user lands on the Login screen cleanly
+    await firebaseSignOut(auth);
+
+    return { success: true, user: superAdminUser };
+  } catch (err: any) {
+    return {
+      success: false,
+      message: err.message || 'حدث خطأ أثناء إنشاء أول مستخدم في Firebase'
+    };
+  }
+}
+
+/**
+ * Registers the Initial Super Admin (Legacy / Fallback helper)
  */
 export async function registerInitialSuperAdmin(adminData: {
   uid?: string;
@@ -302,10 +401,8 @@ export async function registerInitialSuperAdmin(adminData: {
     permissions: getDefaultPermissionsForRole(StaffRole.ADMIN),
   };
 
-  // 1. Save to local Dexie
   await db.users.put(superAdminUser);
 
-  // 2. Save to Firestore users & admins collections
   try {
     await setDoc(doc(firestore, 'users', uid), superAdminUser, { merge: true });
     await setDoc(doc(firestore, 'admins', uid), {
@@ -319,7 +416,6 @@ export async function registerInitialSuperAdmin(adminData: {
     handleFirestoreError(err, OperationType.WRITE, `users/${uid}`);
   }
 
-  // 3. Mark setup permanently completed
   localStorage.setItem('soli_icu_admin_setup_completed', 'true');
   localStorage.setItem('soli_icu_active_user', JSON.stringify(superAdminUser));
 

@@ -19,7 +19,7 @@ import {
   Filter
 } from 'lucide-react';
 import { useAuth } from '../services/AuthContext.tsx';
-import { useSettings } from '../services/SettingsContext.tsx';
+import { useTranslation } from '../services/i18n.ts';
 import { StaffRole, IcuUser, UserPermissions } from '../types/schema.ts';
 import { getDefaultPermissionsForRole } from '../services/firebase.ts';
 
@@ -30,7 +30,7 @@ interface UserManagementModalProps {
 
 export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClose }) => {
   const { allUsers, currentUser, createUser, updateUser, toggleUserStatus } = useAuth();
-  const { lang, isRTL } = useSettings();
+  const { lang, isRTL } = useTranslation();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('ALL');
@@ -64,7 +64,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
     setFormNameEn('');
     setFormEmail('');
     setFormRole(StaffRole.BEDSIDE_RN);
-    setFormLicense(`SCFHS-${Math.floor(10000 + Math.random() * 90000)}`);
+    setFormLicense(`EMS-EGYPT-${Math.floor(10000 + Math.random() * 90000)}`);
     setFormDept('MICU');
     setFormBadge(`STF-${Math.floor(100 + Math.random() * 900)}`);
     setFormPin('1234');
@@ -296,7 +296,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
                 </div>
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                    {lang === 'ar' ? 'رقم ترخيص الهيئة (SCFHS) *' : 'License Number *'}
+                    {lang === 'ar' ? 'ترخيص نقابة أطباء مصر (EMS) *' : 'License Number (EMS) *'}
                   </label>
                   <input
                     type="text"

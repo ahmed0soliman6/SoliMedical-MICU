@@ -29,9 +29,14 @@ import {
   seedInitialDataToFirestore 
 } from './services/firebase.ts';
 import { useTranslation } from './services/i18n.ts';
+import { useAuth } from './services/AuthContext.tsx';
+import { LoginScreen } from './components/LoginScreen.tsx';
+import { InitialAdminSetupModal } from './components/InitialAdminSetupModal.tsx';
+import { UserManagementModal } from './components/UserManagementModal.tsx';
 
 export default function App() {
   const { t, lang, isRTL } = useTranslation();
+  const { currentUser, isAuthenticated, needsInitialAdminSetup, isLoading: isAuthLoading } = useAuth();
   const [isReady, setIsReady] = useState(false);
   const [activeTab, setActiveTab] = useState<'beds' | 'sbar' | 'notes'>('beds');
   const [selectedBedNumber, setSelectedBedNumber] = useState<BedNumber | null>(null);
@@ -47,7 +52,9 @@ export default function App() {
   // Modals
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isUserManagementOpen, setIsUserManagementOpen] = useState(false);
   const [isAdmissionOpen, setIsAdmissionOpen] = useState(false);
+
   const [admissionTargetBed, setAdmissionTargetBed] = useState<BedNumber | null>(null);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isQuickVitalsOpen, setIsQuickVitalsOpen] = useState(false);
@@ -148,7 +155,15 @@ export default function App() {
     };
   }, [reloadData, lang]);
 
-  if (!isReady) {
+  if (needsInitialAdminSetup) {
+    return <InitialAdminSetupModal />;
+  }
+
+  if (!isAuthenticated && !isAuthLoading) {
+    return <LoginScreen />;
+  }
+
+  if (!isReady || isAuthLoading) {
     return (
       <div className="min-h-screen bg-[#070d18] text-teal-400 flex flex-col items-center justify-center space-y-4">
         <div className="w-12 h-12 rounded-2xl bg-teal-500/20 border border-teal-500/40 flex items-center justify-center animate-spin">
@@ -199,9 +214,11 @@ export default function App() {
         onOpenAdmission={handleSmartAdmission}
         onOpenSearch={() => setIsSearchOpen(true)}
         onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenUserManagement={() => setIsUserManagementOpen(true)}
         beds={beds}
         patients={patients}
       />
+
 
       {/* Main Clinical Canvas */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-6 space-y-5">
@@ -416,6 +433,12 @@ export default function App() {
           }}
         />
       )}
+
+      {/* User Management & Access Control Modal (RBAC) */}
+      <UserManagementModal
+        isOpen={isUserManagementOpen}
+        onClose={() => setIsUserManagementOpen(false)}
+      />
     </div>
   );
 }
