@@ -78,15 +78,17 @@ export async function ensureAuthenticated(): Promise<void> {
   }
 }
 
-// Test Connection on boot
+// Test Connection on boot (with timeout and offline graceful handling)
 export async function testFirestoreConnection(): Promise<boolean> {
   try {
-    await getDocFromServer(doc(firestore, 'test', 'connection'));
-    return true;
+    const docRef = doc(firestore, 'test', 'connection');
+    const docSnap = await Promise.race([
+      getDoc(docRef),
+      new Promise<null>((_, reject) => setTimeout(() => reject(new Error('Connection timeout')), 3000))
+    ]);
+    return docSnap !== null;
   } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn('Firestore is running in offline cache mode.');
-    }
+    // Expected when running offline
     return false;
   }
 }
@@ -121,8 +123,22 @@ export interface FirestoreErrorInfo {
 }
 
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errMsg = error instanceof Error ? error.message : String(error);
+  const errCode = (error as any)?.code;
+
+  // Gracefully handle offline / unavailable state without raising loud console errors
+  if (
+    errCode === 'unavailable' ||
+    errMsg.includes('offline') ||
+    errMsg.includes('unavailable') ||
+    errMsg.includes('Could not reach Cloud Firestore')
+  ) {
+    console.info(`[ICU-Sync Offline Cache] Firestore operates in local-first offline mode for path: ${path || 'root'}`);
+    return;
+  }
+
   const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
+    error: errMsg,
     authInfo: {
       userId: auth.currentUser?.uid,
       email: auth.currentUser?.email,

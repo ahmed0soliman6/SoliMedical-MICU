@@ -147,7 +147,14 @@ export async function admitPatient(input: DirectAdmissionInput): Promise<{ patie
     }
 
     if (existingBed.status === BedStatus.OCCUPIED && existingBed.currentPatientId) {
-      throw new Error(`Bed ${input.targetBed} is already occupied. Please transfer or discharge current patient first.`);
+      const activePatient = await db.patients.get(existingBed.currentPatientId);
+      if (activePatient && activePatient.patientStatus === 'ACTIVE_ICU') {
+        throw new Error(`Bed ${input.targetBed} is already occupied by ${activePatient.fullNameAr || activePatient.fullNameEn} (${activePatient.mrn}). Please transfer or discharge current patient first.`);
+      }
+      // Self-heal: the patient previously assigned was missing or discharged
+      existingBed.status = BedStatus.VACANT;
+      existingBed.currentPatientId = null;
+      existingBed.activePatientId = null;
     }
 
     const nowIso = new Date().toISOString();

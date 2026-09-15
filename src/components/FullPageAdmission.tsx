@@ -1,30 +1,79 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, UserPlus, CheckCircle2, RefreshCw } from 'lucide-react';
+import { ArrowLeft, UserPlus, CheckCircle2, RefreshCw, AlertTriangle } from 'lucide-react';
 import { 
   BedNumber, 
   BedStatus, 
   CodeStatus, 
   AcuityLevel, 
   Gender, 
-  IntakePathway,
-  StaffRole,
-  AllergySeverity
+  IntakePathway, 
+  StaffRole, 
+  AllergySeverity,
+  BedRecord,
+  PatientDossier
 } from '../types/schema.ts';
 import { admitPatient, calculateIdealBodyWeight } from '../services/dataModel.ts';
 import { useTranslation } from '../services/i18n.ts';
+import { db } from '../db/icuSyncDb.ts';
 
 interface FullPageAdmissionProps {
   bedNumber: BedNumber;
+  allBeds?: BedRecord[];
+  allPatients?: PatientDossier[];
   onCancel: () => void;
   onAdmissionSuccess: () => void;
 }
 
 export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
   bedNumber,
+  allBeds,
+  allPatients,
   onCancel,
   onAdmissionSuccess,
 }) => {
   const { lang, isRTL } = useTranslation();
+
+  const [bedsList, setBedsList] = useState<BedRecord[]>(allBeds || []);
+  const [patientsList, setPatientsList] = useState<PatientDossier[]>(allPatients || []);
+  const [targetBed, setTargetBed] = useState<BedNumber>(bedNumber);
+  const [admissionError, setAdmissionError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function loadData() {
+      if (!allBeds || allBeds.length === 0) {
+        const b = await db.beds.toArray();
+        setBedsList(b);
+      } else {
+        setBedsList(allBeds);
+      }
+      if (!allPatients || allPatients.length === 0) {
+        const p = await db.patients.toArray();
+        setPatientsList(p);
+      } else {
+        setPatientsList(allPatients);
+      }
+    }
+    loadData();
+  }, [allBeds, allPatients]);
+
+  // If initial bedNumber is occupied, automatically switch to first vacant bed
+  useEffect(() => {
+    if (bedsList.length > 0) {
+      const currentBedRec = bedsList.find(b => b.bedNumber === targetBed);
+      if (currentBedRec && (currentBedRec.status === BedStatus.OCCUPIED || currentBedRec.currentPatientId)) {
+        const firstVacant = bedsList.find(b => b.status === BedStatus.VACANT && !b.currentPatientId);
+        if (firstVacant) {
+          setTargetBed(firstVacant.bedNumber as BedNumber);
+        }
+      }
+    }
+  }, [bedsList]);
+
+  const targetBedRecord = bedsList.find(b => b.bedNumber === targetBed);
+  const isTargetOccupied = !!targetBedRecord && (targetBedRecord.status === BedStatus.OCCUPIED || !!targetBedRecord.currentPatientId);
+  const occupyingPatient = isTargetOccupied && targetBedRecord?.currentPatientId
+    ? patientsList.find(p => p.id === targetBedRecord.currentPatientId)
+    : null;
 
   const [mrn, setMrn] = useState<string>('');
   const [fullNameAr, setFullNameAr] = useState<string>('');
@@ -53,7 +102,7 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
   // Generate MRN on mount
   useEffect(() => {
     setMrn(`MRN-${Math.floor(100000 + Math.random() * 900000)}`);
-  }, [bedNumber]);
+  }, [targetBed]);
 
   const calculatedIbw = calculateIdealBodyWeight(heightCm, gender);
 
@@ -63,8 +112,19 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setAdmissionError(null);
+
+    if (isTargetOccupied) {
+      setAdmissionError(
+        lang === 'ar'
+          ? `السرير ${targetBed} مشغول حالياً. يرجى اختيار سرير شاغر آخر لإتمام الدخول.`
+          : `Bed ${targetBed} is already occupied. Please select an available vacant bed.`
+      );
+      return;
+    }
+
     if (!fullNameAr.trim() && !fullNameEn.trim()) {
-      alert(lang === 'ar' ? 'يرجى إدخال اسم المريض بالكامل.' : 'Please enter patient full name.');
+      setAdmissionError(lang === 'ar' ? 'يرجى إدخال اسم المريض بالكامل.' : 'Please enter patient full name.');
       return;
     }
     setIsSubmitting(true);
@@ -78,7 +138,7 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
         : [];
 
       await admitPatient({
-        targetBed: bedNumber,
+        targetBed,
         mrn: mrn.trim(),
         fullNameAr: fullNameAr.trim() || fullNameEn.trim(),
         fullNameEn: fullNameEn.trim() || fullNameAr.trim(),
@@ -114,13 +174,13 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
           coreTemperatureCelsius: 38.2,
           gcsTotalScore: 12,
         },
-        initialAdmissionNote: `Direct full-page admission protocol completed for Bed ${bedNumber}. Attending: ${attendingDoctor}, RN: ${primaryNurse}.`,
+        initialAdmissionNote: `Direct full-page admission protocol completed for Bed ${targetBed}. Attending: ${attendingDoctor}, RN: ${primaryNurse}.`,
       });
 
       onAdmissionSuccess();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert(lang === 'ar' ? 'حدث خطأ أثناء إجراء إدخال المريض للسرير.' : 'Error performing patient admission.');
+      setAdmissionError(err?.message || (lang === 'ar' ? 'حدث خطأ أثناء إجراء إدخال المريض للسرير.' : 'Error performing patient admission.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -140,17 +200,38 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
           </button>
           <div>
             <div className="flex items-center gap-2">
-              <span className="px-2.5 py-0.5 rounded-lg bg-teal-500/20 text-teal-300 border border-teal-500/40 font-mono font-bold text-xs">
-                {bedNumber}
-              </span>
+              <label htmlFor="target-bed-select" className="sr-only">Target ICU Bed</label>
+              <select
+                id="target-bed-select"
+                value={targetBed}
+                onChange={(e) => {
+                  setTargetBed(e.target.value as BedNumber);
+                  setAdmissionError(null);
+                }}
+                className="px-2.5 py-1 rounded-lg bg-[#070c18] text-teal-300 border border-teal-500/40 font-mono font-bold text-xs focus:outline-none focus:ring-1 focus:ring-teal-500 cursor-pointer"
+              >
+                {bedsList.map((b) => {
+                  const isOcc = b.status === BedStatus.OCCUPIED || !!b.currentPatientId;
+                  const p = isOcc && b.currentPatientId ? patientsList.find(pt => pt.id === b.currentPatientId) : null;
+                  return (
+                    <option key={b.bedNumber} value={b.bedNumber} className="bg-slate-900 text-slate-200">
+                      Bed {b.bedNumber} {isOcc ? `(Occupied - ${p?.fullNameAr || p?.fullNameEn || 'Active'})` : '(Vacant - جاهز)'}
+                    </option>
+                  );
+                })}
+              </select>
               <h1 className="text-base sm:text-lg font-bold text-white">
                 {lang === 'ar' ? 'تسجيل قبول مريض جديد بجانب السرير' : 'Direct Bedside ICU Admission'}
               </h1>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              {lang === 'ar' 
-                ? 'السرير شاغر حالياً. تعبئة هذا النموذج ينشئ ملفاً حيوياً مفعلاً لحظياً على المونيتور المركزي.' 
-                : 'This bed is currently vacant. Admitting a patient initializes their telemetry, clinical charts, and real-time flowsheet.'}
+              {isTargetOccupied
+                ? (lang === 'ar' 
+                    ? `تنبيه: السرير ${targetBed} مشغول حالياً. اختر سريراً شاغراً من القائمة أعلاه.`
+                    : `Notice: Bed ${targetBed} is currently occupied. Please select a vacant bed from the selector above.`)
+                : (lang === 'ar' 
+                    ? 'السرير شاغر وجاهز للاستقبال. تعبئة هذا النموذج ينشئ ملفاً حيوياً مفعلاً لحظياً على المونيتور المركزي.' 
+                    : 'This bed is currently vacant. Admitting a patient initializes their telemetry, clinical charts, and real-time flowsheet.')}
             </p>
           </div>
         </div>
@@ -161,22 +242,51 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
         </div>
       </div>
 
+      {/* Error / Conflict Alert */}
+      {admissionError && (
+        <div className="p-4 rounded-xl bg-red-950/40 border border-red-500/40 flex items-start gap-3 text-red-300">
+          <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+          <div>
+            <strong className="block text-xs font-bold text-red-200 mb-0.5">
+              {lang === 'ar' ? 'تعذر إتمام الدخول إلى السرير' : 'Admission Could Not Be Completed'}
+            </strong>
+            <p className="text-xs text-red-300">{admissionError}</p>
+          </div>
+        </div>
+      )}
+
       {/* Main Full-Page Admission Form */}
       <form onSubmit={handleSubmit} className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-6 shadow-xl space-y-6 text-xs">
         {/* Bed Status Warning */}
-        <div className="p-4 rounded-xl bg-emerald-950/20 border border-emerald-500/30 flex items-start gap-3">
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse mt-1 flex-shrink-0" />
-          <div>
-            <strong className="text-emerald-300 block text-xs">
-              {lang === 'ar' ? 'السرير معقم ومعد للاستقبال الفوري' : 'Bed Cleaned, Calibrated & Ready for Immediate Care'}
-            </strong>
-            <p className="text-slate-400 mt-0.5 text-[11px]">
-              {lang === 'ar' 
-                ? 'تم فحص أجهزة المراقبة الحيوية، واختبار ضغط الأكسجين والشفط الجداري. يمكنك المباشرة بتسكين المريض.' 
-                : 'Bedside hardware, central gases, wall suction, and monitors have been checked. Proceed with direct clinical entry.'}
-            </p>
+        {isTargetOccupied ? (
+          <div className="p-4 rounded-xl bg-amber-950/30 border border-amber-500/40 flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <strong className="text-amber-300 block text-xs">
+                {lang === 'ar' ? `السرير ${targetBed} مشغول حالياً` : `Bed ${targetBed} is Currently Occupied`}
+              </strong>
+              <p className="text-slate-300 mt-0.5 text-[11px]">
+                {lang === 'ar'
+                  ? `السرير ${targetBed} مخصص حالياً للمريض ${occupyingPatient?.fullNameAr || occupyingPatient?.fullNameEn || ''} (${occupyingPatient?.mrn || ''}). يرجى اختيار سرير شاغر آخر من القائمة في الأعلى أو نقل الحالة الحالية أولاً.`
+                  : `Bed ${targetBed} is occupied by ${occupyingPatient?.fullNameEn || occupyingPatient?.fullNameAr || 'patient'} (${occupyingPatient?.mrn || ''}). Please switch to a vacant bed from the selector above or transfer/discharge the current patient first.`}
+              </p>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="p-4 rounded-xl bg-emerald-950/20 border border-emerald-500/30 flex items-start gap-3">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse mt-1 flex-shrink-0" />
+            <div>
+              <strong className="text-emerald-300 block text-xs">
+                {lang === 'ar' ? `السرير ${targetBed} معقم ومعد للاستقبال الفوري` : `Bed ${targetBed} Cleaned, Calibrated & Ready for Immediate Care`}
+              </strong>
+              <p className="text-slate-400 mt-0.5 text-[11px]">
+                {lang === 'ar' 
+                  ? 'تم فحص أجهزة المراقبة الحيوية، واختبار ضغط الأكسجين والشفط الجداري. يمكنك المباشرة بتسكين المريض.' 
+                  : 'Bedside hardware, central gases, wall suction, and monitors have been checked. Proceed with direct clinical entry.'}
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Section 1: Demographics & Identifiers */}
         <div className="space-y-4">
@@ -498,13 +608,19 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
           </button>
           <button
             type="submit"
-            disabled={isSubmitting}
-            className="px-7 py-3 rounded-xl bg-gradient-to-r from-teal-600 to-teal-500 hover:from-teal-500 hover:to-teal-400 text-slate-950 font-bold text-xs flex items-center gap-2 shadow-lg shadow-teal-500/25 active:scale-95 transition-all cursor-pointer"
+            disabled={isSubmitting || isTargetOccupied}
+            className={`px-7 py-3 rounded-xl font-bold text-xs flex items-center gap-2 shadow-lg transition-all ${
+              isTargetOccupied
+                ? 'bg-slate-700 text-slate-400 cursor-not-allowed shadow-none'
+                : 'bg-gradient-to-r from-teal-600 to-teal-500 hover:from-teal-500 hover:to-teal-400 text-slate-950 shadow-teal-500/25 active:scale-95 cursor-pointer'
+            }`}
           >
-            <CheckCircle2 className="w-4 h-4 text-slate-950" />
+            <CheckCircle2 className="w-4 h-4" />
             <span>
               {isSubmitting 
                 ? (lang === 'ar' ? 'جاري حجز السرير وإدخال الحالة...' : 'Registering Admission...') 
+                : isTargetOccupied
+                ? (lang === 'ar' ? 'السرير المحدد مشغول (اختر سريراً شاغراً)' : 'Target Bed is Occupied (Select Vacant Bed)')
                 : (lang === 'ar' ? 'تأكيد دخول المريض وتنشيط السرير' : 'Confirm & Active ICU Bed')}
             </span>
           </button>

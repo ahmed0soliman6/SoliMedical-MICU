@@ -49,13 +49,21 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
 
   if (!isOpen) return null;
 
-  const filteredPatients = allPatients.filter((p) => {
+  const filteredPatients = (allPatients || []).filter((p) => {
+    if (!p) return false;
+    const q = (searchTerm || '').toLowerCase();
+    const mrn = (p.mrn || '').toLowerCase();
+    const nameAr = p.fullNameAr || '';
+    const nameEn = (p.fullNameEn || '').toLowerCase();
+    const diagAr = p.primaryDiagnosisAr || '';
+    const diagEn = (p.primaryDiagnosisEn || '').toLowerCase();
+
     const matchesSearch = 
-      p.mrn.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.fullNameAr.includes(searchTerm) ||
-      p.fullNameEn.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (p.primaryDiagnosisAr && p.primaryDiagnosisAr.includes(searchTerm)) ||
-      p.primaryDiagnosisEn.toLowerCase().includes(searchTerm.toLowerCase());
+      mrn.includes(q) ||
+      nameAr.includes(searchTerm) ||
+      nameEn.includes(q) ||
+      diagAr.includes(searchTerm) ||
+      diagEn.includes(q);
 
     if (!matchesSearch) return false;
     if (filterType === 'ALL') return true;

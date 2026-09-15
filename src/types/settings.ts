@@ -11,6 +11,11 @@ export interface SystemFeatureFlags {
   enableVentilatorParameters: boolean;// إعدادات جهاز التنفس الصناعي (Ventilator)
   enableInfusionPumps: boolean;       // مضخات التسريب الوريدي والأدوية الحركية الوعائية
   enableFluidBalance: boolean;        // ميزان السوائل 24 ساعة (I/O Balance)
+  enableLabFlowsheet: boolean;        // جدول ومسار التحاليل المتسلسلة التراكمية
+  enableInvestigations: boolean;      // الفحوصات والأشعات وتصوير الموجات الصوتية
+  enableAiLabScanner: boolean;        // التعرف البصري الذكي وقراءة التحاليل بالذكاء الاصطناعي (ABG & CBC OCR)
+  enableBedTransferAndSwap: boolean;  // إجراءات نقل المرضى وتبديل الأسِرّة الآمنة
+  enableBedIsolationControls: boolean;// إدارة العزل الطبي وحالة السرير
   enableAcuityLevels: boolean;        // تصنيفات الخطورة السريرية (Acuity Badges)
   enableCodeStatus: boolean;          // حالة الإنعاش القلبي الرئوي (Code Status: Full CPR / DNR)
   enableSha256Addendums: boolean;     // البصمات المشفرة SHA-256 للملاحظات
@@ -49,6 +54,11 @@ export const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
     enableVentilatorParameters: true,
     enableInfusionPumps: true,
     enableFluidBalance: true,
+    enableLabFlowsheet: true,
+    enableInvestigations: true,
+    enableAiLabScanner: true,
+    enableBedTransferAndSwap: true,
+    enableBedIsolationControls: true,
     enableAcuityLevels: true,
     enableCodeStatus: true,
     enableSha256Addendums: true,

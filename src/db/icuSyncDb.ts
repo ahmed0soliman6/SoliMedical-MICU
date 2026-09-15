@@ -13,7 +13,14 @@ import {
   ClinicalNote, 
   Addendum, 
   IcuUser,
-  WardAuditLog
+  WardAuditLog,
+  LabResultItem,
+  InvestigationItem,
+  Gender,
+  CodeStatus,
+  IntakePathway,
+  AcuityLevel,
+  StaffRole
 } from '../types/schema.ts';
 
 export class IcuSyncDatabase extends Dexie {
@@ -30,6 +37,8 @@ export class IcuSyncDatabase extends Dexie {
   addendums!: Table<Addendum, string>;
   users!: Table<IcuUser, string>;
   auditLogs!: Table<WardAuditLog, string>;
+  labResults!: Table<LabResultItem, string>;
+  investigations!: Table<InvestigationItem, string>;
 
   constructor() {
     super('SoliMedicalIcuSyncDB');
@@ -48,6 +57,15 @@ export class IcuSyncDatabase extends Dexie {
       users: 'uid, email, role, badgeId',
       auditLogs: 'id, timestamp, bedNumber, userId, action'
     });
+
+    this.version(2).stores({
+      labResults: 'id, patientId, testName, timestamp, status',
+      investigations: 'id, patientId, modality, timestamp, status'
+    });
+
+    this.version(3).stores({
+      patients: 'id, mrn, fullNameEn, fullNameAr, patientStatus, currentBedId',
+    });
   }
 }
 
@@ -63,11 +81,328 @@ export async function initializeDatabaseSeed(): Promise<void> {
       bayName: `Critical Care Bay ${num}`,
       isActive: true,
       displayOrder: idx,
-      status: BedStatus.VACANT,
-      currentPatientId: null,
+      status: idx === 0 ? BedStatus.OCCUPIED : idx === 1 ? BedStatus.OCCUPIED : idx === 2 ? BedStatus.ISOLATION : idx === 5 ? BedStatus.UNAVAILABLE : BedStatus.VACANT,
+      currentPatientId: idx === 0 ? 'pat-bed-01' : idx === 1 ? 'pat-bed-02' : null,
       lastCleanedAt: new Date().toISOString()
     }));
     await db.beds.bulkPut(initialBeds);
+  }
+
+  // Seed initial demonstration patients if empty
+  const patientCount = await db.patients.count();
+  if (patientCount === 0) {
+    const now = Date.now();
+    const threeDaysAgo = new Date(now - 3 * 24 * 3600 * 1000).toISOString();
+    const twoDaysAgo = new Date(now - 2 * 24 * 3600 * 1000).toISOString();
+    const oneDayAgo = new Date(now - 1 * 24 * 3600 * 1000).toISOString();
+    const today = new Date(now).toISOString();
+
+    const p1: PatientDossier = {
+      id: 'pat-bed-01',
+      mrn: 'MRN-104928',
+      phoneNumber: '01098765432',
+      nationalId: '26508120109283',
+      fullNameEn: 'Mahmoud El-Sayed El-Sherif',
+      fullNameAr: 'محمود السيد الشريف',
+      age: 62,
+      gender: Gender.MALE as any,
+      weightKg: 78,
+      heightCm: 172,
+      idealBodyWeightKg: 70,
+      codeStatus: CodeStatus.FULL_CODE as any,
+      primaryDiagnosisEn: 'Acute Respiratory Distress Syndrome (ARDS) secondary to Septic Shock',
+      primaryDiagnosisAr: 'متلازمة الضائقة التنفسية الحادة (ARDS) الناتجة عن صدمة إنتانية',
+      intakePathway: IntakePathway.STAT_CRITICAL as any,
+      admissionDate: threeDaysAgo,
+      currentBedId: '01' as any,
+      acuityLevel: AcuityLevel.CRITICAL_STAT as any,
+      patientStatus: 'ACTIVE_ICU',
+      allergies: [],
+      microbiologyHistory: [],
+      pastVisits: [],
+      attendingPhysician: {
+        staffId: 'DOC-101',
+        name: 'د. هشام طلعت (Dr. Hesham Talaat)',
+        role: StaffRole.CONSULTANT as any,
+      },
+      primaryNurse: {
+        staffId: 'RN-302',
+        name: 'ممرض/ منى حسان (RN Mona Hassan)',
+        role: StaffRole.BEDSIDE_RN as any,
+      },
+      isolationPrecautions: ['Airborne Precautions'],
+      createdAt: threeDaysAgo,
+      updatedAt: today,
+    };
+
+    const p2: PatientDossier = {
+      id: 'pat-bed-02',
+      mrn: 'MRN-209841',
+      phoneNumber: '01123456789',
+      nationalId: '27204150104821',
+      fullNameEn: 'Fatima Al-Zahra Ali',
+      fullNameAr: 'فاطمة الزهراء علي',
+      age: 58,
+      gender: Gender.FEMALE as any,
+      weightKg: 68,
+      heightCm: 160,
+      idealBodyWeightKg: 52,
+      codeStatus: CodeStatus.FULL_CODE as any,
+      primaryDiagnosisEn: 'Acute Anterior STEMI with Cardiogenic Shock',
+      primaryDiagnosisAr: 'احتشاء أمامي حاد بعضلة القلب مع صدمة قلبية',
+      intakePathway: IntakePathway.STAT_CRITICAL as any,
+      admissionDate: twoDaysAgo,
+      currentBedId: '02' as any,
+      acuityLevel: AcuityLevel.HIGH_VIGILANCE as any,
+      patientStatus: 'ACTIVE_ICU',
+      allergies: [],
+      microbiologyHistory: [],
+      pastVisits: [],
+      attendingPhysician: {
+        staffId: 'DOC-102',
+        name: 'د. طارق منصور (Dr. Tarek Mansour)',
+        role: StaffRole.SPECIALIST as any,
+      },
+      primaryNurse: {
+        staffId: 'RN-304',
+        name: 'ممرض/ أحمد خليل (RN Ahmed Khalil)',
+        role: StaffRole.BEDSIDE_RN as any,
+      },
+      createdAt: twoDaysAgo,
+      updatedAt: today,
+    };
+
+    await db.patients.bulkPut([p1, p2]);
+
+    // Seed serial lab results for Bed 01 showing exact trend: HG 5 > 7 > 8.5 > 8
+    const sampleLabs: LabResultItem[] = [
+      {
+        id: 'lab-hg-1',
+        patientId: 'pat-bed-01',
+        bedNumber: '01',
+        testName: 'HG',
+        category: 'CBC',
+        value: '5',
+        unit: 'g/dL',
+        normalRange: '12.0 - 16.0',
+        timestamp: threeDaysAgo,
+        status: 'RESULTED',
+        notes: 'قراءة أولية عند الدخول - نوبة نزف هضمي حاد',
+        recordedByName: 'د. هشام طلعت (Dr. Hesham)',
+      },
+      {
+        id: 'lab-hg-2',
+        patientId: 'pat-bed-01',
+        bedNumber: '01',
+        testName: 'HG',
+        category: 'CBC',
+        value: '7',
+        unit: 'g/dL',
+        normalRange: '12.0 - 16.0',
+        timestamp: twoDaysAgo,
+        status: 'RESULTED',
+        notes: 'بعد نقل وحدتين دم مكدس PRBCs',
+        recordedByName: 'د. طارق منصور (Dr. Tarek)',
+      },
+      {
+        id: 'lab-hg-3',
+        patientId: 'pat-bed-01',
+        bedNumber: '01',
+        testName: 'HG',
+        category: 'CBC',
+        value: '8.5',
+        unit: 'g/dL',
+        normalRange: '12.0 - 16.0',
+        timestamp: oneDayAgo,
+        status: 'RESULTED',
+        notes: 'استجابة جيدة لنقل الدم وتوقف النزف',
+        recordedByName: 'ممرض/ منى حسان (RN Mona)',
+      },
+      {
+        id: 'lab-hg-4',
+        patientId: 'pat-bed-01',
+        bedNumber: '01',
+        testName: 'HG',
+        category: 'CBC',
+        value: '8',
+        unit: 'g/dL',
+        normalRange: '12.0 - 16.0',
+        timestamp: today,
+        status: 'RESULTED',
+        notes: 'استقرار نسبي للهيموجلوبين',
+        recordedByName: 'د. هشام طلعت (Dr. Hesham)',
+      },
+      // Creatinine declining (improvement)
+      {
+        id: 'lab-cr-1',
+        patientId: 'pat-bed-01',
+        bedNumber: '01',
+        testName: 'Creatinine',
+        category: 'Biochemistry',
+        value: '3.2',
+        unit: 'mg/dL',
+        normalRange: '0.7 - 1.3',
+        timestamp: threeDaysAgo,
+        status: 'RESULTED',
+        notes: 'قصور كلوي حاد AKI',
+        recordedByName: 'د. هشام طلعت',
+      },
+      {
+        id: 'lab-cr-2',
+        patientId: 'pat-bed-01',
+        bedNumber: '01',
+        testName: 'Creatinine',
+        category: 'Biochemistry',
+        value: '2.4',
+        unit: 'mg/dL',
+        normalRange: '0.7 - 1.3',
+        timestamp: twoDaysAgo,
+        status: 'RESULTED',
+        notes: 'تحسن مع السوائل',
+        recordedByName: 'د. طارق منصور',
+      },
+      {
+        id: 'lab-cr-3',
+        patientId: 'pat-bed-01',
+        bedNumber: '01',
+        testName: 'Creatinine',
+        category: 'Biochemistry',
+        value: '1.8',
+        unit: 'mg/dL',
+        normalRange: '0.7 - 1.3',
+        timestamp: today,
+        status: 'RESULTED',
+        notes: 'استمرار التحسن الكلوي',
+        recordedByName: 'د. هشام طلعت',
+      },
+      // WBC
+      {
+        id: 'lab-wbc-1',
+        patientId: 'pat-bed-01',
+        bedNumber: '01',
+        testName: 'WBC',
+        category: 'CBC',
+        value: '18.5',
+        unit: 'x10^9/L',
+        normalRange: '4.0 - 11.0',
+        timestamp: threeDaysAgo,
+        status: 'RESULTED',
+        notes: 'Leukocytosis due to sepsis',
+        recordedByName: 'د. هشام طلعت',
+      },
+      {
+        id: 'lab-wbc-2',
+        patientId: 'pat-bed-01',
+        bedNumber: '01',
+        testName: 'WBC',
+        category: 'CBC',
+        value: '14.2',
+        unit: 'x10^9/L',
+        normalRange: '4.0 - 11.0',
+        timestamp: twoDaysAgo,
+        status: 'RESULTED',
+        notes: 'Declining with Meropenem',
+        recordedByName: 'د. طارق منصور',
+      },
+      {
+        id: 'lab-wbc-3',
+        patientId: 'pat-bed-01',
+        bedNumber: '01',
+        testName: 'WBC',
+        category: 'CBC',
+        value: '11.0',
+        unit: 'x10^9/L',
+        normalRange: '4.0 - 11.0',
+        timestamp: today,
+        status: 'RESULTED',
+        notes: 'Normalized range',
+        recordedByName: 'د. هشام طلعت',
+      },
+    ];
+
+    await db.labResults.bulkPut(sampleLabs);
+
+    // Seed investigations for Bed 01
+    const sampleInv: InvestigationItem[] = [
+      {
+        id: 'inv-cxr-1',
+        patientId: 'pat-bed-01',
+        bedNumber: '01',
+        modality: 'Chest X-Ray',
+        testName: 'Portable AP Chest Radiograph',
+        timestamp: threeDaysAgo,
+        status: 'REPORTED',
+        resultReport: 'Bilateral diffuse fluffy alveolar infiltrates consistent with ARDS stage 2. Endotracheal tube tip positioned 4 cm above carina.',
+        recordedByName: 'د. أشرف رضوان (استشاري الأشعة)',
+      },
+      {
+        id: 'inv-echo-1',
+        patientId: 'pat-bed-01',
+        bedNumber: '01',
+        modality: 'Echo',
+        testName: 'Bedside Transthoracic Echocardiogram (POCUS)',
+        timestamp: twoDaysAgo,
+        status: 'REPORTED',
+        resultReport: 'LVEF estimated 55%, hyperdynamic LV with mild septal hypokinesia. Normal RV size and function, no pericardial effusion.',
+        recordedByName: 'د. طارق منصور (Dr. Tarek)',
+      },
+      {
+        id: 'inv-ecg-1',
+        patientId: 'pat-bed-01',
+        bedNumber: '01',
+        modality: 'ECG',
+        testName: '12-Lead Standard Electrocardiogram',
+        timestamp: today,
+        status: 'REPORTED',
+        resultReport: 'Sinus rhythm, HR 96 bpm, PR 160ms, QTc 430ms. No ischemic ST elevation or malignant arrhythmia.',
+        recordedByName: 'د. هشام طلعت (Dr. Hesham)',
+      },
+    ];
+
+    await db.investigations.bulkPut(sampleInv);
+  }
+
+  // Reconcile and synchronize bed occupancy state with active patients in IndexedDB
+  const currentBeds = await db.beds.toArray();
+  const allPatients = await db.patients.toArray();
+  for (const b of currentBeds) {
+    let modified = false;
+    if (b.currentPatientId) {
+      const activePat = allPatients.find(p => p.id === b.currentPatientId);
+      if (!activePat || activePat.patientStatus !== 'ACTIVE_ICU') {
+        const alternatePat = allPatients.find(p => p.currentBedId === b.bedNumber && p.patientStatus === 'ACTIVE_ICU');
+        if (alternatePat) {
+          b.currentPatientId = alternatePat.id;
+          b.activePatientId = alternatePat.id;
+          b.status = BedStatus.OCCUPIED;
+        } else {
+          b.currentPatientId = null;
+          b.activePatientId = null;
+          b.status = BedStatus.VACANT;
+        }
+        modified = true;
+      } else {
+        if (b.status !== BedStatus.OCCUPIED && b.status !== BedStatus.ISOLATION) {
+          b.status = BedStatus.OCCUPIED;
+          modified = true;
+        }
+      }
+    } else if (b.status === BedStatus.OCCUPIED) {
+      const activePat = allPatients.find(p => p.currentBedId === b.bedNumber && p.patientStatus === 'ACTIVE_ICU');
+      if (activePat) {
+        b.currentPatientId = activePat.id;
+        b.activePatientId = activePat.id;
+      } else {
+        b.status = BedStatus.VACANT;
+        b.currentPatientId = null;
+        b.activePatientId = null;
+      }
+      modified = true;
+    }
+
+    if (modified) {
+      await db.beds.put(b);
+    }
   }
 }
 

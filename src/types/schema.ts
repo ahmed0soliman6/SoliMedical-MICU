@@ -19,6 +19,8 @@ export enum BedNumber {
 export enum BedStatus {
   OCCUPIED = 'OCCUPIED',
   VACANT = 'VACANT',
+  ISOLATION = 'ISOLATION',
+  UNAVAILABLE = 'UNAVAILABLE',
   TRANSFER_PENDING = 'TRANSFER_PENDING',
   DECONTAMINATING = 'DECONTAMINATING',
   LOCKED = 'LOCKED',
@@ -81,6 +83,16 @@ export interface PatientRecord {
   createdAt: number; // Server Timestamp
 }
 
+export interface BedIsolationInfo {
+  isIsolated: boolean;
+  reason?: string;
+  type?: string;
+  startDate?: string;
+  endDate?: string;
+  precautions?: string[];
+  notes?: string;
+}
+
 export interface BedRecord {
   id: string; // bedId
   unitId: string;
@@ -90,6 +102,7 @@ export interface BedRecord {
   displayOrder: number;
   status: BedStatus;
   currentPatientId: string | null;
+  isolation?: BedIsolationInfo;
   lastTelemetryPingUtc?: string;
   lastCleanedAt?: string;
   hardwareReadiness?: {
@@ -107,6 +120,36 @@ export interface BedRecord {
   // -- Legacy/Compatibility fields --
   activePatientId?: string | null; 
   lastTransferId?: string | null; 
+}
+
+export interface LabResultItem {
+  id: string;
+  patientId: string;
+  bedNumber?: string;
+  testName: string;
+  category?: string;
+  value: string;
+  unit: string;
+  normalRange: string;
+  timestamp: string;
+  status: 'ORDERED' | 'RESULTED';
+  notes?: string;
+  recordedByName: string;
+  recordedByStaffId?: string;
+}
+
+export interface InvestigationItem {
+  id: string;
+  patientId: string;
+  bedNumber?: string;
+  modality: 'Chest X-Ray' | 'CT' | 'MRI' | 'Ultrasound' | 'ECG' | 'Echo' | 'Other' | string;
+  testName: string;
+  timestamp: string;
+  status: 'ORDERED' | 'RESULTED' | 'REPORTED';
+  resultReport: string;
+  notes?: string;
+  recordedByName: string;
+  recordedByStaffId?: string;
 }
 
 export interface PatientBedTransfer {
@@ -547,6 +590,7 @@ export interface MortalityAuditRecord {
 export interface PatientDossier {
   id: string;
   mrn: string; // Medical Record Number e.g. #99281, ICU-992-814
+  phoneNumber?: string;
   nationalId?: string;
   fullNameEn: string;
   fullNameAr: string;

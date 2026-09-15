@@ -63,7 +63,7 @@ export default function App() {
 
   // Smart admission with automatic vacant bed detection
   const handleSmartAdmission = useCallback(() => {
-    const vacantBed = beds.find(b => b.status === BedStatus.VACANT || !b.currentPatientId);
+    const vacantBed = beds.find(b => (b.status === BedStatus.VACANT || b.status === BedStatus.DECONTAMINATING) && !b.currentPatientId);
     if (vacantBed) {
       setSelectedBedNumber(vacantBed.bedNumber as BedNumber);
     } else {
@@ -242,6 +242,9 @@ export default function App() {
           onOpenSettings={() => {
             setActiveTab('settings');
           }}
+          onOpenUserManagement={() => {
+            setActiveTab('users');
+          }}
           beds={beds}
           patients={patients}
           selectedBedNumber={selectedBedNumber}
@@ -258,6 +261,8 @@ export default function App() {
             <BedsideFlowsheet
               bed={selectedBed}
               patient={selectedPatient}
+              allBeds={beds}
+              allPatients={patients}
               onBack={() => setSelectedBedNumber(null)}
               onOpenAddVitals={() => {
                 setVitalsTarget({
@@ -287,6 +292,8 @@ export default function App() {
             /* Full-Page Bed Vacant Direct Admission Screen */
             <FullPageAdmission
               bedNumber={selectedBedNumber}
+              allBeds={beds}
+              allPatients={patients}
               onCancel={() => setSelectedBedNumber(null)}
               onAdmissionSuccess={() => {
                 reloadData();

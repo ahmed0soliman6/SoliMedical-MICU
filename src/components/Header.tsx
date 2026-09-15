@@ -47,8 +47,8 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const { settings } = useSystemSettings();
   const { t, lang, setLanguage, isRTL } = useTranslation();
-  const occupiedBedsCount = beds.filter(b => b.status === 'OCCUPIED').length;
-  const criticalCount = patients.filter(p => p.patientStatus === 'ACTIVE_ICU' && p.acuityLevel === 'CRITICAL_STAT').length;
+  const occupiedBedsCount = (beds || []).filter(b => b && b.status === 'OCCUPIED').length;
+  const criticalCount = (patients || []).filter(p => p && p.patientStatus === 'ACTIVE_ICU' && p.acuityLevel === 'CRITICAL_STAT').length;
   
   const [notificationPermission, setNotificationPermission] = useState<string>('default');
   const [syncToastMessage, setSyncToastMessage] = useState<string | null>(null);
@@ -184,50 +184,79 @@ export const Header: React.FC<HeaderProps> = ({
           )}
         </div>
 
-        {/* Action Buttons: Notifications, Search, Settings */}
-        <div className="flex items-center gap-1.5 sm:gap-2">
-          {/* Notification Permission Toggle (Android / Web Push) */}
-          {settings.features.enablePushNotifications && (
-            <button
-              onClick={handleToggleNotifications}
-              className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl border text-xs font-medium transition-all active:scale-95 shadow-sm ${
-                notificationPermission === 'granted'
-                  ? 'bg-emerald-950/60 border-emerald-500/60 text-emerald-300'
-                  : 'bg-[#0f172a] hover:bg-[#1e293b] border-amber-500/50 text-amber-300'
-              }`}
-              title={lang === 'ar' ? 'تفعيل الإشعارات وتنبيهات الطوارئ الخارجية' : 'Enable system and audio push alerts'}
-            >
-              {notificationPermission === 'granted' ? (
-                <>
-                  <BellRing className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-400" />
-                  <span className="hidden md:inline">{lang === 'ar' ? 'الإشعارات مفعلة' : 'Alerts Active'}</span>
-                </>
-              ) : (
-                <>
-                  <Bell className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400 animate-bounce" />
-                  <span className="hidden md:inline">{lang === 'ar' ? 'تفعيل التنبيهات' : 'Enable Alerts'}</span>
-                </>
-              )}
-            </button>
-          )}
-
-          {/* Archive Search */}
+        {/* Prominent Search Bar & Notifications Center & Settings */}
+        <div className="flex items-center gap-2 sm:gap-3">
+          {/* Universal Search Bar (Prominent across all pages) */}
           {settings.features.enableArchiveSearch && (
             <button
               onClick={onOpenSearch}
-              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-[#0f172a] hover:bg-[#1e293b] border border-slate-700/80 text-slate-200 text-xs font-medium transition-all active:scale-95 shadow-sm"
-              title={lang === 'ar' ? 'بحث في السجلات والأرشيف (MRN Search)' : 'Search MRN and Patient Records'}
+              className={`flex items-center gap-2 px-3 py-1.5 sm:py-2 rounded-xl border text-xs font-medium transition-all active:scale-95 shadow-sm group cursor-pointer ${
+                activeTab === 'search'
+                  ? 'bg-teal-500/20 border-teal-500 text-teal-300 shadow-teal-500/10'
+                  : 'bg-[#0b1325] hover:bg-[#111d38] border-slate-700/80 text-slate-300 hover:border-teal-500/50'
+              }`}
+              title={lang === 'ar' ? 'البحث السريع في سجلات المرضى والأرشيف' : 'Search patient records & MRN'}
             >
-              <Search className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-teal-400" />
-              <span className="hidden sm:inline">{lang === 'ar' ? 'بحث بالأرشيف' : 'Archive'}</span>
+              <Search className="w-4 h-4 text-teal-400 group-hover:scale-110 transition-transform flex-shrink-0" />
+              <span className="text-slate-300 font-semibold text-xs truncate max-w-[140px] sm:max-w-[180px] md:max-w-[220px]">
+                {lang === 'ar' ? 'بحث بالاسم أو رقم الملف MRN' : 'Search Patient / MRN'}
+              </span>
+              <kbd className="hidden lg:inline-block text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-400">
+                /
+              </kbd>
+            </button>
+          )}
+
+          {/* Prominent Notifications & Alert Center */}
+          {settings.features.enablePushNotifications && (
+            <button
+              onClick={handleToggleNotifications}
+              className={`relative flex items-center gap-2 px-3 py-1.5 sm:py-2 rounded-xl border text-xs font-semibold transition-all active:scale-95 shadow-sm cursor-pointer ${
+                criticalCount > 0
+                  ? 'bg-red-950/70 border-red-500/60 text-red-200 hover:bg-red-900/80'
+                  : notificationPermission === 'granted'
+                  ? 'bg-emerald-950/50 border-emerald-500/50 text-emerald-300 hover:bg-emerald-900/60'
+                  : 'bg-[#0b1325] hover:bg-[#111d38] border-amber-500/50 text-amber-300'
+              }`}
+              title={
+                criticalCount > 0
+                  ? (lang === 'ar' ? `يوجد ${criticalCount} حالات حرجة STAT` : `${criticalCount} Critical STAT alerts`)
+                  : (lang === 'ar' ? 'نظام الإشعارات والتنبيهات' : 'System Notifications')
+              }
+            >
+              {criticalCount > 0 ? (
+                <>
+                  <BellRing className="w-4 h-4 text-red-400 animate-bounce" />
+                  <span className="hidden sm:inline">{lang === 'ar' ? 'إشعارات طارئة' : 'STAT Alerts'}</span>
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[11px] font-black text-white shadow-md">
+                    {criticalCount}
+                  </span>
+                </>
+              ) : notificationPermission === 'granted' ? (
+                <>
+                  <BellRing className="w-4 h-4 text-emerald-400" />
+                  <span className="hidden sm:inline">{lang === 'ar' ? 'الإشعارات' : 'Alerts'}</span>
+                  <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                </>
+              ) : (
+                <>
+                  <Bell className="w-4 h-4 text-amber-400 animate-pulse" />
+                  <span className="hidden sm:inline">{lang === 'ar' ? 'تفعيل التنبيهات' : 'Enable Alerts'}</span>
+                  <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                </>
+              )}
             </button>
           )}
 
           {/* System Settings Control Center Button */}
           <button
             onClick={onOpenSettings}
-            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-[#0f172a] hover:bg-teal-950/50 hover:border-teal-500/60 border border-slate-700 text-slate-300 hover:text-teal-300 text-xs font-medium transition-all active:scale-95 shadow-sm"
-            title={lang === 'ar' ? 'مركز تخصيص وإعدادات المنظومة' : 'System Settings & Feature Flags'}
+            className={`flex items-center gap-1.5 px-3 py-1.5 sm:py-2 rounded-xl border text-xs font-semibold transition-all active:scale-95 shadow-sm cursor-pointer ${
+              activeTab === 'settings'
+                ? 'bg-teal-500/20 border-teal-500 text-teal-300 shadow-teal-500/20'
+                : 'bg-[#0b1325] hover:bg-[#111d38] border-slate-700/80 text-slate-300 hover:text-teal-300 hover:border-teal-500/50'
+            }`}
+            title={lang === 'ar' ? 'مركز تخصيص وإعدادات المنظومة الشامل' : 'System Settings & Control Center'}
           >
             <Sliders className="w-4 h-4 text-teal-400" />
             <span className="hidden sm:inline">{t('settings')}</span>

@@ -60,9 +60,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const { t, lang, setLanguage, isRTL } = useTranslation();
   const { currentUser, logout, hasPermission } = useAuth();
 
-  const occupiedBedsCount = beds.filter((b) => b.status === 'OCCUPIED').length;
-  const criticalCount = patients.filter(
-    (p) => p.patientStatus === 'ACTIVE_ICU' && p.acuityLevel === 'CRITICAL_STAT'
+  const occupiedBedsCount = (beds || []).filter((b) => b && b.status === 'OCCUPIED').length;
+  const criticalCount = (patients || []).filter(
+    (p) => p && p.patientStatus === 'ACTIVE_ICU' && p.acuityLevel === 'CRITICAL_STAT'
   ).length;
 
   const toggleLanguage = () => {
@@ -263,13 +263,40 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 onClose();
                 onOpenSearch();
               }}
-              className="w-full flex items-center justify-between p-3 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-800/60 hover:text-white transition-all"
+              className={`w-full flex items-center justify-between p-3 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                activeTab === 'search'
+                  ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 shadow-sm font-bold'
+                  : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
+              }`}
             >
               <div className="flex items-center gap-3">
-                <div className="p-1.5 rounded-lg bg-slate-800 text-slate-400">
+                <div className={`p-1.5 rounded-lg ${activeTab === 'search' ? 'bg-teal-500/30 text-teal-200' : 'bg-slate-800 text-slate-400'}`}>
                   <Search className="w-4 h-4" />
                 </div>
                 <span>{lang === 'ar' ? 'أرشيف المرضى (MRN Search)' : 'Universal Patient Archive'}</span>
+              </div>
+              {isRTL ? <ChevronLeft className="w-4 h-4 text-slate-500" /> : <ChevronRight className="w-4 h-4 text-slate-500" />}
+            </button>
+          )}
+
+          {/* User Management & RBAC */}
+          {hasPermission('canManageUsers') && onOpenUserManagement && (
+            <button
+              onClick={() => {
+                onClose();
+                onOpenUserManagement();
+              }}
+              className={`w-full flex items-center justify-between p-3 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                activeTab === 'users'
+                  ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 shadow-sm font-bold'
+                  : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <div className={`p-1.5 rounded-lg ${activeTab === 'users' ? 'bg-teal-500/30 text-teal-200' : 'bg-slate-800 text-slate-400'}`}>
+                  <ShieldCheck className="w-4 h-4" />
+                </div>
+                <span>{lang === 'ar' ? 'إدارة المستخدمين والصلاحيات' : 'Staff RBAC & Users'}</span>
               </div>
               {isRTL ? <ChevronLeft className="w-4 h-4 text-slate-500" /> : <ChevronRight className="w-4 h-4 text-slate-500" />}
             </button>
@@ -281,10 +308,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
               onClose();
               onOpenSettings();
             }}
-            className="w-full flex items-center justify-between p-3 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-800/60 hover:text-white transition-all"
+            className={`w-full flex items-center justify-between p-3 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+              activeTab === 'settings'
+                ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 shadow-sm font-bold'
+                : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
+            }`}
           >
             <div className="flex items-center gap-3">
-              <div className="p-1.5 rounded-lg bg-slate-800 text-slate-400">
+              <div className={`p-1.5 rounded-lg ${activeTab === 'settings' ? 'bg-teal-500/30 text-teal-200' : 'bg-slate-800 text-slate-400'}`}>
                 <Sliders className="w-4 h-4" />
               </div>
               <span>{lang === 'ar' ? 'إعدادات وتخصيص النظام' : t('settings')}</span>

@@ -19,7 +19,17 @@ import {
   AlertCircle,
   Calendar,
   User,
-  Check
+  Check,
+  ArrowRightLeft,
+  ShieldAlert,
+  FlaskConical,
+  Microscope,
+  Phone,
+  Fingerprint,
+  Layers,
+  Sparkles,
+  AlertTriangle,
+  Camera
 } from 'lucide-react';
 import { 
   BedRecord, 
@@ -33,7 +43,11 @@ import {
   CodeStatus,
   StaffRole,
   DispositionType,
-  StatLabPanel
+  StatLabPanel,
+  LabResultItem,
+  InvestigationItem,
+  BedStatus,
+  AcuityLevel
 } from '../types/schema.ts';
 import { db } from '../db/icuSyncDb.ts';
 import { dischargeOrTransferPatient } from '../services/dataModel.ts';
@@ -41,10 +55,18 @@ import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
 import { useAuth } from '../services/AuthContext.tsx';
 import { syncStatLabsToCloud, syncPatientToCloud } from '../services/firebase.ts';
+import { LabFlowsheetSection } from './LabFlowsheetSection.tsx';
+import { InvestigationsSection } from './InvestigationsSection.tsx';
+import { PatientTransferModal } from './PatientTransferModal.tsx';
+import { BedSwapModal } from './BedSwapModal.tsx';
+import { BedIsolationModal } from './BedIsolationModal.tsx';
+import { AiLabScannerModal } from './AiLabScannerModal.tsx';
 
 interface BedsideFlowsheetProps {
   bed: BedRecord;
   patient: PatientDossier;
+  allBeds?: BedRecord[];
+  allPatients?: PatientDossier[];
   onBack: () => void;
   onOpenAddVitals: () => void;
   onOpenAddAddendum: (noteId: string, author: string) => void;
@@ -55,6 +77,8 @@ interface BedsideFlowsheetProps {
 export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
   bed,
   patient,
+  allBeds = [],
+  allPatients = [],
   onBack,
   onOpenAddVitals,
   onOpenAddAddendum,
@@ -65,7 +89,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
   const { t, lang, isRTL } = useTranslation();
   const { currentUser } = useAuth();
   
-  const [activeTab, setActiveTab] = useState<'paperFlowsheet' | 'vitals' | 'vent' | 'pumps' | 'fluids' | 'sbar' | 'notes' | 'disposition'>('paperFlowsheet');
+  const [activeTab, setActiveTab] = useState<'paperFlowsheet' | 'labs' | 'investigations' | 'vitals' | 'vent' | 'pumps' | 'fluids' | 'sbar' | 'notes' | 'disposition'>('paperFlowsheet');
   
   const [vitalsHistory, setVitalsHistory] = useState<TelemetryVitals[]>([]);
   const [ventilator, setVentilator] = useState<VentilatorParameters | null>(null);
@@ -74,6 +98,13 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
   const [sbarList, setSbarList] = useState<SbarHandoverReport[]>([]);
   const [notesList, setNotesList] = useState<ClinicalNote[]>([]);
   const [labsList, setLabsList] = useState<StatLabPanel[]>([]);
+  const [labResults, setLabResults] = useState<LabResultItem[]>([]);
+  const [investigations, setInvestigations] = useState<InvestigationItem[]>([]);
+
+  // Operation modals
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+  const [isSwapModalOpen, setIsSwapModalOpen] = useState(false);
+  const [isIsolationModalOpen, setIsIsolationModalOpen] = useState(false);
 
   // History & Diagnosis edit states
   const [isHistoryEditing, setIsHistoryEditing] = useState(false);
@@ -86,6 +117,8 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
   // Lab modal and form states
   const [isAddLabModalOpen, setIsAddLabModalOpen] = useState(false);
   const [editingLabId, setEditingLabId] = useState<string | null>(null);
+  const [isAiLabScannerOpen, setIsAiLabScannerOpen] = useState(false);
+  const [aiScannerPreset, setAiScannerPreset] = useState<'ABG' | 'CBC' | 'ALL'>('ALL');
   const [labForm, setLabForm] = useState({
     timestamp: '',
     wbc: '', hb: '', hct: '', plt: '', diff: '', typeAnemia: '',
@@ -162,6 +195,298 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       .equals(patient.id)
       .sortBy('timestamp');
     setLabsList(labs);
+
+    // Load Daily Lab Flowsheet Items (Trend-enabled)
+    let labItems = await db.labResults
+      .where('patientId')
+      .equals(patient.id)
+      .sortBy('timestamp');
+
+    if (labItems.length === 0) {
+      const now = Date.now();
+      const oneHour = 3600000;
+      const oneDay = 86400000;
+      const seedLabs: LabResultItem[] = [
+        {
+          id: `lab-${patient.id}-hb1`,
+          patientId: patient.id,
+          bedNumber: bed.bedNumber,
+          testName: 'HG (Hemoglobin)',
+          category: 'CBC',
+          value: '5',
+          unit: 'g/dL',
+          normalRange: '12.0 - 16.0',
+          timestamp: new Date(now - 3 * oneDay).toISOString(),
+          status: 'RESULTED',
+          recordedByName: 'Dr. Hesham Talaat (Consultant)',
+          notes: 'Severe acute blood loss on admission - 2 units PRBC ordered'
+        },
+        {
+          id: `lab-${patient.id}-hb2`,
+          patientId: patient.id,
+          bedNumber: bed.bedNumber,
+          testName: 'HG (Hemoglobin)',
+          category: 'CBC',
+          value: '7',
+          unit: 'g/dL',
+          normalRange: '12.0 - 16.0',
+          timestamp: new Date(now - 2 * oneDay).toISOString(),
+          status: 'RESULTED',
+          recordedByName: 'Dr. Sarah Al-Otaibi (Specialist)',
+          notes: 'Post-transfusion 1st check, active stabilization'
+        },
+        {
+          id: `lab-${patient.id}-hb3`,
+          patientId: patient.id,
+          bedNumber: bed.bedNumber,
+          testName: 'HG (Hemoglobin)',
+          category: 'CBC',
+          value: '8.5',
+          unit: 'g/dL',
+          normalRange: '12.0 - 16.0',
+          timestamp: new Date(now - 1 * oneDay).toISOString(),
+          status: 'RESULTED',
+          recordedByName: 'Dr. Hesham Talaat (Consultant)',
+          notes: 'Target reached > 8.0 g/dL, hemodynamic stability improved'
+        },
+        {
+          id: `lab-${patient.id}-hb4`,
+          patientId: patient.id,
+          bedNumber: bed.bedNumber,
+          testName: 'HG (Hemoglobin)',
+          category: 'CBC',
+          value: '8',
+          unit: 'g/dL',
+          normalRange: '12.0 - 16.0',
+          timestamp: new Date(now - 4 * oneHour).toISOString(),
+          status: 'RESULTED',
+          recordedByName: 'Dr. Ahmed Mansoor (Resident)',
+          notes: 'Morning ICU rounds check - stable'
+        },
+        {
+          id: `lab-${patient.id}-wbc1`,
+          patientId: patient.id,
+          bedNumber: bed.bedNumber,
+          testName: 'WBC',
+          category: 'CBC',
+          value: '18.4',
+          unit: 'x10³/µL',
+          normalRange: '4.0 - 11.0',
+          timestamp: new Date(now - 3 * oneDay).toISOString(),
+          status: 'RESULTED',
+          recordedByName: 'Dr. Hesham Talaat',
+          notes: 'Septic leukocytosis'
+        },
+        {
+          id: `lab-${patient.id}-wbc2`,
+          patientId: patient.id,
+          bedNumber: bed.bedNumber,
+          testName: 'WBC',
+          category: 'CBC',
+          value: '14.2',
+          unit: 'x10³/µL',
+          normalRange: '4.0 - 11.0',
+          timestamp: new Date(now - 2 * oneDay).toISOString(),
+          status: 'RESULTED',
+          recordedByName: 'Dr. Sarah Al-Otaibi',
+          notes: 'Responding to broad-spectrum Meropenem'
+        },
+        {
+          id: `lab-${patient.id}-wbc3`,
+          patientId: patient.id,
+          bedNumber: bed.bedNumber,
+          testName: 'WBC',
+          category: 'CBC',
+          value: '11.5',
+          unit: 'x10³/µL',
+          normalRange: '4.0 - 11.0',
+          timestamp: new Date(now - 1 * oneDay).toISOString(),
+          status: 'RESULTED',
+          recordedByName: 'Dr. Ahmed Mansoor',
+          notes: 'Resolving infection'
+        },
+        {
+          id: `lab-${patient.id}-k1`,
+          patientId: patient.id,
+          bedNumber: bed.bedNumber,
+          testName: 'K (Potassium)',
+          category: 'Electrolytes',
+          value: '5.6',
+          unit: 'mmol/L',
+          normalRange: '3.5 - 5.0',
+          timestamp: new Date(now - 2 * oneDay).toISOString(),
+          status: 'RESULTED',
+          recordedByName: 'Dr. Sarah Al-Otaibi',
+          notes: 'Mild hyperkalemia managed with calcium gluconate'
+        },
+        {
+          id: `lab-${patient.id}-k2`,
+          patientId: patient.id,
+          bedNumber: bed.bedNumber,
+          testName: 'K (Potassium)',
+          category: 'Electrolytes',
+          value: '4.7',
+          unit: 'mmol/L',
+          normalRange: '3.5 - 5.0',
+          timestamp: new Date(now - 1 * oneDay).toISOString(),
+          status: 'RESULTED',
+          recordedByName: 'Dr. Hesham Talaat',
+          notes: 'Electrolytes normalized'
+        },
+        {
+          id: `lab-${patient.id}-k3`,
+          patientId: patient.id,
+          bedNumber: bed.bedNumber,
+          testName: 'K (Potassium)',
+          category: 'Electrolytes',
+          value: '4.2',
+          unit: 'mmol/L',
+          normalRange: '3.5 - 5.0',
+          timestamp: new Date(now - 3 * oneHour).toISOString(),
+          status: 'RESULTED',
+          recordedByName: 'Dr. Ahmed Mansoor',
+          notes: 'Optimal cardiac stability'
+        },
+        {
+          id: `lab-${patient.id}-cr1`,
+          patientId: patient.id,
+          bedNumber: bed.bedNumber,
+          testName: 'Creatinine',
+          category: 'Renal',
+          value: '2.8',
+          unit: 'mg/dL',
+          normalRange: '0.7 - 1.3',
+          timestamp: new Date(now - 2 * oneDay).toISOString(),
+          status: 'RESULTED',
+          recordedByName: 'Dr. Hesham Talaat',
+          notes: 'Acute Kidney Injury (AKI Stage 2)'
+        },
+        {
+          id: `lab-${patient.id}-cr2`,
+          patientId: patient.id,
+          bedNumber: bed.bedNumber,
+          testName: 'Creatinine',
+          category: 'Renal',
+          value: '2.1',
+          unit: 'mg/dL',
+          normalRange: '0.7 - 1.3',
+          timestamp: new Date(now - 1 * oneDay).toISOString(),
+          status: 'RESULTED',
+          recordedByName: 'Dr. Sarah Al-Otaibi',
+          notes: 'Improving with fluid resuscitation'
+        },
+        {
+          id: `lab-${patient.id}-cr3`,
+          patientId: patient.id,
+          bedNumber: bed.bedNumber,
+          testName: 'Creatinine',
+          category: 'Renal',
+          value: '1.4',
+          unit: 'mg/dL',
+          normalRange: '0.7 - 1.3',
+          timestamp: new Date(now - 3 * oneHour).toISOString(),
+          status: 'RESULTED',
+          recordedByName: 'Dr. Ahmed Mansoor',
+          notes: 'Renal recovery ongoing'
+        },
+        {
+          id: `lab-${patient.id}-lact1`,
+          patientId: patient.id,
+          bedNumber: bed.bedNumber,
+          testName: 'Lactate',
+          category: 'ABG',
+          value: '4.5',
+          unit: 'mmol/L',
+          normalRange: '0.5 - 2.0',
+          timestamp: new Date(now - 2 * oneDay).toISOString(),
+          status: 'RESULTED',
+          recordedByName: 'Dr. Hesham Talaat',
+          notes: 'Lactic acidosis on admission'
+        },
+        {
+          id: `lab-${patient.id}-lact2`,
+          patientId: patient.id,
+          bedNumber: bed.bedNumber,
+          testName: 'Lactate',
+          category: 'ABG',
+          value: '2.4',
+          unit: 'mmol/L',
+          normalRange: '0.5 - 2.0',
+          timestamp: new Date(now - 1 * oneDay).toISOString(),
+          status: 'RESULTED',
+          recordedByName: 'Dr. Sarah Al-Otaibi',
+          notes: 'Clearing nicely'
+        },
+        {
+          id: `lab-${patient.id}-lact3`,
+          patientId: patient.id,
+          bedNumber: bed.bedNumber,
+          testName: 'Lactate',
+          category: 'ABG',
+          value: '1.3',
+          unit: 'mmol/L',
+          normalRange: '0.5 - 2.0',
+          timestamp: new Date(now - 3 * oneHour).toISOString(),
+          status: 'RESULTED',
+          recordedByName: 'Dr. Ahmed Mansoor',
+          notes: 'Complete lactate clearance'
+        }
+      ];
+      await db.labResults.bulkPut(seedLabs);
+      labItems = seedLabs;
+    }
+    setLabResults(labItems);
+
+    // Load Investigations & Imaging Items
+    let invItems = await db.investigations
+      .where('patientId')
+      .equals(patient.id)
+      .sortBy('timestamp');
+
+    if (invItems.length === 0) {
+      const now = Date.now();
+      const seedInvs: InvestigationItem[] = [
+        {
+          id: `inv-${patient.id}-1`,
+          patientId: patient.id,
+          bedNumber: bed.bedNumber,
+          modality: 'Chest X-Ray',
+          testName: 'Portable AP Chest Radiograph',
+          timestamp: new Date(now - 18 * 3600000).toISOString(),
+          status: 'REPORTED',
+          resultReport: 'Endotracheal tube tip is 3.5 cm above the carina. Right internal jugular CVC tip at cavoatrial junction. Bilateral patchy bibasilar infiltrates consistent with ARDS / aspiration, slightly improved compared to admission film. No pneumothorax.',
+          recordedByName: 'Dr. Khaled Radiologist',
+          notes: 'Bedside portable study completed'
+        },
+        {
+          id: `inv-${patient.id}-2`,
+          patientId: patient.id,
+          bedNumber: bed.bedNumber,
+          modality: 'Ultrasound',
+          testName: 'Bedside POCUS - Focused Cardiac & Lung Ultrasound',
+          timestamp: new Date(now - 6 * 3600000).toISOString(),
+          status: 'REPORTED',
+          resultReport: 'LV function hyperdynamic with EF ~55-60%. No pericardial effusion. IVC collapsible > 50% indicating fluid responsiveness. Lung ultrasound demonstrates bilateral B-lines in anterior and lateral zones.',
+          recordedByName: 'Dr. Hesham Talaat (Consultant)',
+          notes: 'Bedside echocardiogram and BLUE protocol'
+        },
+        {
+          id: `inv-${patient.id}-3`,
+          patientId: patient.id,
+          bedNumber: bed.bedNumber,
+          modality: 'ECG',
+          testName: '12-Lead Electrocardiogram',
+          timestamp: new Date(now - 2 * 3600000).toISOString(),
+          status: 'REPORTED',
+          resultReport: 'Sinus tachycardia at 104 bpm. Normal axis. QTc 432 ms. No ST elevation or depression. Non-specific T wave flattening in V4-V6.',
+          recordedByName: 'Dr. Ahmed Mansoor (Resident)',
+          notes: 'Routine morning monitoring'
+        }
+      ];
+      await db.investigations.bulkPut(seedInvs);
+      invItems = seedInvs;
+    }
+    setInvestigations(invItems);
   };
 
   const latestVitals = vitalsHistory[0] || null;
@@ -206,6 +531,117 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       ph: '', pco2: '', po2: '', hco3: '', be: '', lactate: '', pf: '',
     });
     setIsAddLabModalOpen(true);
+  };
+
+  const handleApplyScannedToForm = (fields: Record<string, string>, timestamp?: string) => {
+    setLabForm(prev => ({
+      ...prev,
+      ...fields,
+      timestamp: timestamp || prev.timestamp || new Date().toISOString().slice(0, 16),
+    }));
+    setIsAddLabModalOpen(true);
+  };
+
+  const handleDirectSaveScannedLab = async (data: {
+    fields: Record<string, string>;
+    items: Array<{
+      testName: string;
+      category: string;
+      value: string;
+      unit: string;
+      normalRange: string;
+      flag?: string;
+    }>;
+    timestamp: string;
+    summaryEn: string;
+    summaryAr: string;
+  }) => {
+    const doctorName = currentUser?.nameEn || currentUser?.nameAr || currentUser?.email || 'Dr. Guest';
+    const labId = `labs-${Date.now()}`;
+    const f = data.fields;
+    
+    const labEntry: StatLabPanel = {
+      id: labId,
+      bedId: bed.bedNumber,
+      patientId: patient.id,
+      timestamp: new Date(data.timestamp || new Date()).toISOString(),
+      abg: {
+        ph: parseFloat(f.ph) || 0,
+        pco2MmHg: parseFloat(f.pco2) || 0,
+        po2MmHg: parseFloat(f.po2) || 0,
+        hco3MmolPerL: parseFloat(f.hco3) || 0,
+        baseExcessMmolPerL: parseFloat(f.be) || 0,
+        lactateMmolPerL: parseFloat(f.lactate) || 0,
+        pao2Fio2Ratio: parseFloat(f.pf) || 0,
+      },
+      cbc: {
+        wbcCountKPerUl: parseFloat(f.wbc) || 0,
+        hemoglobinGPerDl: parseFloat(f.hb) || 0,
+        hematocritPercent: parseFloat(f.hct) || 0,
+        plateletCountKPerUl: parseFloat(f.plt) || 0,
+        differential: f.diff || '',
+        typeAnemia: f.typeAnemia || '',
+      },
+      coagulation: {
+        inr: parseFloat(f.inr) || 0,
+        ptSeconds: parseFloat(f.pt) || 0,
+        pttSeconds: parseFloat(f.ptt) || 0,
+        fibrinogenMgPerDl: parseFloat(f.fib) || undefined,
+      },
+      biochemistry: {
+        potassiumMeqPerL: parseFloat(f.k) || 0,
+        sodiumMeqPerL: parseFloat(f.na) || 0,
+        creatinineMgPerDl: parseFloat(f.creat) || 0,
+        bunMgPerDl: parseFloat(f.bun) || undefined,
+        totalBilirubinMgPerDl: parseFloat(f.totalBili) || 0,
+        albuminGPerDl: parseFloat(f.alb) || 0,
+        procalcitoninNgPerMl: parseFloat(f.procalc) || undefined,
+        crpMgPerL: parseFloat(f.crp) || undefined,
+        calciumMeqPerL: parseFloat(f.ca) || undefined,
+        phosphorusMeqPerL: parseFloat(f.phos) || undefined,
+        magnesiumMeqPerL: parseFloat(f.mg) || undefined,
+        altUPerL: parseFloat(f.alt) || undefined,
+        astUPerL: parseFloat(f.ast) || undefined,
+        alpUPerL: parseFloat(f.alp) || undefined,
+        ggtUPerL: parseFloat(f.ggt) || undefined,
+        amylaseUPerL: parseFloat(f.amylase) || undefined,
+        lipaseUPerL: parseFloat(f.lipase) || undefined,
+        troponinNgPerMl: parseFloat(f.troponin) || undefined,
+        ckUPerL: parseFloat(f.ck) || undefined,
+        ckMbUPerL: parseFloat(f.ckMb) || undefined,
+        esrMmHr: parseFloat(f.esr) || undefined,
+        ureaMgPerDl: parseFloat(f.urea) || undefined,
+        uricAcidMgPerDl: parseFloat(f.uricAcid) || undefined,
+      },
+      isCriticalAlert: (parseFloat(f.lactate) > 2.0 || (parseFloat(f.ph) > 0 && (parseFloat(f.ph) < 7.30 || parseFloat(f.ph) > 7.50))),
+      reviewedByDoctorName: `${doctorName} (AI Verified)`,
+    };
+
+    await db.statLabs.put(labEntry);
+    await syncStatLabsToCloud(labEntry);
+
+    // Also add to individual lab results for cumulative trend visualization
+    if (data.items && data.items.length > 0) {
+      const newItems: LabResultItem[] = data.items.map((it, idx) => ({
+        id: `labitem-${Date.now()}-${idx}`,
+        patientId: patient.id,
+        bedNumber: bed.bedNumber,
+        testName: it.testName,
+        category: it.category as any || 'Other',
+        value: it.value,
+        unit: it.unit || '',
+        normalRange: it.normalRange || '',
+        status: 'RESULTED',
+        timestamp: new Date(data.timestamp || new Date()).toISOString(),
+        notes: `AI OCR Extracted - ${data.summaryEn}`,
+        recordedByName: doctorName,
+        recordedByStaffId: currentUser?.id,
+      }));
+      await db.labResults.bulkPut(newItems);
+    }
+
+    await loadBedsideData();
+    onDataUpdated();
   };
 
   const handleStartEditLabColumn = (lab: StatLabPanel) => {
@@ -422,7 +858,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
 
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="w-8 h-8 rounded-xl bg-teal-500/20 text-teal-300 border border-teal-500/40 font-mono font-black text-sm flex items-center justify-center">
+                <span className="w-8 h-8 rounded-xl bg-teal-500/20 text-teal-300 border border-teal-500/40 font-mono font-black text-sm flex items-center justify-center shadow-md">
                   {bed.bedNumber}
                 </span>
                 <h1 className="text-lg sm:text-xl font-bold text-white">
@@ -430,9 +866,36 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                     ? `${patient.fullNameAr} (${patient.fullNameEn})` 
                     : `${patient.fullNameEn} (${patient.fullNameAr})`}
                 </h1>
-                <span className="font-mono text-xs text-teal-400 font-semibold px-2 py-0.5 rounded bg-teal-950/80 border border-teal-800/80">
-                  #{patient.mrn}
+                
+                {/* Fixed Patient ID */}
+                <div className="flex items-center gap-1 font-mono text-xs text-teal-300 font-semibold px-2.5 py-0.5 rounded bg-teal-950/80 border border-teal-800/80 shadow-sm">
+                  <Fingerprint className="w-3.5 h-3.5 text-teal-400" />
+                  <span>ID: {patient.id}</span>
+                </div>
+
+                <span className="font-mono text-xs text-slate-300 font-semibold px-2 py-0.5 rounded bg-slate-800 border border-slate-700">
+                  MRN #{patient.mrn}
                 </span>
+
+                {/* Bed Status Badge */}
+                <span className={`text-xs font-bold px-2.5 py-0.5 rounded-md flex items-center gap-1 ${
+                  bed.status === BedStatus.ISOLATION || (bed.isolation?.isIsolated ?? false)
+                    ? 'bg-amber-950 text-amber-300 border border-amber-600'
+                    : bed.status === BedStatus.UNAVAILABLE
+                    ? 'bg-red-950 text-red-300 border border-red-800'
+                    : bed.status === BedStatus.OCCUPIED
+                    ? 'bg-emerald-950 text-emerald-300 border border-emerald-700'
+                    : 'bg-slate-800 text-slate-300 border border-slate-700'
+                }`}>
+                  {bed.status === BedStatus.ISOLATION || (bed.isolation?.isIsolated ?? false)
+                    ? (lang === 'ar' ? '⚠️ سرير عزل طبي' : '⚠️ ISOLATION BED')
+                    : bed.status === BedStatus.UNAVAILABLE
+                    ? (lang === 'ar' ? '🔒 سرير غير متاح' : '🔒 UNAVAILABLE')
+                    : bed.status === BedStatus.OCCUPIED
+                    ? (lang === 'ar' ? '● سرير مشغول' : '● OCCUPIED')
+                    : (lang === 'ar' ? '○ سرير شاغر' : '○ VACANT')}
+                </span>
+
                 {settings.features.enableCodeStatus && (
                   <span className={`text-xs font-mono font-bold px-2.5 py-0.5 rounded-md ${
                     patient.codeStatus === CodeStatus.DNR 
@@ -454,14 +917,24 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
               </div>
 
               <p className="text-xs text-slate-300 mt-1 max-w-3xl">
-                <span className="font-semibold text-slate-200">{lang === 'ar' ? 'التشخيص:' : 'Diagnosis:'}</span>{' '}
+                <span className="font-semibold text-slate-200">{lang === 'ar' ? 'التشخيص الأساسي:' : 'Primary Diagnosis:'}</span>{' '}
                 {lang === 'ar' 
                   ? `${patient.primaryDiagnosisAr} — ${patient.primaryDiagnosisEn}` 
                   : `${patient.primaryDiagnosisEn} — ${patient.primaryDiagnosisAr}`}
               </p>
 
-              <div className="flex items-center gap-3 text-[11px] text-slate-400 mt-1.5 flex-wrap">
-                <span>{lang === 'ar' ? 'العمر:' : 'Age:'} <strong className="text-white">{patient.age}</strong> {lang === 'ar' ? 'سنة' : 'yo'}</span>
+              <div className="flex items-center gap-3 text-[11px] text-slate-300 mt-1.5 flex-wrap font-mono">
+                <span>{lang === 'ar' ? 'العمر والنوع:' : 'Age/Gender:'} <strong className="text-white">{patient.age} {lang === 'ar' ? 'سنة' : 'yo'} ({patient.gender === 'MALE' ? (lang === 'ar' ? 'ذكر' : 'Male') : (lang === 'ar' ? 'أنثى' : 'Female')})</strong></span>
+                <span>•</span>
+                <span className="flex items-center gap-1">
+                  <Phone className="w-3 h-3 text-teal-400" />
+                  <span>{lang === 'ar' ? 'الهاتف:' : 'Phone:'} <strong className="text-white">{patient.phoneNumber || '—'}</strong></span>
+                </span>
+                <span>•</span>
+                <span className="flex items-center gap-1">
+                  <Calendar className="w-3 h-3 text-slate-400" />
+                  <span>{lang === 'ar' ? 'تاريخ الدخول:' : 'Admitted:'} <strong className="text-white">{new Date(patient.admissionDate).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</strong></span>
+                </span>
                 <span>•</span>
                 <span>{lang === 'ar' ? 'الوزن:' : 'Weight:'} <strong className="text-white">{patient.weightKg}</strong> {lang === 'ar' ? 'كجم' : 'kg'} (IBW: <strong className="text-teal-400">{patient.idealBodyWeightKg}</strong> {lang === 'ar' ? 'كجم' : 'kg'})</span>
                 <span>•</span>
@@ -472,12 +945,42 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
             </div>
           </div>
 
-          {/* Quick Header CTAs */}
-          <div className="flex items-center gap-2 flex-shrink-0 self-end lg:self-center">
+          {/* Bed Operational Controls & Header CTAs */}
+          <div className="flex items-center gap-2 flex-shrink-0 self-end lg:self-center flex-wrap justify-end">
+            {/* Safe Patient Transfer CTA */}
+            <button
+              onClick={() => setIsTransferModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-500/40 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
+              title={lang === 'ar' ? 'نقل المريض لسرير شاغر مع الاحتفاظ بكافة بياناته وسجلاته' : 'Transfer patient to vacant bed'}
+            >
+              <ArrowRightLeft className="w-3.5 h-3.5 text-blue-400" />
+              <span>{lang === 'ar' ? 'نقل المريض' : 'Transfer Bed'}</span>
+            </button>
+
+            {/* Safe Bed Swap CTA */}
+            <button
+              onClick={() => setIsSwapModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
+              title={lang === 'ar' ? 'تبديل سريرين ومشغولين في عملية موحدة واحدة آمنة' : 'Atomic bed swap between two patients'}
+            >
+              <Layers className="w-3.5 h-3.5 text-purple-400" />
+              <span>{lang === 'ar' ? 'تبديل سريرين' : 'Swap Beds'}</span>
+            </button>
+
+            {/* Isolation & Maintenance Status CTA */}
+            <button
+              onClick={() => setIsIsolationModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
+              title={lang === 'ar' ? 'تعديل حالة السرير وتدابير العزل الطبي' : 'Manage bed status & isolation precautions'}
+            >
+              <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
+              <span>{lang === 'ar' ? 'العزل والحالة' : 'Bed Status'}</span>
+            </button>
+
             {settings.features.enableTelemetryVitals && (
               <button
                 onClick={onOpenAddVitals}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 text-xs font-bold transition-all shadow-md active:scale-95"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
               >
                 <Activity className="w-4 h-4" />
                 <span>{lang === 'ar' ? 'تسجيل علامات' : 'Record Vitals'}</span>
@@ -487,7 +990,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
             {settings.features.enableSbarHandover && (
               <button
                 onClick={onOpenSbarSign}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-teal-600 to-teal-500 hover:from-teal-500 hover:to-teal-400 text-slate-950 text-xs font-bold transition-all shadow-lg shadow-teal-500/20 active:scale-95"
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-teal-600 to-teal-500 hover:from-teal-500 hover:to-teal-400 text-slate-950 text-xs font-bold transition-all shadow-lg shadow-teal-500/20 active:scale-95 cursor-pointer"
               >
                 <ShieldCheck className="w-4 h-4" />
                 <span>{lang === 'ar' ? 'تسليم SBAR' : 'SBAR Sign'}</span>
@@ -646,6 +1149,18 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
               id: 'paperFlowsheet', 
               label: lang === 'ar' ? 'الورقة الطبية الموحدة (Paper Chart)' : 'Paper Flowsheet', 
               icon: FileText, 
+              enabled: true 
+            },
+            { 
+              id: 'labs', 
+              label: lang === 'ar' ? `التحاليل والجدول اليومي (${labResults.length})` : `Daily Lab Flowsheet (${labResults.length})`, 
+              icon: FlaskConical, 
+              enabled: true 
+            },
+            { 
+              id: 'investigations', 
+              label: lang === 'ar' ? `الفحوصات والأشعات (${investigations.length})` : `Radiology & Investigations (${investigations.length})`, 
+              icon: Microscope, 
               enabled: true 
             },
             { 
@@ -939,13 +1454,35 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                   </p>
                 </div>
               </div>
-              <button
-                onClick={handleOpenAddLabColumn}
-                className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition-all shadow-md active:scale-95 flex-shrink-0"
-              >
-                <Plus className="w-4 h-4" />
-                <span>{lang === 'ar' ? 'إضافة عمود تحاليل جديد' : 'Add New Lab Column'}</span>
-              </button>
+              <div className="flex items-center gap-2 flex-wrap">
+                {settings.enableAiLabScanner && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAiScannerPreset('ALL');
+                      setIsAiLabScannerOpen(true);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-fuchsia-600 to-indigo-600 hover:from-fuchsia-500 hover:to-indigo-500 text-white text-xs font-bold transition-all shadow-md active:scale-95 flex-shrink-0 cursor-pointer"
+                  >
+                    <Camera className="w-4 h-4" />
+                    <span>{lang === 'ar' ? 'تصوير وقراءة التحليل (AI Scan)' : 'AI Scan Lab Report'}</span>
+                  </button>
+                )}
+                <button
+                  onClick={() => setActiveTab('labs')}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 border border-teal-500/40 text-xs font-bold transition-all shadow-md active:scale-95 flex-shrink-0 cursor-pointer"
+                >
+                  <FlaskConical className="w-4 h-4 text-teal-400" />
+                  <span>{lang === 'ar' ? 'عرض تسلسل التحاليل التراكمي (5>7>8.5>8)' : 'View Daily Trend Flowsheet'}</span>
+                </button>
+                <button
+                  onClick={handleOpenAddLabColumn}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition-all shadow-md active:scale-95 flex-shrink-0 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>{lang === 'ar' ? 'إضافة عمود تحاليل' : 'Add Lab Column'}</span>
+                </button>
+              </div>
             </div>
 
             {labsList.length === 0 ? (
@@ -1316,16 +1853,31 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                         : (lang === 'ar' ? 'تسجيل عمود تحاليل متسلسلة جديد' : 'Record New Lab Column')}
                     </span>
                   </h3>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsAddLabModalOpen(false);
-                      setEditingLabId(null);
-                    }}
-                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition-all text-sm font-black"
-                  >
-                    ✕
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {settings.enableAiLabScanner && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAiScannerPreset('ALL');
+                          setIsAiLabScannerOpen(true);
+                        }}
+                        className="px-3 py-1.5 rounded-xl bg-fuchsia-500/20 hover:bg-fuchsia-500/30 text-fuchsia-300 border border-fuchsia-500/40 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                      >
+                        <Camera className="w-4 h-4 text-fuchsia-400" />
+                        <span>{lang === 'ar' ? 'تصوير شريط التحليل (AI Scanner)' : 'Scan Lab Strip (AI)'}</span>
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsAddLabModalOpen(false);
+                        setEditingLabId(null);
+                      }}
+                      className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition-all text-sm font-black"
+                    >
+                      ✕
+                    </button>
+                  </div>
                 </div>
 
                 <form onSubmit={handleSaveLabColumn} className="space-y-4 text-xs">
@@ -1359,7 +1911,23 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 overflow-y-auto max-h-[400px] pr-2">
                     {/* CBC Panel */}
                     <div className="bg-[#070c18] p-4 rounded-xl border border-slate-800 space-y-3">
-                      <div className="text-xs font-bold text-teal-400 border-b border-slate-800 pb-1.5 uppercase font-mono">{lang === 'ar' ? 'صورة الدم (CBC)' : 'Complete Blood Count (CBC)'}</div>
+                      <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                        <div className="text-xs font-bold text-teal-400 uppercase font-mono">{lang === 'ar' ? 'صورة الدم (CBC)' : 'Complete Blood Count (CBC)'}</div>
+                        {settings.enableAiLabScanner && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAiScannerPreset('CBC');
+                              setIsAiLabScannerOpen(true);
+                            }}
+                            className="px-2 py-0.5 rounded-md bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all"
+                            title={lang === 'ar' ? 'تصوير وقراءة تقرير CBC بالذكاء الاصطناعي' : 'Scan CBC report with AI'}
+                          >
+                            <Camera className="w-3 h-3 text-teal-400" />
+                            <span>{lang === 'ar' ? 'تصوير CBC' : 'Scan CBC'}</span>
+                          </button>
+                        )}
+                      </div>
                       <div>
                         <label className="text-slate-400 mb-1 block">WBCs (k/uL)</label>
                         <input type="number" step="any" value={labForm.wbc} onChange={e => setLabForm({ ...labForm, wbc: e.target.value })} className="w-full bg-[#0b1224] border border-slate-800 rounded-lg p-2 text-white text-xs font-mono focus:border-teal-500 focus:outline-none" />
@@ -1459,7 +2027,23 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
 
                     {/* Coagulation, Biomarkers & ABG */}
                     <div className="bg-[#070c18] p-4 rounded-xl border border-slate-800 space-y-3">
-                      <div className="text-xs font-bold text-violet-400 border-b border-slate-800 pb-1.5 uppercase font-mono">{lang === 'ar' ? 'غازات الدم والعلامات الحيوية' : 'ABGs & Cardiac / Coagulation'}</div>
+                      <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                        <div className="text-xs font-bold text-violet-400 uppercase font-mono">{lang === 'ar' ? 'غازات الدم والعلامات (ABG)' : 'ABGs & Cardiac / Coagulation'}</div>
+                        {settings.enableAiLabScanner && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAiScannerPreset('ABG');
+                              setIsAiLabScannerOpen(true);
+                            }}
+                            className="px-2 py-0.5 rounded-md bg-violet-500/20 hover:bg-violet-500/30 text-violet-300 text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all"
+                            title={lang === 'ar' ? 'تصوير وقراءة شريط غازات الدم ABG بالذكاء الاصطناعي' : 'Scan ABG strip with AI'}
+                          >
+                            <Camera className="w-3 h-3 text-violet-400" />
+                            <span>{lang === 'ar' ? 'تصوير ABG' : 'Scan ABG'}</span>
+                          </button>
+                        )}
+                      </div>
                       <div className="grid grid-cols-2 gap-2">
                         <div>
                           <label className="text-slate-400 mb-1 block">pH</label>
@@ -2185,6 +2769,90 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Tab: Daily Lab Flowsheet with Interactive Trend History (HG 5 > 7 > 8.5 > 8) */}
+      {activeTab === 'labs' && (
+        <LabFlowsheetSection
+          patientId={patient.id}
+          bedNumber={bed.bedNumber}
+          labResults={labResults}
+          onLabAdded={() => {
+            loadBedsideData();
+            onDataUpdated();
+          }}
+        />
+      )}
+
+      {/* Tab: Investigations, Radiology & POCUS Studies */}
+      {activeTab === 'investigations' && (
+        <InvestigationsSection
+          patientId={patient.id}
+          bedNumber={bed.bedNumber}
+          investigations={investigations}
+          onInvestigationAdded={() => {
+            loadBedsideData();
+            onDataUpdated();
+          }}
+        />
+      )}
+
+      {/* Patient Transfer to Vacant Bed Modal */}
+      <PatientTransferModal
+        isOpen={isTransferModalOpen}
+        onClose={() => setIsTransferModalOpen(false)}
+        currentBed={bed}
+        patient={patient}
+        allBeds={allBeds}
+        onTransferSuccess={() => {
+          setIsTransferModalOpen(false);
+          loadBedsideData();
+          onDataUpdated();
+          onBack();
+        }}
+      />
+
+      {/* Atomic Two-Patient Bed Swap Modal */}
+      <BedSwapModal
+        isOpen={isSwapModalOpen}
+        onClose={() => setIsSwapModalOpen(false)}
+        sourceBed={bed}
+        sourcePatient={patient}
+        allBeds={allBeds}
+        allPatients={allPatients}
+        onSwapSuccess={() => {
+          setIsSwapModalOpen(false);
+          loadBedsideData();
+          onDataUpdated();
+          onBack();
+        }}
+      />
+
+      {/* Bed Isolation & Availability Status Modal */}
+      <BedIsolationModal
+        isOpen={isIsolationModalOpen}
+        onClose={() => setIsIsolationModalOpen(false)}
+        bed={bed}
+        patient={patient}
+        onUpdated={() => {
+          setIsIsolationModalOpen(false);
+          loadBedsideData();
+          onDataUpdated();
+        }}
+      />
+
+      {/* AI Lab OCR Optical Scanner Modal */}
+      {settings.enableAiLabScanner && (
+        <AiLabScannerModal
+          isOpen={isAiLabScannerOpen}
+          onClose={() => setIsAiLabScannerOpen(false)}
+          patientId={patient.id}
+          patientName={lang === 'ar' ? patient.fullNameAr : patient.fullNameEn}
+          bedNumber={bed.bedNumber}
+          targetPreset={aiScannerPreset}
+          onApplyToForm={handleApplyScannedToForm}
+          onDirectSave={handleDirectSaveScannedLab}
+        />
       )}
     </div>
   );

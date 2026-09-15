@@ -489,7 +489,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const target = allUsers.find(u => u.uid === uid);
     if (!target) return { success: false, message: 'المستخدم غير موجود' };
 
-    if (target.isSuperAdmin && allUsers.filter(u => u.isSuperAdmin || u.role === StaffRole.ADMIN).length <= 1) {
+    if (target.isSuperAdmin && (allUsers || []).filter(u => u && (u.isSuperAdmin || u.role === StaffRole.ADMIN)).length <= 1) {
       return { success: false, message: 'لا يمكن حذف مدير النظام الوحيد' };
     }
 
@@ -497,7 +497,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Clean up duplicate entries with same email if any
     if (target.email) {
-      const dups = allUsers.filter(u => u.email.toLowerCase() === target.email.toLowerCase());
+      const dups = (allUsers || []).filter(u => u && u.email && u.email.toLowerCase() === target.email.toLowerCase());
       for (const dup of dups) {
         if (dup.uid !== uid) {
           await deleteUserAccount(dup.uid).catch(() => {});

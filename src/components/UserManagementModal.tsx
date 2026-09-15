@@ -190,12 +190,19 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
     }
   };
 
-  const filteredUsers = allUsers.filter(u => {
+  const filteredUsers = (allUsers || []).filter(u => {
+    if (!u) return false;
+    const q = (searchQuery || '').toLowerCase();
+    const nameAr = (u.nameAr || '').toLowerCase();
+    const nameEn = (u.nameEn || '').toLowerCase();
+    const email = (u.email || '').toLowerCase();
+    const badgeId = (u.badgeId || '').toLowerCase();
+
     const matchesSearch = 
-      u.nameAr.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      u.nameEn.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      u.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      u.badgeId.toLowerCase().includes(searchQuery.toLowerCase());
+      nameAr.includes(q) ||
+      nameEn.includes(q) ||
+      email.includes(q) ||
+      badgeId.includes(q);
     const matchesRole = roleFilter === 'ALL' || u.role === roleFilter;
     return matchesSearch && matchesRole;
   });
