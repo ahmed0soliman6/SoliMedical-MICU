@@ -263,35 +263,7 @@ export const Header: React.FC<HeaderProps> = ({
             }`}
           >
             <Layers className="w-3.5 h-3.5" />
-            <span>{t('bedMatrix')}</span>
-          </button>
-        )}
-
-        {settings.features.enableSbarHandover && (
-          <button
-            onClick={() => onTabChange('sbar')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-              activeTab === 'sbar'
-                ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
-            }`}
-          >
-            <Activity className="w-3.5 h-3.5" />
-            <span>{t('sbarHandover')}</span>
-          </button>
-        )}
-
-        {settings.features.enableClinicalNotes && (
-          <button
-            onClick={() => onTabChange('notes')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-              activeTab === 'notes'
-                ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
-            }`}
-          >
-            <Database className="w-3.5 h-3.5" />
-            <span>{t('clinicalNotes')}</span>
+            <span>{t('bedMatrix')} (6 {lang === 'ar' ? 'أسرة' : 'Beds'})</span>
           </button>
         )}
       </div>

@@ -84,29 +84,13 @@ export interface PatientRecord {
 export interface BedRecord {
   id: string; // bedId
   unitId: string;
-  bedNumber: string; // "01", "02", etc.
-  bayName?: string;
+  bedNumber: string; // "Bed 1", "Bed 2"
   isActive: boolean;
   displayOrder: number;
-  status: BedStatus;
-  currentPatientId: string | null;
-  lastTelemetryPingUtc?: string;
-  lastCleanedAt?: string;
-  hardwareReadiness?: {
-    ventilatorCalibrated: boolean;
-    ventilatorModel: string;
-    telemetryZeroed: boolean;
-    telemetryLead: string;
-    wallSuctionTested: boolean;
-    centralOxygenPsi: number;
-    alarisPumpsPurged: boolean;
-    disposableKitsPrepped: boolean;
-    terminalDecontaminationCompletedAt?: string;
-  };
   
-  // -- Legacy/Compatibility fields --
-  activePatientId?: string | null; 
-  lastTransferId?: string | null; 
+  // -- المصدر الوحيد للحقيقة --
+  activePatientId: string | null; 
+  lastTransferId: string | null; // ضروري جداً لعمل Firestore Rules (getAfter)
 }
 
 export interface PatientBedTransfer {

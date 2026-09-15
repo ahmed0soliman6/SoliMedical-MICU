@@ -66,8 +66,8 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/80 backdrop-blur-sm overflow-y-auto">
-      <div className="w-full max-w-3xl bg-[#0c1426] border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden my-auto">
+    <div className="w-full h-full animate-in fade-in duration-300">
+      <div className="w-full max-w-4xl mx-auto bg-[#0c1426] border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden mt-4">
         {/* Header */}
         <div className="px-5 py-4 bg-[#090f1d] border-b border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-3">

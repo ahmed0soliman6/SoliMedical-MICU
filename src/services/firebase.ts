@@ -1,6 +1,9 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { 
   getFirestore, 
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
   collection, 
   doc, 
   setDoc, 
@@ -9,6 +12,7 @@ import {
   deleteDoc,
   onSnapshot, 
   query, 
+  where,
   orderBy, 
   limit, 
   Unsubscribe,
@@ -22,6 +26,7 @@ import {
   onAuthStateChanged,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
+  signInAnonymously,
   User as FirebaseUser
 } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
@@ -48,10 +53,30 @@ import { db } from '../db/icuSyncDb.ts';
 // Firebase Initialization
 // -------------------------------------------------------------
 export const firebaseApp = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
-// Bind directly to default Cloud Firestore database instance (matching (default) in console)
-export const firestore = getFirestore(firebaseApp);
+
+let firestoreInstance;
+try {
+  firestoreInstance = initializeFirestore(firebaseApp, {
+    localCache: persistentLocalCache({tabManager: persistentMultipleTabManager()})
+  });
+} catch (e) {
+  firestoreInstance = getFirestore(firebaseApp);
+}
+
+// Bind directly to default Cloud Firestore database instance
+export const firestore = firestoreInstance;
 export const auth = getAuth(firebaseApp);
 export const googleProvider = new GoogleAuthProvider();
+
+export async function ensureAuthenticated(): Promise<void> {
+  if (!auth.currentUser) {
+    try {
+      await signInAnonymously(auth);
+    } catch (e) {
+      console.warn('Anonymous sign-in skipped or failed:', e);
+    }
+  }
+}
 
 // Test Connection on boot
 export async function testFirestoreConnection(): Promise<boolean> {
@@ -683,7 +708,7 @@ export function subscribeToRealtimeFirestore(
 
     // 3. Subscribe to Real-Time Vitals with Alarm Checks
     const vitalsCol = collection(firestore, 'vitals');
-    const vitalsQuery = query(vitalsCol, orderBy('timestamp', 'desc'), limit(30));
+    const vitalsQuery = query(vitalsCol, limit(50));
     const unsubVitals = onSnapshot(vitalsQuery, async (snapshot) => {
       const remoteVitals: TelemetryVitals[] = [];
       snapshot.docChanges().forEach((change) => {

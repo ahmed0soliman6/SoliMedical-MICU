@@ -193,46 +193,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </button>
           )}
 
-          {/* 2. SBAR Handover */}
-          {settings.features.enableSbarHandover && (
-            <button
-              onClick={() => handleSelectTab('sbar')}
-              className={`w-full flex items-center justify-between p-3 rounded-xl text-xs font-semibold transition-all ${
-                activeTab === 'sbar'
-                  ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 shadow-sm'
-                  : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <div className={`p-1.5 rounded-lg ${activeTab === 'sbar' ? 'bg-teal-500/30 text-teal-200' : 'bg-slate-800 text-slate-400'}`}>
-                  <Activity className="w-4 h-4" />
-                </div>
-                <span>{t('sbarHandover')}</span>
-              </div>
-              {isRTL ? <ChevronLeft className="w-4 h-4 text-slate-500" /> : <ChevronRight className="w-4 h-4 text-slate-500" />}
-            </button>
-          )}
-
-          {/* 3. Clinical Notes */}
-          {settings.features.enableClinicalNotes && (
-            <button
-              onClick={() => handleSelectTab('notes')}
-              className={`w-full flex items-center justify-between p-3 rounded-xl text-xs font-semibold transition-all ${
-                activeTab === 'notes'
-                  ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 shadow-sm'
-                  : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <div className={`p-1.5 rounded-lg ${activeTab === 'notes' ? 'bg-teal-500/30 text-teal-200' : 'bg-slate-800 text-slate-400'}`}>
-                  <FileText className="w-4 h-4" />
-                </div>
-                <span>{t('clinicalNotes')}</span>
-              </div>
-              {isRTL ? <ChevronLeft className="w-4 h-4 text-slate-500" /> : <ChevronRight className="w-4 h-4 text-slate-500" />}
-            </button>
-          )}
-
           {/* 6 ICU Beds Pages */}
           <div className="pt-2">
             <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-3 py-1.5 border-t border-slate-850/60">
@@ -274,25 +234,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {lang === 'ar' ? 'الإدارة والخدمات' : 'Management & Tools'}
             </div>
           </div>
-
-          {/* User Management (RBAC) */}
-          {(hasPermission('canManageUsers') || currentUser?.isSuperAdmin) && onOpenUserManagement && (
-            <button
-              onClick={() => {
-                onClose();
-                onOpenUserManagement();
-              }}
-              className="w-full flex items-center justify-between p-3 rounded-xl text-xs font-semibold text-slate-200 hover:bg-slate-800/60 hover:text-teal-300 transition-all border border-slate-800 hover:border-teal-500/40"
-            >
-              <div className="flex items-center gap-3">
-                <div className="p-1.5 rounded-lg bg-teal-500/20 text-teal-300">
-                  <Users className="w-4 h-4" />
-                </div>
-                <span>{lang === 'ar' ? 'إدارة المستخدمين والصلاحيات (RBAC)' : 'Staff & Access Control'}</span>
-              </div>
-              {isRTL ? <ChevronLeft className="w-4 h-4 text-slate-500" /> : <ChevronRight className="w-4 h-4 text-slate-500" />}
-            </button>
-          )}
 
           {/* 4. Admit Patient Quick Action */}
           {hasPermission('canAdmitPatient') && (

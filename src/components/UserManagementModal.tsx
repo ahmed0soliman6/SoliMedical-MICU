@@ -214,8 +214,8 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-3 sm:p-4 overflow-y-auto">
-      <div className="relative w-full max-w-4xl bg-[#0a1224] border border-slate-800 rounded-3xl shadow-2xl p-5 sm:p-7 text-slate-100 max-h-[92vh] flex flex-col">
+    <div className="w-full h-full animate-in fade-in duration-300">
+      <div className="relative w-full mx-auto max-w-5xl bg-[#0a1224] border border-slate-800 rounded-3xl shadow-2xl p-5 sm:p-7 text-slate-100 flex flex-col mt-4">
         
         {/* Header */}
         <div className="flex items-center justify-between pb-4 border-b border-slate-800/80">

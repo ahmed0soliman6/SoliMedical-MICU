@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback } from 'react';
-import { initializeDatabaseSeed, db } from './db/icuSyncDb.ts';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { db, initializeDatabaseSeed } from './db/icuSyncDb.ts';
 import { 
   BedRecord, 
   PatientDossier, 
@@ -15,7 +15,6 @@ import { Sidebar } from './components/Sidebar.tsx';
 import { BedMatrixCard } from './components/BedMatrixCard.tsx';
 import { BedsideFlowsheet } from './components/BedsideFlowsheet.tsx';
 import { AddVitalsModal } from './components/AddVitalsModal.tsx';
-import { AdmissionModal } from './components/AdmissionModal.tsx';
 import { AddAddendumModal } from './components/AddAddendumModal.tsx';
 import { SbarSignModal } from './components/SbarSignModal.tsx';
 import { ArchiveSearchModal } from './components/ArchiveSearchModal.tsx';
@@ -25,7 +24,8 @@ import { ClinicalNotesView } from './components/ClinicalNotesView.tsx';
 import { checkAndExecuteMortalityAutoPurge } from './services/dataModel.ts';
 import { 
   subscribeToRealtimeFirestore, 
-  seedInitialDataToFirestore 
+  seedInitialDataToFirestore,
+  ensureAuthenticated
 } from './services/firebase.ts';
 import { useTranslation } from './services/i18n.ts';
 import { useAuth } from './services/AuthContext.tsx';
@@ -37,7 +37,7 @@ export default function App() {
   const { t, lang, isRTL } = useTranslation();
   const { currentUser, isAuthenticated, needsInitialAdminSetup, isLoading: isAuthLoading } = useAuth();
   const [isReady, setIsReady] = useState(false);
-  const [activeTab, setActiveTab] = useState<'beds' | 'sbar' | 'notes'>('beds');
+  const [activeTab, setActiveTab] = useState<'beds' | 'sbar' | 'notes' | 'search' | 'users' | 'settings'>('beds');
   const [selectedBedNumber, setSelectedBedNumber] = useState<BedNumber | null>(null);
   const [activeAlertMessage, setActiveAlertMessage] = useState<string | null>(null);
 
@@ -52,9 +52,7 @@ export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isUserManagementOpen, setIsUserManagementOpen] = useState(false);
-  const [isAdmissionOpen, setIsAdmissionOpen] = useState(false);
 
-  const [admissionTargetBed, setAdmissionTargetBed] = useState<BedNumber | null>(null);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isQuickVitalsOpen, setIsQuickVitalsOpen] = useState(false);
   const [vitalsTarget, setVitalsTarget] = useState<{ bedNumber: BedNumber; patientId: string; patientName: string } | null>(null);
@@ -77,38 +75,56 @@ export default function App() {
     }
   }, [beds, lang]);
 
+  const lastReloadRef = useRef(0);
+
   const reloadData = useCallback(async () => {
+    // Throttle: don't reload more than once every 1 second unless forced
+    const now = Date.now();
+    if (now - lastReloadRef.current < 1000) return;
+    lastReloadRef.current = now;
+
     try {
       const allBeds = await db.beds.toArray();
-      setBeds(allBeds.sort((a, b) => a.bedNumber.localeCompare(b.bedNumber)));
+      // Deduplicate beds by bedNumber to prevent duplicate keys and UI repetition
+      const uniqueBeds = Array.from(
+        allBeds.reduce((map, bed) => {
+          if (!map.has(bed.bedNumber) || (bed.id && bed.id === bed.bedNumber)) {
+            map.set(bed.bedNumber, bed);
+          }
+          return map;
+        }, new Map<string, BedRecord>()).values()
+      );
+      setBeds(uniqueBeds.sort((a, b) => a.bedNumber.localeCompare(b.bedNumber)));
 
-      const allPatients = await db.patients.toArray();
+      const [allPatients, allVitals, vents, pumps] = await Promise.all([
+        db.patients.toArray(),
+        db.vitals.toArray(),
+        db.ventilators.toArray(),
+        db.infusionPumps.toArray()
+      ]);
+
       setPatients(allPatients);
 
-      // Fetch latest vitals for all beds
+      // Group latest vitals by bedId in one pass
       const vMap: Record<string, TelemetryVitals> = {};
-      for (const b of allBeds) {
-        const latest = await db.vitals
-          .where('bedId')
-          .equals(b.bedNumber)
-          .reverse()
-          .sortBy('timestamp');
-        if (latest.length > 0) {
-          vMap[b.bedNumber] = latest[0];
-        }
-      }
+      const sortedVitals = allVitals.sort((a, b) => 
+        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      );
+      
+      uniqueBeds.forEach(b => {
+        const latest = sortedVitals.find(v => v.bedId === b.bedNumber);
+        if (latest) vMap[b.bedNumber] = latest;
+      });
       setLatestVitalsMap(vMap);
 
-      // Fetch active ventilators
-      const vents = await db.ventilators.toArray();
+      // Map ventilators
       const ventMap: Record<string, VentilatorParameters> = {};
       vents.forEach(v => {
         ventMap[v.bedId] = v;
       });
       setVentilatorsMap(ventMap);
 
-      // Fetch active pumps
-      const pumps = await db.infusionPumps.toArray();
+      // Map infusion pumps
       const pMap: Record<string, InfusionPumpLine[]> = {};
       pumps.forEach(p => {
         if (!pMap[p.patientId]) pMap[p.patientId] = [];
@@ -122,10 +138,16 @@ export default function App() {
 
   useEffect(() => {
     async function init() {
-      await initializeDatabaseSeed();
-      await checkAndExecuteMortalityAutoPurge();
-      await reloadData();
-      setIsReady(true);
+      try {
+        await initializeDatabaseSeed();
+        await ensureAuthenticated();
+        await checkAndExecuteMortalityAutoPurge();
+        await reloadData();
+      } catch (e) {
+        console.error('Initialization error:', e);
+      } finally {
+        setIsReady(true);
+      }
 
       // Seed & sync with Firestore asynchronously in background (non-blocking)
       seedInitialDataToFirestore().catch(e => console.warn('Background Firestore sync:', e));
@@ -183,14 +205,20 @@ export default function App() {
         beds={beds}
         patients={patients}
         onOpenAdmission={handleSmartAdmission}
-        onOpenSearch={() => setIsSearchOpen(true)}
-        onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenSearch={() => {
+          setActiveTab('search');
+        }}
+        onOpenSettings={() => {
+          setActiveTab('settings');
+        }}
         onOpenSidebar={() => setIsSidebarOpen(true)}
         onTriggerCloudSync={reloadData}
         activeTab={activeTab}
         onTabChange={(tab) => {
-          setSelectedBedNumber(null);
-          setActiveTab(tab as any);
+          if (tab === 'beds' || tab === 'search' || tab === 'settings') {
+            setSelectedBedNumber(null);
+            setActiveTab(tab as any);
+          }
         }}
         activeAlertMessage={activeAlertMessage}
         onDismissAlert={() => setActiveAlertMessage(null)}
@@ -208,9 +236,12 @@ export default function App() {
             setActiveTab(tab as any);
           }}
           onOpenAdmission={handleSmartAdmission}
-          onOpenSearch={() => setIsSearchOpen(true)}
-          onOpenSettings={() => setIsSettingsOpen(true)}
-          onOpenUserManagement={() => setIsUserManagementOpen(true)}
+          onOpenSearch={() => {
+            setActiveTab('search');
+          }}
+          onOpenSettings={() => {
+            setActiveTab('settings');
+          }}
           beds={beds}
           patients={patients}
           selectedBedNumber={selectedBedNumber}
@@ -320,64 +351,40 @@ export default function App() {
                       setIsQuickVitalsOpen(true);
                     }}
                     onAdmitToBed={(bNum) => {
-                      setAdmissionTargetBed(bNum);
-                      setIsAdmissionOpen(true);
+                      setSelectedBedNumber(bNum);
                     }}
                   />
                 );
               })}
             </div>
           </div>
-        ) : activeTab === 'sbar' ? (
-          /* SBAR Master Handover Board */
-          <SbarHandoverView
-            beds={beds}
-            patients={patients}
-            onOpenSbarSignForBed={(bNum) => {
-              const b = beds.find(x => x.bedNumber === bNum);
-              const p = b?.currentPatientId ? patients.find(x => x.id === b.currentPatientId) : null;
-              if (b && p) {
-                setSbarTarget({
-                  bedNumber: b.bedNumber,
-                  patientId: p.id,
-                  patientName: p.fullNameAr,
-                  diagnosis: p.primaryDiagnosisAr || p.primaryDiagnosisEn,
-                  codeStatus: p.codeStatus,
-                });
-                setIsSbarModalOpen(true);
-              }
+        ) : activeTab === 'search' ? (
+          <ArchiveSearchModal
+            isOpen={true}
+            onClose={() => setActiveTab('beds')}
+            onSelectPatientBed={(bNum) => {
+              setSelectedBedNumber(bNum);
+              setActiveTab('beds');
             }}
+          />
+        ) : activeTab === 'users' ? (
+          <UserManagementModal
+            isOpen={true}
+            onClose={() => setActiveTab('settings')}
+          />
+        ) : activeTab === 'settings' ? (
+          <SettingsModal
+            isOpen={true}
+            onClose={() => setActiveTab('beds')}
+            onOpenUserManagement={() => setActiveTab('users')}
           />
         ) : (
-          /* Clinical Notes & SHA-256 Addendums Board */
-          <ClinicalNotesView
-            beds={beds}
-            patients={patients}
-            onOpenAddAddendum={(noteId, author) => {
-              setAddendumTarget({ noteId, patientId: '', author });
-              setIsAddendumOpen(true);
-            }}
-          />
+          <div className="flex items-center justify-center h-64 text-slate-500 italic">
+            {lang === 'ar' ? 'يرجى اختيار موديول نشط من الإعدادات' : 'Please select an active module from settings'}
+          </div>
         )}
       </main>
     </div>
-
-      {/* System Settings & Customization Modal */}
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-      />
-
-      {/* Direct Admission Modal */}
-      {isAdmissionOpen && (
-        <AdmissionModal
-          isOpen={isAdmissionOpen}
-          onClose={() => setIsAdmissionOpen(false)}
-          beds={beds}
-          targetBedNumber={admissionTargetBed}
-          onAdmissionSuccess={reloadData}
-        />
-      )}
 
       {/* Quick Vitals Modal */}
       {isQuickVitalsOpen && vitalsTarget && (
@@ -417,24 +424,6 @@ export default function App() {
           onHandoverSigned={reloadData}
         />
       )}
-
-      {/* Archive & MRN Search Modal */}
-      {isSearchOpen && (
-        <ArchiveSearchModal
-          isOpen={isSearchOpen}
-          onClose={() => setIsSearchOpen(false)}
-          onSelectPatientBed={(bNum) => {
-            setSelectedBedNumber(bNum);
-            setActiveTab('beds');
-          }}
-        />
-      )}
-
-      {/* User Management & Access Control Modal (RBAC) */}
-      <UserManagementModal
-        isOpen={isUserManagementOpen}
-        onClose={() => setIsUserManagementOpen(false)}
-      />
     </div>
   );
 }

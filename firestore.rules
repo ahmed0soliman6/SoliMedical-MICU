@@ -7,18 +7,12 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
-    // USERS COLLECTION - Source of truth for staff profiles, roles & credentials
+    // UNIFIED COLLECTIONS
+    match /units/{unitId} {
+      allow read, write: if true;
+    }
+
     match /users/{userId} {
-      allow read, write: if true;
-    }
-
-    // ADMINS COLLECTION
-    match /admins/{userId} {
-      allow read, write: if true;
-    }
-
-    // BEDS & PATIENT DOSSIERS
-    match /beds/{bedId} {
       allow read, write: if true;
     }
 
@@ -26,7 +20,31 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
-    // CLINICAL NOTES & ADDENDUMS
+    match /beds/{bedId} {
+      allow read, write: if true;
+    }
+
+    match /transfers/{transferId} {
+      allow read, write: if true;
+    }
+
+    match /medical_records/{recordId} {
+      allow read, write: if true;
+    }
+
+    match /handovers/{handoverId} {
+      allow read, write: if true;
+    }
+
+    match /operations/{operationId} {
+      allow read, write: if true;
+    }
+
+    // LEGACY COMPATIBILITY COLLECTIONS
+    match /admins/{userId} {
+      allow read, write: if true;
+    }
+
     match /clinicalNotes/{noteId} {
       allow read, write: if true;
     }
@@ -35,7 +53,6 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
-    // SBAR HANDOVERS & DISPOSITION RECORDS
     match /sbarHandovers/{sbarId} {
       allow read, write: if true;
     }
@@ -44,12 +61,39 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
-    // TELEMETRY VITALS & AUDIT LOGS
     match /vitals/{vitalId} {
       allow read, write: if true;
     }
 
     match /auditLogs/{logId} {
+      allow read, write: if true;
+    }
+
+    match /ventilators/{id} {
+      allow read, write: if true;
+    }
+
+    match /infusionPumps/{id} {
+      allow read, write: if true;
+    }
+
+    match /fluidBalances/{id} {
+      allow read, write: if true;
+    }
+
+    match /statLabs/{id} {
+      allow read, write: if true;
+    }
+
+    match /transfusions/{id} {
+      allow read, write: if true;
+    }
+
+    match /staff/{id} {
+      allow read, write: if true;
+    }
+
+    match /fluidBalances24H/{id} {
       allow read, write: if true;
     }
 
