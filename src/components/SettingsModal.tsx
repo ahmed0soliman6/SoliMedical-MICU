@@ -317,16 +317,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
       items: featureItems.filter(f => f.category === 'alerts')
     },
     {
-      id: 'rbac',
-      labelAr: 'صلاحيات المستخدمين والوصول (RBAC)',
-      labelEn: 'User Permissions & Access Control',
-      badgeAr: 'إدارة المستخدمين',
-      badgeEn: 'Staff RBAC',
-      icon: ShieldCheck,
-      isAction: true,
-      action: onOpenUserManagement
-    },
-    {
       id: 'language',
       labelAr: 'لغة المنظومة والترميز الطبي',
       labelEn: 'System Language & Medical Coding',
@@ -347,10 +337,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
   ];
 
   return (
-    <div className="w-full min-h-full animate-in fade-in duration-300 pb-12">
-      {/* Large Full-Width Settings Container (صفحة كبيرة مطوية البطاقات) */}
+    <div className="w-full space-y-4 animate-in fade-in duration-300 pb-12" dir={isRTL ? 'rtl' : 'ltr'}>
+      {/* Large Full-Width Settings Container */}
       <div 
-        className="w-full bg-[#0a1224] border border-slate-800 rounded-3xl shadow-2xl p-4 sm:p-7 text-slate-100 flex flex-col"
+        className="w-full max-w-6xl mx-auto bg-[#0a1224] border border-slate-800 rounded-3xl shadow-xl p-4 sm:p-7 text-slate-100 flex flex-col"
         dir={isRTL ? 'rtl' : 'ltr'}
       >
         {/* Page Header Bar */}
@@ -421,7 +411,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
               >
                 {/* Collapsible Card Trigger Header */}
                 <button
-                  onClick={() => section.isAction && section.action ? section.action() : toggleSection(section.id)}
+                  onClick={() => toggleSection(section.id)}
                   className="w-full p-4 sm:p-5 flex items-center justify-between gap-4 text-left transition-colors cursor-pointer group"
                 >
                   <div className="flex items-center gap-3.5">
@@ -450,23 +440,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                   </div>
 
                   <div className="flex items-center gap-2">
-                    {section.isAction ? (
-                      <span className="text-xs font-bold text-teal-400 px-3 py-1 rounded-lg bg-teal-500/10 border border-teal-500/30">
-                        {lang === 'ar' ? 'فتح الإدارة' : 'Manage'}
-                      </span>
-                    ) : (
-                      <div className={`p-2 rounded-xl transition-all ${
-                        isExpanded ? 'bg-teal-500/10 text-teal-400 rotate-180' : 'text-slate-500 group-hover:text-slate-300'
-                      }`}>
-                        <ChevronDown className="w-5 h-5" />
-                      </div>
-                    )}
+                    <div className={`p-2 rounded-xl transition-all ${
+                      isExpanded ? 'bg-teal-500/10 text-teal-400 rotate-180' : 'text-slate-500 group-hover:text-slate-300'
+                    }`}>
+                      <ChevronDown className="w-5 h-5" />
+                    </div>
                   </div>
                 </button>
 
                 {/* Card Collapsible Body */}
                 <AnimatePresence>
-                  {isExpanded && !section.isAction && (
+                  {isExpanded && (
                     <motion.div
                       initial={{ height: 0, opacity: 0 }}
                       animate={{ height: 'auto', opacity: 1 }}

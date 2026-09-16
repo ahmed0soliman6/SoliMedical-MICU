@@ -67,9 +67,7 @@ export const SbarHandoverView: React.FC<SbarHandoverViewProps> = ({
                         {sbar.bedId}
                       </span>
                       <span className="font-bold text-white text-sm">
-                        {lang === 'ar' 
-                          ? (matchedPatient?.fullNameAr || matchedPatient?.fullNameEn || `سرير ${sbar.bedId}`)
-                          : (matchedPatient?.fullNameEn || matchedPatient?.fullNameAr || `Bed ${sbar.bedId}`)}
+                        {matchedPatient?.fullNameAr || matchedPatient?.fullNameEn || (lang === 'ar' ? `سرير ${sbar.bedId}` : `Bed ${sbar.bedId}`)}
                       </span>
                       <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300">
                         {sbar.shiftType} SHIFT

@@ -65,9 +65,7 @@ export const ClinicalNotesView: React.FC<ClinicalNotesViewProps> = ({
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-bold text-white text-sm">{note.title}</span>
                       <span className="text-xs text-teal-400 font-mono font-semibold px-2 py-0.5 rounded bg-teal-950/60 border border-teal-800/60">
-                        {lang === 'ar' 
-                          ? (matchedPatient?.fullNameAr || matchedPatient?.fullNameEn || (note.patientId ? `مريض #${note.patientId.slice(0, 8)}` : 'مريض غير محدد'))
-                          : (matchedPatient?.fullNameEn || matchedPatient?.fullNameAr || (note.patientId ? `Patient #${note.patientId.slice(0, 8)}` : 'Unknown Patient'))}
+                        {matchedPatient?.fullNameAr || matchedPatient?.fullNameEn || (note.patientId ? (lang === 'ar' ? `مريض #${note.patientId.slice(0, 8)}` : `Patient #${note.patientId.slice(0, 8)}`) : (lang === 'ar' ? 'مريض غير محدد' : 'Unknown Patient'))}
                       </span>
                       <span className="text-[10px] font-mono text-slate-400">
                         {note.noteType} • {new Date(note.timestamp).toLocaleString(lang === 'ar' ? 'ar-EG' : 'en-US')}

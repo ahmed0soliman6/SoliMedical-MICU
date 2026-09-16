@@ -18,31 +18,45 @@ import { useTranslation } from '../services/i18n.ts';
 interface BedSwapModalProps {
   isOpen: boolean;
   onClose: () => void;
-  beds: BedRecord[];
-  patients: PatientDossier[];
+  beds?: BedRecord[];
+  allBeds?: BedRecord[];
+  patients?: PatientDossier[];
+  allPatients?: PatientDossier[];
+  sourceBed?: BedRecord;
+  sourcePatient?: PatientDossier;
   initialBedNumber?: string;
-  onSuccess: () => void;
+  onSuccess?: () => void;
+  onSwapSuccess?: () => void;
 }
 
 export const BedSwapModal: React.FC<BedSwapModalProps> = ({
   isOpen,
   onClose,
   beds,
+  allBeds,
   patients,
+  allPatients,
+  sourceBed,
+  sourcePatient,
   initialBedNumber,
   onSuccess,
+  onSwapSuccess,
 }) => {
   const { lang, isRTL } = useTranslation();
   const { currentUser } = useAuth();
 
+  const effectiveBeds = beds || allBeds || [];
+  const effectivePatients = patients || allPatients || [];
+  const effectiveInitialBedNumber = initialBedNumber || sourceBed?.bedNumber;
+
   // Filter beds that are occupied with a valid patient
-  const occupiedBeds = (beds || []).filter(b => {
+  const occupiedBeds = effectiveBeds.filter(b => {
     if (!b) return false;
     const pId = b.currentPatientId || b.activePatientId;
-    return !!pId && (patients || []).some(p => p && p.id === pId) && b.status !== 'UNAVAILABLE';
+    return !!pId && effectivePatients.some(p => p && p.id === pId) && b.status !== 'UNAVAILABLE';
   });
 
-  const [bedAId, setBedAId] = useState<string>(initialBedNumber || (occupiedBeds[0]?.bedNumber || ''));
+  const [bedAId, setBedAId] = useState<string>(effectiveInitialBedNumber || (occupiedBeds[0]?.bedNumber || ''));
   const [bedBId, setBedBId] = useState<string>('');
   const [reason, setReason] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -50,23 +64,23 @@ export const BedSwapModal: React.FC<BedSwapModalProps> = ({
   const [confirmStep, setConfirmStep] = useState(false);
 
   useEffect(() => {
-    if (initialBedNumber) {
-      setBedAId(initialBedNumber);
+    if (effectiveInitialBedNumber) {
+      setBedAId(effectiveInitialBedNumber);
     }
     // Auto pick the other bed if possible
-    const other = occupiedBeds.find(b => b.bedNumber !== (initialBedNumber || bedAId));
+    const other = occupiedBeds.find(b => b.bedNumber !== (effectiveInitialBedNumber || bedAId));
     if (other && !bedBId) {
       setBedBId(other.bedNumber);
     }
-  }, [initialBedNumber, occupiedBeds]);
+  }, [effectiveInitialBedNumber, occupiedBeds]);
 
   if (!isOpen) return null;
 
   const bedA = occupiedBeds.find(b => b.bedNumber === bedAId);
   const bedB = occupiedBeds.find(b => b.bedNumber === bedBId);
 
-  const patientA = bedA ? patients.find(p => p.id === (bedA.currentPatientId || bedA.activePatientId)) : null;
-  const patientB = bedB ? patients.find(p => p.id === (bedB.currentPatientId || bedB.activePatientId)) : null;
+  const patientA = bedA ? effectivePatients.find(p => p.id === (bedA.currentPatientId || bedA.activePatientId)) : null;
+  const patientB = bedB ? effectivePatients.find(p => p.id === (bedB.currentPatientId || bedB.activePatientId)) : null;
 
   const handleStartConfirmation = (e: React.FormEvent) => {
     e.preventDefault();
@@ -118,7 +132,7 @@ export const BedSwapModal: React.FC<BedSwapModalProps> = ({
         reason.trim()
       );
 
-      onSuccess();
+      (onSuccess || onSwapSuccess)?.();
       onClose();
     } catch (err: any) {
       console.error('Bed swap failed:', err);
@@ -213,7 +227,7 @@ export const BedSwapModal: React.FC<BedSwapModalProps> = ({
                   {patientA && (
                     <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 space-y-1">
                       <div className="text-xs font-bold text-white truncate">
-                        {lang === 'ar' ? (patientA.fullNameAr || patientA.fullNameEn) : (patientA.fullNameEn || patientA.fullNameAr)}
+                        {patientA.fullNameAr || patientA.fullNameEn}
                       </div>
                       <div className="text-[10px] text-slate-400 font-mono">
                         MRN: #{patientA.mrn} | {patientA.age}y {patientA.gender}
@@ -249,7 +263,7 @@ export const BedSwapModal: React.FC<BedSwapModalProps> = ({
                   {patientB && (
                     <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 space-y-1">
                       <div className="text-xs font-bold text-white truncate">
-                        {lang === 'ar' ? (patientB.fullNameAr || patientB.fullNameEn) : (patientB.fullNameEn || patientB.fullNameAr)}
+                        {patientB.fullNameAr || patientB.fullNameEn}
                       </div>
                       <div className="text-[10px] text-slate-400 font-mono">
                         MRN: #{patientB.mrn} | {patientB.age}y {patientB.gender}

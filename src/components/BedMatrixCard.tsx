@@ -191,7 +191,7 @@ export const BedMatrixCard: React.FC<BedMatrixCardProps> = ({
             <div>
               <div className="flex items-baseline justify-between gap-1">
                 <h2 className="text-sm sm:text-base font-bold text-white truncate hover:text-teal-300 transition-colors">
-                  {lang === 'ar' ? (patient?.fullNameAr || patient?.fullNameEn) : (patient?.fullNameEn || patient?.fullNameAr)}
+                  {patient?.fullNameAr || patient?.fullNameEn}
                 </h2>
                 <span className="text-[11px] font-mono text-slate-400 font-semibold flex-shrink-0">
                   #{patient?.mrn}

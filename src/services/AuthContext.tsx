@@ -16,7 +16,8 @@ import {
   getDefaultPermissionsForRole,
   testFirestoreConnection,
   syncAdminAccountToFirebaseConsole,
-  syncUserToFirebaseConsole
+  syncUserToFirebaseConsole,
+  getInitialStaffUsers
 } from './firebase.ts';
 import { signInWithPopup, signOut as firebaseSignOut, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, User as FirebaseUser } from 'firebase/auth';
 import { db } from '../db/icuSyncDb.ts';
@@ -80,6 +81,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const localUsers = await db.users.toArray();
       if (localUsers.length > 0) {
         setAllUsers(localUsers);
+      } else {
+        const initialStaff = getInitialStaffUsers();
+        await db.users.bulkPut(initialStaff);
+        setAllUsers(initialStaff);
       }
       
       setNeedsInitialAdminSetup(false);

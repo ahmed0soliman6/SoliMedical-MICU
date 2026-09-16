@@ -13,14 +13,17 @@ import {
   Languages,
   Menu
 } from 'lucide-react';
-import { BedRecord, PatientDossier } from '../types/schema.ts';
+import { BedRecord, PatientDossier, BedNumber } from '../types/schema.ts';
 import { requestNotificationPermission, playIcuAlarmAudio } from '../services/firebase.ts';
 import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
+import { getPatientForBed } from '../services/dataModel.ts';
 
 interface HeaderProps {
   beds: BedRecord[];
   patients: PatientDossier[];
+  selectedBedNumber?: BedNumber | null;
+  onSelectBed?: (bed: BedNumber | null) => void;
   onOpenAdmission?: () => void;
   onOpenSearch: () => void;
   onOpenSettings: () => void;
@@ -35,6 +38,8 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({
   beds,
   patients,
+  selectedBedNumber,
+  onSelectBed,
   onOpenAdmission,
   onOpenSearch,
   onOpenSettings,
@@ -127,11 +132,11 @@ export const Header: React.FC<HeaderProps> = ({
             </span>
           </button>
 
-          {/* Active View / Unit Title */}
+          {/* Active View / System Brand */}
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
             <h1 className="text-xs sm:text-sm font-extrabold tracking-tight text-white leading-none">
-              {lang === 'ar' ? 'وحدة العناية المركزة الباطنة (MICU)' : 'Soli Medical MICU System'}
+              Soli Medical
             </h1>
           </div>
         </div>
@@ -184,26 +189,21 @@ export const Header: React.FC<HeaderProps> = ({
           )}
         </div>
 
-        {/* Prominent Search Bar & Notifications Center & Settings */}
-        <div className="flex items-center gap-2 sm:gap-3">
-          {/* Universal Search Bar (Prominent across all pages) */}
+        {/* Action Controls: Compact Search Icon, Alerts & Settings */}
+        <div className="flex items-center gap-2 sm:gap-2.5">
+          {/* Universal Search Icon Button (Freeing header space) */}
           {settings.features.enableArchiveSearch && (
             <button
               onClick={onOpenSearch}
-              className={`flex items-center gap-2 px-3 py-1.5 sm:py-2 rounded-xl border text-xs font-medium transition-all active:scale-95 shadow-sm group cursor-pointer ${
+              className={`flex items-center justify-center p-2 sm:px-2.5 sm:py-2 rounded-xl border text-xs font-semibold transition-all active:scale-95 shadow-sm group cursor-pointer ${
                 activeTab === 'search'
                   ? 'bg-teal-500/20 border-teal-500 text-teal-300 shadow-teal-500/10'
-                  : 'bg-[#0b1325] hover:bg-[#111d38] border-slate-700/80 text-slate-300 hover:border-teal-500/50'
+                  : 'bg-[#0b1325] hover:bg-[#111d38] border-slate-700/80 text-slate-300 hover:text-teal-300 hover:border-teal-500/50'
               }`}
               title={lang === 'ar' ? 'البحث السريع في سجلات المرضى والأرشيف' : 'Search patient records & MRN'}
+              aria-label="Search patient records"
             >
               <Search className="w-4 h-4 text-teal-400 group-hover:scale-110 transition-transform flex-shrink-0" />
-              <span className="text-slate-300 font-semibold text-xs truncate max-w-[140px] sm:max-w-[180px] md:max-w-[220px]">
-                {lang === 'ar' ? 'بحث بالاسم أو رقم الملف MRN' : 'Search Patient / MRN'}
-              </span>
-              <kbd className="hidden lg:inline-block text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-400">
-                /
-              </kbd>
             </button>
           )}
 
@@ -280,21 +280,58 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       )}
 
-      {/* Desktop Tab Navigation Bar (Respecting Feature Flags & Bilingual) */}
-      <div className="max-w-7xl mx-auto hidden md:flex items-center gap-1 mt-2 pt-2 border-t border-slate-800/60">
+      {/* Desktop Tab Navigation Bar (Interactive Bed Pages) */}
+      <div className="max-w-[1600px] mx-auto hidden md:flex items-center gap-1.5 mt-2 pt-2 border-t border-slate-800/60 overflow-x-auto">
         {settings.features.enableBedMatrix && (
           <button
-            onClick={() => onTabChange('beds')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-              activeTab === 'beds'
+            onClick={() => {
+              if (onSelectBed) onSelectBed(null);
+              onTabChange('beds');
+            }}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
+              activeTab === 'beds' && !selectedBedNumber
                 ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 shadow-sm'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
             }`}
+            title={lang === 'ar' ? 'عرض الكونسول المركزي لجميع الأسرة الستة' : 'View 6-Bed Central Console Grid'}
           >
-            <Layers className="w-3.5 h-3.5" />
-            <span>{t('bedMatrix')} (6 {lang === 'ar' ? 'أسرة' : 'Beds'})</span>
+            <Layers className="w-3.5 h-3.5 text-teal-400" />
+            <span>{lang === 'ar' ? 'شبكة الأسِرّة الستة (Matrix)' : '6-Bed Console'}</span>
           </button>
         )}
+
+        <span className="text-slate-700 mx-1">|</span>
+
+        {/* Individual Dedicated Bed Pages */}
+        {beds.map((b) => {
+          const patient = getPatientForBed(b, patients);
+          const isOccupied = b.status === 'OCCUPIED' || (b.status === 'ISOLATION' && !!patient) || !!patient;
+          const isSelected = activeTab === 'beds' && selectedBedNumber === b.bedNumber;
+
+          return (
+            <button
+              key={b.bedNumber}
+              onClick={() => {
+                if (onSelectBed) onSelectBed(b.bedNumber as BedNumber);
+                onTabChange('beds');
+              }}
+              className={`px-2.5 py-1.5 rounded-lg text-xs transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
+                isSelected
+                  ? 'bg-teal-500/25 text-teal-200 border border-teal-500/50 font-black shadow-md'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent'
+              }`}
+              title={lang === 'ar' ? `صفحة السرير ${b.bedNumber}` : `Bed ${b.bedNumber} Dedicated Page`}
+            >
+              <span className="font-mono font-extrabold text-teal-400">{b.bedNumber}</span>
+              <span className="truncate max-w-[110px] text-[11px]">
+                {isOccupied 
+                  ? (patient?.fullNameAr?.split(' ')[0] || patient?.fullNameEn?.split(' ')[0] || (lang === 'ar' ? 'مشغول' : 'Occupied')) 
+                  : (lang === 'ar' ? 'شاغر' : 'Vacant')}
+              </span>
+              <span className={`w-2 h-2 rounded-full shrink-0 ${isOccupied ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
+            </button>
+          );
+        })}
       </div>
     </header>
   );

@@ -28,6 +28,7 @@ import { collection, doc, setDoc } from 'firebase/firestore';
 import { firestore } from '../services/firebase.ts';
 import { COLLECTIONS } from '../types/contracts.ts';
 import { AiLabScannerModal } from './AiLabScannerModal.tsx';
+import { toEnglishDigits } from '../services/numberUtils.ts';
 
 interface LabFlowsheetSectionProps {
   patientId: string;
@@ -166,9 +167,9 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
         bedNumber,
         testName: finalName,
         category: formCategory,
-        value: formValue.trim(),
+        value: toEnglishDigits(formValue.trim()),
         unit: formUnit.trim(),
-        normalRange: formNormalRange.trim(),
+        normalRange: toEnglishDigits(formNormalRange.trim()),
         timestamp: new Date(formTimestamp).toISOString(),
         status: formStatus,
         notes: formNotes.trim() || undefined,

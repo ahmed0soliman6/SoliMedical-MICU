@@ -221,8 +221,8 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
   };
 
   return (
-    <div className="w-full h-full animate-in fade-in duration-300">
-      <div className="relative w-full mx-auto max-w-5xl bg-[#0a1224] border border-slate-800 rounded-3xl shadow-2xl p-5 sm:p-7 text-slate-100 flex flex-col mt-4">
+    <div className="w-full space-y-4 animate-in fade-in duration-300" dir={isRTL ? 'rtl' : 'ltr'}>
+      <div className="relative w-full max-w-6xl mx-auto bg-[#0a1224] border border-slate-800 rounded-3xl shadow-xl p-5 sm:p-7 text-slate-100 flex flex-col">
         
         {/* Header */}
         <div className="flex items-center justify-between pb-4 border-b border-slate-800/80">

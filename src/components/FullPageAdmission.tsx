@@ -15,6 +15,7 @@ import {
 import { admitPatient, calculateIdealBodyWeight } from '../services/dataModel.ts';
 import { useTranslation } from '../services/i18n.ts';
 import { db } from '../db/icuSyncDb.ts';
+import { toEnglishDigits, parseEnglishFloat, parseEnglishInt } from '../services/numberUtils.ts';
 
 interface FullPageAdmissionProps {
   bedNumber: BedNumber;
@@ -139,13 +140,13 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
 
       await admitPatient({
         targetBed,
-        mrn: mrn.trim(),
+        mrn: toEnglishDigits(mrn.trim()),
         fullNameAr: fullNameAr.trim() || fullNameEn.trim(),
         fullNameEn: fullNameEn.trim() || fullNameAr.trim(),
-        age: Number(age),
+        age: parseEnglishInt(age) || 65,
         gender,
-        heightCm: Number(heightCm),
-        weightKg: Number(weightKg),
+        heightCm: parseEnglishFloat(heightCm) || 170,
+        weightKg: parseEnglishFloat(weightKg) || 75,
         codeStatus,
         acuityLevel,
         intakePathway,
@@ -164,12 +165,12 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
         allergies: allergiesList,
         isolationPrecautions: isolation ? [isolation] : [],
         initialVitals: {
-          heartRateBpm: Number(initialHr),
-          systolicBpMmHg: Math.round(initialMap + 25),
-          diastolicBpMmHg: Math.round(initialMap - 15),
+          heartRateBpm: parseEnglishInt(initialHr) || 110,
+          systolicBpMmHg: Math.round((parseEnglishFloat(initialMap) || 65) + 25),
+          diastolicBpMmHg: Math.round((parseEnglishFloat(initialMap) || 65) - 15),
           isArterialLine: true,
-          spo2Percent: Number(initialSpo2),
-          fio2SuppliedPercent: Number(initialFio2),
+          spo2Percent: parseEnglishInt(initialSpo2) || 90,
+          fio2SuppliedPercent: parseEnglishInt(initialFio2) || 50,
           respiratoryRateCpm: 22,
           coreTemperatureCelsius: 38.2,
           gcsTotalScore: 12,
@@ -268,7 +269,7 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
               <p className="text-slate-300 mt-0.5 text-[11px]">
                 {lang === 'ar'
                   ? `السرير ${targetBed} مخصص حالياً للمريض ${occupyingPatient?.fullNameAr || occupyingPatient?.fullNameEn || ''} (${occupyingPatient?.mrn || ''}). يرجى اختيار سرير شاغر آخر من القائمة في الأعلى أو نقل الحالة الحالية أولاً.`
-                  : `Bed ${targetBed} is occupied by ${occupyingPatient?.fullNameEn || occupyingPatient?.fullNameAr || 'patient'} (${occupyingPatient?.mrn || ''}). Please switch to a vacant bed from the selector above or transfer/discharge the current patient first.`}
+                  : `Bed ${targetBed} is occupied by ${occupyingPatient?.fullNameAr || occupyingPatient?.fullNameEn || 'patient'} (${occupyingPatient?.mrn || ''}). Please switch to a vacant bed from the selector above or transfer/discharge the current patient first.`}
               </p>
             </div>
           </div>

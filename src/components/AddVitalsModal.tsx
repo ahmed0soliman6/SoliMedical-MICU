@@ -3,6 +3,7 @@ import { X, Activity, Heart, Wind, Thermometer, ShieldCheck } from 'lucide-react
 import { BedNumber, StaffRole } from '../types/schema.ts';
 import { addTimestampedVitals } from '../services/dataModel.ts';
 import { useTranslation } from '../services/i18n.ts';
+import { parseEnglishFloat, parseEnglishInt } from '../services/numberUtils.ts';
 
 interface AddVitalsModalProps {
   isOpen: boolean;
@@ -51,20 +52,20 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
       await addTimestampedVitals({
         bedId: bedNumber,
         patientId,
-        heartRateBpm: Number(heartRate),
+        heartRateBpm: parseEnglishInt(heartRate) || 110,
         heartRhythm,
-        systolicBpMmHg: Number(systolicBp),
-        diastolicBpMmHg: Number(diastolicBp),
+        systolicBpMmHg: parseEnglishInt(systolicBp) || 95,
+        diastolicBpMmHg: parseEnglishInt(diastolicBp) || 60,
         isArterialLine,
-        spo2Percent: Number(spo2),
-        fio2SuppliedPercent: Number(fio2),
-        respiratoryRateCpm: Number(respiratoryRate),
-        coreTemperatureCelsius: Number(coreTemp),
+        spo2Percent: parseEnglishInt(spo2) || 94,
+        fio2SuppliedPercent: parseEnglishInt(fio2) || 60,
+        respiratoryRateCpm: parseEnglishInt(respiratoryRate) || 22,
+        coreTemperatureCelsius: parseEnglishFloat(coreTemp) || 38.2,
         temperatureSite: tempSite,
-        gcsTotalScore: Number(gcsTotal),
-        sedationRassScore: Number(sedationRass),
-        lactateMmolPerL: lactate ? Number(lactate) : undefined,
-        bloodGlucoseMgDl: bloodGlucose ? Number(bloodGlucose) : undefined,
+        gcsTotalScore: parseEnglishInt(gcsTotal) || 10,
+        sedationRassScore: parseEnglishInt(sedationRass) || -2,
+        lactateMmolPerL: lactate ? parseEnglishFloat(lactate) : undefined,
+        bloodGlucoseMgDl: bloodGlucose ? parseEnglishFloat(bloodGlucose) : undefined,
         recordedBy: {
           staffId: '7721',
           name: staffName,

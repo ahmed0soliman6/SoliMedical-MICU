@@ -557,6 +557,156 @@ export async function saveUserAccount(user: IcuUser): Promise<void> {
   }
 }
 
+export function getInitialStaffUsers(): IcuUser[] {
+  const now = new Date().toISOString();
+  return [
+    {
+      uid: 'usr_admin_01',
+      email: 'admin@solimedical-micu.org',
+      nameEn: 'Dr. Ahmed Soliman',
+      nameAr: 'د. أحمد سليمان',
+      role: StaffRole.ADMIN,
+      department: 'إدارة العناية المركزة الباطنة',
+      badgeId: 'ADM-001',
+      licenseNumber: 'LIC-100001',
+      isActive: true,
+      isSuperAdmin: true,
+      pinCode: '12345678',
+      createdAt: now,
+      lastLoginAt: now,
+      permissions: getDefaultPermissionsForRole(StaffRole.ADMIN),
+    },
+    {
+      uid: 'usr_consultant_01',
+      email: 'consultant@solimedical-micu.org',
+      nameEn: 'Dr. Tariq Al-Mansoor',
+      nameAr: 'د. طارق المنصور',
+      role: StaffRole.CONSULTANT,
+      department: 'طب الحالات الحرجة',
+      badgeId: 'CON-101',
+      licenseNumber: 'LIC-200101',
+      isActive: true,
+      isSuperAdmin: false,
+      pinCode: '12345678',
+      createdAt: now,
+      lastLoginAt: now,
+      permissions: getDefaultPermissionsForRole(StaffRole.CONSULTANT),
+    },
+    {
+      uid: 'usr_specialist_01',
+      email: 'specialist@solimedical-micu.org',
+      nameEn: 'Dr. Layla Al-Ghamdi',
+      nameAr: 'د. ليلى الغامدي',
+      role: StaffRole.SPECIALIST,
+      department: 'الأمراض الصدرية والحالات الحرجة',
+      badgeId: 'SPC-204',
+      licenseNumber: 'LIC-300204',
+      isActive: true,
+      isSuperAdmin: false,
+      pinCode: '12345678',
+      createdAt: now,
+      lastLoginAt: now,
+      permissions: getDefaultPermissionsForRole(StaffRole.SPECIALIST),
+    },
+    {
+      uid: 'usr_resident_01',
+      email: 'resident@solimedical-micu.org',
+      nameEn: 'Dr. Omar Khaled',
+      nameAr: 'د. عمر خالد',
+      role: StaffRole.RESIDENT,
+      department: 'الطب الباطني / العناية المركزة',
+      badgeId: 'RES-305',
+      licenseNumber: 'LIC-400305',
+      isActive: true,
+      isSuperAdmin: false,
+      pinCode: '12345678',
+      createdAt: now,
+      lastLoginAt: now,
+      permissions: getDefaultPermissionsForRole(StaffRole.RESIDENT),
+    },
+    {
+      uid: 'usr_lead_rn_01',
+      email: 'lead_rn@solimedical-micu.org',
+      nameEn: 'RN Sarah Jenkins',
+      nameAr: 'م. سارة جنكينز',
+      role: StaffRole.LEAD_RN,
+      department: 'تمريض العناية المركزة (مسؤولة المناوبة)',
+      badgeId: 'RN-401',
+      licenseNumber: 'LIC-500401',
+      isActive: true,
+      isSuperAdmin: false,
+      pinCode: '12345678',
+      createdAt: now,
+      lastLoginAt: now,
+      permissions: getDefaultPermissionsForRole(StaffRole.LEAD_RN),
+    },
+    {
+      uid: 'usr_bedside_rn_01',
+      email: 'bedside_rn@solimedical-micu.org',
+      nameEn: 'RN Fatima Al-Zahrani',
+      nameAr: 'م. فاطمة الزهراني',
+      role: StaffRole.BEDSIDE_RN,
+      department: 'تمريض أسِرّة العناية المركزة',
+      badgeId: 'RN-502',
+      licenseNumber: 'LIC-600502',
+      isActive: true,
+      isSuperAdmin: false,
+      pinCode: '12345678',
+      createdAt: now,
+      lastLoginAt: now,
+      permissions: getDefaultPermissionsForRole(StaffRole.BEDSIDE_RN),
+    },
+    {
+      uid: 'usr_pharmacist_01',
+      email: 'pharmacist@solimedical-micu.org',
+      nameEn: 'Pharm. Zaid Al-Otaibi',
+      nameAr: 'ص. زيد العتيبي',
+      role: StaffRole.CLINICAL_PHARMACIST,
+      department: 'الصيدلة السريرية',
+      badgeId: 'PHM-601',
+      licenseNumber: 'LIC-700601',
+      isActive: true,
+      isSuperAdmin: false,
+      pinCode: '12345678',
+      createdAt: now,
+      lastLoginAt: now,
+      permissions: getDefaultPermissionsForRole(StaffRole.CLINICAL_PHARMACIST),
+    },
+    {
+      uid: 'usr_rt_01',
+      email: 'rt@solimedical-micu.org',
+      nameEn: 'RT Hisham Mahmoud',
+      nameAr: 'أ. هشام محمود',
+      role: StaffRole.RESPIRATORY_THERAPIST,
+      department: 'العلاج التنفسي',
+      badgeId: 'RT-701',
+      licenseNumber: 'LIC-800701',
+      isActive: true,
+      isSuperAdmin: false,
+      pinCode: '12345678',
+      createdAt: now,
+      lastLoginAt: now,
+      permissions: getDefaultPermissionsForRole(StaffRole.RESPIRATORY_THERAPIST),
+    },
+    {
+      uid: 'usr_auditor_01',
+      email: 'auditor@solimedical-micu.org',
+      nameEn: 'Eng. Mona Mahmoud',
+      nameAr: 'أ. منى محمود',
+      role: StaffRole.AUDITOR,
+      department: 'مراجعة الجودة - GAHAR / وزارة الصحة',
+      badgeId: 'AUD-801',
+      licenseNumber: 'LIC-900801',
+      isActive: true,
+      isSuperAdmin: false,
+      pinCode: '12345678',
+      createdAt: now,
+      lastLoginAt: now,
+      permissions: getDefaultPermissionsForRole(StaffRole.AUDITOR),
+    }
+  ];
+}
+
 /**
  * Fetch all users from cloud and sync with local DB, automatically purging duplicate records
  */
@@ -576,6 +726,13 @@ export async function fetchAllUsers(): Promise<IcuUser[]> {
     if (!rawList.some(r => r.uid === u.uid)) {
       rawList.push(u);
     }
+  }
+
+  // If no users exist anywhere, seed default clinical staff accounts
+  if (rawList.length === 0) {
+    const initialStaff = getInitialStaffUsers();
+    await db.users.bulkPut(initialStaff);
+    return initialStaff;
   }
 
   // Deduplicate by email / badgeId

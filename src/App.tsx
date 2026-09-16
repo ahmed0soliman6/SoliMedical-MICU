@@ -21,7 +21,7 @@ import { ArchiveSearchModal } from './components/ArchiveSearchModal.tsx';
 import { SettingsModal } from './components/SettingsModal.tsx';
 import { SbarHandoverView } from './components/SbarHandoverView.tsx';
 import { ClinicalNotesView } from './components/ClinicalNotesView.tsx';
-import { checkAndExecuteMortalityAutoPurge } from './services/dataModel.ts';
+import { checkAndExecuteMortalityAutoPurge, getPatientForBed } from './services/dataModel.ts';
 import { 
   subscribeToRealtimeFirestore, 
   seedInitialDataToFirestore,
@@ -52,8 +52,8 @@ export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isUserManagementOpen, setIsUserManagementOpen] = useState(false);
-
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+
   const [isQuickVitalsOpen, setIsQuickVitalsOpen] = useState(false);
   const [vitalsTarget, setVitalsTarget] = useState<{ bedNumber: BedNumber; patientId: string; patientName: string } | null>(null);
   const [isAddendumOpen, setIsAddendumOpen] = useState(false);
@@ -75,104 +75,132 @@ export default function App() {
     }
   }, [beds, lang]);
 
-  const lastReloadRef = useRef(0);
-
+  // Load local Dexie data into state
   const reloadData = useCallback(async () => {
-    // Throttle: don't reload more than once every 1 second unless forced
-    const now = Date.now();
-    if (now - lastReloadRef.current < 1000) return;
-    lastReloadRef.current = now;
-
     try {
-      const allBeds = await db.beds.toArray();
-      // Deduplicate beds by bedNumber to prevent duplicate keys and UI repetition
-      const uniqueBeds = Array.from(
-        allBeds.reduce((map, bed) => {
-          if (!map.has(bed.bedNumber) || (bed.id && bed.id === bed.bedNumber)) {
-            map.set(bed.bedNumber, bed);
-          }
-          return map;
-        }, new Map<string, BedRecord>()).values()
-      );
-      setBeds(uniqueBeds.sort((a, b) => a.bedNumber.localeCompare(b.bedNumber)));
+      const bList = await db.beds.orderBy('bedNumber').toArray();
+      const pList = await db.patients.toArray();
+      setBeds(bList);
+      setPatients(pList);
 
-      const [allPatients, allVitals, vents, pumps] = await Promise.all([
-        db.patients.toArray(),
-        db.vitals.toArray(),
-        db.ventilators.toArray(),
-        db.infusionPumps.toArray()
-      ]);
+      // Latest vitals per bed
+      const vitalsList = await db.vitals.toArray();
+      const vitMap: Record<string, TelemetryVitals> = {};
+      for (const v of vitalsList) {
+        const bKey = (v.bedNumber || v.bedId) as string;
+        if (bKey && (!vitMap[bKey] || new Date(v.timestamp) > new Date(vitMap[bKey].timestamp))) {
+          vitMap[bKey] = v;
+        }
+      }
+      setLatestVitalsMap(vitMap);
 
-      setPatients(allPatients);
+      // Active ventilators
+      const ventList = await db.ventilators.toArray();
+      const vMap: Record<string, VentilatorParameters> = {};
+      for (const v of ventList) {
+        const bKey = (v.bedNumber || v.bedId) as string;
+        if (bKey) {
+          vMap[bKey] = v;
+        }
+      }
+      setVentilatorsMap(vMap);
 
-      // Group latest vitals by bedId in one pass
-      const vMap: Record<string, TelemetryVitals> = {};
-      const sortedVitals = allVitals.sort((a, b) => 
-        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-      );
-      
-      uniqueBeds.forEach(b => {
-        const latest = sortedVitals.find(v => v.bedId === b.bedNumber);
-        if (latest) vMap[b.bedNumber] = latest;
-      });
-      setLatestVitalsMap(vMap);
-
-      // Map ventilators
-      const ventMap: Record<string, VentilatorParameters> = {};
-      vents.forEach(v => {
-        ventMap[v.bedId] = v;
-      });
-      setVentilatorsMap(ventMap);
-
-      // Map infusion pumps
+      // Active pumps grouped by patient
+      const pumpList = await db.infusionPumps.filter(p => p.status === 'RUNNING' || p.status === 'STANDBY').toArray();
       const pMap: Record<string, InfusionPumpLine[]> = {};
-      pumps.forEach(p => {
-        if (!pMap[p.patientId]) pMap[p.patientId] = [];
+      for (const p of pumpList) {
+        if (!pMap[p.patientId]) {
+          pMap[p.patientId] = [];
+        }
         pMap[p.patientId].push(p);
-      });
+      }
       setPumpsMap(pMap);
+
+      // Check auto-purge expired mortal records
+      await checkAndExecuteMortalityAutoPurge();
     } catch (err) {
-      console.error('Error reloading ICU state:', err);
+      console.error('Error reloading local ICU database:', err);
     }
   }, []);
 
+  // Initialize App, Local DB & Firebase Sync
   useEffect(() => {
-    async function init() {
+    let unsubscribeFirestore: (() => void) | null = null;
+
+    async function initSystem() {
       try {
-        await initializeDatabaseSeed();
+        // Ensure anonymous/custom auth for Firebase security rules
         await ensureAuthenticated();
-        await checkAndExecuteMortalityAutoPurge();
+
+        // Check if local DB is initialized
+        const bedCount = await db.beds.count();
+        if (bedCount === 0) {
+          console.log('Initializing local Dexie indexed database seed...');
+          await initializeDatabaseSeed();
+          // Also seed initial data to Firestore cloud if empty
+          await seedInitialDataToFirestore();
+        }
+
         await reloadData();
+
+        // Subscribe to real-time cloud changes from Firebase Firestore
+        unsubscribeFirestore = subscribeToRealtimeFirestore(async () => {
+          console.log('Firestore cloud delta received. Synchronizing local state...');
+          await reloadData();
+        });
+
+        setIsReady(true);
       } catch (e) {
-        console.error('Initialization error:', e);
-      } finally {
+        console.warn('System initialization warning (running in offline/local fallback):', e);
         setIsReady(true);
       }
-
-      // Seed & sync with Firestore asynchronously in background (non-blocking)
-      seedInitialDataToFirestore().catch(e => console.warn('Background Firestore sync:', e));
     }
-    init();
 
-    // Setup Firebase Real-Time Listener across all devices
-    const unsubscribeFirestore = subscribeToRealtimeFirestore(
-      () => {
-        reloadData();
-      },
-      (alert) => {
-        setActiveAlertMessage(lang === 'ar' ? `السرير ${alert.bedNumber}: ${alert.message}` : `Bed ${alert.bedNumber}: ${alert.message}`);
-      }
-    );
-
-    // Setup periodic polling backup
-    const interval = setInterval(() => {
-      reloadData();
-    }, 15000);
+    initSystem();
 
     return () => {
-      unsubscribeFirestore();
-      clearInterval(interval);
+      if (unsubscribeFirestore) {
+        unsubscribeFirestore();
+      }
     };
+  }, [reloadData]);
+
+  // Periodic Telemetry MAP & Desaturation Safety Monitor
+  useEffect(() => {
+    const alertInterval = setInterval(async () => {
+      const activeVitals: TelemetryVitals[] = Object.values(latestVitalsMap);
+      const criticalBed = activeVitals.find(v => v.meanArterialPressureMmHg < 65 || (v.spo2Percent || v.oxygenSaturationPercent || 100) < 88);
+      if (criticalBed) {
+        const bedNum = criticalBed.bedNumber || criticalBed.bedId;
+        const bedLabel = lang === 'ar' ? `السرير ${bedNum}` : `Bed ${bedNum}`;
+        const spo2 = criticalBed.spo2Percent || criticalBed.oxygenSaturationPercent || 0;
+        const issue = criticalBed.meanArterialPressureMmHg < 65 
+          ? (lang === 'ar' ? `انخفاض حاد في الضغط الشرياني الوسطي MAP (${criticalBed.meanArterialPressureMmHg} mmHg)` : `Critical MAP Drop (${criticalBed.meanArterialPressureMmHg} mmHg)`)
+          : (lang === 'ar' ? `هبوط نسبة تشبع الأكسجين SpO₂ (${spo2}%)` : `Critical Desaturation SpO₂ (${spo2}%)`);
+        setActiveAlertMessage(`🚨 STAT ALERT [${bedLabel}]: ${issue} — Immediate intervention required!`);
+      }
+    }, 15000);
+
+    return () => clearInterval(alertInterval);
+  }, [latestVitalsMap, lang]);
+
+  // Handle ESC key to exit Bedside Flowsheet back to Central 6-Bed Console
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && selectedBedNumber !== null && !isQuickVitalsOpen && !isAddendumOpen && !isSbarModalOpen && !isSettingsOpen && !isUserManagementOpen && !isSearchOpen && !isSidebarOpen) {
+        setSelectedBedNumber(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedBedNumber, isQuickVitalsOpen, isAddendumOpen, isSbarModalOpen, isSettingsOpen, isUserManagementOpen, isSearchOpen, isSidebarOpen]);
+
+  // Periodic Auto-Refresh for ICU Timelines & 24h Balances
+  useEffect(() => {
+    const refreshTimer = setInterval(() => {
+      reloadData();
+    }, 30000);
+    return () => clearInterval(refreshTimer);
   }, [reloadData, lang]);
 
   if (!isAuthenticated && !isAuthLoading) {
@@ -194,204 +222,219 @@ export default function App() {
 
   // Selected Bed Patient Dossier
   const selectedBed = beds.find(b => b.bedNumber === selectedBedNumber);
-  const selectedPatient = selectedBed?.currentPatientId 
-    ? patients.find(p => p.id === selectedBed.currentPatientId) 
-    : null;
+  const selectedPatient = getPatientForBed(selectedBed, patients);
 
   return (
-    <div className="min-h-screen bg-[#070d18] text-[#dbe2fd] flex flex-col pb-6 selection:bg-teal-500 selection:text-teal-950 font-sans">
-      {/* Universal Header with Firebase Cloud Status and Alarm Banner */}
-      <Header
-        beds={beds}
-        patients={patients}
+    <div className="min-h-screen bg-[#070d18] text-[#dbe2fd] flex flex-row font-sans selection:bg-teal-500 selection:text-teal-950" dir={isRTL ? 'rtl' : 'ltr'}>
+      {/* Sidebar: Full Height Sticky Column on Desktop + Mobile Slide Drawer */}
+      <Sidebar
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+        activeTab={activeTab}
+        onTabChange={(tab) => {
+          if (tab === 'beds') {
+            setSelectedBedNumber(null);
+            setActiveTab('beds');
+          } else {
+            setActiveTab(tab);
+          }
+          setIsSidebarOpen(false);
+        }}
         onOpenAdmission={handleSmartAdmission}
         onOpenSearch={() => {
           setActiveTab('search');
+          setIsSidebarOpen(false);
         }}
         onOpenSettings={() => {
           setActiveTab('settings');
+          setIsSidebarOpen(false);
         }}
-        onOpenSidebar={() => setIsSidebarOpen(true)}
-        onTriggerCloudSync={reloadData}
-        activeTab={activeTab}
-        onTabChange={(tab) => {
-          if (tab === 'beds' || tab === 'search' || tab === 'settings') {
-            setSelectedBedNumber(null);
-            setActiveTab(tab as any);
-          }
+        onOpenUserManagement={() => {
+          setActiveTab('users');
+          setIsSidebarOpen(false);
         }}
-        activeAlertMessage={activeAlertMessage}
-        onDismissAlert={() => setActiveAlertMessage(null)}
+        beds={beds}
+        patients={patients}
+        selectedBedNumber={selectedBedNumber}
+        onSelectBed={(bedNum) => {
+          setSelectedBedNumber(bedNum);
+          setActiveTab('beds');
+          setIsSidebarOpen(false);
+        }}
       />
 
-      {/* Main Container: Persistent Sidebar on Desktop + Clinical Canvas */}
-      <div className="flex-1 max-w-[1600px] w-full mx-auto flex flex-col md:flex-row items-start">
-        {/* Responsive Slide-out Sidebar Drawer */}
-        <Sidebar
-          isOpen={isSidebarOpen}
-          onClose={() => setIsSidebarOpen(false)}
-          activeTab={activeTab}
-          onTabChange={(tab) => {
-            setSelectedBedNumber(null);
-            setActiveTab(tab as any);
-          }}
-          onOpenAdmission={handleSmartAdmission}
-          onOpenSearch={() => {
-            setActiveTab('search');
-          }}
-          onOpenSettings={() => {
-            setActiveTab('settings');
-          }}
-          onOpenUserManagement={() => {
-            setActiveTab('users');
-          }}
+      {/* Main Column: Header Beside Sidebar + Main Content View */}
+      <div className="flex-1 flex flex-col min-w-0 min-h-screen pb-6">
+        {/* Top Header (Sits beside Sidebar on Desktop) */}
+        <Header
           beds={beds}
           patients={patients}
           selectedBedNumber={selectedBedNumber}
           onSelectBed={(bedNum) => {
             setSelectedBedNumber(bedNum);
+            setActiveTab('beds');
           }}
+          onOpenAdmission={handleSmartAdmission}
+          onOpenSearch={() => setActiveTab('search')}
+          onOpenSettings={() => setActiveTab('settings')}
+          onOpenSidebar={() => setIsSidebarOpen(true)}
+          onTriggerCloudSync={reloadData}
+          activeTab={activeTab}
+          onTabChange={(tab) => {
+            if (tab === 'beds') {
+              setSelectedBedNumber(null);
+              setActiveTab('beds');
+            } else {
+              setActiveTab(tab);
+            }
+          }}
+          activeAlertMessage={activeAlertMessage}
+          onDismissAlert={() => setActiveAlertMessage(null)}
         />
 
-        {/* Main Clinical Canvas */}
-        <main className="flex-1 min-w-0 w-full p-3 sm:p-6 space-y-5">
-        {selectedBedNumber && selectedBed ? (
-          selectedPatient ? (
-            /* Bedside Deep Dive Flowsheet */
-            <BedsideFlowsheet
-              bed={selectedBed}
-              patient={selectedPatient}
-              allBeds={beds}
-              allPatients={patients}
-              onBack={() => setSelectedBedNumber(null)}
-              onOpenAddVitals={() => {
-                setVitalsTarget({
-                  bedNumber: selectedBed.bedNumber,
-                  patientId: selectedPatient.id,
-                  patientName: selectedPatient.fullNameAr,
-                });
-                setIsQuickVitalsOpen(true);
+        {/* Main Canvas View - Renders Selected Full Page */}
+        <main className="flex-1 max-w-[1600px] w-full mx-auto p-3 sm:p-6 space-y-5">
+          {activeTab === 'search' ? (
+            <ArchiveSearchModal
+              isOpen={true}
+              onClose={() => setActiveTab('beds')}
+              onSelectPatientBed={(bNum) => {
+                setSelectedBedNumber(bNum);
+                setActiveTab('beds');
               }}
-              onOpenAddAddendum={(noteId, author) => {
-                setAddendumTarget({ noteId, patientId: selectedPatient.id, author });
-                setIsAddendumOpen(true);
-              }}
-              onOpenSbarSign={() => {
-                setSbarTarget({
-                  bedNumber: selectedBed.bedNumber,
-                  patientId: selectedPatient.id,
-                  patientName: selectedPatient.fullNameAr,
-                  diagnosis: selectedPatient.primaryDiagnosisAr || selectedPatient.primaryDiagnosisEn,
-                  codeStatus: selectedPatient.codeStatus,
-                });
-                setIsSbarModalOpen(true);
-              }}
-              onDataUpdated={reloadData}
+            />
+          ) : activeTab === 'users' ? (
+            <UserManagementModal
+              isOpen={true}
+              onClose={() => setActiveTab('beds')}
+            />
+          ) : activeTab === 'settings' ? (
+            <SettingsModal
+              isOpen={true}
+              onClose={() => setActiveTab('beds')}
+              onOpenUserManagement={() => setActiveTab('users')}
             />
           ) : (
-            /* Full-Page Bed Vacant Direct Admission Screen */
-            <FullPageAdmission
-              bedNumber={selectedBedNumber}
-              allBeds={beds}
-              allPatients={patients}
-              onCancel={() => setSelectedBedNumber(null)}
-              onAdmissionSuccess={() => {
-                reloadData();
-              }}
-            />
-          )
-        ) : activeTab === 'beds' ? (
-          /* 6-Bed Matrix Grid (Central Station Overview) */
-          <div className="space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#0a1224] p-3.5 sm:p-4 rounded-2xl border border-slate-800/80 shadow-md">
-              <div>
-                <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
-                  <span>
-                    {lang === 'ar' ? 'لوحة المراقبة المركزية للأسِرّة الستة (6-Bed Central Console)' : 'Central Station 6-Bed Monitor Console'}
-                  </span>
-                </h2>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  {lang === 'ar' 
-                    ? 'مراقبة فورية ومزامنة سحابية لحظية عبر Firebase لجميع العلامات الحيوية، أجهزة التنفس ومضخات الحقن'
-                    : 'Real-time telemetry, ventilator metrics, and infusion pump monitoring with Firebase Cloud Sync'}
-                </p>
+            /* activeTab === 'beds' */
+            selectedBedNumber && selectedBed ? (
+              selectedPatient ? (
+                /* Bedside Deep Dive Flowsheet */
+                <BedsideFlowsheet
+                  key={`bed-${selectedBed.bedNumber}-${selectedPatient.id}`}
+                  bed={selectedBed}
+                  patient={selectedPatient}
+                  allBeds={beds}
+                  allPatients={patients}
+                  onSelectBed={(bedNum) => setSelectedBedNumber(bedNum)}
+                  onBack={() => setSelectedBedNumber(null)}
+                  onOpenAddVitals={() => {
+                    setVitalsTarget({
+                      bedNumber: selectedBed.bedNumber,
+                      patientId: selectedPatient.id,
+                      patientName: selectedPatient.fullNameAr,
+                    });
+                    setIsQuickVitalsOpen(true);
+                  }}
+                  onOpenAddAddendum={(noteId, author) => {
+                    setAddendumTarget({ noteId, patientId: selectedPatient.id, author });
+                    setIsAddendumOpen(true);
+                  }}
+                  onOpenSbarSign={() => {
+                    setSbarTarget({
+                      bedNumber: selectedBed.bedNumber,
+                      patientId: selectedPatient.id,
+                      patientName: selectedPatient.fullNameAr,
+                      diagnosis: selectedPatient.primaryDiagnosisAr || selectedPatient.primaryDiagnosisEn,
+                      codeStatus: selectedPatient.codeStatus,
+                    });
+                    setIsSbarModalOpen(true);
+                  }}
+                  onDataUpdated={reloadData}
+                />
+              ) : (
+                /* Full-Page Bed Vacant Direct Admission Screen */
+                <FullPageAdmission
+                  key={`vacant-${selectedBedNumber}`}
+                  bedNumber={selectedBedNumber}
+                  allBeds={beds}
+                  allPatients={patients}
+                  onCancel={() => setSelectedBedNumber(null)}
+                  onAdmissionSuccess={() => {
+                    reloadData();
+                  }}
+                />
+              )
+            ) : (
+              /* 6-Bed Matrix Grid (Central Station Overview) */
+              <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#0a1224] p-3.5 sm:p-4 rounded-2xl border border-slate-800/80 shadow-md">
+                  <div>
+                    <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+                      <span>
+                        {lang === 'ar' ? 'لوحة المراقبة المركزية للأسِرّة الستة (6-Bed Central Console)' : 'Central Station 6-Bed Monitor Console'}
+                      </span>
+                    </h2>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      {lang === 'ar' 
+                        ? 'مراقبة فورية ومزامنة سحابية لحظية عبر Firebase لجميع العلامات الحيوية، أجهزة التنفس ومضخات الحقن'
+                        : 'Real-time telemetry, ventilator metrics, and infusion pump monitoring with Firebase Cloud Sync'}
+                    </p>
+                  </div>
+
+                  {/* Direct Admission Button with Automatic Vacant Bed Detection */}
+                  {beds.length > 0 && (
+                    <button
+                      onClick={handleSmartAdmission}
+                      className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-teal-600 to-teal-500 hover:from-teal-500 hover:to-teal-400 text-slate-950 text-xs sm:text-sm font-bold transition-all shadow-lg shadow-teal-500/20 active:scale-95 flex-shrink-0 cursor-pointer"
+                      title={lang === 'ar' ? 'إدخال مريض جديد واختيار أول سرير شاغر تلقائياً' : 'Admit new ICU patient (Auto-detect vacant bed)'}
+                    >
+                      <UserPlus className="w-4 h-4 text-slate-950" />
+                      <span>{lang === 'ar' ? 'دخول جديد (اختيار السرير تلقائياً)' : 'New Admission (Auto-Detect Bed)'}</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Responsive Grid: 1 col on mobile, 2 on tablet, 3 on desktop */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {beds.map((bed) => {
+                    const patient = getPatientForBed(bed, patients);
+                    const vitals = latestVitalsMap[bed.bedNumber] || null;
+                    const vent = ventilatorsMap[bed.bedNumber] || null;
+                    const pList = patient ? pumpsMap[patient.id] || [] : [];
+
+                    return (
+                      <BedMatrixCard
+                        key={bed.bedNumber}
+                        bed={bed}
+                        patient={patient}
+                        latestVitals={vitals}
+                        ventilator={vent}
+                        pumps={pList}
+                        onSelectBed={(bNum) => {
+                          setSelectedBedNumber(bNum);
+                          setActiveTab('beds');
+                        }}
+                        onOpenQuickVitals={(bNum, pId) => {
+                          setVitalsTarget({
+                            bedNumber: bNum,
+                            patientId: pId,
+                            patientName: patient?.fullNameAr || '',
+                          });
+                          setIsQuickVitalsOpen(true);
+                        }}
+                        onAdmitToBed={(bNum) => {
+                          setSelectedBedNumber(bNum);
+                          setActiveTab('beds');
+                        }}
+                      />
+                    );
+                  })}
+                </div>
               </div>
-
-              {/* Direct Admission Button with Automatic Vacant Bed Detection */}
-              {beds.length > 0 && (
-                <button
-                  onClick={handleSmartAdmission}
-                  className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-teal-600 to-teal-500 hover:from-teal-500 hover:to-teal-400 text-slate-950 text-xs sm:text-sm font-bold transition-all shadow-lg shadow-teal-500/20 active:scale-95 flex-shrink-0"
-                  title={lang === 'ar' ? 'إدخال مريض جديد واختيار أول سرير شاغر تلقائياً' : 'Admit new ICU patient (Auto-detect vacant bed)'}
-                >
-                  <UserPlus className="w-4 h-4 text-slate-950" />
-                  <span>{lang === 'ar' ? 'دخول جديد (اختيار السرير تلقائياً)' : 'New Admission (Auto-Detect Bed)'}</span>
-                </button>
-              )}
-            </div>
-
-            {/* Responsive Grid: 1 col on mobile, 2 on tablet, 3 on desktop */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {beds.map((bed) => {
-                const patient = bed.currentPatientId 
-                  ? patients.find(p => p.id === bed.currentPatientId) 
-                  : null;
-                const vitals = latestVitalsMap[bed.bedNumber] || null;
-                const vent = ventilatorsMap[bed.bedNumber] || null;
-                const pList = patient ? pumpsMap[patient.id] || [] : [];
-
-                return (
-                  <BedMatrixCard
-                    key={bed.bedNumber}
-                    bed={bed}
-                    patient={patient}
-                    latestVitals={vitals}
-                    ventilator={vent}
-                    pumps={pList}
-                    onSelectBed={(bNum) => setSelectedBedNumber(bNum)}
-                    onOpenQuickVitals={(bNum, pId) => {
-                      setVitalsTarget({
-                        bedNumber: bNum,
-                        patientId: pId,
-                        patientName: patient?.fullNameAr || '',
-                      });
-                      setIsQuickVitalsOpen(true);
-                    }}
-                    onAdmitToBed={(bNum) => {
-                      setSelectedBedNumber(bNum);
-                    }}
-                  />
-                );
-              })}
-            </div>
-          </div>
-        ) : activeTab === 'search' ? (
-          <ArchiveSearchModal
-            isOpen={true}
-            onClose={() => setActiveTab('beds')}
-            onSelectPatientBed={(bNum) => {
-              setSelectedBedNumber(bNum);
-              setActiveTab('beds');
-            }}
-          />
-        ) : activeTab === 'users' ? (
-          <UserManagementModal
-            isOpen={true}
-            onClose={() => setActiveTab('settings')}
-          />
-        ) : activeTab === 'settings' ? (
-          <SettingsModal
-            isOpen={true}
-            onClose={() => setActiveTab('beds')}
-            onOpenUserManagement={() => setActiveTab('users')}
-          />
-        ) : (
-          <div className="flex items-center justify-center h-64 text-slate-500 italic">
-            {lang === 'ar' ? 'يرجى اختيار موديول نشط من الإعدادات' : 'Please select an active module from settings'}
-          </div>
-        )}
-      </main>
-    </div>
+            )
+          )}
+        </main>
+      </div>
 
       {/* Quick Vitals Modal */}
       {isQuickVitalsOpen && vitalsTarget && (

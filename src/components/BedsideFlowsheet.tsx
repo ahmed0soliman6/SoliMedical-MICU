@@ -29,7 +29,10 @@ import {
   Layers,
   Sparkles,
   AlertTriangle,
-  Camera
+  Camera,
+  Sliders,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { 
   BedRecord, 
@@ -47,10 +50,11 @@ import {
   LabResultItem,
   InvestigationItem,
   BedStatus,
-  AcuityLevel
+  AcuityLevel,
+  BedNumber
 } from '../types/schema.ts';
 import { db } from '../db/icuSyncDb.ts';
-import { dischargeOrTransferPatient } from '../services/dataModel.ts';
+import { dischargeOrTransferPatient, getPatientForBed } from '../services/dataModel.ts';
 import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
 import { useAuth } from '../services/AuthContext.tsx';
@@ -61,12 +65,21 @@ import { PatientTransferModal } from './PatientTransferModal.tsx';
 import { BedSwapModal } from './BedSwapModal.tsx';
 import { BedIsolationModal } from './BedIsolationModal.tsx';
 import { AiLabScannerModal } from './AiLabScannerModal.tsx';
+import { VentilatorModal } from './VentilatorModal.tsx';
+import { InfusionPumpModal } from './InfusionPumpModal.tsx';
+import { FluidBalanceModal } from './FluidBalanceModal.tsx';
+import { 
+  BedsideCardsConfigModal, 
+  BedsideCardsConfig, 
+  DEFAULT_BEDSIDE_CARDS_CONFIG 
+} from './BedsideCardsConfigModal.tsx';
 
 interface BedsideFlowsheetProps {
   bed: BedRecord;
   patient: PatientDossier;
   allBeds?: BedRecord[];
   allPatients?: PatientDossier[];
+  onSelectBed?: (bedNumber: BedNumber) => void;
   onBack: () => void;
   onOpenAddVitals: () => void;
   onOpenAddAddendum: (noteId: string, author: string) => void;
@@ -79,6 +92,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
   patient,
   allBeds = [],
   allPatients = [],
+  onSelectBed,
   onBack,
   onOpenAddVitals,
   onOpenAddAddendum,
@@ -89,7 +103,20 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
   const { t, lang, isRTL } = useTranslation();
   const { currentUser } = useAuth();
   
-  const [activeTab, setActiveTab] = useState<'paperFlowsheet' | 'labs' | 'investigations' | 'vitals' | 'vent' | 'pumps' | 'fluids' | 'sbar' | 'notes' | 'disposition'>('paperFlowsheet');
+  const [activeTab, setActiveTab] = useState<'all' | 'paperFlowsheet' | 'labs' | 'investigations' | 'vitals' | 'vent' | 'pumps' | 'fluids' | 'sbar' | 'notes' | 'disposition'>('paperFlowsheet');
+  const [isPatientCardCollapsed, setIsPatientCardCollapsed] = useState<boolean>(true);
+  const [isDispositionCardCollapsed, setIsDispositionCardCollapsed] = useState<boolean>(true);
+  const [isHistoryCardCollapsed, setIsHistoryCardCollapsed] = useState<boolean>(true);
+  const [isDemographicsCardCollapsed, setIsDemographicsCardCollapsed] = useState<boolean>(true);
+  const [isMicrobiologyCardCollapsed, setIsMicrobiologyCardCollapsed] = useState<boolean>(true);
+  const [isPaperVitalsCardCollapsed, setIsPaperVitalsCardCollapsed] = useState<boolean>(true);
+  const [isPaperVentCardCollapsed, setIsPaperVentCardCollapsed] = useState<boolean>(true);
+  const [isPaperPumpsCardCollapsed, setIsPaperPumpsCardCollapsed] = useState<boolean>(true);
+  const [isPaperFluidsCardCollapsed, setIsPaperFluidsCardCollapsed] = useState<boolean>(true);
+  const [isPaperLabsCardCollapsed, setIsPaperLabsCardCollapsed] = useState<boolean>(true);
+  const [isPaperInvestigationsCardCollapsed, setIsPaperInvestigationsCardCollapsed] = useState<boolean>(true);
+  const [isPaperSbarCardCollapsed, setIsPaperSbarCardCollapsed] = useState<boolean>(true);
+  const [isPaperNotesCardCollapsed, setIsPaperNotesCardCollapsed] = useState<boolean>(true);
   
   const [vitalsHistory, setVitalsHistory] = useState<TelemetryVitals[]>([]);
   const [ventilator, setVentilator] = useState<VentilatorParameters | null>(null);
@@ -100,6 +127,32 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
   const [labsList, setLabsList] = useState<StatLabPanel[]>([]);
   const [labResults, setLabResults] = useState<LabResultItem[]>([]);
   const [investigations, setInvestigations] = useState<InvestigationItem[]>([]);
+
+  // Clinical equipment and card management modals
+  const [isVentilatorModalOpen, setIsVentilatorModalOpen] = useState(false);
+  const [isPumpModalOpen, setIsPumpModalOpen] = useState(false);
+  const [selectedPumpForEdit, setSelectedPumpForEdit] = useState<InfusionPumpLine | null>(null);
+  const [isFluidModalOpen, setIsFluidModalOpen] = useState(false);
+  const [isCardsConfigModalOpen, setIsCardsConfigModalOpen] = useState(false);
+
+  // Bedside cards configuration per bed
+  const [cardsConfig, setCardsConfig] = useState<BedsideCardsConfig>(() => {
+    try {
+      const saved = localStorage.getItem(`icu_cards_config_${bed.bedNumber}`);
+      return saved ? JSON.parse(saved) : DEFAULT_BEDSIDE_CARDS_CONFIG;
+    } catch {
+      return DEFAULT_BEDSIDE_CARDS_CONFIG;
+    }
+  });
+
+  const handleSaveCardsConfig = (newConfig: BedsideCardsConfig) => {
+    setCardsConfig(newConfig);
+    try {
+      localStorage.setItem(`icu_cards_config_${bed.bedNumber}`, JSON.stringify(newConfig));
+    } catch (e) {
+      console.error('Failed to persist cards config:', e);
+    }
+  };
 
   // Operation modals
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
@@ -843,161 +896,279 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
 
   return (
     <div className="space-y-4 animate-in fade-in duration-200">
-      {/* Top Dossier Header Card */}
-      <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-4 shadow-xl">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          {/* Back Button & Patient Summary */}
-          <div className="flex items-start gap-3">
-            <button
-              onClick={onBack}
-              className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-all flex-shrink-0 mt-0.5"
-              title={lang === 'ar' ? 'العودة لشبكة الأسِرّة' : 'Back to Bed Matrix'}
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </button>
+      {/* Quick Bed Switcher Bar (Direct Single-Click Page Navigation) */}
+      {allBeds.length > 0 && onSelectBed && (
+        <div className="bg-[#0a1224] border border-slate-800/80 rounded-xl px-3 py-2 flex items-center gap-1.5 overflow-x-auto shadow-sm">
+          <button
+            onClick={onBack}
+            className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold flex items-center gap-1 shrink-0 transition-all cursor-pointer"
+            title={lang === 'ar' ? 'العودة لشبكة الأسِرّة الستة' : 'Back to Bed Console'}
+          >
+            <ArrowLeft className="w-3.5 h-3.5 text-teal-400" />
+            <span className="hidden sm:inline">{lang === 'ar' ? 'شبكة الأسِرّة' : 'Console'}</span>
+          </button>
 
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="w-8 h-8 rounded-xl bg-teal-500/20 text-teal-300 border border-teal-500/40 font-mono font-black text-sm flex items-center justify-center shadow-md">
-                  {bed.bedNumber}
+          <span className="text-slate-700 mx-1">|</span>
+
+          {allBeds.map((b) => {
+            const isCurrent = b.bedNumber === bed.bedNumber;
+            const bPatient = getPatientForBed(b, allPatients);
+            const isOccupied = b.status === 'OCCUPIED' || (b.status === 'ISOLATION' && !!bPatient) || !!bPatient;
+
+            return (
+              <button
+                key={b.bedNumber}
+                onClick={() => onSelectBed(b.bedNumber as BedNumber)}
+                className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-2 shrink-0 transition-all cursor-pointer ${
+                  isCurrent
+                    ? 'bg-teal-500/25 text-teal-200 border border-teal-500/60 font-black shadow-md'
+                    : 'bg-[#0e172a] hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800'
+                }`}
+              >
+                <span className="font-mono font-bold text-teal-400">{b.bedNumber}</span>
+                <span className="truncate max-w-[90px] text-[11px]">
+                  {isOccupied 
+                    ? (bPatient?.fullNameAr?.split(' ')[0] || bPatient?.fullNameEn?.split(' ')[0] || (lang === 'ar' ? 'مشغول' : 'Occupied'))
+                    : (lang === 'ar' ? 'شاغر' : 'Vacant')}
                 </span>
-                <h1 className="text-lg sm:text-xl font-bold text-white">
-                  {lang === 'ar' 
-                    ? `${patient.fullNameAr} (${patient.fullNameEn})` 
-                    : `${patient.fullNameEn} (${patient.fullNameAr})`}
+                <span className={`w-2 h-2 rounded-full shrink-0 ${isOccupied ? 'bg-emerald-400' : 'bg-slate-600'}`} />
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Top Dossier Header Card (Collapsible) */}
+      <div 
+        onClick={() => setIsPatientCardCollapsed(!isPatientCardCollapsed)}
+        className="bg-[#0b1224] border border-slate-700/80 hover:border-teal-500/40 rounded-2xl p-3.5 sm:p-4 shadow-xl transition-all cursor-pointer select-none"
+      >
+        {isPatientCardCollapsed ? (
+          /* Collapsed View: ONLY Bed Number, Patient Name, Diagnosis Subtitle, and Chevron indicator */
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0 flex-1">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onBack();
+                }}
+                className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-all flex-shrink-0"
+                title={lang === 'ar' ? 'العودة لشبكة الأسِرّة' : 'Back to Bed Matrix'}
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </button>
+
+              <span className="w-8 h-8 rounded-xl bg-teal-500/20 text-teal-300 border border-teal-500/40 font-mono font-black text-sm flex items-center justify-center shadow-md flex-shrink-0">
+                {bed.bedNumber}
+              </span>
+
+              <div className="min-w-0 flex-1">
+                <h1 className="text-base sm:text-lg font-bold text-white truncate">
+                  {patient.fullNameAr || patient.fullNameEn}
                 </h1>
-                
-                {/* Fixed Patient ID */}
-                <div className="flex items-center gap-1 font-mono text-xs text-teal-300 font-semibold px-2.5 py-0.5 rounded bg-teal-950/80 border border-teal-800/80 shadow-sm">
-                  <Fingerprint className="w-3.5 h-3.5 text-teal-400" />
-                  <span>ID: {patient.id}</span>
-                </div>
 
-                <span className="font-mono text-xs text-slate-300 font-semibold px-2 py-0.5 rounded bg-slate-800 border border-slate-700">
-                  MRN #{patient.mrn}
-                </span>
-
-                {/* Bed Status Badge */}
-                <span className={`text-xs font-bold px-2.5 py-0.5 rounded-md flex items-center gap-1 ${
-                  bed.status === BedStatus.ISOLATION || (bed.isolation?.isIsolated ?? false)
-                    ? 'bg-amber-950 text-amber-300 border border-amber-600'
-                    : bed.status === BedStatus.UNAVAILABLE
-                    ? 'bg-red-950 text-red-300 border border-red-800'
-                    : bed.status === BedStatus.OCCUPIED
-                    ? 'bg-emerald-950 text-emerald-300 border border-emerald-700'
-                    : 'bg-slate-800 text-slate-300 border border-slate-700'
-                }`}>
-                  {bed.status === BedStatus.ISOLATION || (bed.isolation?.isIsolated ?? false)
-                    ? (lang === 'ar' ? '⚠️ سرير عزل طبي' : '⚠️ ISOLATION BED')
-                    : bed.status === BedStatus.UNAVAILABLE
-                    ? (lang === 'ar' ? '🔒 سرير غير متاح' : '🔒 UNAVAILABLE')
-                    : bed.status === BedStatus.OCCUPIED
-                    ? (lang === 'ar' ? '● سرير مشغول' : '● OCCUPIED')
-                    : (lang === 'ar' ? '○ سرير شاغر' : '○ VACANT')}
-                </span>
-
-                {settings.features.enableCodeStatus && (
-                  <span className={`text-xs font-mono font-bold px-2.5 py-0.5 rounded-md ${
-                    patient.codeStatus === CodeStatus.DNR 
-                      ? 'bg-purple-950 text-purple-300 border border-purple-700' 
-                      : 'bg-emerald-950 text-emerald-300 border border-emerald-700'
-                  }`}>
-                    {patient.codeStatus}
-                  </span>
-                )}
-                {settings.features.enableAcuityLevels && (
-                  <span className={`text-xs font-bold px-2.5 py-0.5 rounded-md ${
-                    patient.acuityLevel === 'CRITICAL_STAT'
-                      ? 'bg-red-950 text-red-400 border border-red-700 animate-pulse'
-                      : 'bg-teal-950 text-teal-300 border border-teal-800'
-                  }`}>
-                    {patient.acuityLevel}
-                  </span>
+                {(patient.primaryDiagnosisAr || patient.primaryDiagnosisEn) && (
+                  <p className="text-xs text-teal-300/80 font-mono truncate mt-0.5">
+                    <span className="text-slate-400 font-sans">{lang === 'ar' ? 'التشخيص:' : 'Dx:'}</span>{' '}
+                    {lang === 'ar' 
+                      ? (patient.primaryDiagnosisAr || patient.primaryDiagnosisEn) 
+                      : (patient.primaryDiagnosisEn || patient.primaryDiagnosisAr)}
+                  </p>
                 )}
               </div>
+            </div>
 
-              <p className="text-xs text-slate-300 mt-1 max-w-3xl">
-                <span className="font-semibold text-slate-200">{lang === 'ar' ? 'التشخيص الأساسي:' : 'Primary Diagnosis:'}</span>{' '}
-                {lang === 'ar' 
-                  ? `${patient.primaryDiagnosisAr} — ${patient.primaryDiagnosisEn}` 
-                  : `${patient.primaryDiagnosisEn} — ${patient.primaryDiagnosisAr}`}
-              </p>
+            <div className="flex items-center gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsCardsConfigModalOpen(true);
+                }}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold transition-all border border-slate-700 cursor-pointer"
+                title={lang === 'ar' ? 'تخصيص الخواص والبطاقات' : 'Customize Properties'}
+              >
+                <Sliders className="w-3.5 h-3.5 text-cyan-400" />
+                <span className="hidden sm:inline">{lang === 'ar' ? 'تخصيص الخواص' : 'Properties'}</span>
+              </button>
 
-              <div className="flex items-center gap-3 text-[11px] text-slate-300 mt-1.5 flex-wrap font-mono">
-                <span>{lang === 'ar' ? 'العمر والنوع:' : 'Age/Gender:'} <strong className="text-white">{patient.age} {lang === 'ar' ? 'سنة' : 'yo'} ({patient.gender === 'MALE' ? (lang === 'ar' ? 'ذكر' : 'Male') : (lang === 'ar' ? 'أنثى' : 'Female')})</strong></span>
-                <span>•</span>
-                <span className="flex items-center gap-1">
-                  <Phone className="w-3 h-3 text-teal-400" />
-                  <span>{lang === 'ar' ? 'الهاتف:' : 'Phone:'} <strong className="text-white">{patient.phoneNumber || '—'}</strong></span>
-                </span>
-                <span>•</span>
-                <span className="flex items-center gap-1">
-                  <Calendar className="w-3 h-3 text-slate-400" />
-                  <span>{lang === 'ar' ? 'تاريخ الدخول:' : 'Admitted:'} <strong className="text-white">{new Date(patient.admissionDate).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</strong></span>
-                </span>
-                <span>•</span>
-                <span>{lang === 'ar' ? 'الوزن:' : 'Weight:'} <strong className="text-white">{patient.weightKg}</strong> {lang === 'ar' ? 'كجم' : 'kg'} (IBW: <strong className="text-teal-400">{patient.idealBodyWeightKg}</strong> {lang === 'ar' ? 'كجم' : 'kg'})</span>
-                <span>•</span>
-                <span>{lang === 'ar' ? 'الاستشاري:' : 'Attending:'} <strong className="text-slate-200">{patient.attendingPhysician.name}</strong></span>
-                <span>•</span>
-                <span>{lang === 'ar' ? 'التمريض:' : 'Primary RN:'} <strong className="text-slate-200">{patient.primaryNurse.name}</strong></span>
+              <div className="p-1.5 rounded-xl bg-teal-500/10 text-teal-400 border border-teal-500/30 flex items-center justify-center">
+                <ChevronDown className="w-5 h-5 text-teal-400" />
               </div>
             </div>
           </div>
+        ) : (
+          /* Expanded View: Complete Dossier Details & CTAs */
+          <div className="space-y-4">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              {/* Back Button & Patient Summary */}
+              <div className="flex items-start gap-3">
+                <button
+                  onClick={onBack}
+                  className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-all flex-shrink-0 mt-0.5"
+                  title={lang === 'ar' ? 'العودة لشبكة الأسِرّة' : 'Back to Bed Matrix'}
+                >
+                  <ArrowLeft className="w-5 h-5" />
+                </button>
 
-          {/* Bed Operational Controls & Header CTAs */}
-          <div className="flex items-center gap-2 flex-shrink-0 self-end lg:self-center flex-wrap justify-end">
-            {/* Safe Patient Transfer CTA */}
-            <button
-              onClick={() => setIsTransferModalOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-500/40 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
-              title={lang === 'ar' ? 'نقل المريض لسرير شاغر مع الاحتفاظ بكافة بياناته وسجلاته' : 'Transfer patient to vacant bed'}
-            >
-              <ArrowRightLeft className="w-3.5 h-3.5 text-blue-400" />
-              <span>{lang === 'ar' ? 'نقل المريض' : 'Transfer Bed'}</span>
-            </button>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="w-8 h-8 rounded-xl bg-teal-500/20 text-teal-300 border border-teal-500/40 font-mono font-black text-sm flex items-center justify-center shadow-md">
+                      {bed.bedNumber}
+                    </span>
+                    <h1 className="text-lg sm:text-xl font-bold text-white">
+                      {patient.fullNameAr || patient.fullNameEn}
+                    </h1>
+                    
+                    {/* Fixed Patient ID */}
+                    <div className="flex items-center gap-1 font-mono text-xs text-teal-300 font-semibold px-2.5 py-0.5 rounded bg-teal-950/80 border border-teal-800/80 shadow-sm">
+                      <Fingerprint className="w-3.5 h-3.5 text-teal-400" />
+                      <span>ID: {patient.id}</span>
+                    </div>
 
-            {/* Safe Bed Swap CTA */}
-            <button
-              onClick={() => setIsSwapModalOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
-              title={lang === 'ar' ? 'تبديل سريرين ومشغولين في عملية موحدة واحدة آمنة' : 'Atomic bed swap between two patients'}
-            >
-              <Layers className="w-3.5 h-3.5 text-purple-400" />
-              <span>{lang === 'ar' ? 'تبديل سريرين' : 'Swap Beds'}</span>
-            </button>
+                    <span className="font-mono text-xs text-slate-300 font-semibold px-2 py-0.5 rounded bg-slate-800 border border-slate-700">
+                      MRN #{patient.mrn}
+                    </span>
 
-            {/* Isolation & Maintenance Status CTA */}
-            <button
-              onClick={() => setIsIsolationModalOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
-              title={lang === 'ar' ? 'تعديل حالة السرير وتدابير العزل الطبي' : 'Manage bed status & isolation precautions'}
-            >
-              <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
-              <span>{lang === 'ar' ? 'العزل والحالة' : 'Bed Status'}</span>
-            </button>
+                    {/* Bed Status Badge */}
+                    <span className={`text-xs font-bold px-2.5 py-0.5 rounded-md flex items-center gap-1 ${
+                      bed.status === BedStatus.ISOLATION || (bed.isolation?.isIsolated ?? false)
+                        ? 'bg-amber-950 text-amber-300 border border-amber-600'
+                        : bed.status === BedStatus.UNAVAILABLE
+                        ? 'bg-red-950 text-red-300 border border-red-800'
+                        : bed.status === BedStatus.OCCUPIED
+                        ? 'bg-emerald-950 text-emerald-300 border border-emerald-700'
+                        : 'bg-slate-800 text-slate-300 border border-slate-700'
+                    }`}>
+                      {bed.status === BedStatus.ISOLATION || (bed.isolation?.isIsolated ?? false)
+                        ? (lang === 'ar' ? '⚠️ سرير عزل طبي' : '⚠️ ISOLATION BED')
+                        : bed.status === BedStatus.UNAVAILABLE
+                        ? (lang === 'ar' ? '🔒 سرير غير متاح' : '🔒 UNAVAILABLE')
+                        : bed.status === BedStatus.OCCUPIED
+                        ? (lang === 'ar' ? '● سرير مشغول' : '● OCCUPIED')
+                        : (lang === 'ar' ? '○ سرير شاغر' : '○ VACANT')}
+                    </span>
 
-            {settings.features.enableTelemetryVitals && (
-              <button
-                onClick={onOpenAddVitals}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
-              >
-                <Activity className="w-4 h-4" />
-                <span>{lang === 'ar' ? 'تسجيل علامات' : 'Record Vitals'}</span>
-              </button>
-            )}
+                    {settings.features.enableCodeStatus && (
+                      <span className={`text-xs font-mono font-bold px-2.5 py-0.5 rounded-md ${
+                        patient.codeStatus === CodeStatus.DNR 
+                          ? 'bg-purple-950 text-purple-300 border border-purple-700' 
+                          : 'bg-emerald-950 text-emerald-300 border border-emerald-700'
+                      }`}>
+                        {patient.codeStatus}
+                      </span>
+                    )}
+                    {settings.features.enableAcuityLevels && (
+                      <span className={`text-xs font-bold px-2.5 py-0.5 rounded-md ${
+                        patient.acuityLevel === 'CRITICAL_STAT'
+                          ? 'bg-red-950 text-red-400 border border-red-700 animate-pulse'
+                          : 'bg-teal-950 text-teal-300 border border-teal-800'
+                      }`}>
+                        {patient.acuityLevel}
+                      </span>
+                    )}
+                  </div>
 
-            {settings.features.enableSbarHandover && (
-              <button
-                onClick={onOpenSbarSign}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-teal-600 to-teal-500 hover:from-teal-500 hover:to-teal-400 text-slate-950 text-xs font-bold transition-all shadow-lg shadow-teal-500/20 active:scale-95 cursor-pointer"
-              >
-                <ShieldCheck className="w-4 h-4" />
-                <span>{lang === 'ar' ? 'تسليم SBAR' : 'SBAR Sign'}</span>
-              </button>
-            )}
+                  <p className="text-xs text-slate-300 mt-1 max-w-3xl">
+                    <span className="font-semibold text-slate-200">{lang === 'ar' ? 'التشخيص الأساسي:' : 'Primary Diagnosis:'}</span>{' '}
+                    {lang === 'ar' 
+                      ? `${patient.primaryDiagnosisAr} — ${patient.primaryDiagnosisEn}` 
+                      : `${patient.primaryDiagnosisEn} — ${patient.primaryDiagnosisAr}`}
+                  </p>
+
+                  <div className="flex items-center gap-3 text-[11px] text-slate-300 mt-1.5 flex-wrap font-mono">
+                    <span>{lang === 'ar' ? 'العمر والنوع:' : 'Age/Gender:'} <strong className="text-white">{patient.age} {lang === 'ar' ? 'سنة' : 'yo'} ({patient.gender === 'MALE' ? (lang === 'ar' ? 'ذكر' : 'Male') : (lang === 'ar' ? 'أنثى' : 'Female')})</strong></span>
+                    <span>•</span>
+                    <span className="flex items-center gap-1">
+                      <Phone className="w-3 h-3 text-teal-400" />
+                      <span>{lang === 'ar' ? 'الهاتف:' : 'Phone:'} <strong className="text-white">{patient.phoneNumber || '—'}</strong></span>
+                    </span>
+                    <span>•</span>
+                    <span className="flex items-center gap-1">
+                      <Calendar className="w-3 h-3 text-slate-400" />
+                      <span>{lang === 'ar' ? 'تاريخ الدخول:' : 'Admitted:'} <strong className="text-white">{new Date(patient.admissionDate).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</strong></span>
+                    </span>
+                    <span>•</span>
+                    <span>{lang === 'ar' ? 'الوزن:' : 'Weight:'} <strong className="text-white">{patient.weightKg}</strong> {lang === 'ar' ? 'كجم' : 'kg'} (IBW: <strong className="text-teal-400">{patient.idealBodyWeightKg}</strong> {lang === 'ar' ? 'كجم' : 'kg'})</span>
+                    <span>•</span>
+                    <span>{lang === 'ar' ? 'الاستشاري:' : 'Attending:'} <strong className="text-slate-200">{patient.attendingPhysician.name}</strong></span>
+                    <span>•</span>
+                    <span>{lang === 'ar' ? 'التمريض:' : 'Primary RN:'} <strong className="text-slate-200">{patient.primaryNurse.name}</strong></span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bed Operational Controls & Collapse Button */}
+              <div className="flex items-center gap-2 flex-shrink-0 self-end lg:self-center flex-wrap justify-end">
+                <button
+                  onClick={() => setIsCardsConfigModalOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-200 border border-slate-700 hover:border-cyan-500/50 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
+                  title={lang === 'ar' ? 'تخصيص وإدارة بطاقات السرير (إظهار/إخفاء/تعديل)' : 'Manage & Customize Bedside Cards'}
+                >
+                  <Sliders className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>{lang === 'ar' ? 'تخصيص البطاقات' : 'Cards Layout'}</span>
+                </button>
+
+                <button
+                  onClick={() => setIsTransferModalOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-500/40 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
+                  title={lang === 'ar' ? 'نقل المريض لسرير شاغر مع الاحتفاظ بكافة بياناته وسجلاته' : 'Transfer patient to vacant bed'}
+                >
+                  <ArrowRightLeft className="w-3.5 h-3.5 text-blue-400" />
+                  <span>{lang === 'ar' ? 'نقل المريض' : 'Transfer Bed'}</span>
+                </button>
+
+                <button
+                  onClick={() => setIsSwapModalOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
+                  title={lang === 'ar' ? 'تبديل سريرين ومشغولين في عملية موحدة واحدة آمنة' : 'Atomic bed swap between two patients'}
+                >
+                  <Layers className="w-3.5 h-3.5 text-purple-400" />
+                  <span>{lang === 'ar' ? 'تبديل سريرين' : 'Swap Beds'}</span>
+                </button>
+
+                <button
+                  onClick={() => setIsIsolationModalOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
+                  title={lang === 'ar' ? 'تعديل حالة السرير وتدابير العزل الطبي' : 'Manage bed status & isolation precautions'}
+                >
+                  <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
+                  <span>{lang === 'ar' ? 'العزل والحالة' : 'Bed Status'}</span>
+                </button>
+
+                {settings.features.enableTelemetryVitals && (
+                  <button
+                    onClick={onOpenAddVitals}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
+                  >
+                    <Activity className="w-4 h-4" />
+                    <span>{lang === 'ar' ? 'تسجيل علامات' : 'Record Vitals'}</span>
+                  </button>
+                )}
+
+                {settings.features.enableSbarHandover && (
+                  <button
+                    onClick={onOpenSbarSign}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-teal-600 to-teal-500 hover:from-teal-500 hover:to-teal-400 text-slate-950 text-xs font-bold transition-all shadow-lg shadow-teal-500/20 active:scale-95 cursor-pointer"
+                  >
+                    <ShieldCheck className="w-4 h-4" />
+                    <span>{lang === 'ar' ? 'تسليم SBAR' : 'SBAR Sign'}</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setIsPatientCardCollapsed(true)}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
+                >
+                  <ChevronUp className="w-4 h-4 text-slate-400" />
+                  <span>{lang === 'ar' ? 'طي بطاقة البيانات' : 'Collapse Details'}</span>
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Quick ICU Disposition Panel (لوحة إجراءات إنهاء الإقامة والتحويل المباشر) */}
@@ -1146,6 +1317,12 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs font-semibold">
           {[
             { 
+              id: 'all', 
+              label: lang === 'ar' ? 'الكل (جميع البطاقات)' : 'ALL (Combined Flowsheets)', 
+              icon: Layers, 
+              enabled: true 
+            },
+            { 
               id: 'paperFlowsheet', 
               label: lang === 'ar' ? 'الورقة الطبية الموحدة (Paper Chart)' : 'Paper Flowsheet', 
               icon: FileText, 
@@ -1227,30 +1404,60 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       </div>
 
       {/* Tab 0: Paper Flowsheet Chart (الورقة الطبية الإلكترونية) */}
-      {activeTab === 'paperFlowsheet' && (
+      {(activeTab === 'paperFlowsheet' || activeTab === 'all') && (
         <div className="space-y-4 animate-in fade-in duration-300">
           {/* Top Row: History & Patient Data Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {/* History & Presenting Complaints Box */}
-            <div className="lg:col-span-2 bg-[#0b1224] border border-slate-700/80 rounded-2xl p-5 shadow-xl space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div className="lg:col-span-2 bg-[#0b1224] border border-slate-700/80 rounded-2xl p-4 shadow-xl space-y-3">
+              <div 
+                onClick={() => setIsHistoryCardCollapsed(!isHistoryCardCollapsed)}
+                className="flex items-center justify-between border-b border-slate-800 pb-2.5 cursor-pointer hover:bg-slate-800/40 p-2 rounded-xl transition-all"
+              >
                 <div className="flex items-center gap-2">
                   <FileText className="w-5 h-5 text-teal-400" />
                   <h3 className="text-base font-bold text-white">
                     {lang === 'ar' ? 'التاريخ الطبي والشكوى الحالية' : 'Clinical History & Complaints'}
                   </h3>
                 </div>
-                {!isHistoryEditing && (
+
+                <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                   <button
-                    onClick={() => setIsHistoryEditing(true)}
-                    className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-teal-300 text-xs font-bold transition-all"
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsCardsConfigModalOpen(true);
+                    }}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-all border border-slate-700 cursor-pointer"
+                    title={lang === 'ar' ? 'تخصيص الخواص' : 'Customize Properties'}
                   >
-                    {lang === 'ar' ? 'تعديل البيانات الطبية' : 'Edit Medical Info'}
+                    <Sliders className="w-3.5 h-3.5 text-cyan-400" />
+                    <span className="hidden sm:inline">{lang === 'ar' ? 'تخصيص الخواص' : 'Properties'}</span>
                   </button>
-                )}
+
+                  {!isHistoryEditing && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsHistoryEditing(true);
+                        setIsHistoryCardCollapsed(false);
+                      }}
+                      className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-teal-300 text-xs font-bold transition-all cursor-pointer"
+                    >
+                      {lang === 'ar' ? 'تعديل البيانات' : 'Edit Info'}
+                    </button>
+                  )}
+
+                  <div className="p-1 rounded-lg bg-slate-800 text-slate-400">
+                    {isHistoryCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+                  </div>
+                </div>
               </div>
 
-              {isHistoryEditing ? (
+              {!isHistoryCardCollapsed && (
+                <>
+                  {isHistoryEditing ? (
                 <div className="space-y-4 text-xs">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
@@ -1369,121 +1576,173 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                   </div>
                 </div>
               )}
+                </>
+              )}
             </div>
 
             {/* Demographics / Pt Data Box */}
-            <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-5 shadow-xl flex flex-col justify-between">
-              <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
+            <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-4 shadow-xl flex flex-col justify-between">
+              <div 
+                onClick={() => setIsDemographicsCardCollapsed(!isDemographicsCardCollapsed)}
+                className="border-b border-slate-800 pb-2.5 flex items-center justify-between cursor-pointer hover:bg-slate-800/40 p-2 rounded-xl transition-all"
+              >
                 <div className="flex items-center gap-2">
                   <User className="w-5 h-5 text-indigo-400" />
                   <h3 className="text-base font-bold text-white">
-                    {lang === 'ar' ? 'بيانات المريض الأساسية' : 'Patient Demographics (Pt Data)'}
+                    {lang === 'ar' ? 'بيانات المريض الأساسية' : 'Patient Demographics'}
                   </h3>
                 </div>
-                <span className="font-mono text-[11px] text-teal-400 bg-teal-950/80 px-2 py-0.5 rounded border border-teal-800 font-bold">
-                  {bed.bedNumber}
-                </span>
-              </div>
 
-              <div className="grid grid-cols-2 gap-3.5 my-4 text-xs font-mono">
-                <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
-                  <div className="text-[10px] text-slate-500">{lang === 'ar' ? 'الاسم كاملاً' : 'Full Name'}</div>
-                  <div className="text-white font-bold mt-0.5 text-xs truncate">
-                    {lang === 'ar' ? patient.fullNameAr : patient.fullNameEn}
-                  </div>
-                </div>
+                <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsCardsConfigModalOpen(true);
+                    }}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-all border border-slate-700 cursor-pointer"
+                    title={lang === 'ar' ? 'تخصيص الخواص' : 'Customize Properties'}
+                  >
+                    <Sliders className="w-3.5 h-3.5 text-cyan-400" />
+                    <span className="hidden sm:inline">{lang === 'ar' ? 'تخصيص الخواص' : 'Properties'}</span>
+                  </button>
 
-                <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
-                  <div className="text-[10px] text-slate-500">{lang === 'ar' ? 'رقم السجل المدني / الهوية' : 'National ID'}</div>
-                  <div className="text-slate-300 font-bold mt-0.5">{patient.nationalId || '—'}</div>
-                </div>
+                  <span className="font-mono text-[11px] text-teal-400 bg-teal-950/80 px-2 py-0.5 rounded border border-teal-800 font-bold">
+                    {bed.bedNumber}
+                  </span>
 
-                <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
-                  <div className="text-[10px] text-slate-500">{lang === 'ar' ? 'السن والجنس' : 'Age & Gender'}</div>
-                  <div className="text-white font-bold mt-0.5">
-                    {patient.age} {lang === 'ar' ? 'سنة' : 'yo'} / {patient.gender}
-                  </div>
-                </div>
-
-                <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
-                  <div className="text-[10px] text-slate-500">{lang === 'ar' ? 'تاريخ دخول العناية' : 'ICU Admission Date'}</div>
-                  <div className="text-teal-400 font-bold mt-0.5">
-                    {new Date(patient.admissionDate).toLocaleDateString(lang === 'ar' ? 'ar-EG' : 'en-US', { day: '2-digit', month: 'short' })}
-                  </div>
-                </div>
-
-                <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
-                  <div className="text-[10px] text-slate-500">{lang === 'ar' ? 'الوزن والوزن المثالي' : 'Weight / IBW'}</div>
-                  <div className="text-white font-bold mt-0.5">
-                    {patient.weightKg}kg (IBW: <span className="text-teal-400">{patient.idealBodyWeightKg}</span>kg)
-                  </div>
-                </div>
-
-                <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
-                  <div className="text-[10px] text-slate-500">{lang === 'ar' ? 'الطبيب والممرض المسؤول' : 'Team RN / MD'}</div>
-                  <div className="text-slate-300 mt-0.5 text-[10px] truncate">
-                    MD: {patient.attendingPhysician.name}
+                  <div className="p-1 rounded-lg bg-slate-800 text-slate-400">
+                    {isDemographicsCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
                   </div>
                 </div>
               </div>
 
-              <div className="text-[11px] text-slate-400 bg-slate-950/60 p-2.5 rounded-xl border border-slate-800/80 flex items-center gap-1.5 leading-snug">
-                <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0" />
-                <span>
-                  {lang === 'ar'
-                    ? 'البيانات الطبية والتاريخ المرضي يتزامن فوريّاً مع شاشات المراقبة السريرية والأجهزة اللوحية.'
-                    : 'Clinical history updates synchronize instantly with core monitors and staff bedside tablets.'}
-                </span>
-              </div>
+              {!isDemographicsCardCollapsed && (
+                <>
+                  <div className="grid grid-cols-2 gap-3.5 my-4 text-xs font-mono">
+                    <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
+                      <div className="text-[10px] text-slate-500">{lang === 'ar' ? 'الاسم كاملاً' : 'Full Name'}</div>
+                      <div className="text-white font-bold mt-0.5 text-xs truncate">
+                        {patient.fullNameAr || patient.fullNameEn}
+                      </div>
+                    </div>
+
+                    <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
+                      <div className="text-[10px] text-slate-500">{lang === 'ar' ? 'رقم السجل المدني / الهوية' : 'National ID'}</div>
+                      <div className="text-slate-300 font-bold mt-0.5">{patient.nationalId || '—'}</div>
+                    </div>
+
+                    <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
+                      <div className="text-[10px] text-slate-500">{lang === 'ar' ? 'السن والجنس' : 'Age & Gender'}</div>
+                      <div className="text-white font-bold mt-0.5">
+                        {patient.age} {lang === 'ar' ? 'سنة' : 'yo'} / {patient.gender}
+                      </div>
+                    </div>
+
+                    <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
+                      <div className="text-[10px] text-slate-500">{lang === 'ar' ? 'تاريخ دخول العناية' : 'ICU Admission Date'}</div>
+                      <div className="text-teal-400 font-bold mt-0.5">
+                        {new Date(patient.admissionDate).toLocaleDateString(lang === 'ar' ? 'ar-EG' : 'en-US', { day: '2-digit', month: 'short' })}
+                      </div>
+                    </div>
+
+                    <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
+                      <div className="text-[10px] text-slate-500">{lang === 'ar' ? 'الوزن والوزن المثالي' : 'Weight / IBW'}</div>
+                      <div className="text-white font-bold mt-0.5">
+                        {patient.weightKg}kg (IBW: <span className="text-teal-400">{patient.idealBodyWeightKg}</span>kg)
+                      </div>
+                    </div>
+
+                    <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
+                      <div className="text-[10px] text-slate-500">{lang === 'ar' ? 'الطبيب والممرض المسؤول' : 'Team RN / MD'}</div>
+                      <div className="text-slate-300 mt-0.5 text-[10px] truncate">
+                        MD: {patient.attendingPhysician.name}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="text-[11px] text-slate-400 bg-slate-950/60 p-2.5 rounded-xl border border-slate-800/80 flex items-center gap-1.5 leading-snug">
+                    <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                    <span>
+                      {lang === 'ar'
+                        ? 'البيانات الطبية والتاريخ المرضي يتزامن فوريّاً مع شاشات المراقبة السريرية والأجهزة اللوحية.'
+                        : 'Clinical history updates synchronize instantly with core monitors and staff bedside tablets.'}
+                    </span>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
           {/* Interactive Labs Grid Table (التحاليل الطبية المتسلسلة التراكمية) */}
-          <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-5 shadow-xl space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+          <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-4 shadow-xl space-y-3">
+            <div 
+              onClick={() => setIsPaperLabsCardCollapsed(!isPaperLabsCardCollapsed)}
+              className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-2.5 cursor-pointer hover:bg-slate-800/40 p-2 rounded-xl transition-all"
+            >
               <div className="flex items-center gap-2">
                 <Activity className="w-5 h-5 text-emerald-400" />
                 <div>
                   <h3 className="text-base font-bold text-white">
-                    {lang === 'ar' ? 'جدول التحاليل المتسلسلة التراكمية (الورقة الورقية الرقمية)' : 'Progressive Sequential Laboratories Grid'}
+                    {lang === 'ar' ? 'جدول التحاليل المتسلسلة التراكمية' : 'Sequential Laboratories Grid'}
                   </h3>
                   <p className="text-[10px] text-slate-400 mt-0.5">
                     {lang === 'ar'
-                      ? 'يتم عرض التحاليل في أعمدة متسلسلة زمنياً من الأقدم للأحدث، مع توثيق اسم كل طبيب وحظر التعديل التبادلي.'
-                      : 'Labs are ordered sequentially side-by-side chronologically with doctor-lock protection to ensure medical integrity.'}
+                      ? 'عرض التحاليل متسلسلة زمنياً مع حظر التعديل التبادلي وحماية المصداقية.'
+                      : 'Labs ordered chronologically with doctor-lock protection.'}
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-2 flex-wrap" onClick={(e) => e.stopPropagation()}>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsCardsConfigModalOpen(true);
+                  }}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-all border border-slate-700 cursor-pointer"
+                  title={lang === 'ar' ? 'تخصيص الخواص' : 'Customize Properties'}
+                >
+                  <Sliders className="w-3.5 h-3.5 text-cyan-400" />
+                  <span className="hidden sm:inline">{lang === 'ar' ? 'تخصيص الخواص' : 'Properties'}</span>
+                </button>
+
                 {settings.enableAiLabScanner && (
                   <button
                     type="button"
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.stopPropagation();
                       setAiScannerPreset('ALL');
                       setIsAiLabScannerOpen(true);
+                      setIsPaperLabsCardCollapsed(false);
                     }}
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-fuchsia-600 to-indigo-600 hover:from-fuchsia-500 hover:to-indigo-500 text-white text-xs font-bold transition-all shadow-md active:scale-95 flex-shrink-0 cursor-pointer"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-fuchsia-600 to-indigo-600 hover:from-fuchsia-500 hover:to-indigo-500 text-white text-xs font-bold transition-all shadow-md active:scale-95 flex-shrink-0 cursor-pointer"
                   >
                     <Camera className="w-4 h-4" />
-                    <span>{lang === 'ar' ? 'تصوير وقراءة التحليل (AI Scan)' : 'AI Scan Lab Report'}</span>
+                    <span className="hidden sm:inline">{lang === 'ar' ? 'قراءة بالذكاء الاصطناعي' : 'AI Scan'}</span>
                   </button>
                 )}
                 <button
-                  onClick={() => setActiveTab('labs')}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 border border-teal-500/40 text-xs font-bold transition-all shadow-md active:scale-95 flex-shrink-0 cursor-pointer"
-                >
-                  <FlaskConical className="w-4 h-4 text-teal-400" />
-                  <span>{lang === 'ar' ? 'عرض تسلسل التحاليل التراكمي (5>7>8.5>8)' : 'View Daily Trend Flowsheet'}</span>
-                </button>
-                <button
-                  onClick={handleOpenAddLabColumn}
-                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition-all shadow-md active:scale-95 flex-shrink-0 cursor-pointer"
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleOpenAddLabColumn();
+                    setIsPaperLabsCardCollapsed(false);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition-all shadow-md active:scale-95 flex-shrink-0 cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>{lang === 'ar' ? 'إضافة عمود تحاليل' : 'Add Lab Column'}</span>
+                  <span>{lang === 'ar' ? 'إضافة عمود تحاليل' : 'Add Column'}</span>
                 </button>
+
+                <div className="p-1 rounded-lg bg-slate-800 text-slate-400">
+                  {isPaperLabsCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+                </div>
               </div>
             </div>
+
+            {!isPaperLabsCardCollapsed && (
+              <>
 
             {labsList.length === 0 ? (
               <div className="bg-[#070c18] border border-dashed border-slate-800 rounded-xl p-8 text-center text-slate-400 space-y-3">
@@ -1729,115 +1988,323 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                 </table>
               </div>
             )}
+              </>
+            )}
           </div>
 
           {/* Connected Support Equipment & Bedside Systems (الأجهزة الموصلة والمضخات وميزان السوائل) */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {/* Ventilator connectivity status */}
-            <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-5 shadow-xl space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                <div className="flex items-center gap-2">
-                  <Wind className="w-5 h-5 text-cyan-400" />
-                  <h3 className="text-sm font-bold text-white">{lang === 'ar' ? 'جهاز التنفس الصناعي الجاري' : 'Active Mechanical Ventilator'}</h3>
-                </div>
-                {ventilator && (
-                  <span className="px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800 font-mono text-[10px] font-bold">
-                    {ventilator.mode}
-                  </span>
-                )}
-              </div>
+            {cardsConfig.showVentilatorCard && (
+              <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-4 shadow-xl space-y-3 flex flex-col justify-between">
+                <div>
+                  <div 
+                    onClick={() => setIsPaperVentCardCollapsed(!isPaperVentCardCollapsed)}
+                    className="flex items-center justify-between border-b border-slate-800 pb-2.5 cursor-pointer hover:bg-slate-800/40 p-2 rounded-xl transition-all"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Wind className="w-5 h-5 text-cyan-400" />
+                      <h3 className="text-sm font-bold text-white">{lang === 'ar' ? 'جهاز التنفس الصناعي' : 'Ventilator'}</h3>
+                    </div>
+                    <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIsCardsConfigModalOpen(true);
+                        }}
+                        className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-all border border-slate-700 cursor-pointer"
+                        title={lang === 'ar' ? 'تخصيص الخواص' : 'Customize Properties'}
+                      >
+                        <Sliders className="w-3.5 h-3.5 text-cyan-400" />
+                      </button>
 
-              {ventilator ? (
-                <div className="grid grid-cols-2 gap-2.5 text-xs font-mono">
-                  <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
-                    <div className="text-[10px] text-slate-500">FiO₂ Provided</div>
-                    <div className="text-teal-300 font-bold text-sm mt-0.5">{ventilator.fio2Percent}%</div>
-                  </div>
-                  <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
-                    <div className="text-[10px] text-slate-500">PEEP</div>
-                    <div className="text-cyan-300 font-bold text-sm mt-0.5">{ventilator.peepCmH2O} cmH2O</div>
-                  </div>
-                  <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
-                    <div className="text-[10px] text-slate-500">Tidal Vol (Vt)</div>
-                    <div className="text-white font-bold text-sm mt-0.5">{ventilator.setTidalVolumeMl} mL</div>
-                  </div>
-                  <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
-                    <div className="text-[10px] text-slate-500">Set Rate (RR)</div>
-                    <div className="text-slate-200 font-bold text-sm mt-0.5">{ventilator.setRespiratoryRateCpm} bpm</div>
-                  </div>
-                </div>
-              ) : (
-                <div className="p-6 text-center text-xs text-slate-500 bg-[#070c18] rounded-xl border border-slate-800/80">
-                  {lang === 'ar' ? 'المريض يتنفس تلقائياً بدون أجهزة جائرة.' : 'Patient is breathing spontaneously (Room Air / HFNC).'}
-                </div>
-              )}
-            </div>
+                      {ventilator && (
+                        <span className="px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800 font-mono text-[10px] font-bold">
+                          {ventilator.mode}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIsVentilatorModalOpen(true);
+                          setIsPaperVentCardCollapsed(false);
+                        }}
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer"
+                        title={lang === 'ar' ? 'إضافة أو تعديل إعدادات جهاز التنفس' : 'Add / Edit Ventilator Parameters'}
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>{ventilator ? (lang === 'ar' ? 'تعديل' : 'Edit') : (lang === 'ar' ? 'إضافة' : 'Add')}</span>
+                      </button>
 
-            {/* Infusion lines connectivity status */}
-            <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-5 shadow-xl space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                <div className="flex items-center gap-2">
-                  <Droplet className="w-5 h-5 text-amber-400" />
-                  <h3 className="text-sm font-bold text-white">{lang === 'ar' ? 'مضخات ومحاليل موصلة' : 'Connected Infusions & Pumps'}</h3>
-                </div>
-                <span className="text-[10px] font-mono text-slate-500 bg-slate-900/60 px-2 py-0.5 rounded border border-slate-800">
-                  {pumps.length} active
-                </span>
-              </div>
-
-              {pumps.length > 0 ? (
-                <div className="space-y-2 max-h-[140px] overflow-y-auto">
-                  {pumps.map(p => (
-                    <div key={p.id} className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800 flex items-center justify-between gap-2 text-xs">
-                      <div>
-                        <div className="font-bold text-white font-mono truncate max-w-[150px]">{p.drugNameEn}</div>
-                        <div className="text-[9px] text-slate-500">{p.diluentFluid} (Conc: {p.concentrationMgPerMl}mg/mL)</div>
-                      </div>
-                      <div className="text-right font-mono">
-                        <div className="text-amber-400 font-bold">{p.currentRate} {p.rateUnit}</div>
-                        <div className="text-[9px] text-slate-500">Rem: {p.volumeRemainingMl}mL</div>
+                      <div className="p-1 rounded-lg bg-slate-800 text-slate-400">
+                        {isPaperVentCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
                       </div>
                     </div>
-                  ))}
+                  </div>
+
+                  {!isPaperVentCardCollapsed && (
+                    <>
+                      {ventilator ? (
+                        <div 
+                          onClick={() => setIsVentilatorModalOpen(true)}
+                          className="grid grid-cols-2 gap-2.5 text-xs font-mono mt-3 cursor-pointer hover:opacity-90 transition-opacity"
+                        >
+                          <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
+                            <div className="text-[10px] text-slate-500">FiO₂ Provided</div>
+                            <div className="text-teal-300 font-bold text-sm mt-0.5">{ventilator.fio2Percent}%</div>
+                          </div>
+                          <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
+                            <div className="text-[10px] text-slate-500">PEEP</div>
+                            <div className="text-cyan-300 font-bold text-sm mt-0.5">{ventilator.peepCmH2O} cmH2O</div>
+                          </div>
+                          <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
+                            <div className="text-[10px] text-slate-500">Tidal Vol (Vt)</div>
+                            <div className="text-white font-bold text-sm mt-0.5">{ventilator.setTidalVolumeMl} mL</div>
+                          </div>
+                          <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
+                            <div className="text-[10px] text-slate-500">Set Rate (RR)</div>
+                            <div className="text-slate-200 font-bold text-sm mt-0.5">{ventilator.setRespiratoryRateCpm} bpm</div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="p-6 text-center text-xs text-slate-400 bg-[#070c18] rounded-xl border border-slate-800/80 mt-3 space-y-2">
+                          <p>{lang === 'ar' ? 'المريض يتنفس تلقائياً بدون أجهزة جائرة.' : 'Patient breathing spontaneously (Room Air / HFNC).'}</p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsVentilatorModalOpen(true);
+                              setIsPaperVentCardCollapsed(false);
+                            }}
+                            className="px-3 py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>{lang === 'ar' ? 'توصيل جهاز تنفس صناعي' : 'Connect Mechanical Vent'}</span>
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
-              ) : (
-                <div className="p-6 text-center text-xs text-slate-500 bg-[#070c18] rounded-xl border border-slate-800/80">
-                  {lang === 'ar' ? 'لا توجد قنوات حقن وريدي نشطة حالياً.' : 'No active infusion pumps registered.'}
+              </div>
+            )}
+
+            {/* Infusion lines connectivity status */}
+            {cardsConfig.showInfusionPumpsCard && (
+              <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-4 shadow-xl space-y-3 flex flex-col justify-between">
+                <div>
+                  <div 
+                    onClick={() => setIsPaperPumpsCardCollapsed(!isPaperPumpsCardCollapsed)}
+                    className="flex items-center justify-between border-b border-slate-800 pb-2.5 cursor-pointer hover:bg-slate-800/40 p-2 rounded-xl transition-all"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Droplet className="w-5 h-5 text-amber-400" />
+                      <h3 className="text-sm font-bold text-white">{lang === 'ar' ? 'مضخات ومحاليل وريدية' : 'Infusion Pumps'}</h3>
+                    </div>
+                    <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIsCardsConfigModalOpen(true);
+                        }}
+                        className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-all border border-slate-700 cursor-pointer"
+                        title={lang === 'ar' ? 'تخصيص الخواص' : 'Customize Properties'}
+                      >
+                        <Sliders className="w-3.5 h-3.5 text-cyan-400" />
+                      </button>
+
+                      <span className="text-[10px] font-mono text-slate-400 bg-slate-900/60 px-2 py-0.5 rounded border border-slate-800 font-bold">
+                        {pumps.length} {lang === 'ar' ? 'نشط' : 'active'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedPumpForEdit(null);
+                          setIsPumpModalOpen(true);
+                          setIsPaperPumpsCardCollapsed(false);
+                        }}
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer"
+                        title={lang === 'ar' ? 'إضافة مضخة أو خط تنقيط وريدي جديد' : 'Add Infusion Pump Line'}
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>{lang === 'ar' ? 'إضافة' : 'Add'}</span>
+                      </button>
+
+                      <div className="p-1 rounded-lg bg-slate-800 text-slate-400">
+                        {isPaperPumpsCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+                      </div>
+                    </div>
+                  </div>
+
+                  {!isPaperPumpsCardCollapsed && (
+                    <>
+                      {pumps.length > 0 ? (
+                        <div className="space-y-2 max-h-[140px] overflow-y-auto mt-3">
+                          {pumps.map(p => (
+                            <div 
+                              key={p.id} 
+                              className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800 flex items-center justify-between gap-2 text-xs hover:border-amber-500/40 transition-colors"
+                            >
+                              <div 
+                                className="cursor-pointer flex-1 min-w-0"
+                                onClick={() => {
+                                  setSelectedPumpForEdit(p);
+                                  setIsPumpModalOpen(true);
+                                }}
+                              >
+                                <div className="font-bold text-white font-mono truncate max-w-[150px]">{p.drugNameEn}</div>
+                                <div className="text-[9px] text-slate-500">{p.diluentFluid} (Conc: {p.concentrationMgPerMl}mg/mL)</div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div 
+                                  className="text-right font-mono cursor-pointer"
+                                  onClick={() => {
+                                    setSelectedPumpForEdit(p);
+                                    setIsPumpModalOpen(true);
+                                  }}
+                                >
+                                  <div className="text-amber-400 font-bold">{p.currentRate} {p.rateUnit}</div>
+                                  <div className="text-[9px] text-slate-500">Rem: {p.volumeRemainingMl}mL</div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    if (confirm(lang === 'ar' ? `هل أنت متأكد من حذف مضخة [${p.drugNameEn}]؟` : `Delete infusion pump [${p.drugNameEn}]?`)) {
+                                      await db.infusionPumps.delete(p.id);
+                                      await loadBedsideData();
+                                      onDataUpdated();
+                                    }
+                                  }}
+                                  className="p-1 rounded text-slate-500 hover:text-red-400 hover:bg-red-950/40 transition-colors cursor-pointer"
+                                  title={lang === 'ar' ? 'حذف المضخة' : 'Delete line'}
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="p-6 text-center text-xs text-slate-400 bg-[#070c18] rounded-xl border border-slate-800/80 mt-3 space-y-2">
+                          <p>{lang === 'ar' ? 'لا توجد قنوات حقن وريدي مسجلة حالياً.' : 'No active infusion pumps registered.'}</p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedPumpForEdit(null);
+                              setIsPumpModalOpen(true);
+                              setIsPaperPumpsCardCollapsed(false);
+                            }}
+                            className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>{lang === 'ar' ? 'إضافة مضخة وريدية' : 'Add Infusion Pump'}</span>
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
 
             {/* Daily Fluid balances */}
-            <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-5 shadow-xl space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                <div className="flex items-center gap-2">
-                  <Scale className="w-5 h-5 text-teal-400" />
-                  <h3 className="text-sm font-bold text-white">{lang === 'ar' ? 'ميزان السوائل والبول 24 ساعة' : '24h Fluid Balance Tracker'}</h3>
-                </div>
-                {fluidBalance && (
-                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${fluidBalance.netBalance24HMl >= 0 ? 'bg-amber-950 text-amber-300' : 'bg-teal-950 text-teal-300'}`}>
-                    Net: {fluidBalance.netBalance24HMl > 0 ? `+${fluidBalance.netBalance24HMl}` : fluidBalance.netBalance24HMl} mL
-                  </span>
-                )}
-              </div>
+            {cardsConfig.showFluidBalanceCard && (
+              <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-4 shadow-xl space-y-3 flex flex-col justify-between">
+                <div>
+                  <div 
+                    onClick={() => setIsPaperFluidsCardCollapsed(!isPaperFluidsCardCollapsed)}
+                    className="flex items-center justify-between border-b border-slate-800 pb-2.5 cursor-pointer hover:bg-slate-800/40 p-2 rounded-xl transition-all"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Scale className="w-5 h-5 text-teal-400" />
+                      <h3 className="text-sm font-bold text-white">{lang === 'ar' ? 'ميزان السوائل 24 ساعة' : 'Fluid Balance'}</h3>
+                    </div>
+                    <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIsCardsConfigModalOpen(true);
+                        }}
+                        className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-all border border-slate-700 cursor-pointer"
+                        title={lang === 'ar' ? 'تخصيص الخواص' : 'Customize Properties'}
+                      >
+                        <Sliders className="w-3.5 h-3.5 text-cyan-400" />
+                      </button>
 
-              {fluidBalance ? (
-                <div className="grid grid-cols-2 gap-2 text-xs font-mono">
-                  <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
-                    <div className="text-[10px] text-slate-500">Intake Total</div>
-                    <div className="text-cyan-300 font-bold mt-0.5">{fluidBalance.totalIntakeMl} mL</div>
+                      {fluidBalance && (() => {
+                        const netVal = fluidBalance.netCumulativeBalanceMl ?? (fluidBalance as any).netBalance24HMl ?? 0;
+                        return (
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${netVal >= 0 ? 'bg-amber-950 text-amber-300' : 'bg-teal-950 text-teal-300'}`}>
+                            Net: {netVal > 0 ? `+${netVal}` : netVal} mL
+                          </span>
+                        );
+                      })()}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIsFluidModalOpen(true);
+                          setIsPaperFluidsCardCollapsed(false);
+                        }}
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 border border-teal-500/40 text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer"
+                        title={lang === 'ar' ? 'تسجيل أو تعديل ميزان السوائل والبول' : 'Record / Edit Fluid Balance'}
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>{fluidBalance ? (lang === 'ar' ? 'تعديل' : 'Edit') : (lang === 'ar' ? 'تسجيل' : 'Record')}</span>
+                      </button>
+
+                      <div className="p-1 rounded-lg bg-slate-800 text-slate-400">
+                        {isPaperFluidsCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+                      </div>
+                    </div>
                   </div>
-                  <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
-                    <div className="text-[10px] text-slate-500">Output Urine (UOP)</div>
-                    <div className="text-amber-400 font-bold mt-0.5">{fluidBalance.outputBreakdown.urineMl} mL</div>
-                  </div>
+
+                  {!isPaperFluidsCardCollapsed && (
+                    <>
+                      {fluidBalance ? (() => {
+                        const totalIntake = fluidBalance.intakeBreakdown?.totalIntakeMl ?? (fluidBalance as any).totalIntakeMl ?? 0;
+                        const urineVal = fluidBalance.outputBreakdown?.urineOutputMl ?? (fluidBalance as any).outputBreakdown?.urineMl ?? 0;
+                        return (
+                          <div 
+                            onClick={() => setIsFluidModalOpen(true)}
+                            className="grid grid-cols-2 gap-2 text-xs font-mono mt-3 cursor-pointer hover:opacity-90 transition-opacity"
+                          >
+                            <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
+                              <div className="text-[10px] text-slate-500">Intake Total</div>
+                              <div className="text-cyan-300 font-bold mt-0.5">{totalIntake} mL</div>
+                            </div>
+                            <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
+                              <div className="text-[10px] text-slate-500">Output Urine (UOP)</div>
+                              <div className="text-amber-400 font-bold mt-0.5">{urineVal} mL</div>
+                            </div>
+                          </div>
+                        );
+                      })() : (
+                        <div className="p-6 text-center text-xs text-slate-400 bg-[#070c18] rounded-xl border border-slate-800/80 mt-3 space-y-2">
+                          <p>{lang === 'ar' ? 'لم يسجل ميزان السوائل لليوم.' : 'No fluid balance records for today.'}</p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsFluidModalOpen(true);
+                              setIsPaperFluidsCardCollapsed(false);
+                            }}
+                            className="px-3 py-1.5 rounded-lg bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 border border-teal-500/40 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>{lang === 'ar' ? 'تسجيل ميزان اليوم' : 'Log Today Balance'}</span>
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
-              ) : (
-                <div className="p-6 text-center text-xs text-slate-500 bg-[#070c18] rounded-xl border border-slate-800/80">
-                  {lang === 'ar' ? 'لم يسجل ميزان السوائل لليوم.' : 'No fluid balance records for today.'}
-                </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
 
           {/* Gorgeous Modal for Adding/Editing Lab Columns */}
@@ -2126,7 +2593,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       )}
 
       {/* Tab 1: Vitals & Telemetry */}
-      {activeTab === 'vitals' && (
+      {(activeTab === 'vitals' || activeTab === 'all') && (
         <div className="space-y-4">
           {latestVitals && (
             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
@@ -2270,7 +2737,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       )}
 
       {/* Tab 2: Ventilator & ABG */}
-      {activeTab === 'vent' && (
+      {(activeTab === 'vent' || activeTab === 'all') && (
         <div className="space-y-4">
           {ventilator ? (
             <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-5 shadow-xl space-y-4">
@@ -2304,7 +2771,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                   <div className="text-[10px] text-slate-400">Set Tidal Volume (Vt)</div>
                   <div className="text-xl font-bold text-white mt-1">{ventilator.setTidalVolumeMl} <span className="text-xs text-slate-400">mL</span></div>
                   <div className="text-[10px] text-teal-400 font-sans mt-0.5">
-                    ({Math.round((ventilator.setTidalVolumeMl || 420) / patient.idealBodyWeightKg)} mL/kg IBW)
+                    ({Math.round((ventilator.setTidalVolumeMl || ventilator.tidalVolumeMl || 420) / (patient.idealBodyWeightKg || (patient.gender === 'MALE' ? 70 : 60) || 70))} mL/kg IBW)
                   </div>
                 </div>
 
@@ -2363,7 +2830,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       )}
 
       {/* Tab 3: Infusion Pumps */}
-      {activeTab === 'pumps' && (
+      {(activeTab === 'pumps' || activeTab === 'all') && (
         <div className="space-y-4">
           <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-5 shadow-xl space-y-4">
             <div className="flex items-center justify-between">
@@ -2431,61 +2898,76 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       )}
 
       {/* Tab 4: Fluids & MTP */}
-      {activeTab === 'fluids' && (
+      {(activeTab === 'fluids' || activeTab === 'all') && (
         <div className="space-y-4">
-          {fluidBalance ? (
-            <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-5 shadow-xl space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Scale className="w-5 h-5 text-teal-400" />
-                  <h3 className="text-base font-bold text-white">
-                    {lang === 'ar' 
-                      ? 'ميزان السوائل ونقل مشتقات الدم (Fluid Balance & MTP)' 
-                      : '24-Hour Fluid Balance & Massive Transfusion (MTP)'}
-                  </h3>
+          {fluidBalance ? (() => {
+            const netVal = fluidBalance.netCumulativeBalanceMl ?? (fluidBalance as any).netBalance24HMl ?? 0;
+            const totalIntake = fluidBalance.intakeBreakdown?.totalIntakeMl ?? (fluidBalance as any).totalIntakeMl ?? 0;
+            const totalOutput = fluidBalance.outputBreakdown?.totalOutputMl ?? (fluidBalance as any).totalOutputMl ?? 0;
+            const ivMaint = fluidBalance.intakeBreakdown?.ivMaintenanceFluidMl ?? (fluidBalance as any).intakeBreakdown?.crystalloidMl ?? 0;
+            const ivMeds = fluidBalance.intakeBreakdown?.ivMedicationInfusionsMl ?? (fluidBalance as any).intakeBreakdown?.infusionsMl ?? 0;
+            const urineVal = fluidBalance.outputBreakdown?.urineOutputMl ?? (fluidBalance as any).outputBreakdown?.urineMl ?? 0;
+            const uopRate = fluidBalance.outputBreakdown?.hourlyUrineAverageMlPerHour ?? (fluidBalance as any).outputBreakdown?.hourlyUrineRateMlPerHr ?? 0;
+            
+            const bloodMl = fluidBalance.intakeBreakdown?.bloodProductsMl ?? 0;
+            const prbcUnits = (fluidBalance as any).transfusionProductsGiven?.prbcUnits ?? (bloodMl > 0 ? Math.ceil(bloodMl / 250) : 0);
+            const ffpUnits = (fluidBalance as any).transfusionProductsGiven?.ffpUnits ?? 0;
+            const plateletsUnits = (fluidBalance as any).transfusionProductsGiven?.plateletsUnits ?? 0;
+
+            return (
+              <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-5 shadow-xl space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Scale className="w-5 h-5 text-teal-400" />
+                    <h3 className="text-base font-bold text-white">
+                      {lang === 'ar' 
+                        ? 'ميزان السوائل ونقل مشتقات الدم (Fluid Balance & MTP)' 
+                        : '24-Hour Fluid Balance & Massive Transfusion (MTP)'}
+                    </h3>
+                  </div>
+                  <span className={`px-3 py-1 rounded-lg text-xs font-mono font-black ${
+                    netVal >= 0 
+                      ? 'bg-amber-950 text-amber-300 border border-amber-700' 
+                      : 'bg-teal-950 text-teal-300 border border-teal-700'
+                  }`}>
+                    NET 24H: {netVal > 0 ? `+${netVal}` : netVal} mL
+                  </span>
                 </div>
-                <span className={`px-3 py-1 rounded-lg text-xs font-mono font-black ${
-                  fluidBalance.netBalance24HMl >= 0 
-                    ? 'bg-amber-950 text-amber-300 border border-amber-700' 
-                    : 'bg-teal-950 text-teal-300 border border-teal-700'
-                }`}>
-                  NET 24H: {fluidBalance.netBalance24HMl > 0 ? `+${fluidBalance.netBalance24HMl}` : fluidBalance.netBalance24HMl} mL
-                </span>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 font-mono">
+                  <div className="bg-[#070c18] p-3.5 rounded-xl border border-slate-800">
+                    <div className="text-[10px] text-slate-400">{lang === 'ar' ? 'إجمالي المدخلات (Total Intake)' : 'Total Intake'}</div>
+                    <div className="text-xl font-bold text-cyan-300 mt-1">{totalIntake} mL</div>
+                    <div className="text-[10px] text-slate-400 mt-1">
+                      {lang === 'ar'
+                        ? `محاليل: ${ivMaint} mL • مضخات: ${ivMeds} mL`
+                        : `Crystalloid: ${ivMaint} mL • Infusions: ${ivMeds} mL`}
+                    </div>
+                  </div>
+
+                  <div className="bg-[#070c18] p-3.5 rounded-xl border border-slate-800">
+                    <div className="text-[10px] text-slate-400">{lang === 'ar' ? 'إجمالي المخرجات (Total Output)' : 'Total Output'}</div>
+                    <div className="text-xl font-bold text-amber-300 mt-1">{totalOutput} mL</div>
+                    <div className="text-[10px] text-slate-400 mt-1">
+                      {lang === 'ar'
+                        ? `بول: ${urineVal} mL (${uopRate} mL/hr)`
+                        : `Urine: ${urineVal} mL (${uopRate} mL/hr)`}
+                    </div>
+                  </div>
+
+                  <div className="bg-[#070c18] p-3.5 rounded-xl border border-slate-800">
+                    <div className="text-[10px] text-slate-400">{lang === 'ar' ? 'بروتوكول نقل الدم (MTP Transfusions)' : 'MTP Blood Transfusion'}</div>
+                    <div className="text-sm font-bold text-red-300 mt-1">
+                      PRBC: {prbcUnits} {lang === 'ar' ? 'أكياس' : 'Units'}
+                    </div>
+                    <div className="text-[10px] text-slate-400 mt-0.5">
+                      FFP: {ffpUnits} • Platelets: {plateletsUnits}
+                    </div>
+                  </div>
+                </div>
               </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 font-mono">
-                <div className="bg-[#070c18] p-3.5 rounded-xl border border-slate-800">
-                  <div className="text-[10px] text-slate-400">{lang === 'ar' ? 'إجمالي المدخلات (Total Intake)' : 'Total Intake'}</div>
-                  <div className="text-xl font-bold text-cyan-300 mt-1">{fluidBalance.totalIntakeMl} mL</div>
-                  <div className="text-[10px] text-slate-400 mt-1">
-                    {lang === 'ar'
-                      ? `محاليل: ${fluidBalance.intakeBreakdown.crystalloidMl} mL • مضخات: ${fluidBalance.intakeBreakdown.infusionsMl} mL`
-                      : `Crystalloid: ${fluidBalance.intakeBreakdown.crystalloidMl} mL • Infusions: ${fluidBalance.intakeBreakdown.infusionsMl} mL`}
-                  </div>
-                </div>
-
-                <div className="bg-[#070c18] p-3.5 rounded-xl border border-slate-800">
-                  <div className="text-[10px] text-slate-400">{lang === 'ar' ? 'إجمالي المخرجات (Total Output)' : 'Total Output'}</div>
-                  <div className="text-xl font-bold text-amber-300 mt-1">{fluidBalance.totalOutputMl} mL</div>
-                  <div className="text-[10px] text-slate-400 mt-1">
-                    {lang === 'ar'
-                      ? `بول: ${fluidBalance.outputBreakdown.urineMl} mL (${fluidBalance.outputBreakdown.hourlyUrineRateMlPerHr} mL/hr)`
-                      : `Urine: ${fluidBalance.outputBreakdown.urineMl} mL (${fluidBalance.outputBreakdown.hourlyUrineRateMlPerHr} mL/hr)`}
-                  </div>
-                </div>
-
-                <div className="bg-[#070c18] p-3.5 rounded-xl border border-slate-800">
-                  <div className="text-[10px] text-slate-400">{lang === 'ar' ? 'بروتوكول نقل الدم (MTP Transfusions)' : 'MTP Blood Transfusion'}</div>
-                  <div className="text-sm font-bold text-red-300 mt-1">
-                    PRBC: {fluidBalance.transfusionProductsGiven.prbcUnits} {lang === 'ar' ? 'أكياس' : 'Units'}
-                  </div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">
-                    FFP: {fluidBalance.transfusionProductsGiven.ffpUnits} • Platelets: {fluidBalance.transfusionProductsGiven.plateletsUnits}
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : (
+            );
+          })() : (
             <div className="bg-[#0b1224] border border-slate-800 rounded-2xl p-8 text-center text-slate-400">
               {lang === 'ar' ? 'لا توجد بيانات مسجلة لميزان السوائل اليوم.' : 'No fluid balance logs recorded for today.'}
             </div>
@@ -2494,7 +2976,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       )}
 
       {/* Tab 5: SBAR Handovers */}
-      {activeTab === 'sbar' && (
+      {(activeTab === 'sbar' || activeTab === 'all') && (
         <div className="space-y-4">
           <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-5 shadow-xl space-y-4">
             <div className="flex items-center justify-between">
@@ -2579,7 +3061,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       )}
 
       {/* Tab 6: Clinical Notes & SHA-256 Addendums */}
-      {activeTab === 'notes' && (
+      {(activeTab === 'notes' || activeTab === 'all') && (
         <div className="space-y-4">
           <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-5 shadow-xl space-y-4">
             <div className="flex items-center justify-between">
@@ -2667,7 +3149,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       )}
 
       {/* Tab 7: Disposition */}
-      {activeTab === 'disposition' && (
+      {(activeTab === 'disposition' || activeTab === 'all') && (
         <div className="space-y-4">
           <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-5 shadow-xl space-y-4">
             <div className="flex items-center gap-2">
@@ -2772,7 +3254,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       )}
 
       {/* Tab: Daily Lab Flowsheet with Interactive Trend History (HG 5 > 7 > 8.5 > 8) */}
-      {activeTab === 'labs' && (
+      {(activeTab === 'labs' || activeTab === 'all') && (
         <LabFlowsheetSection
           patientId={patient.id}
           bedNumber={bed.bedNumber}
@@ -2785,7 +3267,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       )}
 
       {/* Tab: Investigations, Radiology & POCUS Studies */}
-      {activeTab === 'investigations' && (
+      {(activeTab === 'investigations' || activeTab === 'all') && (
         <InvestigationsSection
           patientId={patient.id}
           bedNumber={bed.bedNumber}
@@ -2847,13 +3329,94 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
           isOpen={isAiLabScannerOpen}
           onClose={() => setIsAiLabScannerOpen(false)}
           patientId={patient.id}
-          patientName={lang === 'ar' ? patient.fullNameAr : patient.fullNameEn}
+          patientName={patient.fullNameAr || patient.fullNameEn}
           bedNumber={bed.bedNumber}
           targetPreset={aiScannerPreset}
           onApplyToForm={handleApplyScannedToForm}
           onDirectSave={handleDirectSaveScannedLab}
         />
       )}
+
+      {/* Ventilator Settings & Parameters Modal */}
+      <VentilatorModal
+        isOpen={isVentilatorModalOpen}
+        onClose={() => setIsVentilatorModalOpen(false)}
+        bedNumber={bed.bedNumber}
+        patient={patient}
+        initialVentilator={ventilator}
+        onSaved={() => {
+          setIsVentilatorModalOpen(false);
+          loadBedsideData();
+          onDataUpdated();
+        }}
+      />
+
+      {/* Infusion Pump Line Modal (Add & Edit) */}
+      <InfusionPumpModal
+        isOpen={isPumpModalOpen}
+        onClose={() => {
+          setIsPumpModalOpen(false);
+          setSelectedPumpForEdit(null);
+        }}
+        bedNumber={bed.bedNumber}
+        patient={patient}
+        editingPump={selectedPumpForEdit}
+        onSaved={() => {
+          setIsPumpModalOpen(false);
+          setSelectedPumpForEdit(null);
+          loadBedsideData();
+          onDataUpdated();
+        }}
+      />
+
+      {/* Fluid Balance 24h Tracker Modal */}
+      <FluidBalanceModal
+        isOpen={isFluidModalOpen}
+        onClose={() => setIsFluidModalOpen(false)}
+        bedNumber={bed.bedNumber}
+        patient={patient}
+        initialFluidBalance={fluidBalance}
+        onSaved={() => {
+          setIsFluidModalOpen(false);
+          loadBedsideData();
+          onDataUpdated();
+        }}
+      />
+
+      {/* Bedside Cards Visibility & Customization Modal */}
+      <BedsideCardsConfigModal
+        isOpen={isCardsConfigModalOpen}
+        onClose={() => setIsCardsConfigModalOpen(false)}
+        bedNumber={bed.bedNumber}
+        patientName={patient.fullNameAr || patient.fullNameEn}
+        currentConfig={cardsConfig}
+        onSaveConfig={handleSaveCardsConfig}
+        onOpenAddVent={() => {
+          setIsCardsConfigModalOpen(false);
+          setIsVentilatorModalOpen(true);
+        }}
+        onOpenAddPump={() => {
+          setIsCardsConfigModalOpen(false);
+          setSelectedPumpForEdit(null);
+          setIsPumpModalOpen(true);
+        }}
+        onOpenAddFluid={() => {
+          setIsCardsConfigModalOpen(false);
+          setIsFluidModalOpen(true);
+        }}
+        onOpenAddVitals={() => {
+          setIsCardsConfigModalOpen(false);
+          onOpenAddVitals();
+        }}
+        onOpenAddSbar={() => {
+          setIsCardsConfigModalOpen(false);
+          onOpenSbarSign();
+        }}
+        onOpenAddLab={() => {
+          setIsCardsConfigModalOpen(false);
+          setIsAddLabModalOpen(true);
+        }}
+      />
     </div>
   );
 };

@@ -1,31 +1,23 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { 
   X, 
   Layers, 
-  Activity, 
-  FileText, 
   Search, 
   UserPlus, 
   Sliders, 
   Languages, 
-  ShieldAlert, 
-  Cloud, 
-  Bell, 
-  BellRing,
-  Heart,
   ChevronRight,
   ChevronLeft,
-  CheckCircle2,
-  Users,
   LogOut,
   ShieldCheck,
-  UserCircle
+  LayoutDashboard
 } from 'lucide-react';
-import { BedRecord, PatientDossier, StaffRole, BedNumber } from '../types/schema.ts';
+import { BedRecord, PatientDossier, BedNumber } from '../types/schema.ts';
 import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
 import { useAuth } from '../services/AuthContext.tsx';
 import { SoliLogo } from './SoliLogo.tsx';
+import { getPatientForBed } from '../services/dataModel.ts';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -61,9 +53,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const { currentUser, logout, hasPermission } = useAuth();
 
   const occupiedBedsCount = (beds || []).filter((b) => b && b.status === 'OCCUPIED').length;
-  const criticalCount = (patients || []).filter(
-    (p) => p && p.patientStatus === 'ACTIVE_ICU' && p.acuityLevel === 'CRITICAL_STAT'
-  ).length;
 
   const toggleLanguage = () => {
     const nextLang = lang === 'en' ? 'ar' : 'en';
@@ -75,26 +64,283 @@ export const Sidebar: React.FC<SidebarProps> = ({
     onClose();
   };
 
+  const handleSelectBed = (bNum: BedNumber | null) => {
+    onSelectBed(bNum);
+    onTabChange('beds');
+    onClose();
+  };
+
+  // Close on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
+  // Unified Sidebar Navigation Content Component
+  const SidebarNavContent = () => (
+    <div className="flex-1 flex flex-col min-h-0 divide-y divide-slate-800/60">
+      {/* Scrollable Navigation Menu */}
+      <div className="flex-1 p-3 space-y-1.5 overflow-y-auto">
+        <div className="px-2 py-1 text-[11px] font-mono text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+          <LayoutDashboard className="w-3.5 h-3.5 text-teal-400" />
+          <span>{lang === 'ar' ? 'لوحة التحكم والأسِرّة' : 'Navigation & Dashboard'}</span>
+        </div>
+
+        {/* 1. Bedside Matrix Main Tab */}
+        <button
+          onClick={() => handleSelectBed(null)}
+          className={`w-full flex items-center justify-between p-3 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+            activeTab === 'beds' && !selectedBedNumber
+              ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 shadow-sm font-bold'
+              : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
+          }`}
+        >
+          <div className="flex items-center gap-3 truncate">
+            <div className={`p-2 rounded-lg ${activeTab === 'beds' && !selectedBedNumber ? 'bg-teal-500/30 text-teal-200' : 'bg-slate-800 text-slate-400'}`}>
+              <Layers className="w-4 h-4" />
+            </div>
+            <span className="truncate">{lang === 'ar' ? 'لوحة أسرة العناية (6 أسرة)' : 'Bedside Matrix (6 Beds)'}</span>
+          </div>
+          <span className="text-[10px] px-2 py-0.5 rounded bg-teal-500/20 text-teal-300 font-mono font-bold shrink-0">
+            {occupiedBedsCount}/6
+          </span>
+        </button>
+
+        {/* Sub-list of Beds 01 to 06 */}
+        <div className="pl-3 pr-1 py-1 space-y-1">
+          <div className="text-[10px] font-mono text-slate-400 uppercase tracking-wider px-2 font-semibold">
+            {lang === 'ar' ? 'الأسرة السريرية' : 'Bedside Units'}
+          </div>
+          {beds.map((b) => {
+            const patient = getPatientForBed(b, patients);
+            const isOccupied = b.status === 'OCCUPIED' || (b.status === 'ISOLATION' && !!patient) || !!patient;
+            const isSelected = activeTab === 'beds' && selectedBedNumber === b.bedNumber;
+
+            const displayName = patient 
+              ? (lang === 'ar' ? (patient.fullNameAr || patient.fullNameEn) : (patient.fullNameEn || patient.fullNameAr))
+              : (b.status === 'ISOLATION' 
+                ? (lang === 'ar' ? 'عزل (شاغر)' : 'Isolation (Vacant)')
+                : b.status === 'UNAVAILABLE' 
+                ? (lang === 'ar' ? 'غير متاح' : 'Unavailable')
+                : (lang === 'ar' ? 'شاغر' : 'Vacant'));
+
+            return (
+              <button
+                key={b.bedNumber}
+                onClick={() => handleSelectBed(b.bedNumber as BedNumber)}
+                className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-all cursor-pointer ${
+                  isSelected 
+                    ? 'bg-teal-500/20 text-teal-300 border border-teal-500/30 font-bold' 
+                    : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'
+                }`}
+              >
+                <div className="flex items-center gap-2 truncate">
+                  <span className="font-mono text-[11px] font-bold text-teal-400">{b.bedNumber}</span>
+                  <span className="truncate text-[11px] font-medium">
+                    {displayName}
+                  </span>
+                </div>
+                <span className={`w-2 h-2 rounded-full shrink-0 ${isOccupied ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="pt-2 border-t border-slate-800/60 my-2" />
+
+        <div className="px-2 py-1 text-[11px] font-mono text-slate-400 font-bold uppercase tracking-wider">
+          {lang === 'ar' ? 'الأقسام والوظائف' : 'Clinical Modules'}
+        </div>
+
+        {/* 2. Patient Admission STAT */}
+        {settings.features.enablePatientAdmission && (
+          <button
+            onClick={() => {
+              onClose();
+              onOpenAdmission();
+            }}
+            className="w-full flex items-center justify-between p-3 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-800/60 hover:text-white transition-all cursor-pointer"
+          >
+            <div className="flex items-center gap-3 truncate">
+              <div className="p-2 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                <UserPlus className="w-4 h-4" />
+              </div>
+              <span className="truncate">{lang === 'ar' ? 'إدخال مريض جديد (Admission)' : 'Admit New Patient'}</span>
+            </div>
+            <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono font-bold shrink-0">
+              + STAT
+            </span>
+          </button>
+        )}
+
+        {/* 3. Patient Archive Search */}
+        {settings.features.enableArchiveSearch && (
+          <button
+            onClick={() => handleSelectTab('search')}
+            className={`w-full flex items-center justify-between p-3 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+              activeTab === 'search'
+                ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 shadow-sm font-bold'
+                : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
+            }`}
+          >
+            <div className="flex items-center gap-3 truncate">
+              <div className={`p-2 rounded-lg ${activeTab === 'search' ? 'bg-teal-500/30 text-teal-200' : 'bg-slate-800 text-slate-400'}`}>
+                <Search className="w-4 h-4" />
+              </div>
+              <span className="truncate">{lang === 'ar' ? 'أرشيف المرضى (MRN Search)' : 'Universal Patient Archive'}</span>
+            </div>
+            {isRTL ? <ChevronLeft className="w-4 h-4 text-slate-500 shrink-0" /> : <ChevronRight className="w-4 h-4 text-slate-500 shrink-0" />}
+          </button>
+        )}
+
+        {/* 4. Staff RBAC & User Management */}
+        {hasPermission('canManageUsers') && onOpenUserManagement && (
+          <button
+            onClick={() => handleSelectTab('users')}
+            className={`w-full flex items-center justify-between p-3 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+              activeTab === 'users'
+                ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 shadow-sm font-bold'
+                : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
+            }`}
+          >
+            <div className="flex items-center gap-3 truncate">
+              <div className={`p-2 rounded-lg ${activeTab === 'users' ? 'bg-teal-500/30 text-teal-200' : 'bg-slate-800 text-slate-400'}`}>
+                <ShieldCheck className="w-4 h-4" />
+              </div>
+              <span className="truncate">{lang === 'ar' ? 'إدارة المستخدمين والصلاحيات' : 'Staff RBAC & Users'}</span>
+            </div>
+            {isRTL ? <ChevronLeft className="w-4 h-4 text-slate-500 shrink-0" /> : <ChevronRight className="w-4 h-4 text-slate-500 shrink-0" />}
+          </button>
+        )}
+
+        {/* 5. System Settings */}
+        <button
+          onClick={() => handleSelectTab('settings')}
+          className={`w-full flex items-center justify-between p-3 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+            activeTab === 'settings'
+              ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 shadow-sm font-bold'
+              : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
+          }`}
+        >
+          <div className="flex items-center gap-3 truncate">
+            <div className={`p-2 rounded-lg ${activeTab === 'settings' ? 'bg-teal-500/30 text-teal-200' : 'bg-slate-800 text-slate-400'}`}>
+              <Sliders className="w-4 h-4" />
+            </div>
+            <span className="truncate">{lang === 'ar' ? 'إعدادات وتخصيص النظام' : t('settings')}</span>
+          </div>
+          {isRTL ? <ChevronLeft className="w-4 h-4 text-slate-500 shrink-0" /> : <ChevronRight className="w-4 h-4 text-slate-500 shrink-0" />}
+        </button>
+      </div>
+
+      {/* User Profile Footer */}
+      {currentUser && (
+        <div className="p-3 bg-[#0a1224] border-t border-slate-800/80 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5 truncate">
+              <div className="w-9 h-9 rounded-xl bg-teal-500/20 border border-teal-500/40 flex items-center justify-center font-bold text-teal-300 text-xs font-mono shrink-0">
+                {currentUser.nameEn.slice(0, 2).toUpperCase()}
+              </div>
+              <div className="truncate">
+                <div className="text-xs font-bold text-white flex items-center gap-1.5 truncate">
+                  <span className="truncate">{currentUser.nameAr || currentUser.nameEn}</span>
+                  <span className="text-[9px] px-1.5 py-0.2 rounded bg-teal-500/20 text-teal-300 border border-teal-500/40 font-mono font-semibold shrink-0">
+                    {currentUser.role}
+                  </span>
+                </div>
+                <div className="text-[10px] text-teal-400 font-mono flex items-center gap-1 mt-0.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                  <span>{lang === 'ar' ? 'الطبيب متاح' : 'Available'}</span>
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={() => {
+                logout();
+                onClose();
+              }}
+              className="p-2 rounded-xl bg-red-950/40 hover:bg-red-900/60 border border-red-800/60 text-red-300 transition-colors cursor-pointer shrink-0"
+              title={lang === 'ar' ? 'تسجيل الخروج' : 'Logout'}
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <>
-      {/* Mobile Backdrop overlay (only visible on mobile when isOpen is true) */}
+      {/* Mobile Drawer Navigation (Side Drawer matching Image 4) */}
       {isOpen && (
-        <div 
-          onClick={onClose} 
-          className="md:hidden fixed inset-0 z-40 bg-black/80 backdrop-blur-sm transition-opacity animate-fade-in"
-        />
+        <div className="md:hidden fixed inset-0 z-50 overflow-hidden" dir={isRTL ? 'rtl' : 'ltr'}>
+          {/* Backdrop Blur Overlay */}
+          <div 
+            className="fixed inset-0 bg-black/75 backdrop-blur-sm transition-opacity animate-in fade-in duration-200"
+            onClick={onClose}
+          />
+
+          {/* Sliding Side Drawer Panel */}
+          <div 
+            className={`fixed inset-y-0 ${
+              isRTL ? 'right-0 border-l' : 'left-0 border-r'
+            } z-50 w-80 max-w-[85vw] bg-[#070d1a] border-slate-800 shadow-2xl flex flex-col text-white animate-in ${
+              isRTL ? 'slide-in-from-right' : 'slide-in-from-left'
+            } duration-200`}
+          >
+            {/* Mobile Drawer Header */}
+            <div className="p-3.5 bg-[#0a1224] border-b border-slate-800/80 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2.5">
+                <SoliLogo className="w-8 h-8 flex-shrink-0 drop-shadow-md" />
+                <div>
+                  <h2 className="text-xs font-black tracking-tight text-white">
+                    {lang === 'ar' ? 'سولي ميديكال' : 'SOLI MEDICAL'}
+                  </h2>
+                  <p className="text-[10px] font-mono text-teal-400 font-semibold leading-none">
+                    {lang === 'ar' ? 'العناية المركزة MICU' : 'MICU SYNC'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={toggleLanguage}
+                  className="flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-800/80 hover:bg-teal-950/60 border border-slate-700 text-slate-300 text-[11px] font-mono font-bold transition-all cursor-pointer"
+                >
+                  <Languages className="w-3.5 h-3.5 text-teal-400" />
+                  <span>{lang === 'ar' ? 'EN' : 'عربي'}</span>
+                </button>
+
+                <button
+                  onClick={onClose}
+                  className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer"
+                  title={lang === 'ar' ? 'إغلاق القائمة' : 'Close Menu'}
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Mobile Drawer Navigation Body */}
+            <SidebarNavContent />
+          </div>
+        </div>
       )}
 
-      {/* Sidebar Panel (Persistent on Desktop md:flex, Slide-out Drawer on Mobile) */}
+      {/* Sticky Desktop Sidebar (Full Height docked on side matching Image 3) */}
       <aside 
-        className={`
-          ${isOpen ? 'translate-x-0' : (isRTL ? 'translate-x-full md:translate-x-0' : '-translate-x-full md:translate-x-0')}
-          fixed md:sticky top-0 md:top-16 bottom-0 z-50 md:z-10 w-72 shrink-0 h-full md:h-[calc(100vh-4rem)] bg-[#070d1a] text-white flex flex-col shadow-2xl md:shadow-none overflow-y-auto transition-transform duration-300 ${
-            isRTL ? 'right-0 border-l border-slate-800' : 'left-0 border-r border-slate-800'
-          }
-        `}
+        className={`hidden md:flex sticky top-0 bottom-0 z-30 w-72 shrink-0 h-screen bg-[#070d1a] text-white flex-col border-slate-800 ${
+          isRTL ? 'border-l border-slate-800/80' : 'border-r border-slate-800/80'
+        }`}
+        dir={isRTL ? 'rtl' : 'ltr'}
       >
-        {/* Sidebar Header: Logo, Branding, Language Switcher & Mobile Close button */}
+        {/* Desktop Header */}
         <div className="p-4 bg-[#0a1224] border-b border-slate-800/80 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2.5">
             <SoliLogo className="w-9 h-9 flex-shrink-0 drop-shadow-md" />
@@ -108,246 +354,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5">
-            {/* Compact Language Toggle Button */}
-            <button
-              onClick={toggleLanguage}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-800/80 hover:bg-teal-950/60 border border-slate-700 hover:border-teal-500/60 text-slate-300 hover:text-teal-300 text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer"
-              title={lang === 'ar' ? 'التحويل للإنجليزية (English)' : 'Switch to Arabic (العربية)'}
-            >
-              <Languages className="w-3.5 h-3.5 text-teal-400" />
-              <span className="font-mono text-[11px]">{lang === 'ar' ? 'EN' : 'عربي'}</span>
-            </button>
-
-            {/* Close Button for Mobile */}
-            <button
-              onClick={onClose}
-              className="md:hidden w-8 h-8 rounded-lg bg-slate-800/60 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-all cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-
-        {/* User Profile Card */}
-        {currentUser && (
-          <div className="p-3.5 bg-[#0b1426] border-b border-slate-800/60">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-teal-500/20 border border-teal-500/40 flex items-center justify-center font-bold text-teal-300 text-xs font-mono">
-                  {currentUser.nameEn.slice(0, 2).toUpperCase()}
-                </div>
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs font-bold text-white truncate max-w-[130px]">
-                      {lang === 'ar' ? currentUser.nameAr : currentUser.nameEn}
-                    </span>
-                    {currentUser.isSuperAdmin && (
-                      <span className="px-1 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[9px] font-bold">
-                        ADMIN
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-[10px] text-teal-400/90 font-mono font-medium flex items-center gap-1">
-                    <span>{currentUser.role}</span>
-                    <span>•</span>
-                    <span>{currentUser.badgeId}</span>
-                  </div>
-                </div>
-              </div>
-
-              <button
-                onClick={logout}
-                className="p-1.5 rounded-lg bg-slate-800/80 hover:bg-red-950/60 text-slate-400 hover:text-red-400 transition-colors"
-                title={lang === 'ar' ? 'تسجيل الخروج وقفل الشاشة' : 'Sign Out / Lock Console'}
-              >
-                <LogOut className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Navigation Items */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-1">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-3 py-1.5">
-            {lang === 'ar' ? 'الأقسام السريرية' : 'Clinical Modules'}
-          </div>
-
-          {/* 1. Bed Matrix */}
-          {settings.features.enableBedMatrix && (
-            <button
-              onClick={() => handleSelectTab('beds')}
-              className={`w-full flex items-center justify-between p-3 rounded-xl text-xs font-semibold transition-all ${
-                activeTab === 'beds'
-                  ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 shadow-sm'
-                  : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <div className={`p-1.5 rounded-lg ${activeTab === 'beds' ? 'bg-teal-500/30 text-teal-200' : 'bg-slate-800 text-slate-400'}`}>
-                  <Layers className="w-4 h-4" />
-                </div>
-                <span>{t('bedMatrix')} (6 {lang === 'ar' ? 'أسرة' : 'Beds'})</span>
-              </div>
-              {isRTL ? <ChevronLeft className="w-4 h-4 text-slate-500" /> : <ChevronRight className="w-4 h-4 text-slate-500" />}
-            </button>
-          )}
-
-          {/* 6 ICU Beds Pages */}
-          <div className="pt-2">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-3 py-1.5 border-t border-slate-850/60">
-              {lang === 'ar' ? 'مراقبة أسِرّة العناية (ICU Beds)' : 'Bedside Care Pages'}
-            </div>
-            <div className="space-y-1">
-              {beds.map((b) => {
-                const patient = b.currentPatientId ? patients.find(p => p.id === b.currentPatientId) : null;
-                const isSelected = selectedBedNumber === b.bedNumber;
-                return (
-                  <button
-                    key={b.bedNumber}
-                    onClick={() => {
-                      onSelectBed(b.bedNumber as BedNumber);
-                      onClose();
-                    }}
-                    className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
-                      isSelected
-                        ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 font-bold'
-                        : 'text-slate-300 hover:bg-slate-800/60 hover:text-white border border-transparent'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 truncate">
-                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${patient ? 'bg-red-500 animate-pulse' : 'bg-emerald-500'}`} />
-                      <span className="font-mono font-bold text-slate-200">{b.bedNumber}</span>
-                      <span className="truncate max-w-[120px] text-slate-400 text-[10px] font-semibold">
-                        {patient ? (lang === 'ar' ? patient.fullNameAr : patient.fullNameEn) : (lang === 'ar' ? 'شاغر' : 'Vacant')}
-                      </span>
-                    </div>
-                    {isRTL ? <ChevronLeft className="w-3.5 h-3.5 text-slate-600" /> : <ChevronRight className="w-3.5 h-3.5 text-slate-600" />}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="pt-2">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-3 py-1.5">
-              {lang === 'ar' ? 'الإدارة والخدمات' : 'Management & Tools'}
-            </div>
-          </div>
-
-          {/* 4. Admit Patient Quick Action */}
-          {hasPermission('canAdmitPatient') && (
-            <button
-              onClick={() => {
-                onClose();
-                onOpenAdmission();
-              }}
-              className="w-full flex items-center justify-between p-3 rounded-xl text-xs font-bold bg-gradient-to-r from-teal-600/30 to-teal-500/10 hover:from-teal-600/40 hover:to-teal-500/20 border border-teal-500/30 text-teal-200 transition-all shadow-sm"
-            >
-              <div className="flex items-center gap-3">
-                <div className="p-1.5 rounded-lg bg-teal-500/20 text-teal-300">
-                  <UserPlus className="w-4 h-4" />
-                </div>
-                <span>{lang === 'ar' ? 'إدخال مريض جديد (Admission)' : 'Admit New Patient'}</span>
-              </div>
-              <span className="text-[10px] px-2 py-0.5 rounded bg-teal-500/20 text-teal-300 font-mono">
-                + STAT
-              </span>
-            </button>
-          )}
-
-          {/* 5. Patient Archive Search */}
-          {settings.features.enableArchiveSearch && (
-            <button
-              onClick={() => {
-                onClose();
-                onOpenSearch();
-              }}
-              className={`w-full flex items-center justify-between p-3 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                activeTab === 'search'
-                  ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 shadow-sm font-bold'
-                  : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <div className={`p-1.5 rounded-lg ${activeTab === 'search' ? 'bg-teal-500/30 text-teal-200' : 'bg-slate-800 text-slate-400'}`}>
-                  <Search className="w-4 h-4" />
-                </div>
-                <span>{lang === 'ar' ? 'أرشيف المرضى (MRN Search)' : 'Universal Patient Archive'}</span>
-              </div>
-              {isRTL ? <ChevronLeft className="w-4 h-4 text-slate-500" /> : <ChevronRight className="w-4 h-4 text-slate-500" />}
-            </button>
-          )}
-
-          {/* User Management & RBAC */}
-          {hasPermission('canManageUsers') && onOpenUserManagement && (
-            <button
-              onClick={() => {
-                onClose();
-                onOpenUserManagement();
-              }}
-              className={`w-full flex items-center justify-between p-3 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                activeTab === 'users'
-                  ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 shadow-sm font-bold'
-                  : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <div className={`p-1.5 rounded-lg ${activeTab === 'users' ? 'bg-teal-500/30 text-teal-200' : 'bg-slate-800 text-slate-400'}`}>
-                  <ShieldCheck className="w-4 h-4" />
-                </div>
-                <span>{lang === 'ar' ? 'إدارة المستخدمين والصلاحيات' : 'Staff RBAC & Users'}</span>
-              </div>
-              {isRTL ? <ChevronLeft className="w-4 h-4 text-slate-500" /> : <ChevronRight className="w-4 h-4 text-slate-500" />}
-            </button>
-          )}
-
-          {/* 6. Settings */}
           <button
-            onClick={() => {
-              onClose();
-              onOpenSettings();
-            }}
-            className={`w-full flex items-center justify-between p-3 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-              activeTab === 'settings'
-                ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 shadow-sm font-bold'
-                : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
-            }`}
+            onClick={toggleLanguage}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-800/80 hover:bg-teal-950/60 border border-slate-700 hover:border-teal-500/60 text-slate-300 hover:text-teal-300 text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer"
+            title={lang === 'ar' ? 'التحويل للإنجليزية (English)' : 'Switch to Arabic (العربية)'}
           >
-            <div className="flex items-center gap-3">
-              <div className={`p-1.5 rounded-lg ${activeTab === 'settings' ? 'bg-teal-500/30 text-teal-200' : 'bg-slate-800 text-slate-400'}`}>
-                <Sliders className="w-4 h-4" />
-              </div>
-              <span>{lang === 'ar' ? 'إعدادات وتخصيص النظام' : t('settings')}</span>
-            </div>
-            {isRTL ? <ChevronLeft className="w-4 h-4 text-slate-500" /> : <ChevronRight className="w-4 h-4 text-slate-500" />}
+            <Languages className="w-3.5 h-3.5 text-teal-400" />
+            <span className="font-mono text-[11px]">{lang === 'ar' ? 'EN' : 'عربي'}</span>
           </button>
         </div>
 
-        {/* Sidebar Footer: Unit Status & Standards */}
-        <div className="p-3.5 bg-[#060a14] border-t border-slate-800/80 space-y-2 text-xs">
-          {/* Quick Stats Pill */}
-          <div className="grid grid-cols-2 gap-2 text-center">
-            <div className="bg-[#0b1325] border border-slate-800 rounded-lg p-2">
-              <div className="text-[10px] text-slate-400">{lang === 'ar' ? 'الأسرة المشغولة' : 'Occupancy'}</div>
-              <div dir="ltr" className="text-xs font-bold text-teal-400 font-mono mt-0.5">
-                {occupiedBedsCount} / 6
-              </div>
-            </div>
-
-            <div className="bg-[#0b1325] border border-red-900/30 rounded-lg p-2">
-              <div className="text-[10px] text-red-400">{lang === 'ar' ? 'حالات حرجة STAT' : 'Critical STAT'}</div>
-              <div className="text-xs font-bold text-red-300 font-mono mt-0.5">
-                {criticalCount}
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1 font-mono">
-            <span>CBAHI • JCI • HIPAA</span>
-            <span className="text-teal-500/80">{lang === 'ar' ? 'منظومة سولي الطبية' : 'Soli Medical MICU'}</span>
-          </div>
-        </div>
+        {/* Desktop Navigation Body */}
+        <SidebarNavContent />
       </aside>
     </>
   );

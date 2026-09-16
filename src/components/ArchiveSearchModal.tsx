@@ -74,8 +74,8 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
   });
 
   return (
-    <div className="w-full h-full animate-in fade-in duration-300">
-      <div className="w-full max-w-4xl mx-auto bg-[#0c1426] border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden mt-4">
+    <div className="w-full space-y-4 animate-in fade-in duration-300" dir={isRTL ? 'rtl' : 'ltr'}>
+      <div className="w-full max-w-6xl mx-auto bg-[#0c1426] border border-slate-700/80 rounded-2xl shadow-xl overflow-hidden">
         {/* Header */}
         <div className="px-5 py-4 bg-[#090f1d] border-b border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -173,9 +173,7 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-bold text-white text-sm">
-                        {lang === 'ar' 
-                          ? `${patient.fullNameAr} (${patient.fullNameEn})` 
-                          : `${patient.fullNameEn || patient.fullNameAr}`}
+                        {patient.fullNameAr || patient.fullNameEn}
                       </span>
                       <span className="font-mono text-xs text-teal-400 font-semibold px-2 py-0.5 rounded bg-teal-950/60 border border-teal-800/60">
                         #{patient.mrn}

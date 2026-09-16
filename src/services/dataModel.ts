@@ -6,6 +6,7 @@
  */
 
 import { db } from '../db/icuSyncDb.ts';
+import { toEnglishDigits } from './numberUtils.ts';
 import {
   syncBedToCloud,
   syncPatientToCloud,
@@ -16,6 +17,7 @@ import {
 import {
   BedNumber,
   BedStatus,
+  BedRecord,
   PatientDossier,
   TelemetryVitals,
   VentilatorParameters,
@@ -174,8 +176,8 @@ export async function admitPatient(input: DirectAdmissionInput): Promise<{ patie
 
     const newPatient: PatientDossier = {
       id: patientId,
-      mrn: input.mrn,
-      nationalId: input.nationalId,
+      mrn: toEnglishDigits(input.mrn),
+      nationalId: input.nationalId ? toEnglishDigits(input.nationalId) : undefined,
       fullNameEn: input.fullNameEn,
       fullNameAr: input.fullNameAr,
       age: input.age,
@@ -853,4 +855,30 @@ export async function getBedDetails(bedNumber: BedNumber) {
     latestSbar: sbarHandovers[0] || null,
     clinicalNotes,
   };
+}
+
+/**
+ * Helper to resolve the active patient belonging to a bed safely.
+ */
+export function getPatientForBed(
+  bed: BedRecord | undefined | null,
+  patients: PatientDossier[] | undefined | null
+): PatientDossier | null {
+  if (!bed || !patients || patients.length === 0) return null;
+
+  // 1. Direct match by bed's currentPatientId
+  if (bed.currentPatientId) {
+    const directMatch = patients.find(
+      p => p.id === bed.currentPatientId && p.patientStatus === 'ACTIVE_ICU'
+    );
+    if (directMatch) return directMatch;
+  }
+
+  // 2. Secondary match by patient's currentBedId === bed.bedNumber
+  const bedMatch = patients.find(
+    p => p.currentBedId === bed.bedNumber && p.patientStatus === 'ACTIVE_ICU'
+  );
+  if (bedMatch) return bedMatch;
+
+  return null;
 }

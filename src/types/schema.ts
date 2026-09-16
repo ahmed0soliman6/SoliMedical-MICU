@@ -212,12 +212,16 @@ export enum NoteType {
 
 export enum VentilatorMode {
   PRVC_AC = 'PRVC/AC',
+  PRVC = 'PRVC/AC',
   SIMV_PC = 'SIMV-PC',
   SIMV_VC = 'SIMV-VC',
   NIV_PSV = 'NIV PSV',
+  PSV_CPAP = 'CPAP/PS',
   CPAP_PS = 'CPAP/PS',
+  BIPAP = 'BiPAP',
   T_PIECE = 'T-Piece Trial',
   HIGH_FLOW_NASAL = 'HFNC',
+  HIGH_FLOW_NC = 'HFNC',
   ROOM_AIR = 'Room Air',
 }
 
@@ -241,6 +245,7 @@ export enum PumpStatus {
   RUNNING = 'RUNNING',
   TITRATING = 'TITRATING',
   STANDBY = 'STANDBY',
+  PAUSED = 'STANDBY',
   STOPPED = 'STOPPED',
 }
 
@@ -299,6 +304,7 @@ export interface GCSBreakdown {
 export interface TelemetryVitals {
   id: string;
   bedId: BedNumber;
+  bedNumber?: BedNumber | string;
   patientId: string;
   timestamp: string; // ISO 8601 UTC
   heartRateBpm: number;
@@ -308,6 +314,7 @@ export interface TelemetryVitals {
   meanArterialPressureMmHg: number; // MAP (Calculated or direct Art-Line)
   isArterialLine: boolean;
   spo2Percent: number;
+  oxygenSaturationPercent?: number; // Alias for spo2Percent
   fio2SuppliedPercent: number;
   respiratoryRateCpm: number;
   coreTemperatureCelsius: number;
@@ -329,6 +336,7 @@ export interface TelemetryVitals {
 export interface VentilatorParameters {
   id: string;
   bedId: BedNumber;
+  bedNumber?: BedNumber | string;
   patientId: string;
   timestamp: string;
   deviceModel: string; // e.g. Draeger Evita V800
@@ -336,6 +344,7 @@ export interface VentilatorParameters {
   fio2Percent: number;
   peepCmH2O: number;
   tidalVolumeMl: number;
+  setTidalVolumeMl?: number; // Alias for tidalVolumeMl
   peakInspiratoryPressureCmH2O: number; // Ppeak
   plateauPressureCmH2O: number; // Pplat
   drivingPressureCmH2O: number; // Driving Pressure = Pplat - PEEP
@@ -347,6 +356,7 @@ export interface VentilatorParameters {
   weaningTrialType?: 'SBT_30MIN' | 'CPAP_PS_TRIAL' | 'T_PIECE';
   circuitLeakPercent: number;
   recordedByStaffName: string;
+  isActive?: boolean;
 }
 
 export interface InfusionPumpLine {

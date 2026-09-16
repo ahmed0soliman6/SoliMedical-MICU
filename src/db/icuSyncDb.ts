@@ -2,6 +2,7 @@ import Dexie, { type Table } from 'dexie';
 import { 
   BedRecord, 
   BedStatus,
+  BedNumber,
   PatientDossier, 
   TelemetryVitals, 
   VentilatorParameters, 
@@ -365,39 +366,55 @@ export async function initializeDatabaseSeed(): Promise<void> {
   // Reconcile and synchronize bed occupancy state with active patients in IndexedDB
   const currentBeds = await db.beds.toArray();
   const allPatients = await db.patients.toArray();
+  const activePatients = allPatients.filter(p => p.patientStatus === 'ACTIVE_ICU');
+
+  const assignedPatientIds = new Set<string>();
+
   for (const b of currentBeds) {
     let modified = false;
-    if (b.currentPatientId) {
-      const activePat = allPatients.find(p => p.id === b.currentPatientId);
-      if (!activePat || activePat.patientStatus !== 'ACTIVE_ICU') {
-        const alternatePat = allPatients.find(p => p.currentBedId === b.bedNumber && p.patientStatus === 'ACTIVE_ICU');
-        if (alternatePat) {
-          b.currentPatientId = alternatePat.id;
-          b.activePatientId = alternatePat.id;
-          b.status = BedStatus.OCCUPIED;
-        } else {
-          b.currentPatientId = null;
-          b.activePatientId = null;
-          b.status = BedStatus.VACANT;
-        }
+
+    // 1. Find active patient for this bed
+    let targetPatient: PatientDossier | undefined;
+
+    // Check if bed's currentPatientId matches an active unassigned patient
+    if (b.currentPatientId && !assignedPatientIds.has(b.currentPatientId)) {
+      const p = activePatients.find(pt => pt.id === b.currentPatientId);
+      if (p) targetPatient = p;
+    }
+
+    // Secondary fallback: check patient by currentBedId if not yet claimed
+    if (!targetPatient) {
+      const p = activePatients.find(pt => pt.currentBedId === b.bedNumber && !assignedPatientIds.has(pt.id));
+      if (p) targetPatient = p;
+    }
+
+    if (targetPatient) {
+      assignedPatientIds.add(targetPatient.id);
+
+      if (b.currentPatientId !== targetPatient.id) {
+        b.currentPatientId = targetPatient.id;
+        b.activePatientId = targetPatient.id;
         modified = true;
-      } else {
-        if (b.status !== BedStatus.OCCUPIED && b.status !== BedStatus.ISOLATION) {
-          b.status = BedStatus.OCCUPIED;
-          modified = true;
-        }
       }
-    } else if (b.status === BedStatus.OCCUPIED) {
-      const activePat = allPatients.find(p => p.currentBedId === b.bedNumber && p.patientStatus === 'ACTIVE_ICU');
-      if (activePat) {
-        b.currentPatientId = activePat.id;
-        b.activePatientId = activePat.id;
-      } else {
-        b.status = BedStatus.VACANT;
+      if (b.status !== BedStatus.OCCUPIED && b.status !== BedStatus.ISOLATION) {
+        b.status = BedStatus.OCCUPIED;
+        modified = true;
+      }
+      if (targetPatient.currentBedId !== b.bedNumber) {
+        targetPatient.currentBedId = b.bedNumber as BedNumber;
+        await db.patients.put(targetPatient);
+      }
+    } else {
+      // Bed is vacant (or unavailable/isolation without patient)
+      if (b.currentPatientId !== null) {
         b.currentPatientId = null;
         b.activePatientId = null;
+        modified = true;
       }
-      modified = true;
+      if (b.status === BedStatus.OCCUPIED) {
+        b.status = BedStatus.VACANT;
+        modified = true;
+      }
     }
 
     if (modified) {

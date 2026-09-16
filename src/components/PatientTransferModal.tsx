@@ -17,19 +17,25 @@ import { useTranslation } from '../services/i18n.ts';
 interface PatientTransferModalProps {
   isOpen: boolean;
   onClose: () => void;
-  sourceBed: BedRecord;
+  sourceBed?: BedRecord;
+  currentBed?: BedRecord;
   patient: PatientDossier;
-  availableBeds: BedRecord[];
-  onSuccess: () => void;
+  availableBeds?: BedRecord[];
+  allBeds?: BedRecord[];
+  onSuccess?: () => void;
+  onTransferSuccess?: () => void;
 }
 
 export const PatientTransferModal: React.FC<PatientTransferModalProps> = ({
   isOpen,
   onClose,
   sourceBed,
+  currentBed,
   patient,
   availableBeds,
+  allBeds,
   onSuccess,
+  onTransferSuccess,
 }) => {
   const { lang, isRTL } = useTranslation();
   const { currentUser } = useAuth();
@@ -40,11 +46,14 @@ export const PatientTransferModal: React.FC<PatientTransferModalProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [confirmStep, setConfirmStep] = useState(false);
 
-  if (!isOpen) return null;
+  const effectiveSourceBed = sourceBed || currentBed;
+  const rawBedsList = availableBeds || allBeds || [];
+
+  if (!isOpen || !effectiveSourceBed || !patient) return null;
 
   // Filter only vacant beds (exclude source bed)
-  const selectableBeds = (availableBeds || []).filter(
-    b => b && b.bedNumber !== sourceBed?.bedNumber && (b.status === 'VACANT' || !b.currentPatientId)
+  const selectableBeds = rawBedsList.filter(
+    b => b && b.bedNumber !== effectiveSourceBed.bedNumber && (b.status === 'VACANT' || !b.currentPatientId)
   );
 
   const handleStartConfirmation = (e: React.FormEvent) => {
@@ -78,11 +87,11 @@ export const PatientTransferModal: React.FC<PatientTransferModalProps> = ({
 
       const doctorId = currentUser?.badgeId || currentUser?.uid || 'STAFF-AUTO';
       const doctorName = currentUser?.nameAr || currentUser?.nameEn || 'مناوب العناية المركزة';
-      const unitId = sourceBed.unitId || 'MICU-MAIN';
+      const unitId = effectiveSourceBed.unitId || 'MICU-MAIN';
 
       await executeTransfer(
         patient.id,
-        sourceBed.bedNumber,
+        effectiveSourceBed.bedNumber,
         targetBedId,
         doctorId,
         unitId,
@@ -90,7 +99,7 @@ export const PatientTransferModal: React.FC<PatientTransferModalProps> = ({
         doctorName
       );
 
-      onSuccess();
+      (onSuccess || onTransferSuccess)?.();
       onClose();
     } catch (err: any) {
       console.error('Transfer failed:', err);
@@ -143,7 +152,7 @@ export const PatientTransferModal: React.FC<PatientTransferModalProps> = ({
               </div>
               <div>
                 <div className="text-sm font-bold text-white">
-                  {lang === 'ar' ? (patient.fullNameAr || patient.fullNameEn) : (patient.fullNameEn || patient.fullNameAr)}
+                  {patient.fullNameAr || patient.fullNameEn}
                 </div>
                 <div className="text-[11px] text-slate-400 font-mono">
                   MRN: #{patient.mrn} | ID: {patient.id.slice(0, 10)}...
@@ -156,7 +165,7 @@ export const PatientTransferModal: React.FC<PatientTransferModalProps> = ({
                 {lang === 'ar' ? 'السرير الحالي' : 'Current Bed'}
               </div>
               <div className="text-sm font-bold text-teal-400 font-mono">
-                {lang === 'ar' ? `سرير ${sourceBed.bedNumber}` : `Bed ${sourceBed.bedNumber}`}
+                {lang === 'ar' ? `سرير ${effectiveSourceBed.bedNumber}` : `Bed ${effectiveSourceBed.bedNumber}`}
               </div>
             </div>
           </div>
@@ -253,8 +262,8 @@ export const PatientTransferModal: React.FC<PatientTransferModalProps> = ({
                 </div>
                 <p>
                   {lang === 'ar' 
-                    ? `هل أنت متأكد من نقل المريض "${patient.fullNameAr || patient.fullNameEn}" من السرير (${sourceBed.bedNumber}) إلى السرير (${targetBedId})؟`
-                    : `Are you sure you want to transfer "${patient.fullNameEn || patient.fullNameAr}" from Bed ${sourceBed.bedNumber} to Bed ${targetBedId}?`}
+                    ? `هل أنت متأكد من نقل المريض "${patient.fullNameAr || patient.fullNameEn}" من السرير (${effectiveSourceBed.bedNumber}) إلى السرير (${targetBedId})؟`
+                    : `Are you sure you want to transfer "${patient.fullNameAr || patient.fullNameEn}" from Bed ${effectiveSourceBed.bedNumber} to Bed ${targetBedId}?`}
                 </p>
                 <div className="p-2 rounded bg-slate-950/60 font-mono text-[11px] text-slate-300">
                   <span className="text-slate-400">{lang === 'ar' ? 'السبب: ' : 'Reason: '}</span>

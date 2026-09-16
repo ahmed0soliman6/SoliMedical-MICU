@@ -9,7 +9,7 @@ import {
   Lock,
   Check
 } from 'lucide-react';
-import { BedRecord, BedStatus, BedIsolationInfo } from '../types/schema.ts';
+import { BedRecord, BedStatus, BedIsolationInfo, PatientDossier } from '../types/schema.ts';
 import { db } from '../db/icuSyncDb.ts';
 import { doc, updateDoc } from 'firebase/firestore';
 import { firestore } from '../services/firebase.ts';
@@ -19,8 +19,10 @@ import { useTranslation } from '../services/i18n.ts';
 interface BedIsolationModalProps {
   isOpen: boolean;
   onClose: () => void;
-  bed: BedRecord;
-  onSuccess: () => void;
+  bed?: BedRecord;
+  patient?: PatientDossier | null;
+  onSuccess?: () => void;
+  onUpdated?: () => void;
 }
 
 const PRECAUTION_OPTIONS = [
@@ -36,28 +38,30 @@ export const BedIsolationModal: React.FC<BedIsolationModalProps> = ({
   isOpen,
   onClose,
   bed,
+  patient,
   onSuccess,
+  onUpdated,
 }) => {
   const { lang, isRTL } = useTranslation();
 
-  const [selectedStatus, setSelectedStatus] = useState<BedStatus>(bed.status);
+  const [selectedStatus, setSelectedStatus] = useState<BedStatus>(bed?.status || BedStatus.VACANT);
   const [isIsolated, setIsIsolated] = useState<boolean>(
-    bed.status === BedStatus.ISOLATION || bed.isolation?.isIsolated || false
+    bed ? (bed.status === BedStatus.ISOLATION || bed.isolation?.isIsolated || false) : false
   );
-  const [isolationType, setIsolationType] = useState<string>(bed.isolation?.type || 'Airborne');
-  const [reason, setReason] = useState<string>(bed.isolation?.reason || '');
+  const [isolationType, setIsolationType] = useState<string>(bed?.isolation?.type || 'Airborne');
+  const [reason, setReason] = useState<string>(bed?.isolation?.reason || '');
   const [startDate, setStartDate] = useState<string>(
-    bed.isolation?.startDate || new Date().toISOString().split('T')[0]
+    bed?.isolation?.startDate || new Date().toISOString().split('T')[0]
   );
-  const [endDate, setEndDate] = useState<string>(bed.isolation?.endDate || '');
+  const [endDate, setEndDate] = useState<string>(bed?.isolation?.endDate || '');
   const [precautions, setPrecautions] = useState<string[]>(
-    bed.isolation?.precautions || ['n95', 'gloves', 'gown']
+    bed?.isolation?.precautions || ['n95', 'gloves', 'gown']
   );
-  const [notes, setNotes] = useState<string>(bed.isolation?.notes || '');
+  const [notes, setNotes] = useState<string>(bed?.isolation?.notes || '');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  if (!isOpen) return null;
+  if (!isOpen || !bed) return null;
 
   const togglePrecaution = (id: string) => {
     setPrecautions(prev => 
@@ -106,7 +110,7 @@ export const BedIsolationModal: React.FC<BedIsolationModalProps> = ({
         console.warn('Firestore bed status update (offline cache will sync):', cloudErr);
       }
 
-      onSuccess();
+      (onSuccess || onUpdated)?.();
       onClose();
     } catch (err: any) {
       console.error('Failed to update bed isolation status:', err);
