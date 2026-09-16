@@ -17,9 +17,10 @@ import {
   testFirestoreConnection,
   syncAdminAccountToFirebaseConsole,
   syncUserToFirebaseConsole,
-  getInitialStaffUsers
+  firestore
 } from './firebase.ts';
 import { signInWithPopup, signOut as firebaseSignOut, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, User as FirebaseUser } from 'firebase/auth';
+import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../db/icuSyncDb.ts';
 
 interface AuthContextType {
@@ -80,18 +81,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const localUsers = await db.users.toArray();
       if (localUsers.length > 0) {
-        setAllUsers(localUsers);
-      } else {
-        const initialStaff = getInitialStaffUsers();
-        await db.users.bulkPut(initialStaff);
-        setAllUsers(initialStaff);
+        // Strict deduplication by uid
+        const uniqueLocal: IcuUser[] = [];
+        const seenLocal = new Set<string>();
+        for (const u of localUsers) {
+          if (u && u.uid && !seenLocal.has(u.uid)) {
+            seenLocal.add(u.uid);
+            uniqueLocal.push(u);
+          }
+        }
+        setAllUsers(uniqueLocal);
       }
       
       setNeedsInitialAdminSetup(false);
     } catch (e) {
       console.warn('Local auth restore:', e);
     } finally {
-      // Unblock UI rendering instantly
       setIsLoading(false);
     }
 
@@ -101,11 +106,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       fetchAllUsers().catch(() => [])
     ]).then(([_, remoteUsers]) => {
       if (remoteUsers && remoteUsers.length > 0) {
-        setAllUsers(remoteUsers);
-        const adminUser = remoteUsers.find(u => u.role === StaffRole.ADMIN || u.isSuperAdmin);
+        // Strict deduplication by uid
+        const uniqueRemote: IcuUser[] = [];
+        const seenRemote = new Set<string>();
+        for (const u of remoteUsers) {
+          if (u && u.uid && !seenRemote.has(u.uid)) {
+            seenRemote.add(u.uid);
+            uniqueRemote.push(u);
+          }
+        }
+        setAllUsers(uniqueRemote);
+        const adminUser = uniqueRemote.find(u => u.role === StaffRole.ADMIN || u.isSuperAdmin);
         if (adminUser) {
           syncAdminAccountToFirebaseConsole(adminUser).catch(() => {});
         }
+        setNeedsInitialAdminSetup(false);
+      } else {
+        // If there are absolutely no users, trigger initial admin setup
+        setNeedsInitialAdminSetup(true);
       }
     }).catch(err => {
       console.warn('Background auth sync notice:', err);
@@ -118,7 +136,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Firebase Auth state listener
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       if (fbUser && fbUser.email) {
-        // Find matching IcuUser
         const existingUser = await db.users.where('email').equals(fbUser.email).first();
         if (existingUser) {
           setCurrentUser(existingUser);
@@ -127,7 +144,55 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     });
 
-    return () => unsubscribe();
+    // Real-Time Cloud Firestore user subscription (Absolute Source of Truth)
+    const usersCol = collection(firestore, 'users');
+    const unsubscribeUsers = onSnapshot(usersCol, async (snapshot) => {
+      const remoteUsers: IcuUser[] = [];
+      snapshot.forEach((docSnap) => {
+        remoteUsers.push(docSnap.data() as IcuUser);
+      });
+      
+      // Strict deduplication by uid to guarantee key uniqueness
+      const uniqueUsers: IcuUser[] = [];
+      const seen = new Set<string>();
+      for (const u of remoteUsers) {
+        if (u && u.uid && !seen.has(u.uid)) {
+          seen.add(u.uid);
+          uniqueUsers.push(u);
+        }
+      }
+
+      if (uniqueUsers.length > 0) {
+        setAllUsers(uniqueUsers);
+        await db.users.clear();
+        await db.users.bulkPut(uniqueUsers);
+
+        // Also check if current logged in user's permissions or active status has changed in Firestore!
+        const savedUserStr = localStorage.getItem('soli_icu_active_user');
+        if (savedUserStr) {
+          try {
+            const activeUser = JSON.parse(savedUserStr) as IcuUser;
+            const updatedActive = uniqueUsers.find(u => u.uid === activeUser.uid);
+            if (updatedActive) {
+              setCurrentUser(updatedActive);
+              localStorage.setItem('soli_icu_active_user', JSON.stringify(updatedActive));
+            }
+          } catch (e) {
+            console.warn('Error syncing active user with firestore snapshot:', e);
+          }
+        }
+      } else {
+        setAllUsers([]);
+        await db.users.clear();
+      }
+    }, (err) => {
+      console.warn('Real-time users subscription warning:', err);
+    });
+
+    return () => {
+      unsubscribe();
+      unsubscribeUsers();
+    };
   }, [checkInitialSetup]);
 
   const refreshUsers = useCallback(async () => {

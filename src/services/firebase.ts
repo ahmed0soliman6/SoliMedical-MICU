@@ -708,9 +708,69 @@ export function getInitialStaffUsers(): IcuUser[] {
 }
 
 /**
+ * Run a database sanitation to delete any duplicate document IDs and mock/dummy users
+ */
+export async function sanitizeFirestoreUsers() {
+  try {
+    const snap = await getDocs(collection(firestore, 'users'));
+    const seenUids = new Map<string, { docId: string; data: IcuUser }>();
+    const mockUids = new Set([
+      'usr_admin_01',
+      'usr_consultant_01',
+      'usr_specialist_01',
+      'usr_resident_01',
+      'usr_lead_rn_01',
+      'usr_bedside_rn_01',
+      'usr_pharmacist_01',
+      'usr_rt_01',
+      'usr_auditor_01'
+    ]);
+
+    for (const docSnap of snap.docs) {
+      const u = docSnap.data() as IcuUser;
+      const docId = docSnap.id;
+      
+      // 1. If it's a mock user, delete it completely from Firestore
+      if (mockUids.has(docId) || (u && u.uid && mockUids.has(u.uid))) {
+        await deleteDoc(doc(firestore, 'users', docId));
+        continue;
+      }
+
+      if (!u || !u.uid) {
+        // Corrupted record, delete it
+        await deleteDoc(doc(firestore, 'users', docId));
+        continue;
+      }
+
+      // 2. Identify duplicates
+      const uid = u.uid.trim();
+      if (!seenUids.has(uid)) {
+        seenUids.set(uid, { docId, data: u });
+      } else {
+        const existing = seenUids.get(uid)!;
+        // Keep the document whose ID matches the uid
+        if (docId === uid) {
+          // Delete the other document which is a duplicate (likely keyed by email)
+          await deleteDoc(doc(firestore, 'users', existing.docId));
+          seenUids.set(uid, { docId, data: u });
+        } else {
+          // Delete this document as it is the duplicate
+          await deleteDoc(doc(firestore, 'users', docId));
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Firestore sanitation failed:', err);
+  }
+}
+
+/**
  * Fetch all users from cloud and sync with local DB, automatically purging duplicate records
  */
 export async function fetchAllUsers(): Promise<IcuUser[]> {
+  // Run Firestore sanitation first to clean up duplicate docs and mock/dummy accounts in the cloud
+  await sanitizeFirestoreUsers();
+
   let rawList: IcuUser[] = [];
   try {
     const snap = await getDocs(collection(firestore, 'users'));
@@ -721,49 +781,27 @@ export async function fetchAllUsers(): Promise<IcuUser[]> {
     handleFirestoreError(err, OperationType.LIST, 'users');
   }
 
-  const localList = await db.users.toArray();
-  for (const u of localList) {
-    if (!rawList.some(r => r.uid === u.uid)) {
-      rawList.push(u);
-    }
-  }
-
-  // If no users exist anywhere, seed default clinical staff accounts
-  if (rawList.length === 0) {
-    const initialStaff = getInitialStaffUsers();
-    await db.users.bulkPut(initialStaff);
-    return initialStaff;
-  }
-
-  // Deduplicate by email / badgeId
+  // Deduplicate strictly by uid to ensure absolute key uniqueness and prevent React map key collision errors
   const uniqueUsersMap = new Map<string, IcuUser>();
-  const duplicatesToDelete: string[] = [];
-
   for (const user of rawList) {
-    const key = (user.email || user.badgeId || user.uid).toLowerCase().trim();
-    if (!uniqueUsersMap.has(key)) {
-      uniqueUsersMap.set(key, user);
+    if (!user || !user.uid) continue;
+    const uid = user.uid.trim();
+    if (!uniqueUsersMap.has(uid)) {
+      uniqueUsersMap.set(uid, user);
     } else {
-      const existing = uniqueUsersMap.get(key)!;
-      // Keep the one with newer lastLoginAt or name updated or superAdmin flag
+      const existing = uniqueUsersMap.get(uid)!;
       const isUserNewer = (user.lastLoginAt || user.createdAt || '') > (existing.lastLoginAt || existing.createdAt || '');
       if (isUserNewer || (user.isSuperAdmin && !existing.isSuperAdmin)) {
-        duplicatesToDelete.push(existing.uid);
-        uniqueUsersMap.set(key, user);
-      } else {
-        duplicatesToDelete.push(user.uid);
+        uniqueUsersMap.set(uid, user);
       }
     }
   }
 
-  // Purge duplicate records from local DB and Firestore
-  for (const dupUid of duplicatesToDelete) {
-    deleteUserAccount(dupUid).catch(err => console.warn('Purge duplicate user warning:', err));
-  }
-
   const finalUsers = Array.from(uniqueUsersMap.values());
   await db.users.clear();
-  await db.users.bulkPut(finalUsers);
+  if (finalUsers.length > 0) {
+    await db.users.bulkPut(finalUsers);
+  }
 
   return finalUsers;
 }

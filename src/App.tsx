@@ -407,20 +407,9 @@ export default function App() {
                         key={bed.bedNumber}
                         bed={bed}
                         patient={patient}
-                        latestVitals={vitals}
-                        ventilator={vent}
-                        pumps={pList}
                         onSelectBed={(bNum) => {
                           setSelectedBedNumber(bNum);
                           setActiveTab('beds');
-                        }}
-                        onOpenQuickVitals={(bNum, pId) => {
-                          setVitalsTarget({
-                            bedNumber: bNum,
-                            patientId: pId,
-                            patientName: patient?.fullNameAr || '',
-                          });
-                          setIsQuickVitalsOpen(true);
                         }}
                         onAdmitToBed={(bNum) => {
                           setSelectedBedNumber(bNum);

@@ -22,7 +22,8 @@ import {
   scanLabImage, 
   ScannedLabResponse, 
   generateSampleAbgImage, 
-  generateSampleCbcImage 
+  generateSampleCbcImage,
+  generateSampleChemistryImage
 } from '../services/aiLabService.ts';
 
 interface AiLabScannerModalProps {
@@ -31,7 +32,7 @@ interface AiLabScannerModalProps {
   patientId: string;
   patientName?: string;
   bedNumber: string;
-  targetPreset?: 'ABG' | 'CBC' | 'ALL';
+  targetPreset?: 'ABG' | 'CBC' | 'CHEMISTRY' | 'ALL';
   onApplyToForm?: (fields: Record<string, string>, timestamp?: string) => void;
   onDirectSave?: (data: {
     fields: Record<string, string>;
@@ -63,6 +64,11 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
 
   // Mode: 'camera' | 'upload'
   const [activeInputMode, setActiveInputMode] = useState<'camera' | 'upload'>('upload');
+  const [selectedPresetType, setSelectedPresetType] = useState<'ABG' | 'CBC' | 'CHEMISTRY' | 'ALL'>(targetPreset || 'ALL');
+
+  useEffect(() => {
+    setSelectedPresetType(targetPreset || 'ALL');
+  }, [targetPreset]);
   
   // Camera state
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -180,24 +186,34 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
   };
 
   const loadSampleAbg = () => {
+    setSelectedPresetType('ABG');
     const sample = generateSampleAbgImage();
     setSelectedImage(sample);
-    processImageWithAI(sample, 'image/svg+xml');
+    processImageWithAI(sample, 'image/svg+xml', 'ABG');
   };
 
   const loadSampleCbc = () => {
+    setSelectedPresetType('CBC');
     const sample = generateSampleCbcImage();
     setSelectedImage(sample);
-    processImageWithAI(sample, 'image/svg+xml');
+    processImageWithAI(sample, 'image/svg+xml', 'CBC');
   };
 
-  const processImageWithAI = async (base64Data: string, mimeType: string) => {
+  const loadSampleChemistry = () => {
+    setSelectedPresetType('CHEMISTRY');
+    const sample = generateSampleChemistryImage();
+    setSelectedImage(sample);
+    processImageWithAI(sample, 'image/svg+xml', 'CHEMISTRY');
+  };
+
+  const processImageWithAI = async (base64Data: string, mimeType: string, overridePreset?: string) => {
     setIsAnalyzing(true);
     setAnalysisError(null);
     setScannedResult(null);
 
     try {
-      const result = await scanLabImage(base64Data, mimeType, targetPreset);
+      const presetToUse = overridePreset || selectedPresetType || 'ALL';
+      const result = await scanLabImage(base64Data, mimeType, presetToUse);
       setScannedResult(result);
       setEditableFields(result.statFields || {});
       if (result.sampleDate) {
@@ -303,62 +319,124 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
           
           {/* TOP ACTION BAR: Mode Toggles & Demo Samples */}
           {!scannedResult && !isAnalyzing && (
-            <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-slate-900/60 border border-slate-800/80 rounded-xl text-xs">
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={startCamera}
-                  className={`px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition-all ${
-                    isCameraActive
-                      ? 'bg-fuchsia-600 text-white shadow-md'
-                      : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
-                  }`}
-                >
-                  <Camera className="w-4 h-4 text-fuchsia-400" />
-                  <span>{lang === 'ar' ? 'تشغيل الكاميرا والتصوير' : 'Live Camera Capture'}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    stopCamera();
-                    fileInputRef.current?.click();
-                  }}
-                  className="px-3 py-1.5 rounded-lg font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 flex items-center gap-1.5 transition-all"
-                >
-                  <Upload className="w-4 h-4 text-cyan-400" />
-                  <span>{lang === 'ar' ? 'رفع صورة من الجهاز' : 'Upload Lab Image'}</span>
-                </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                />
-              </div>
-
-              {/* Instant Test Presets */}
-              <div className="flex items-center gap-2">
-                <span className="text-slate-400 font-medium">
-                  {lang === 'ar' ? 'عينة تجريبية فورية:' : 'Live Test Sample:'}
+            <div className="space-y-3">
+              {/* LAB TYPE PRESET SELECTOR */}
+              <div className="flex flex-wrap items-center gap-1.5 p-2 bg-slate-900/80 border border-slate-800 rounded-xl text-xs">
+                <span className="text-slate-400 font-bold px-2">
+                  {lang === 'ar' ? 'نوع التحليل المستهدف:' : 'Target Lab Type:'}
                 </span>
                 <button
                   type="button"
-                  onClick={loadSampleAbg}
-                  className="px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-mono text-[11px] font-bold flex items-center gap-1 transition-all"
+                  onClick={() => setSelectedPresetType('ABG')}
+                  className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                    selectedPresetType === 'ABG'
+                      ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md'
+                      : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                  }`}
                 >
-                  <Activity className="w-3.5 h-3.5" />
-                  <span>{lang === 'ar' ? 'شريط ABG (غازات دم)' : 'Sample ABG Strip'}</span>
+                  🫁 {lang === 'ar' ? 'غازات الدم (ABG)' : 'Arterial Blood Gas (ABG)'}
                 </button>
                 <button
                   type="button"
-                  onClick={loadSampleCbc}
-                  className="px-2.5 py-1 rounded-lg bg-teal-500/10 hover:bg-teal-500/20 text-teal-400 border border-teal-500/30 font-mono text-[11px] font-bold flex items-center gap-1 transition-all"
+                  onClick={() => setSelectedPresetType('CBC')}
+                  className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                    selectedPresetType === 'CBC'
+                      ? 'bg-gradient-to-r from-teal-600 to-cyan-600 text-white shadow-md'
+                      : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                  }`}
                 >
-                  <Layers className="w-3.5 h-3.5" />
-                  <span>{lang === 'ar' ? 'تقرير CBC (صورة دم)' : 'Sample CBC Sheet'}</span>
+                  🩸 {lang === 'ar' ? 'صورة الدم (CBC)' : 'Complete Blood Count (CBC)'}
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedPresetType('CHEMISTRY')}
+                  className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                    selectedPresetType === 'CHEMISTRY'
+                      ? 'bg-gradient-to-r from-cyan-600 to-indigo-600 text-white shadow-md'
+                      : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                  }`}
+                >
+                  🧪 {lang === 'ar' ? 'كيمياء وأملاح (Chemistry)' : 'Biochemistry & Electrolytes'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedPresetType('ALL')}
+                  className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                    selectedPresetType === 'ALL'
+                      ? 'bg-gradient-to-r from-fuchsia-600 to-indigo-600 text-white shadow-md'
+                      : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                  }`}
+                >
+                  ✨ {lang === 'ar' ? 'كشف تلقائي (شامل)' : 'Auto Detect (All)'}
+                </button>
+              </div>
+
+              {/* ACTION BUTTONS & DEMO SAMPLES */}
+              <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-slate-900/60 border border-slate-800/80 rounded-xl text-xs">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={startCamera}
+                    className={`px-3.5 py-2 rounded-xl font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                      isCameraActive
+                        ? 'bg-fuchsia-600 text-white shadow-md'
+                        : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
+                    }`}
+                  >
+                    <Camera className="w-4 h-4 text-fuchsia-400" />
+                    <span>{lang === 'ar' ? 'تشغيل الكاميرا والتصوير' : 'Live Camera Capture'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      stopCamera();
+                      fileInputRef.current?.click();
+                    }}
+                    className="px-3.5 py-2 rounded-xl font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 flex items-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    <Upload className="w-4 h-4 text-cyan-400" />
+                    <span>{lang === 'ar' ? 'رفع صورة من الجهاز' : 'Upload Lab Image'}</span>
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+                </div>
+
+                {/* Instant Test Presets */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-slate-400 font-medium text-[11px]">
+                    {lang === 'ar' ? 'عينة تجريبية:' : 'Live Test:'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={loadSampleAbg}
+                    className="px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-mono text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer"
+                  >
+                    <Activity className="w-3.5 h-3.5" />
+                    <span>{lang === 'ar' ? 'شريط ABG' : 'Sample ABG'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={loadSampleCbc}
+                    className="px-2.5 py-1 rounded-lg bg-teal-500/10 hover:bg-teal-500/20 text-teal-400 border border-teal-500/30 font-mono text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer"
+                  >
+                    <Layers className="w-3.5 h-3.5" />
+                    <span>{lang === 'ar' ? 'تقرير CBC' : 'Sample CBC'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={loadSampleChemistry}
+                    className="px-2.5 py-1 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 font-mono text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>{lang === 'ar' ? 'كيمياء ووظائف' : 'Sample Chemistry'}</span>
+                  </button>
+                </div>
               </div>
             </div>
           )}

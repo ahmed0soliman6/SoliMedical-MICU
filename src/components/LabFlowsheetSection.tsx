@@ -230,19 +230,54 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {settings.enableAiLabScanner && (
-            <button
-              type="button"
-              onClick={() => {
-                setAiPreset('ALL');
-                setIsAiScannerOpen(true);
-              }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-fuchsia-600 to-indigo-600 hover:from-fuchsia-500 hover:to-indigo-500 text-white font-bold text-xs transition-all shadow-sm active:scale-95 cursor-pointer"
-            >
-              <Camera className="w-3.5 h-3.5" />
-              <span>{lang === 'ar' ? 'تصوير وقراءة التحليل (AI Scanner)' : 'AI Lab OCR Scan'}</span>
-            </button>
+            <div className="flex items-center gap-1 bg-slate-900/80 p-1 rounded-xl border border-slate-800">
+              <button
+                type="button"
+                onClick={() => {
+                  setAiPreset('ALL');
+                  setIsAiScannerOpen(true);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-fuchsia-600 to-indigo-600 hover:from-fuchsia-500 hover:to-indigo-500 text-white font-bold text-xs transition-all shadow-sm active:scale-95 cursor-pointer"
+              >
+                <Camera className="w-3.5 h-3.5" />
+                <span>{lang === 'ar' ? 'تصوير تحليل' : 'AI Lab Scan'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setAiPreset('ABG');
+                  setIsAiScannerOpen(true);
+                }}
+                className="px-2.5 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 font-bold text-xs transition-all border border-emerald-500/30 cursor-pointer"
+              >
+                🫁 {lang === 'ar' ? 'غازات ABG' : 'ABG'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setAiPreset('CBC');
+                  setIsAiScannerOpen(true);
+                }}
+                className="px-2.5 py-1.5 rounded-lg bg-teal-500/15 hover:bg-teal-500/25 text-teal-300 font-bold text-xs transition-all border border-teal-500/30 cursor-pointer"
+              >
+                🩸 {lang === 'ar' ? 'صورة دم CBC' : 'CBC'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setAiPreset('CHEMISTRY');
+                  setIsAiScannerOpen(true);
+                }}
+                className="px-2.5 py-1.5 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 font-bold text-xs transition-all border border-cyan-500/30 cursor-pointer"
+              >
+                🧪 {lang === 'ar' ? 'كيمياء وأملاح' : 'Chemistry'}
+              </button>
+            </div>
           )}
           <button
             type="button"
@@ -253,7 +288,7 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
               setFormNotes('');
               setIsAddModalOpen(true);
             }}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs transition-colors shadow-sm"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs transition-colors shadow-sm cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>{lang === 'ar' ? 'إضافة تحليل جديد' : 'Add Lab Result'}</span>

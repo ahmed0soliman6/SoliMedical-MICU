@@ -32,7 +32,8 @@ import {
   Camera,
   Sliders,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Scan
 } from 'lucide-react';
 import { 
   BedRecord, 
@@ -103,7 +104,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
   const { t, lang, isRTL } = useTranslation();
   const { currentUser } = useAuth();
   
-  const [activeTab, setActiveTab] = useState<'all' | 'paperFlowsheet' | 'labs' | 'investigations' | 'vitals' | 'vent' | 'pumps' | 'fluids' | 'sbar' | 'notes' | 'disposition'>('paperFlowsheet');
+  const [activeTab, setActiveTab] = useState<'all' | 'paperFlowsheet' | 'labs' | 'investigations' | 'vitals' | 'vent' | 'pumps' | 'fluids' | 'sbar' | 'notes' | 'disposition'>('all');
   const [isPatientCardCollapsed, setIsPatientCardCollapsed] = useState<boolean>(true);
   const [isDispositionCardCollapsed, setIsDispositionCardCollapsed] = useState<boolean>(true);
   const [isHistoryCardCollapsed, setIsHistoryCardCollapsed] = useState<boolean>(true);
@@ -117,6 +118,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
   const [isPaperInvestigationsCardCollapsed, setIsPaperInvestigationsCardCollapsed] = useState<boolean>(true);
   const [isPaperSbarCardCollapsed, setIsPaperSbarCardCollapsed] = useState<boolean>(true);
   const [isPaperNotesCardCollapsed, setIsPaperNotesCardCollapsed] = useState<boolean>(true);
+  const [isPaperDispCardCollapsed, setIsPaperDispCardCollapsed] = useState<boolean>(true);
   
   const [vitalsHistory, setVitalsHistory] = useState<TelemetryVitals[]>([]);
   const [ventilator, setVentilator] = useState<VentilatorParameters | null>(null);
@@ -171,7 +173,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
   const [isAddLabModalOpen, setIsAddLabModalOpen] = useState(false);
   const [editingLabId, setEditingLabId] = useState<string | null>(null);
   const [isAiLabScannerOpen, setIsAiLabScannerOpen] = useState(false);
-  const [aiScannerPreset, setAiScannerPreset] = useState<'ABG' | 'CBC' | 'ALL'>('ALL');
+  const [aiScannerPreset, setAiScannerPreset] = useState<'ABG' | 'CBC' | 'CHEMISTRY' | 'ALL'>('ALL');
   const [labForm, setLabForm] = useState({
     timestamp: '',
     wbc: '', hb: '', hct: '', plt: '', diff: '', typeAnemia: '',
@@ -980,19 +982,6 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
             </div>
 
             <div className="flex items-center gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setIsCardsConfigModalOpen(true);
-                }}
-                className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold transition-all border border-slate-700 cursor-pointer"
-                title={lang === 'ar' ? 'تخصيص الخواص والبطاقات' : 'Customize Properties'}
-              >
-                <Sliders className="w-3.5 h-3.5 text-cyan-400" />
-                <span className="hidden sm:inline">{lang === 'ar' ? 'تخصيص الخواص' : 'Properties'}</span>
-              </button>
-
               <div className="p-1.5 rounded-xl bg-teal-500/10 text-teal-400 border border-teal-500/30 flex items-center justify-center">
                 <ChevronDown className="w-5 h-5 text-teal-400" />
               </div>
@@ -1101,15 +1090,6 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
 
               {/* Bed Operational Controls & Collapse Button */}
               <div className="flex items-center gap-2 flex-shrink-0 self-end lg:self-center flex-wrap justify-end">
-                <button
-                  onClick={() => setIsCardsConfigModalOpen(true)}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-200 border border-slate-700 hover:border-cyan-500/50 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
-                  title={lang === 'ar' ? 'تخصيص وإدارة بطاقات السرير (إظهار/إخفاء/تعديل)' : 'Manage & Customize Bedside Cards'}
-                >
-                  <Sliders className="w-3.5 h-3.5 text-cyan-400" />
-                  <span>{lang === 'ar' ? 'تخصيص البطاقات' : 'Cards Layout'}</span>
-                </button>
-
                 <button
                   onClick={() => setIsTransferModalOpen(true)}
                   className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-500/40 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
@@ -1422,19 +1402,6 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                 </div>
 
                 <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setIsCardsConfigModalOpen(true);
-                    }}
-                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-all border border-slate-700 cursor-pointer"
-                    title={lang === 'ar' ? 'تخصيص الخواص' : 'Customize Properties'}
-                  >
-                    <Sliders className="w-3.5 h-3.5 text-cyan-400" />
-                    <span className="hidden sm:inline">{lang === 'ar' ? 'تخصيص الخواص' : 'Properties'}</span>
-                  </button>
-
                   {!isHistoryEditing && (
                     <button
                       type="button"
@@ -1594,19 +1561,6 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                 </div>
 
                 <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setIsCardsConfigModalOpen(true);
-                    }}
-                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-all border border-slate-700 cursor-pointer"
-                    title={lang === 'ar' ? 'تخصيص الخواص' : 'Customize Properties'}
-                  >
-                    <Sliders className="w-3.5 h-3.5 text-cyan-400" />
-                    <span className="hidden sm:inline">{lang === 'ar' ? 'تخصيص الخواص' : 'Properties'}</span>
-                  </button>
-
                   <span className="font-mono text-[11px] text-teal-400 bg-teal-950/80 px-2 py-0.5 rounded border border-teal-800 font-bold">
                     {bed.bedNumber}
                   </span>
@@ -1694,33 +1648,61 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                 </div>
               </div>
               <div className="flex items-center gap-2 flex-wrap" onClick={(e) => e.stopPropagation()}>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setIsCardsConfigModalOpen(true);
-                  }}
-                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-all border border-slate-700 cursor-pointer"
-                  title={lang === 'ar' ? 'تخصيص الخواص' : 'Customize Properties'}
-                >
-                  <Sliders className="w-3.5 h-3.5 text-cyan-400" />
-                  <span className="hidden sm:inline">{lang === 'ar' ? 'تخصيص الخواص' : 'Properties'}</span>
-                </button>
-
                 {settings.enableAiLabScanner && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setAiScannerPreset('ALL');
-                      setIsAiLabScannerOpen(true);
-                      setIsPaperLabsCardCollapsed(false);
-                    }}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-fuchsia-600 to-indigo-600 hover:from-fuchsia-500 hover:to-indigo-500 text-white text-xs font-bold transition-all shadow-md active:scale-95 flex-shrink-0 cursor-pointer"
-                  >
-                    <Camera className="w-4 h-4" />
-                    <span className="hidden sm:inline">{lang === 'ar' ? 'قراءة بالذكاء الاصطناعي' : 'AI Scan'}</span>
-                  </button>
+                  <div className="flex items-center gap-1 bg-slate-900/80 p-1 rounded-xl border border-slate-800">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setAiScannerPreset('ALL');
+                        setIsAiLabScannerOpen(true);
+                        setIsPaperLabsCardCollapsed(false);
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-fuchsia-600 to-indigo-600 hover:from-fuchsia-500 hover:to-indigo-500 text-white text-xs font-bold transition-all shadow-md active:scale-95 flex-shrink-0 cursor-pointer"
+                    >
+                      <Camera className="w-4 h-4" />
+                      <span className="hidden sm:inline">{lang === 'ar' ? 'تصوير تحليل' : 'AI Scan'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setAiScannerPreset('ABG');
+                        setIsAiLabScannerOpen(true);
+                        setIsPaperLabsCardCollapsed(false);
+                      }}
+                      className="px-2 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 text-[11px] font-bold transition-all border border-emerald-500/30 cursor-pointer"
+                    >
+                      🫁 {lang === 'ar' ? 'غازات ABG' : 'ABG'}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setAiScannerPreset('CBC');
+                        setIsAiLabScannerOpen(true);
+                        setIsPaperLabsCardCollapsed(false);
+                      }}
+                      className="px-2 py-1 rounded-lg bg-teal-500/15 hover:bg-teal-500/25 text-teal-300 text-[11px] font-bold transition-all border border-teal-500/30 cursor-pointer"
+                    >
+                      🩸 {lang === 'ar' ? 'صورة CBC' : 'CBC'}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setAiScannerPreset('CHEMISTRY');
+                        setIsAiLabScannerOpen(true);
+                        setIsPaperLabsCardCollapsed(false);
+                      }}
+                      className="px-2 py-1 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 text-[11px] font-bold transition-all border border-cyan-500/30 cursor-pointer"
+                    >
+                      🧪 {lang === 'ar' ? 'كيمياء وأملاح' : 'Chemistry'}
+                    </button>
+                  </div>
                 )}
                 <button
                   type="button"
@@ -2007,18 +1989,6 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                       <h3 className="text-sm font-bold text-white">{lang === 'ar' ? 'جهاز التنفس الصناعي' : 'Ventilator'}</h3>
                     </div>
                     <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setIsCardsConfigModalOpen(true);
-                        }}
-                        className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-all border border-slate-700 cursor-pointer"
-                        title={lang === 'ar' ? 'تخصيص الخواص' : 'Customize Properties'}
-                      >
-                        <Sliders className="w-3.5 h-3.5 text-cyan-400" />
-                      </button>
-
                       {ventilator && (
                         <span className="px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800 font-mono text-[10px] font-bold">
                           {ventilator.mode}
@@ -2103,18 +2073,6 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                       <h3 className="text-sm font-bold text-white">{lang === 'ar' ? 'مضخات ومحاليل وريدية' : 'Infusion Pumps'}</h3>
                     </div>
                     <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setIsCardsConfigModalOpen(true);
-                        }}
-                        className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-all border border-slate-700 cursor-pointer"
-                        title={lang === 'ar' ? 'تخصيص الخواص' : 'Customize Properties'}
-                      >
-                        <Sliders className="w-3.5 h-3.5 text-cyan-400" />
-                      </button>
-
                       <span className="text-[10px] font-mono text-slate-400 bg-slate-900/60 px-2 py-0.5 rounded border border-slate-800 font-bold">
                         {pumps.length} {lang === 'ar' ? 'نشط' : 'active'}
                       </span>
@@ -2224,18 +2182,6 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                       <h3 className="text-sm font-bold text-white">{lang === 'ar' ? 'ميزان السوائل 24 ساعة' : 'Fluid Balance'}</h3>
                     </div>
                     <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setIsCardsConfigModalOpen(true);
-                        }}
-                        className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-all border border-slate-700 cursor-pointer"
-                        title={lang === 'ar' ? 'تخصيص الخواص' : 'Customize Properties'}
-                      >
-                        <Sliders className="w-3.5 h-3.5 text-cyan-400" />
-                      </button>
-
                       {fluidBalance && (() => {
                         const netVal = fluidBalance.netCumulativeBalanceMl ?? (fluidBalance as any).netBalance24HMl ?? 0;
                         return (
@@ -2594,236 +2540,267 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
 
       {/* Tab 1: Vitals & Telemetry */}
       {(activeTab === 'vitals' || activeTab === 'all') && (
-        <div className="space-y-4">
-          {latestVitals && (
-            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
-              {/* MAP */}
-              <div className="bg-[#090f1d] border border-slate-800 p-3.5 rounded-2xl">
-                <div className="text-[10px] text-slate-400 uppercase font-bold">Mean Arterial Pressure (MAP)</div>
-                <div className={`text-xl sm:text-2xl font-black font-mono mt-1 ${
-                  latestVitals.meanArterialPressureMmHg < 65 ? 'text-red-400 animate-pulse' : 'text-cyan-300'
-                }`}>
-                  {latestVitals.meanArterialPressureMmHg} <span className="text-xs font-normal text-slate-400">mmHg</span>
-                </div>
-                <div className="text-[11px] text-slate-400 font-mono mt-0.5">
-                  BP: {latestVitals.systolicBpMmHg}/{latestVitals.diastolicBpMmHg}
-                </div>
-              </div>
+        <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-4 shadow-xl space-y-4">
+          <div 
+            onClick={() => setIsPaperVitalsCardCollapsed(!isPaperVitalsCardCollapsed)}
+            className="flex items-center justify-between border-b border-slate-800 pb-2.5 cursor-pointer hover:bg-slate-800/40 p-2 rounded-xl transition-all"
+          >
+            <div className="flex items-center gap-2">
+              <Activity className="w-5 h-5 text-teal-400" />
+              <h3 className="text-base font-bold text-white">
+                {lang === 'ar' ? 'العلامات الحيوية والمراقبة المستمرة (Vitals & Telemetry)' : 'Continuous Vitals & Telemetry'}
+              </h3>
+            </div>
+            <div className="p-1 rounded-lg bg-slate-800 text-slate-400">
+              {isPaperVitalsCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+            </div>
+          </div>
 
-              {/* Heart Rate */}
-              <div className="bg-[#090f1d] border border-slate-800 p-3.5 rounded-2xl">
-                <div className="text-[10px] text-slate-400 uppercase font-bold flex items-center gap-1">
-                  <Heart className="w-3 h-3 text-red-400" />
-                  <span>Heart Rate (HR)</span>
-                </div>
-                <div className="text-xl sm:text-2xl font-black font-mono mt-1 text-emerald-400">
-                  {latestVitals.heartRateBpm} <span className="text-xs font-normal text-slate-400">bpm</span>
-                </div>
-                <div className="text-[11px] text-slate-400 truncate mt-0.5">
-                  {latestVitals.heartRhythm}
-                </div>
-              </div>
+          {!isPaperVitalsCardCollapsed && (
+            <div className="space-y-4 animate-in fade-in duration-300">
+              {latestVitals && (
+                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+                  {/* MAP */}
+                  <div className="bg-[#090f1d] border border-slate-800 p-3.5 rounded-2xl">
+                    <div className="text-[10px] text-slate-400 uppercase font-bold">Mean Arterial Pressure (MAP)</div>
+                    <div className={`text-xl sm:text-2xl font-black font-mono mt-1 ${
+                      latestVitals.meanArterialPressureMmHg < 65 ? 'text-red-400 animate-pulse' : 'text-cyan-300'
+                    }`}>
+                      {latestVitals.meanArterialPressureMmHg} <span className="text-xs font-normal text-slate-400">mmHg</span>
+                    </div>
+                    <div className="text-[11px] text-slate-400 font-mono mt-0.5">
+                      BP: {latestVitals.systolicBpMmHg}/{latestVitals.diastolicBpMmHg}
+                    </div>
+                  </div>
 
-              {/* SpO2 */}
-              <div className="bg-[#090f1d] border border-slate-800 p-3.5 rounded-2xl">
-                <div className="text-[10px] text-slate-400 uppercase font-bold">SpO₂ & FiO₂</div>
-                <div className="text-xl sm:text-2xl font-black font-mono mt-1 text-teal-300">
-                  {latestVitals.spo2Percent}%
-                </div>
-                <div className="text-[11px] text-slate-400 font-mono mt-0.5">
-                  FiO₂: {latestVitals.fio2SuppliedPercent}%
-                </div>
-              </div>
+                  {/* Heart Rate */}
+                  <div className="bg-[#090f1d] border border-slate-800 p-3.5 rounded-2xl">
+                    <div className="text-[10px] text-slate-400 uppercase font-bold flex items-center gap-1">
+                      <Heart className="w-3 h-3 text-red-400" />
+                      <span>Heart Rate (HR)</span>
+                    </div>
+                    <div className="text-xl sm:text-2xl font-black font-mono mt-1 text-emerald-400">
+                      {latestVitals.heartRateBpm} <span className="text-xs font-normal text-slate-400">bpm</span>
+                    </div>
+                    <div className="text-[11px] text-slate-400 truncate mt-0.5">
+                      {latestVitals.heartRhythm}
+                    </div>
+                  </div>
 
-              {/* Core Temp */}
-              <div className="bg-[#090f1d] border border-slate-800 p-3.5 rounded-2xl">
-                <div className="text-[10px] text-slate-400 uppercase font-bold">Core Temp</div>
-                <div className="text-xl sm:text-2xl font-black font-mono mt-1 text-amber-300">
-                  {latestVitals.coreTemperatureCelsius}°C
-                </div>
-                <div className="text-[11px] text-slate-400 mt-0.5">
-                  Site: {latestVitals.temperatureSite}
-                </div>
-              </div>
+                  {/* SpO2 */}
+                  <div className="bg-[#090f1d] border border-slate-800 p-3.5 rounded-2xl">
+                    <div className="text-[10px] text-slate-400 uppercase font-bold">SpO₂ & FiO₂</div>
+                    <div className="text-xl sm:text-2xl font-black font-mono mt-1 text-teal-300">
+                      {latestVitals.spo2Percent}%
+                    </div>
+                    <div className="text-[11px] text-slate-400 font-mono mt-0.5">
+                      FiO₂: {latestVitals.fio2SuppliedPercent}%
+                    </div>
+                  </div>
 
-              {/* GCS & RASS */}
-              <div className="bg-[#090f1d] border border-slate-800 p-3.5 rounded-2xl">
-                <div className="text-[10px] text-slate-400 uppercase font-bold">GCS / RASS</div>
-                <div className="text-xl sm:text-2xl font-black font-mono mt-1 text-indigo-300">
-                  {latestVitals.gcsTotalScore}/15
-                </div>
-                <div className="text-[11px] text-slate-400 mt-0.5">
-                  RASS: {latestVitals.sedationRassScore ?? 'N/A'}
-                </div>
-              </div>
+                  {/* Core Temp */}
+                  <div className="bg-[#090f1d] border border-slate-800 p-3.5 rounded-2xl">
+                    <div className="text-[10px] text-slate-400 uppercase font-bold">Core Temp</div>
+                    <div className="text-xl sm:text-2xl font-black font-mono mt-1 text-amber-300">
+                      {latestVitals.coreTemperatureCelsius}°C
+                    </div>
+                    <div className="text-[11px] text-slate-400 mt-0.5">
+                      Site: {latestVitals.temperatureSite}
+                    </div>
+                  </div>
 
-              {/* Lactate */}
-              <div className="bg-[#090f1d] border border-slate-800 p-3.5 rounded-2xl">
-                <div className="text-[10px] text-slate-400 uppercase font-bold">Lactate & Glucose</div>
-                <div className="text-xl sm:text-2xl font-black font-mono mt-1 text-purple-300">
-                  {latestVitals.lactateMmolPerL ?? '—'} <span className="text-xs font-normal text-slate-400">mmol/L</span>
+                  {/* GCS & RASS */}
+                  <div className="bg-[#090f1d] border border-slate-800 p-3.5 rounded-2xl">
+                    <div className="text-[10px] text-slate-400 uppercase font-bold">GCS / RASS</div>
+                    <div className="text-xl sm:text-2xl font-black font-mono mt-1 text-indigo-300">
+                      {latestVitals.gcsTotalScore}/15
+                    </div>
+                    <div className="text-[11px] text-slate-400 mt-0.5">
+                      RASS: {latestVitals.sedationRassScore ?? 'N/A'}
+                    </div>
+                  </div>
+
+                  {/* Lactate */}
+                  <div className="bg-[#090f1d] border border-slate-800 p-3.5 rounded-2xl">
+                    <div className="text-[10px] text-slate-400 uppercase font-bold">Lactate & Glucose</div>
+                    <div className="text-xl sm:text-2xl font-black font-mono mt-1 text-purple-300">
+                      {latestVitals.lactateMmolPerL ?? '—'} <span className="text-xs font-normal text-slate-400">mmol/L</span>
+                    </div>
+                    <div className="text-[11px] text-slate-400 mt-0.5">
+                      RBG: {latestVitals.bloodGlucoseMgDl ?? '—'} mg/dL
+                    </div>
+                  </div>
                 </div>
-                <div className="text-[11px] text-slate-400 mt-0.5">
-                  RBG: {latestVitals.bloodGlucoseMgDl ?? '—'} mg/dL
+              )}
+
+              {/* Historical Feed Table (Flattened - No nested cards) */}
+              <div className="pt-4 border-t border-slate-800/60 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-teal-400" />
+                    <span>{lang === 'ar' ? 'سجل العلامات الحيوية التاريخية (Telemetry Trajectory)' : 'Telemetry History Trajectory'}</span>
+                  </h3>
+                  <button
+                    onClick={onOpenAddVitals}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-teal-500/20 text-teal-300 text-xs font-bold"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>{lang === 'ar' ? 'إضافة قراءة جديدة' : 'Add Reading'}</span>
+                  </button>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className={`w-full text-xs ${isRTL ? 'text-right' : 'text-left'}`}>
+                    <thead>
+                      <tr className="border-b border-slate-800 text-slate-400 font-mono">
+                        <th className="py-2 px-3">{lang === 'ar' ? 'التوقيت' : 'Time'}</th>
+                        <th className="py-2 px-3">MAP (mmHg)</th>
+                        <th className="py-2 px-3">BP (Sys/Dia)</th>
+                        <th className="py-2 px-3">HR (bpm)</th>
+                        <th className="py-2 px-3">SpO₂ (%)</th>
+                        <th className="py-2 px-3">RR (cpm)</th>
+                        <th className="py-2 px-3">{lang === 'ar' ? 'اللاكتات' : 'Lactate'}</th>
+                        <th className="py-2 px-3">{lang === 'ar' ? 'المسجل' : 'Staff'}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60 font-mono">
+                      {vitalsHistory.map((v) => (
+                        <tr key={v.id} className="hover:bg-slate-800/30">
+                          <td className="py-2.5 px-3 text-slate-400">
+                            {new Date(v.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}
+                          </td>
+                          <td className={`py-2.5 px-3 font-bold ${v.meanArterialPressureMmHg < 65 ? 'text-red-400' : 'text-cyan-300'}`}>
+                            {v.meanArterialPressureMmHg}
+                          </td>
+                          <td className="py-2.5 px-3 text-white">
+                            {v.systolicBpMmHg}/{v.diastolicBpMmHg} {v.isArterialLine ? '(Art)' : '(Cuff)'}
+                          </td>
+                          <td className="py-2.5 px-3 text-emerald-400">
+                            {v.heartRateBpm}
+                          </td>
+                          <td className="py-2.5 px-3 text-teal-300">
+                            {v.spo2Percent}% ({v.fio2SuppliedPercent}% Fi)
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-300">
+                            {v.respiratoryRateCpm}
+                          </td>
+                          <td className="py-2.5 px-3 text-purple-300">
+                            {v.lactateMmolPerL ?? '—'}
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-400 text-[11px] font-sans">
+                            {v.recordedBy.name}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </div>
           )}
-
-          {/* Historical Feed Table */}
-          <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-4 shadow-xl">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <Clock className="w-4 h-4 text-teal-400" />
-                <span>{lang === 'ar' ? 'سجل العلامات الحيوية التاريخية (Telemetry Trajectory)' : 'Telemetry History Trajectory'}</span>
-              </h3>
-              <button
-                onClick={onOpenAddVitals}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-teal-500/20 text-teal-300 text-xs font-bold"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>{lang === 'ar' ? 'إضافة قراءة جديدة' : 'Add Reading'}</span>
-              </button>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className={`w-full text-xs ${isRTL ? 'text-right' : 'text-left'}`}>
-                <thead>
-                  <tr className="border-b border-slate-800 text-slate-400 font-mono">
-                    <th className="py-2 px-3">{lang === 'ar' ? 'التوقيت' : 'Time'}</th>
-                    <th className="py-2 px-3">MAP (mmHg)</th>
-                    <th className="py-2 px-3">BP (Sys/Dia)</th>
-                    <th className="py-2 px-3">HR (bpm)</th>
-                    <th className="py-2 px-3">SpO₂ (%)</th>
-                    <th className="py-2 px-3">RR (cpm)</th>
-                    <th className="py-2 px-3">{lang === 'ar' ? 'اللاكتات' : 'Lactate'}</th>
-                    <th className="py-2 px-3">{lang === 'ar' ? 'المسجل' : 'Staff'}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/60 font-mono">
-                  {vitalsHistory.map((v) => (
-                    <tr key={v.id} className="hover:bg-slate-800/30">
-                      <td className="py-2.5 px-3 text-slate-400">
-                        {new Date(v.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}
-                      </td>
-                      <td className={`py-2.5 px-3 font-bold ${v.meanArterialPressureMmHg < 65 ? 'text-red-400' : 'text-cyan-300'}`}>
-                        {v.meanArterialPressureMmHg}
-                      </td>
-                      <td className="py-2.5 px-3 text-white">
-                        {v.systolicBpMmHg}/{v.diastolicBpMmHg} {v.isArterialLine ? '(Art)' : '(Cuff)'}
-                      </td>
-                      <td className="py-2.5 px-3 text-emerald-400">
-                        {v.heartRateBpm}
-                      </td>
-                      <td className="py-2.5 px-3 text-teal-300">
-                        {v.spo2Percent}% ({v.fio2SuppliedPercent}% Fi)
-                      </td>
-                      <td className="py-2.5 px-3 text-slate-300">
-                        {v.respiratoryRateCpm}
-                      </td>
-                      <td className="py-2.5 px-3 text-purple-300">
-                        {v.lactateMmolPerL ?? '—'}
-                      </td>
-                      <td className="py-2.5 px-3 text-slate-400 text-[11px] font-sans">
-                        {v.recordedBy.name}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
         </div>
       )}
 
       {/* Tab 2: Ventilator & ABG */}
       {(activeTab === 'vent' || activeTab === 'all') && (
-        <div className="space-y-4">
-          {ventilator ? (
-            <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-5 shadow-xl space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Wind className="w-5 h-5 text-cyan-400" />
-                  <h3 className="text-base font-bold text-white">
-                    {lang === 'ar' 
-                      ? 'إعدادات جهاز التنفس الصناعي (Hamilton / Dräger V800)' 
-                      : 'Mechanical Ventilator Settings (Hamilton / Dräger V800)'}
-                  </h3>
-                </div>
+        <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-4 shadow-xl space-y-4">
+          <div 
+            onClick={() => setIsPaperVentCardCollapsed(!isPaperVentCardCollapsed)}
+            className="flex items-center justify-between border-b border-slate-800 pb-2.5 cursor-pointer hover:bg-slate-800/40 p-2 rounded-xl transition-all"
+          >
+            <div className="flex items-center gap-2">
+              <Wind className="w-5 h-5 text-cyan-400" />
+              <h3 className="text-base font-bold text-white">
+                {lang === 'ar' ? 'إعدادات جهاز التنفس الصناعي والغازات (Ventilator & ABG)' : 'Mechanical Ventilator & ABG Settings'}
+              </h3>
+            </div>
+            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+              {ventilator && (
                 <span className="px-3 py-1 rounded-lg bg-cyan-950 text-cyan-300 border border-cyan-700 font-mono font-bold text-xs">
                   MODE: {ventilator.mode}
                 </span>
-              </div>
-
-              {/* Ventilator Matrix */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 font-mono">
-                <div className="bg-[#070c18] p-3 rounded-xl border border-slate-800">
-                  <div className="text-[10px] text-slate-400">FiO₂ Supplied</div>
-                  <div className="text-xl font-bold text-teal-300 mt-1">{ventilator.fio2Percent}%</div>
-                </div>
-
-                <div className="bg-[#070c18] p-3 rounded-xl border border-slate-800">
-                  <div className="text-[10px] text-slate-400">PEEP</div>
-                  <div className="text-xl font-bold text-cyan-300 mt-1">{ventilator.peepCmH2O} <span className="text-xs text-slate-400">cmH2O</span></div>
-                </div>
-
-                <div className="bg-[#070c18] p-3 rounded-xl border border-slate-800">
-                  <div className="text-[10px] text-slate-400">Set Tidal Volume (Vt)</div>
-                  <div className="text-xl font-bold text-white mt-1">{ventilator.setTidalVolumeMl} <span className="text-xs text-slate-400">mL</span></div>
-                  <div className="text-[10px] text-teal-400 font-sans mt-0.5">
-                    ({Math.round((ventilator.setTidalVolumeMl || ventilator.tidalVolumeMl || 420) / (patient.idealBodyWeightKg || (patient.gender === 'MALE' ? 70 : 60) || 70))} mL/kg IBW)
-                  </div>
-                </div>
-
-                <div className="bg-[#070c18] p-3 rounded-xl border border-slate-800">
-                  <div className="text-[10px] text-slate-400">Set Rate (RR)</div>
-                  <div className="text-xl font-bold text-slate-200 mt-1">{ventilator.setRespiratoryRateCpm} <span className="text-xs text-slate-400">bpm</span></div>
-                </div>
-
-                <div className="bg-[#070c18] p-3 rounded-xl border border-slate-800">
-                  <div className="text-[10px] text-slate-400">Peak Pressure (Ppeak)</div>
-                  <div className="text-xl font-bold text-amber-300 mt-1">{ventilator.peakInspiratoryPressureCmH2O ?? '—'} <span className="text-xs text-slate-400">cmH2O</span></div>
-                </div>
-
-                <div className="bg-[#070c18] p-3 rounded-xl border border-slate-800">
-                  <div className="text-[10px] text-slate-400">Plateau Pressure (Pplat)</div>
-                  <div className="text-xl font-bold text-indigo-300 mt-1">{ventilator.plateauPressureCmH2O ?? '—'} <span className="text-xs text-slate-400">cmH2O</span></div>
-                </div>
-
-                <div className="bg-[#070c18] p-3 rounded-xl border border-slate-800">
-                  <div className="text-[10px] text-slate-400">Driving Pressure (Pplat - PEEP)</div>
-                  <div className={`text-xl font-bold mt-1 ${
-                    drivingPressure && drivingPressure > 14 ? 'text-red-400 font-black' : 'text-emerald-400'
-                  }`}>
-                    {drivingPressure ?? '—'} <span className="text-xs text-slate-400">cmH2O</span>
-                  </div>
-                  <div className="text-[9px] text-slate-500 font-sans">Target: &lt; 14 cmH2O (Lung-protective)</div>
-                </div>
-
-                <div className="bg-[#070c18] p-3 rounded-xl border border-slate-800">
-                  <div className="text-[10px] text-slate-400">PaO₂ / FiO₂ Ratio (P/F)</div>
-                  <div className={`text-xl font-bold mt-1 ${
-                    ventilator.pao2Fio2Ratio && ventilator.pao2Fio2Ratio < 100 
-                      ? 'text-red-400' 
-                      : ventilator.pao2Fio2Ratio && ventilator.pao2Fio2Ratio < 200 
-                      ? 'text-amber-400' 
-                      : 'text-emerald-400'
-                  }`}>
-                    {ventilator.pao2Fio2Ratio ?? '—'}
-                  </div>
-                  <div className="text-[9px] text-red-400 font-sans font-bold">
-                    {ventilator.pao2Fio2Ratio && ventilator.pao2Fio2Ratio < 100 && 'Severe ARDS (Berlin definition)'}
-                    {ventilator.pao2Fio2Ratio && ventilator.pao2Fio2Ratio >= 100 && ventilator.pao2Fio2Ratio < 200 && 'Moderate ARDS'}
-                    {ventilator.pao2Fio2Ratio && ventilator.pao2Fio2Ratio >= 200 && ventilator.pao2Fio2Ratio < 300 && 'Mild ARDS'}
-                  </div>
-                </div>
+              )}
+              <div className="p-1 rounded-lg bg-slate-800 text-slate-400">
+                {isPaperVentCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
               </div>
             </div>
-          ) : (
-            <div className="bg-[#0b1224] border border-slate-800 rounded-2xl p-8 text-center text-slate-400">
-              {lang === 'ar' 
-                ? 'المريض يتنفس تلقائياً بدون جهاز تنفس صناعي جائر (Spontaneous Breathing on Room Air / Venturi Mask).'
-                : 'Patient is spontaneously breathing (Room Air / High-Flow Nasal Cannula / Mask).'}
+          </div>
+
+          {!isPaperVentCardCollapsed && (
+            <div className="space-y-4 animate-in fade-in duration-300">
+              {ventilator ? (
+                <div className="space-y-4">
+                  {/* Ventilator Matrix */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 font-mono">
+                    <div className="bg-[#070c18] p-3 rounded-xl border border-slate-800">
+                      <div className="text-[10px] text-slate-400">FiO₂ Supplied</div>
+                      <div className="text-xl font-bold text-teal-300 mt-1">{ventilator.fio2Percent}%</div>
+                    </div>
+
+                    <div className="bg-[#070c18] p-3 rounded-xl border border-slate-800">
+                      <div className="text-[10px] text-slate-400">PEEP</div>
+                      <div className="text-xl font-bold text-cyan-300 mt-1">{ventilator.peepCmH2O} <span className="text-xs text-slate-400">cmH2O</span></div>
+                    </div>
+
+                    <div className="bg-[#070c18] p-3 rounded-xl border border-slate-800">
+                      <div className="text-[10px] text-slate-400">Set Tidal Volume (Vt)</div>
+                      <div className="text-xl font-bold text-white mt-1">{ventilator.setTidalVolumeMl} <span className="text-xs text-slate-400">mL</span></div>
+                      <div className="text-[10px] text-teal-400 font-sans mt-0.5">
+                        ({Math.round((ventilator.setTidalVolumeMl || ventilator.tidalVolumeMl || 420) / (patient.idealBodyWeightKg || (patient.gender === 'MALE' ? 70 : 60) || 70))} mL/kg IBW)
+                      </div>
+                    </div>
+
+                    <div className="bg-[#070c18] p-3 rounded-xl border border-slate-800">
+                      <div className="text-[10px] text-slate-400">Set Rate (RR)</div>
+                      <div className="text-xl font-bold text-slate-200 mt-1">{ventilator.setRespiratoryRateCpm} <span className="text-xs text-slate-400">bpm</span></div>
+                    </div>
+
+                    <div className="bg-[#070c18] p-3 rounded-xl border border-slate-800">
+                      <div className="text-[10px] text-slate-400">Peak Pressure (Ppeak)</div>
+                      <div className="text-xl font-bold text-amber-300 mt-1">{ventilator.peakInspiratoryPressureCmH2O ?? '—'} <span className="text-xs text-slate-400">cmH2O</span></div>
+                    </div>
+
+                    <div className="bg-[#070c18] p-3 rounded-xl border border-slate-800">
+                      <div className="text-[10px] text-slate-400">Plateau Pressure (Pplat)</div>
+                      <div className="text-xl font-bold text-indigo-300 mt-1">{ventilator.plateauPressureCmH2O ?? '—'} <span className="text-xs text-slate-400">cmH2O</span></div>
+                    </div>
+
+                    <div className="bg-[#070c18] p-3 rounded-xl border border-slate-800">
+                      <div className="text-[10px] text-slate-400">Driving Pressure (Pplat - PEEP)</div>
+                      <div className={`text-xl font-bold mt-1 ${
+                        drivingPressure && drivingPressure > 14 ? 'text-red-400 font-black' : 'text-emerald-400'
+                      }`}>
+                        {drivingPressure ?? '—'} <span className="text-xs text-slate-400">cmH2O</span>
+                      </div>
+                      <div className="text-[9px] text-slate-500 font-sans">Target: &lt; 14 cmH2O (Lung-protective)</div>
+                    </div>
+
+                    <div className="bg-[#070c18] p-3 rounded-xl border border-slate-800">
+                      <div className="text-[10px] text-slate-400">PaO₂ / FiO₂ Ratio (P/F)</div>
+                      <div className={`text-xl font-bold mt-1 ${
+                        ventilator.pao2Fio2Ratio && ventilator.pao2Fio2Ratio < 100 
+                          ? 'text-red-400' 
+                          : ventilator.pao2Fio2Ratio && ventilator.pao2Fio2Ratio < 200 
+                          ? 'text-amber-400' 
+                          : 'text-emerald-400'
+                      }`}>
+                        {ventilator.pao2Fio2Ratio ?? '—'}
+                      </div>
+                      <div className="text-[9px] text-red-400 font-sans font-bold">
+                        {ventilator.pao2Fio2Ratio && ventilator.pao2Fio2Ratio < 100 && 'Severe ARDS (Berlin definition)'}
+                        {ventilator.pao2Fio2Ratio && ventilator.pao2Fio2Ratio >= 100 && ventilator.pao2Fio2Ratio < 200 && 'Moderate ARDS'}
+                        {ventilator.pao2Fio2Ratio && ventilator.pao2Fio2Ratio >= 200 && ventilator.pao2Fio2Ratio < 300 && 'Mild ARDS'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-6 text-center text-slate-400 bg-slate-950/40 rounded-xl border border-slate-800">
+                  {lang === 'ar' 
+                    ? 'المريض يتنفس تلقائياً بدون جهاز تنفس صناعي جائر (Spontaneous Breathing on Room Air / Venturi Mask).'
+                    : 'Patient is spontaneously breathing (Room Air / High-Flow Nasal Cannula / Mask).'}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -2831,22 +2808,30 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
 
       {/* Tab 3: Infusion Pumps */}
       {(activeTab === 'pumps' || activeTab === 'all') && (
-        <div className="space-y-4">
-          <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-5 shadow-xl space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Droplet className="w-5 h-5 text-amber-400" />
-                <h3 className="text-base font-bold text-white">
-                  {lang === 'ar' ? 'مضخات الحقن الوريدي المتواصل (Alaris Smart Pumps)' : 'Vasoactive Continuous Infusion Lines'}
-                </h3>
-              </div>
+        <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-4 shadow-xl space-y-4">
+          <div 
+            onClick={() => setIsPaperPumpsCardCollapsed(!isPaperPumpsCardCollapsed)}
+            className="flex items-center justify-between border-b border-slate-800 pb-2.5 cursor-pointer hover:bg-slate-800/40 p-2 rounded-xl transition-all"
+          >
+            <div className="flex items-center gap-2">
+              <Droplet className="w-5 h-5 text-amber-400" />
+              <h3 className="text-base font-bold text-white">
+                {lang === 'ar' ? 'مضخات الحقن الوريدي المتواصل (Alaris Smart Pumps)' : 'Vasoactive Continuous Infusion Lines'}
+              </h3>
+            </div>
+            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
               <span className="text-xs text-slate-400 font-mono">
                 {pumps.length} {lang === 'ar' ? 'قنوات نشطة' : 'Active Channels'}
               </span>
+              <div className="p-1 rounded-lg bg-slate-800 text-slate-400">
+                {isPaperPumpsCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+              </div>
             </div>
+          </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {pumps.map((pump) => (
+          {!isPaperPumpsCardCollapsed && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 animate-in fade-in duration-300">
+              {pumps.length > 0 ? pumps.map((pump) => (
                 <div 
                   key={pump.id}
                   className="bg-[#070c18] border border-slate-800 p-4 rounded-xl space-y-3"
@@ -2891,85 +2876,106 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                     <span className="font-semibold text-slate-300">{lang === 'ar' ? 'هدف المعايرة:' : 'Titration Target:'}</span> {pump.targetParameter}
                   </div>
                 </div>
-              ))}
+              )) : (
+                <div className="col-span-2 p-6 text-center text-slate-400 bg-slate-950/40 rounded-xl border border-slate-800">
+                  {lang === 'ar' ? 'لا توجد قنوات حقن وريدي نشطة حالياً.' : 'No active continuous infusion channels currently.'}
+                </div>
+              )}
             </div>
-          </div>
+          )}
         </div>
       )}
 
       {/* Tab 4: Fluids & MTP */}
       {(activeTab === 'fluids' || activeTab === 'all') && (
-        <div className="space-y-4">
-          {fluidBalance ? (() => {
-            const netVal = fluidBalance.netCumulativeBalanceMl ?? (fluidBalance as any).netBalance24HMl ?? 0;
-            const totalIntake = fluidBalance.intakeBreakdown?.totalIntakeMl ?? (fluidBalance as any).totalIntakeMl ?? 0;
-            const totalOutput = fluidBalance.outputBreakdown?.totalOutputMl ?? (fluidBalance as any).totalOutputMl ?? 0;
-            const ivMaint = fluidBalance.intakeBreakdown?.ivMaintenanceFluidMl ?? (fluidBalance as any).intakeBreakdown?.crystalloidMl ?? 0;
-            const ivMeds = fluidBalance.intakeBreakdown?.ivMedicationInfusionsMl ?? (fluidBalance as any).intakeBreakdown?.infusionsMl ?? 0;
-            const urineVal = fluidBalance.outputBreakdown?.urineOutputMl ?? (fluidBalance as any).outputBreakdown?.urineMl ?? 0;
-            const uopRate = fluidBalance.outputBreakdown?.hourlyUrineAverageMlPerHour ?? (fluidBalance as any).outputBreakdown?.hourlyUrineRateMlPerHr ?? 0;
-            
-            const bloodMl = fluidBalance.intakeBreakdown?.bloodProductsMl ?? 0;
-            const prbcUnits = (fluidBalance as any).transfusionProductsGiven?.prbcUnits ?? (bloodMl > 0 ? Math.ceil(bloodMl / 250) : 0);
-            const ffpUnits = (fluidBalance as any).transfusionProductsGiven?.ffpUnits ?? 0;
-            const plateletsUnits = (fluidBalance as any).transfusionProductsGiven?.plateletsUnits ?? 0;
-
-            return (
-              <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-5 shadow-xl space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Scale className="w-5 h-5 text-teal-400" />
-                    <h3 className="text-base font-bold text-white">
-                      {lang === 'ar' 
-                        ? 'ميزان السوائل ونقل مشتقات الدم (Fluid Balance & MTP)' 
-                        : '24-Hour Fluid Balance & Massive Transfusion (MTP)'}
-                    </h3>
-                  </div>
-                  <span className={`px-3 py-1 rounded-lg text-xs font-mono font-black ${
-                    netVal >= 0 
-                      ? 'bg-amber-950 text-amber-300 border border-amber-700' 
-                      : 'bg-teal-950 text-teal-300 border border-teal-700'
-                  }`}>
-                    NET 24H: {netVal > 0 ? `+${netVal}` : netVal} mL
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 font-mono">
-                  <div className="bg-[#070c18] p-3.5 rounded-xl border border-slate-800">
-                    <div className="text-[10px] text-slate-400">{lang === 'ar' ? 'إجمالي المدخلات (Total Intake)' : 'Total Intake'}</div>
-                    <div className="text-xl font-bold text-cyan-300 mt-1">{totalIntake} mL</div>
-                    <div className="text-[10px] text-slate-400 mt-1">
-                      {lang === 'ar'
-                        ? `محاليل: ${ivMaint} mL • مضخات: ${ivMeds} mL`
-                        : `Crystalloid: ${ivMaint} mL • Infusions: ${ivMeds} mL`}
-                    </div>
-                  </div>
-
-                  <div className="bg-[#070c18] p-3.5 rounded-xl border border-slate-800">
-                    <div className="text-[10px] text-slate-400">{lang === 'ar' ? 'إجمالي المخرجات (Total Output)' : 'Total Output'}</div>
-                    <div className="text-xl font-bold text-amber-300 mt-1">{totalOutput} mL</div>
-                    <div className="text-[10px] text-slate-400 mt-1">
-                      {lang === 'ar'
-                        ? `بول: ${urineVal} mL (${uopRate} mL/hr)`
-                        : `Urine: ${urineVal} mL (${uopRate} mL/hr)`}
-                    </div>
-                  </div>
-
-                  <div className="bg-[#070c18] p-3.5 rounded-xl border border-slate-800">
-                    <div className="text-[10px] text-slate-400">{lang === 'ar' ? 'بروتوكول نقل الدم (MTP Transfusions)' : 'MTP Blood Transfusion'}</div>
-                    <div className="text-sm font-bold text-red-300 mt-1">
-                      PRBC: {prbcUnits} {lang === 'ar' ? 'أكياس' : 'Units'}
-                    </div>
-                    <div className="text-[10px] text-slate-400 mt-0.5">
-                      FFP: {ffpUnits} • Platelets: {plateletsUnits}
-                    </div>
-                  </div>
-                </div>
+        <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-4 shadow-xl space-y-4">
+          <div 
+            onClick={() => setIsPaperFluidsCardCollapsed(!isPaperFluidsCardCollapsed)}
+            className="flex items-center justify-between border-b border-slate-800 pb-2.5 cursor-pointer hover:bg-slate-800/40 p-2 rounded-xl transition-all"
+          >
+            <div className="flex items-center gap-2">
+              <Scale className="w-5 h-5 text-teal-400" />
+              <h3 className="text-base font-bold text-white">
+                {lang === 'ar' 
+                  ? 'ميزان السوائل ونقل مشتقات الدم (Fluid Balance & MTP)' 
+                  : '24-Hour Fluid Balance & Massive Transfusion (MTP)'}
+              </h3>
+            </div>
+            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+              {fluidBalance && (
+                (() => {
+                  const netVal = fluidBalance.netCumulativeBalanceMl ?? (fluidBalance as any).netBalance24HMl ?? 0;
+                  return (
+                    <span className={`px-3 py-1 rounded-lg text-xs font-mono font-black ${
+                      netVal >= 0 
+                        ? 'bg-amber-950 text-amber-300 border border-amber-700' 
+                        : 'bg-teal-950 text-teal-300 border border-teal-700'
+                    }`}>
+                      NET 24H: {netVal > 0 ? `+${netVal}` : netVal} mL
+                    </span>
+                  );
+                })()
+              )}
+              <div className="p-1 rounded-lg bg-slate-800 text-slate-400">
+                {isPaperFluidsCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
               </div>
-            );
-          })() : (
-            <div className="bg-[#0b1224] border border-slate-800 rounded-2xl p-8 text-center text-slate-400">
-              {lang === 'ar' ? 'لا توجد بيانات مسجلة لميزان السوائل اليوم.' : 'No fluid balance logs recorded for today.'}
+            </div>
+          </div>
+
+          {!isPaperFluidsCardCollapsed && (
+            <div className="space-y-4 animate-in fade-in duration-300">
+              {fluidBalance ? (() => {
+                const netVal = fluidBalance.netCumulativeBalanceMl ?? (fluidBalance as any).netBalance24HMl ?? 0;
+                const totalIntake = fluidBalance.intakeBreakdown?.totalIntakeMl ?? (fluidBalance as any).totalIntakeMl ?? 0;
+                const totalOutput = fluidBalance.outputBreakdown?.totalOutputMl ?? (fluidBalance as any).totalOutputMl ?? 0;
+                const ivMaint = fluidBalance.intakeBreakdown?.ivMaintenanceFluidMl ?? (fluidBalance as any).intakeBreakdown?.crystalloidMl ?? 0;
+                const ivMeds = fluidBalance.intakeBreakdown?.ivMedicationInfusionsMl ?? (fluidBalance as any).intakeBreakdown?.infusionsMl ?? 0;
+                const urineVal = fluidBalance.outputBreakdown?.urineOutputMl ?? (fluidBalance as any).outputBreakdown?.urineMl ?? 0;
+                const uopRate = fluidBalance.outputBreakdown?.hourlyUrineAverageMlPerHour ?? (fluidBalance as any).outputBreakdown?.hourlyUrineRateMlPerHr ?? 0;
+                
+                const bloodMl = fluidBalance.intakeBreakdown?.bloodProductsMl ?? 0;
+                const prbcUnits = (fluidBalance as any).transfusionProductsGiven?.prbcUnits ?? (bloodMl > 0 ? Math.ceil(bloodMl / 250) : 0);
+                const ffpUnits = (fluidBalance as any).transfusionProductsGiven?.ffpUnits ?? 0;
+                const plateletsUnits = (fluidBalance as any).transfusionProductsGiven?.plateletsUnits ?? 0;
+
+                return (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 font-mono">
+                    <div className="bg-[#070c18] p-3.5 rounded-xl border border-slate-800">
+                      <div className="text-[10px] text-slate-400">{lang === 'ar' ? 'إجمالي المدخلات (Total Intake)' : 'Total Intake'}</div>
+                      <div className="text-xl font-bold text-cyan-300 mt-1">{totalIntake} mL</div>
+                      <div className="text-[10px] text-slate-400 mt-1">
+                        {lang === 'ar'
+                          ? `محاليل: ${ivMaint} mL • مضخات: ${ivMeds} mL`
+                          : `Crystalloid: ${ivMaint} mL • Infusions: ${ivMeds} mL`}
+                      </div>
+                    </div>
+
+                    <div className="bg-[#070c18] p-3.5 rounded-xl border border-slate-800">
+                      <div className="text-[10px] text-slate-400">{lang === 'ar' ? 'إجمالي المخرجات (Total Output)' : 'Total Output'}</div>
+                      <div className="text-xl font-bold text-amber-300 mt-1">{totalOutput} mL</div>
+                      <div className="text-[10px] text-slate-400 mt-1">
+                        {lang === 'ar'
+                          ? `بول: ${urineVal} mL (${uopRate} mL/hr)`
+                          : `Urine: ${urineVal} mL (${uopRate} mL/hr)`}
+                      </div>
+                    </div>
+
+                    <div className="bg-[#070c18] p-3.5 rounded-xl border border-slate-800">
+                      <div className="text-[10px] text-slate-400">{lang === 'ar' ? 'بروتوكول نقل الدم (MTP Transfusions)' : 'MTP Blood Transfusion'}</div>
+                      <div className="text-sm font-bold text-red-300 mt-1">
+                        PRBC: {prbcUnits} {lang === 'ar' ? 'أكياس' : 'Units'}
+                      </div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">
+                        FFP: {ffpUnits} • Platelets: {plateletsUnits}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })() : (
+                <div className="p-6 text-center text-slate-400 bg-slate-950/40 rounded-xl border border-slate-800">
+                  {lang === 'ar' ? 'لا توجد بيانات مسجلة لميزان السوائل اليوم.' : 'No fluid balance logs recorded for today.'}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -2977,15 +2983,18 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
 
       {/* Tab 5: SBAR Handovers */}
       {(activeTab === 'sbar' || activeTab === 'all') && (
-        <div className="space-y-4">
-          <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-5 shadow-xl space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="w-5 h-5 text-teal-400" />
-                <h3 className="text-base font-bold text-white">
-                  {lang === 'ar' ? 'سجلات تسليم واستلام المناوبات السريرية (SBAR Archive)' : 'SBAR Shift Handover Reports'}
-                </h3>
-              </div>
+        <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-4 shadow-xl space-y-4">
+          <div 
+            onClick={() => setIsPaperSbarCardCollapsed(!isPaperSbarCardCollapsed)}
+            className="flex items-center justify-between border-b border-slate-800 pb-2.5 cursor-pointer hover:bg-slate-800/40 p-2 rounded-xl transition-all"
+          >
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="w-5 h-5 text-teal-400" />
+              <h3 className="text-base font-bold text-white">
+                {lang === 'ar' ? 'سجلات تسليم واستلام المناوبات السريرية (SBAR Archive)' : 'SBAR Shift Handover Reports'}
+              </h3>
+            </div>
+            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
               <button
                 onClick={onOpenSbarSign}
                 className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shadow-md active:scale-95"
@@ -2993,10 +3002,15 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                 <Plus className="w-4 h-4 text-slate-950" />
                 <span>{lang === 'ar' ? 'تسليم جديد' : 'New Handover'}</span>
               </button>
+              <div className="p-1 rounded-lg bg-slate-800 text-slate-400">
+                {isPaperSbarCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+              </div>
             </div>
+          </div>
 
-            <div className="space-y-3">
-              {sbarList.map((sbar) => (
+          {!isPaperSbarCardCollapsed && (
+            <div className="space-y-3 animate-in fade-in duration-300">
+              {sbarList.length > 0 ? sbarList.map((sbar) => (
                 <div 
                   key={sbar.id}
                   className="bg-[#070c18] border border-slate-800 p-4 rounded-xl space-y-3"
@@ -3054,39 +3068,51 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                     )}
                   </div>
                 </div>
-              ))}
+              )) : (
+                <div className="p-6 text-center text-slate-400 bg-slate-950/40 rounded-xl border border-slate-800">
+                  {lang === 'ar' ? 'لا توجد تقارير تسليم مناوبة مسجلة.' : 'No shift handover reports recorded.'}
+                </div>
+              )}
             </div>
-          </div>
+          )}
         </div>
       )}
 
       {/* Tab 6: Clinical Notes & SHA-256 Addendums */}
       {(activeTab === 'notes' || activeTab === 'all') && (
-        <div className="space-y-4">
-          <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-5 shadow-xl space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <FileText className="w-5 h-5 text-teal-400" />
-                <div>
-                  <h3 className="text-base font-bold text-white">
-                    {lang === 'ar' ? 'الملاحظات الطبية المشفرة وملحقاتها' : 'Clinical Progress Notes & Cryptographic Addendums'}
-                  </h3>
-                  <p className="text-xs text-slate-400">
-                    {lang === 'ar' 
-                      ? 'ملاحظات الأطباء محمية بتشفير SHA-256، لا يمكن حذفها، ويتم إلحاق التحديثات عبر Addendums فقط.'
-                      : 'Medical notes are cryptographic SHA-256 protected and immutable. Modifications are appended as verified addendums.'}
-                  </p>
-                </div>
+        <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-4 shadow-xl space-y-4">
+          <div 
+            onClick={() => setIsPaperNotesCardCollapsed(!isPaperNotesCardCollapsed)}
+            className="flex items-center justify-between border-b border-slate-800 pb-2.5 cursor-pointer hover:bg-slate-800/40 p-2 rounded-xl transition-all"
+          >
+            <div className="flex items-center gap-2">
+              <FileText className="w-5 h-5 text-teal-400" />
+              <div>
+                <h3 className="text-base font-bold text-white">
+                  {lang === 'ar' ? 'الملاحظات الطبية المشفرة وملحقاتها' : 'Clinical Progress Notes & Cryptographic Addendums'}
+                </h3>
+                <p className="text-[10px] text-slate-400 hidden sm:block">
+                  {lang === 'ar' 
+                    ? 'ملاحظات الأطباء محمية بتشفير SHA-256، لا يمكن حذفها، ويتم إلحاق التحديثات عبر Addendums فقط.'
+                    : 'Medical notes are cryptographic SHA-256 protected and immutable. Modifications are appended as verified addendums.'}
+                </p>
               </div>
             </div>
+            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+              <div className="p-1 rounded-lg bg-slate-800 text-slate-400">
+                {isPaperNotesCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+              </div>
+            </div>
+          </div>
 
-            <div className="space-y-4">
-              {notesList.map((note) => (
+          {!isPaperNotesCardCollapsed && (
+            <div className="space-y-4 animate-in fade-in duration-300">
+              {notesList.length > 0 ? notesList.map((note) => (
                 <div 
-                  key={note.id}
-                  className="bg-[#070c18] border border-slate-800 rounded-xl p-4 space-y-3"
+                   key={note.id}
+                   className="bg-[#070c18] border border-slate-800 rounded-xl p-4 space-y-3"
                 >
-                  <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-800 pb-2 gap-2">
                     <div>
                       <span className="font-bold text-white text-sm">{note.title}</span>
                       <span className="text-[10px] font-mono text-slate-400 mx-2">
@@ -3111,7 +3137,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                     {note.content}
                   </p>
 
-                  <div className="text-[11px] text-slate-400">
+                  <div className="text-[11px] text-slate-400 font-sans">
                     {lang === 'ar' ? 'الكاتب:' : 'Author:'} <strong className="text-slate-200">{note.authorName}</strong> ({note.authorRole})
                   </div>
 
@@ -3142,43 +3168,57 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                     </div>
                   )}
                 </div>
-              ))}
+              )) : (
+                <div className="p-6 text-center text-slate-400 bg-slate-950/40 rounded-xl border border-slate-800">
+                  {lang === 'ar' ? 'لا توجد ملاحظات سريرية مسجلة اليوم.' : 'No clinical progress notes recorded today.'}
+                </div>
+              )}
             </div>
-          </div>
+          )}
         </div>
       )}
 
       {/* Tab 7: Disposition */}
       {(activeTab === 'disposition' || activeTab === 'all') && (
-        <div className="space-y-4">
-          <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-5 shadow-xl space-y-4">
+        <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-4 shadow-xl space-y-4">
+          <div 
+            onClick={() => setIsPaperDispCardCollapsed(!isPaperDispCardCollapsed)}
+            className="flex items-center justify-between border-b border-slate-800 pb-2.5 cursor-pointer hover:bg-slate-800/40 p-2 rounded-xl transition-all"
+          >
             <div className="flex items-center gap-2">
               <ExternalLink className="w-5 h-5 text-amber-400" />
               <div>
                 <h3 className="text-base font-bold text-white">
                   {lang === 'ar' ? 'بروتوكول إنهاء الإقامة بالرعاية (ICU Disposition & Discharge)' : 'ICU Disposition & Discharge Protocol'}
                 </h3>
-                <p className="text-xs text-slate-400">
+                <p className="text-[10px] text-slate-400 hidden sm:block">
                   {lang === 'ar' 
                     ? 'تحويل المريض للأقسام الداخلية، النقل لمستشفى آخر، أو تسجيل الوفاة القانونية.'
                     : 'Discharge to ward / HDU, external hospital transfer, or mortality registration.'}
                 </p>
               </div>
             </div>
+            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+              <div className="p-1 rounded-lg bg-slate-800 text-slate-400">
+                {isPaperDispCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+              </div>
+            </div>
+          </div>
 
-            <div className="bg-[#070c18] p-4 rounded-xl border border-slate-800 space-y-4 text-xs">
+          {!isPaperDispCardCollapsed && (
+            <div className="bg-[#070c18] p-4 rounded-xl border border-slate-800 space-y-4 text-xs animate-in fade-in duration-300">
               <div>
                 <label className="text-[11px] text-slate-300 font-semibold">
                   {lang === 'ar' ? 'نوع الإجراء (Disposition Pathway)' : 'Disposition Pathway'}
                 </label>
-                <div className="grid grid-cols-2 gap-3 mt-1.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-1.5">
                   <button
                     type="button"
                     onClick={() => setDispType(DispositionType.TRANSFER_GENERAL_WARD)}
                     className={`p-3 rounded-xl border font-bold text-xs ${isRTL ? 'text-right' : 'text-left'} transition-all ${
                       dispType === DispositionType.TRANSFER_GENERAL_WARD
                         ? 'bg-teal-500/20 text-teal-300 border-teal-500/50'
-                        : 'bg-slate-900 border-slate-800 text-slate-400'
+                        : 'bg-[#0b1224] border-slate-800 text-slate-400'
                     }`}
                   >
                     <div>{lang === 'ar' ? 'تحويل / خروج تحسن (Stepdown / Ward)' : 'Stepdown Transfer / Ward'}</div>
@@ -3193,7 +3233,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                     className={`p-3 rounded-xl border font-bold text-xs ${isRTL ? 'text-right' : 'text-left'} transition-all ${
                       dispType === DispositionType.CLINICAL_MORTALITY
                         ? 'bg-red-950/60 text-red-300 border-red-500/50'
-                        : 'bg-slate-900 border-slate-800 text-slate-400'
+                        : 'bg-[#0b1224] border-slate-800 text-slate-400'
                     }`}
                   >
                     <div>{lang === 'ar' ? 'تسجيل وفاة سريرية (Clinical Mortality)' : 'Clinical Mortality Registration'}</div>
@@ -3230,7 +3270,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                 />
               </div>
 
-              <div className={`pt-2 flex ${isRTL ? 'justify-end' : 'justify-end'}`}>
+              <div className="pt-2 flex justify-end">
                 <button
                   type="button"
                   onClick={handleExecuteDisposition}
@@ -3249,34 +3289,80 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                 </button>
               </div>
             </div>
-          </div>
+          )}
         </div>
       )}
 
       {/* Tab: Daily Lab Flowsheet with Interactive Trend History (HG 5 > 7 > 8.5 > 8) */}
       {(activeTab === 'labs' || activeTab === 'all') && (
-        <LabFlowsheetSection
-          patientId={patient.id}
-          bedNumber={bed.bedNumber}
-          labResults={labResults}
-          onLabAdded={() => {
-            loadBedsideData();
-            onDataUpdated();
-          }}
-        />
+        <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-4 shadow-xl space-y-4">
+          <div 
+            onClick={() => setIsPaperLabsCardCollapsed(!isPaperLabsCardCollapsed)}
+            className="flex items-center justify-between border-b border-slate-800 pb-2.5 cursor-pointer hover:bg-slate-800/40 p-2 rounded-xl transition-all"
+          >
+            <div className="flex items-center gap-2">
+              <FlaskConical className="w-5 h-5 text-teal-400" />
+              <h3 className="text-base font-bold text-white">
+                {lang === 'ar' ? 'سجل وتطور التحاليل المخبرية والغازات (Labs & ABGs)' : 'Laboratory Flowsheet & Trends'}
+              </h3>
+            </div>
+            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+              <div className="p-1 rounded-lg bg-slate-800 text-slate-400">
+                {isPaperLabsCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+              </div>
+            </div>
+          </div>
+
+          {!isPaperLabsCardCollapsed && (
+            <div className="space-y-4 animate-in fade-in duration-300">
+              <LabFlowsheetSection
+                patientId={patient.id}
+                bedNumber={bed.bedNumber}
+                labResults={labResults}
+                onLabAdded={() => {
+                  loadBedsideData();
+                  onDataUpdated();
+                }}
+              />
+            </div>
+          )}
+        </div>
       )}
 
       {/* Tab: Investigations, Radiology & POCUS Studies */}
       {(activeTab === 'investigations' || activeTab === 'all') && (
-        <InvestigationsSection
-          patientId={patient.id}
-          bedNumber={bed.bedNumber}
-          investigations={investigations}
-          onInvestigationAdded={() => {
-            loadBedsideData();
-            onDataUpdated();
-          }}
-        />
+        <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-4 shadow-xl space-y-4">
+          <div 
+            onClick={() => setIsPaperInvestigationsCardCollapsed(!isPaperInvestigationsCardCollapsed)}
+            className="flex items-center justify-between border-b border-slate-800 pb-2.5 cursor-pointer hover:bg-slate-800/40 p-2 rounded-xl transition-all"
+          >
+            <div className="flex items-center gap-2">
+              <Scan className="w-5 h-5 text-teal-400" />
+              <h3 className="text-base font-bold text-white">
+                {lang === 'ar' ? 'الفحوصات والأشعة وموجات القلب الطارئة (Radiology & POCUS)' : 'Radiology, Investigations & POCUS'}
+              </h3>
+            </div>
+            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+              <div className="p-1 rounded-lg bg-slate-800 text-slate-400">
+                {isPaperInvestigationsCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+              </div>
+            </div>
+          </div>
+
+          {!isPaperInvestigationsCardCollapsed && (
+            <div className="space-y-4 animate-in fade-in duration-300">
+              <InvestigationsSection
+                patientId={patient.id}
+                bedNumber={bed.bedNumber}
+                investigations={investigations}
+                onInvestigationAdded={() => {
+                  loadBedsideData();
+                  onDataUpdated();
+                }}
+              />
+            </div>
+          )}
+        </div>
       )}
 
       {/* Patient Transfer to Vacant Bed Modal */}

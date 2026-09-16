@@ -210,3 +210,86 @@ export function generateSampleCbcImage(): string {
   </svg>`;
   return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
 }
+
+export function generateSampleChemistryImage(): string {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="850" viewBox="0 0 600 850" style="background:#ffffff; font-family:Arial, sans-serif;">
+    <rect width="600" height="850" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+    <rect x="0" y="0" width="600" height="80" fill="#065f46"/>
+    <text x="300" y="45" text-anchor="middle" font-size="20" font-weight="bold" fill="#6ee7b7">CLINICAL BIOCHEMISTRY &amp; ELECTROLYTES</text>
+    <text x="300" y="68" text-anchor="middle" font-size="13" fill="#a7f3d0">MICU COMPREHENSIVE METABOLIC PANEL</text>
+
+    <rect x="25" y="95" width="550" height="65" rx="6" fill="#f0fdf4" stroke="#bbf7d0"/>
+    <text x="40" y="120" font-size="13" font-weight="bold" fill="#064e3b">Patient: Al-Otaibi, Fahad</text>
+    <text x="320" y="120" font-size="13" fill="#047857">MRN: 94021884 | Bed: 01</text>
+    <text x="40" y="145" font-size="13" fill="#047857">Collection: 2026-09-15 10:00</text>
+    <text x="320" y="145" font-size="13" fill="#047857">Status: STAT VERIFIED</text>
+
+    <!-- Table Header -->
+    <rect x="25" y="180" width="550" height="32" fill="#ecfdf5"/>
+    <text x="40" y="201" font-size="13" font-weight="bold" fill="#065f46">TEST NAME</text>
+    <text x="240" y="201" font-size="13" font-weight="bold" fill="#065f46">RESULT</text>
+    <text x="360" y="201" font-size="13" font-weight="bold" fill="#065f46">FLAG</text>
+    <text x="440" y="201" font-size="13" font-weight="bold" fill="#065f46">REFERENCE</text>
+
+    <!-- Serum Sodium -->
+    <text x="40" y="240" font-size="14" font-weight="bold" fill="#0f172a">Sodium (Na+)</text>
+    <text x="240" y="240" font-size="14" font-weight="bold" fill="#0f172a">138 mEq/L</text>
+    <text x="360" y="240" font-size="14" fill="#16a34a">NORMAL</text>
+    <text x="440" y="240" font-size="13" fill="#64748b">135 - 145</text>
+
+    <!-- Serum Potassium -->
+    <text x="40" y="280" font-size="14" font-weight="bold" fill="#0f172a">Potassium (K+)</text>
+    <text x="240" y="280" font-size="14" font-weight="bold" fill="#dc2626">5.6 mEq/L</text>
+    <text x="360" y="280" font-size="14" font-weight="bold" fill="#dc2626">HIGH</text>
+    <text x="440" y="280" font-size="13" fill="#64748b">3.5 - 5.0</text>
+
+    <!-- Serum Creatinine -->
+    <text x="40" y="320" font-size="14" font-weight="bold" fill="#0f172a">Creatinine</text>
+    <text x="240" y="320" font-size="14" font-weight="bold" fill="#dc2626">2.4 mg/dL</text>
+    <text x="360" y="320" font-size="14" font-weight="bold" fill="#dc2626">HIGH</text>
+    <text x="440" y="320" font-size="13" fill="#64748b">0.7 - 1.2</text>
+
+    <!-- Blood Urea Nitrogen -->
+    <text x="40" y="360" font-size="14" font-weight="bold" fill="#0f172a">Urea (BUN)</text>
+    <text x="240" y="360" font-size="14" font-weight="bold" fill="#dc2626">48 mg/dL</text>
+    <text x="360" y="360" font-size="14" font-weight="bold" fill="#dc2626">HIGH</text>
+    <text x="440" y="360" font-size="13" fill="#64748b">15 - 45</text>
+
+    <!-- ALT / AST -->
+    <text x="40" y="400" font-size="14" fill="#0f172a">ALT (SGPT)</text>
+    <text x="240" y="400" font-size="14" fill="#0f172a">68 U/L</text>
+    <text x="360" y="400" font-size="14" font-weight="bold" fill="#dc2626">HIGH</text>
+    <text x="440" y="400" font-size="13" fill="#64748b">7 - 56</text>
+
+    <text x="40" y="435" font-size="14" fill="#0f172a">AST (SGOT)</text>
+    <text x="240" y="435" font-size="14" fill="#0f172a">72 U/L</text>
+    <text x="360" y="435" font-size="14" font-weight="bold" fill="#dc2626">HIGH</text>
+    <text x="440" y="435" font-size="13" fill="#64748b">8 - 40</text>
+
+    <!-- Total Bilirubin & Albumin -->
+    <text x="40" y="470" font-size="14" fill="#0f172a">Total Bilirubin</text>
+    <text x="240" y="470" font-size="14" fill="#0f172a">1.8 mg/dL</text>
+    <text x="360" y="470" font-size="14" font-weight="bold" fill="#dc2626">HIGH</text>
+    <text x="440" y="470" font-size="13" fill="#64748b">0.2 - 1.2</text>
+
+    <text x="40" y="505" font-size="14" fill="#0f172a">Albumin</text>
+    <text x="240" y="505" font-size="14" fill="#0f172a">3.1 g/dL</text>
+    <text x="360" y="505" font-size="14" font-weight="bold" fill="#dc2626">LOW</text>
+    <text x="440" y="505" font-size="13" fill="#64748b">3.5 - 5.0</text>
+
+    <!-- CRP & Procalcitonin -->
+    <text x="40" y="540" font-size="14" font-weight="bold" fill="#0f172a">C-Reactive Protein (CRP)</text>
+    <text x="240" y="540" font-size="14" font-weight="bold" fill="#dc2626">42.0 mg/L</text>
+    <text x="360" y="540" font-size="14" font-weight="bold" fill="#dc2626">HIGH</text>
+    <text x="440" y="540" font-size="13" fill="#64748b">&lt; 5.0</text>
+
+    <!-- Remarks -->
+    <rect x="25" y="580" width="550" height="85" rx="6" fill="#f0fdf4" stroke="#bbf7d0"/>
+    <text x="40" y="605" font-size="13" font-weight="bold" fill="#065f46">Biochemistry Remarks:</text>
+    <text x="40" y="628" font-size="13" fill="#047857">Acute elevation in serum creatinine &amp; BUN consistent with AKI stage 2.</text>
+    <text x="40" y="650" font-size="13" fill="#047857">Hyperkalemia (5.6 mEq/L) noted. Recommend repeat &amp; ECG monitoring.</text>
+
+    <text x="300" y="740" text-anchor="middle" font-size="13" fill="#64748b">CONSULTANT BIOCHEMIST: Dr. S. Al-Dossari | VERIFIED</text>
+  </svg>`;
+  return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
+}
