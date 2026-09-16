@@ -242,6 +242,7 @@ export const FluidBalanceModal: React.FC<FluidBalanceModalProps> = ({
                 </label>
                 <input
                   type="text"
+                  inputMode="decimal"
                   value={ivMaintenance}
                   onChange={(e) => setIvMaintenance(toEnglishDigits(e.target.value))}
                   placeholder="0"
@@ -255,6 +256,7 @@ export const FluidBalanceModal: React.FC<FluidBalanceModalProps> = ({
                 </label>
                 <input
                   type="text"
+                  inputMode="decimal"
                   value={ivMedications}
                   onChange={(e) => setIvMedications(toEnglishDigits(e.target.value))}
                   placeholder="0"
@@ -268,6 +270,7 @@ export const FluidBalanceModal: React.FC<FluidBalanceModalProps> = ({
                 </label>
                 <input
                   type="text"
+                  inputMode="decimal"
                   value={enteralFeed}
                   onChange={(e) => setEnteralFeed(toEnglishDigits(e.target.value))}
                   placeholder="0"
@@ -281,6 +284,7 @@ export const FluidBalanceModal: React.FC<FluidBalanceModalProps> = ({
                 </label>
                 <input
                   type="text"
+                  inputMode="decimal"
                   value={bloodProducts}
                   onChange={(e) => setBloodProducts(toEnglishDigits(e.target.value))}
                   placeholder="0"
@@ -294,6 +298,7 @@ export const FluidBalanceModal: React.FC<FluidBalanceModalProps> = ({
                 </label>
                 <input
                   type="text"
+                  inputMode="decimal"
                   value={oralFluids}
                   onChange={(e) => setOralFluids(toEnglishDigits(e.target.value))}
                   placeholder="0"
@@ -322,6 +327,7 @@ export const FluidBalanceModal: React.FC<FluidBalanceModalProps> = ({
                 </label>
                 <input
                   type="text"
+                  inputMode="decimal"
                   value={urineOutput}
                   onChange={(e) => setUrineOutput(toEnglishDigits(e.target.value))}
                   placeholder="0"
@@ -336,6 +342,7 @@ export const FluidBalanceModal: React.FC<FluidBalanceModalProps> = ({
                 </label>
                 <input
                   type="text"
+                  inputMode="decimal"
                   value={ngDrainage}
                   onChange={(e) => setNgDrainage(toEnglishDigits(e.target.value))}
                   placeholder="0"
@@ -349,6 +356,7 @@ export const FluidBalanceModal: React.FC<FluidBalanceModalProps> = ({
                 </label>
                 <input
                   type="text"
+                  inputMode="decimal"
                   value={chestTube}
                   onChange={(e) => setChestTube(toEnglishDigits(e.target.value))}
                   placeholder="0"
@@ -362,6 +370,7 @@ export const FluidBalanceModal: React.FC<FluidBalanceModalProps> = ({
                 </label>
                 <input
                   type="text"
+                  inputMode="decimal"
                   value={surgicalDrain}
                   onChange={(e) => setSurgicalDrain(toEnglishDigits(e.target.value))}
                   placeholder="0"
@@ -375,6 +384,7 @@ export const FluidBalanceModal: React.FC<FluidBalanceModalProps> = ({
                 </label>
                 <input
                   type="text"
+                  inputMode="decimal"
                   value={insensibleLoss}
                   onChange={(e) => setInsensibleLoss(toEnglishDigits(e.target.value))}
                   placeholder="500"

@@ -276,6 +276,7 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
               <div className="relative">
                 <input
                   type="text"
+                  inputMode="decimal"
                   value={fio2}
                   onChange={(e) => setFio2(toEnglishDigits(e.target.value))}
                   placeholder="21 - 100"
@@ -293,6 +294,7 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
               </label>
               <input
                 type="text"
+                inputMode="decimal"
                 value={peep}
                 onChange={(e) => setPeep(toEnglishDigits(e.target.value))}
                 placeholder="0 - 24"
@@ -308,6 +310,7 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
               </label>
               <input
                 type="text"
+                inputMode="decimal"
                 value={tidalVolume}
                 onChange={(e) => setTidalVolume(toEnglishDigits(e.target.value))}
                 placeholder="300 - 650"
@@ -323,6 +326,7 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
               </label>
               <input
                 type="text"
+                inputMode="decimal"
                 value={setRate}
                 onChange={(e) => setSetRate(toEnglishDigits(e.target.value))}
                 placeholder="10 - 35"
@@ -338,6 +342,7 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
               </label>
               <input
                 type="text"
+                inputMode="decimal"
                 value={peakPressure}
                 onChange={(e) => setPeakPressure(toEnglishDigits(e.target.value))}
                 placeholder="15 - 40"
@@ -352,6 +357,7 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
               </label>
               <input
                 type="text"
+                inputMode="decimal"
                 value={plateauPressure}
                 onChange={(e) => setPlateauPressure(toEnglishDigits(e.target.value))}
                 placeholder="10 - 30"
@@ -366,6 +372,7 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
               </label>
               <input
                 type="text"
+                inputMode="decimal"
                 value={actualRate}
                 onChange={(e) => setActualRate(toEnglishDigits(e.target.value))}
                 placeholder="12 - 40"
@@ -380,6 +387,7 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
               </label>
               <input
                 type="text"
+                inputMode="decimal"
                 value={ieRatio}
                 onChange={(e) => setIeRatio(toEnglishDigits(e.target.value))}
                 placeholder="1:2"
@@ -404,6 +412,7 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
               <span className="text-slate-400 text-[10px]">{lang === 'ar' ? 'التسريب:' : 'Leak:'}</span>
               <input
                 type="text"
+                inputMode="decimal"
                 value={circuitLeak}
                 onChange={(e) => setCircuitLeak(toEnglishDigits(e.target.value))}
                 className="w-12 bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-center text-slate-200 text-xs"

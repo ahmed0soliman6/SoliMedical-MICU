@@ -354,6 +354,7 @@ export const InfusionPumpModal: React.FC<InfusionPumpModalProps> = ({
               </label>
               <input
                 type="text"
+                inputMode="decimal"
                 value={currentRate}
                 onChange={(e) => setCurrentRate(toEnglishDigits(e.target.value))}
                 placeholder="0.0"
@@ -385,6 +386,7 @@ export const InfusionPumpModal: React.FC<InfusionPumpModalProps> = ({
               </label>
               <input
                 type="text"
+                inputMode="decimal"
                 value={flowRateMlPerHour}
                 onChange={(e) => setFlowRateMlPerHour(toEnglishDigits(e.target.value))}
                 placeholder="0.0"
@@ -402,6 +404,7 @@ export const InfusionPumpModal: React.FC<InfusionPumpModalProps> = ({
               </label>
               <input
                 type="text"
+                inputMode="decimal"
                 value={totalVolumeMl}
                 onChange={(e) => setTotalVolumeMl(toEnglishDigits(e.target.value))}
                 placeholder="50"
@@ -415,6 +418,7 @@ export const InfusionPumpModal: React.FC<InfusionPumpModalProps> = ({
               </label>
               <input
                 type="text"
+                inputMode="decimal"
                 value={remainingVolumeMl}
                 onChange={(e) => setRemainingVolumeMl(toEnglishDigits(e.target.value))}
                 placeholder="50"

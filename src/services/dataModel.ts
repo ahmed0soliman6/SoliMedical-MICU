@@ -84,6 +84,7 @@ export interface DirectAdmissionInput {
   fullNameAr: string;
   age: number;
   gender: Gender;
+  bloodType?: string;
   weightKg: number;
   heightCm: number;
   codeStatus: CodeStatus;
@@ -182,6 +183,7 @@ export async function admitPatient(input: DirectAdmissionInput): Promise<{ patie
       fullNameAr: input.fullNameAr,
       age: input.age,
       gender: input.gender,
+      bloodType: input.bloodType,
       weightKg: input.weightKg,
       heightCm: input.heightCm,
       idealBodyWeightKg: idealWeight,

@@ -4,6 +4,7 @@ import { BedNumber, StaffRole } from '../types/schema.ts';
 import { addTimestampedVitals } from '../services/dataModel.ts';
 import { useTranslation } from '../services/i18n.ts';
 import { parseEnglishFloat, parseEnglishInt } from '../services/numberUtils.ts';
+import { useAuth } from '../services/AuthContext.tsx';
 
 interface AddVitalsModalProps {
   isOpen: boolean;
@@ -23,6 +24,7 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
   onVitalsAdded,
 }) => {
   const { t, lang, isRTL } = useTranslation();
+  const { currentUser } = useAuth();
   const [heartRate, setHeartRate] = useState<number>(110);
   const [heartRhythm, setHeartRhythm] = useState<string>('Sinus Tachycardia');
   const [systolicBp, setSystolicBp] = useState<number>(95);
@@ -37,7 +39,6 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
   const [sedationRass, setSedationRass] = useState<number>(-2);
   const [lactate, setLactate] = useState<number>(3.2);
   const [bloodGlucose, setBloodGlucose] = useState<number>(165);
-  const [staffName, setStaffName] = useState<string>('RN Sarah Kamal');
   const [clinicalNotes, setClinicalNotes] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
@@ -49,6 +50,10 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
     e.preventDefault();
     setIsSubmitting(true);
     try {
+      const userDisplay = currentUser?.nameAr || currentUser?.nameEn || currentUser?.displayName || (lang === 'ar' ? 'تمريض العناية المركزة' : 'ICU Staff RN');
+      const staffId = currentUser?.badgeId || currentUser?.id || currentUser?.uid || '7721';
+      const userRole = (currentUser?.role as StaffRole) || StaffRole.LEAD_RN;
+
       await addTimestampedVitals({
         bedId: bedNumber,
         patientId,
@@ -67,9 +72,9 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
         lactateMmolPerL: lactate ? parseEnglishFloat(lactate) : undefined,
         bloodGlucoseMgDl: bloodGlucose ? parseEnglishFloat(bloodGlucose) : undefined,
         recordedBy: {
-          staffId: '7721',
-          name: staffName,
-          role: StaffRole.LEAD_RN,
+          staffId,
+          name: userDisplay,
+          role: userRole,
         },
         clinicalNotes: clinicalNotes.trim() || undefined,
       });
@@ -131,6 +136,7 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
                 </label>
                 <input
                   type="number"
+                  inputMode="decimal"
                   value={systolicBp}
                   onChange={(e) => setSystolicBp(Number(e.target.value))}
                   className="w-full mt-1 bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 text-white font-mono font-bold focus:border-teal-500 focus:outline-none"
@@ -144,6 +150,7 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
                 </label>
                 <input
                   type="number"
+                  inputMode="decimal"
                   value={diastolicBp}
                   onChange={(e) => setDiastolicBp(Number(e.target.value))}
                   className="w-full mt-1 bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 text-white font-mono font-bold focus:border-teal-500 focus:outline-none"
@@ -177,6 +184,7 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
               </label>
               <input
                 type="number"
+                inputMode="decimal"
                 value={heartRate}
                 onChange={(e) => setHeartRate(Number(e.target.value))}
                 className="w-full mt-1 bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 text-white font-mono font-bold focus:border-teal-500 focus:outline-none"
@@ -205,6 +213,7 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
               <label className="text-[11px] text-slate-400">SpO₂ (%)</label>
               <input
                 type="number"
+                inputMode="decimal"
                 value={spo2}
                 onChange={(e) => setSpo2(Number(e.target.value))}
                 className="w-full mt-1 bg-[#0f172a] border border-slate-700 rounded-lg px-2.5 py-2 text-white font-mono font-bold focus:border-teal-500 focus:outline-none"
@@ -216,6 +225,7 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
               <label className="text-[11px] text-slate-400">FiO₂ (%)</label>
               <input
                 type="number"
+                inputMode="decimal"
                 value={fio2}
                 onChange={(e) => setFio2(Number(e.target.value))}
                 className="w-full mt-1 bg-[#0f172a] border border-slate-700 rounded-lg px-2.5 py-2 text-white font-mono font-bold focus:border-teal-500 focus:outline-none"
@@ -230,6 +240,7 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
               </label>
               <input
                 type="number"
+                inputMode="decimal"
                 value={respiratoryRate}
                 onChange={(e) => setRespiratoryRate(Number(e.target.value))}
                 className="w-full mt-1 bg-[#0f172a] border border-slate-700 rounded-lg px-2.5 py-2 text-white font-mono font-bold focus:border-teal-500 focus:outline-none"
@@ -248,6 +259,7 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
               <input
                 type="number"
                 step="0.1"
+                inputMode="decimal"
                 value={coreTemp}
                 onChange={(e) => setCoreTemp(Number(e.target.value))}
                 className="w-full mt-1 bg-[#0f172a] border border-slate-700 rounded-lg px-2.5 py-2 text-white font-mono font-bold focus:border-teal-500 focus:outline-none"
@@ -261,6 +273,7 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
                 type="number"
                 min="3"
                 max="15"
+                inputMode="decimal"
                 value={gcsTotal}
                 onChange={(e) => setGcsTotal(Number(e.target.value))}
                 className="w-full mt-1 bg-[#0f172a] border border-slate-700 rounded-lg px-2.5 py-2 text-white font-mono font-bold focus:border-teal-500 focus:outline-none"
@@ -294,6 +307,7 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
               <input
                 type="number"
                 step="0.1"
+                inputMode="decimal"
                 value={lactate}
                 onChange={(e) => setLactate(Number(e.target.value))}
                 className="w-full mt-1 bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 text-white font-mono focus:border-teal-500 focus:outline-none"
@@ -304,23 +318,12 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
               <label className="text-[11px] text-slate-400">{lang === 'ar' ? 'السكر العشوائي (RBG mg/dL)' : 'Random Glucose (mg/dL)'}</label>
               <input
                 type="number"
+                inputMode="decimal"
                 value={bloodGlucose}
                 onChange={(e) => setBloodGlucose(Number(e.target.value))}
                 className="w-full mt-1 bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 text-white font-mono focus:border-teal-500 focus:outline-none"
               />
             </div>
-          </div>
-
-          {/* Staff Signature */}
-          <div>
-            <label className="text-[11px] text-slate-400">{lang === 'ar' ? 'المسؤول عن التسجيل (Staff RN)' : 'Recording Clinician (Staff RN)'}</label>
-            <input
-              type="text"
-              value={staffName}
-              onChange={(e) => setStaffName(e.target.value)}
-              className="w-full mt-1 bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-teal-500 focus:outline-none"
-              required
-            />
           </div>
 
           {/* Submit Button */}

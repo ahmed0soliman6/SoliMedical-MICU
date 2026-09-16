@@ -367,33 +367,6 @@ export default function App() {
             ) : (
               /* 6-Bed Matrix Grid (Central Station Overview) */
               <div className="space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#0a1224] p-3.5 sm:p-4 rounded-2xl border border-slate-800/80 shadow-md">
-                  <div>
-                    <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
-                      <span>
-                        {lang === 'ar' ? 'لوحة المراقبة المركزية للأسِرّة الستة (6-Bed Central Console)' : 'Central Station 6-Bed Monitor Console'}
-                      </span>
-                    </h2>
-                    <p className="text-xs text-slate-400 mt-0.5">
-                      {lang === 'ar' 
-                        ? 'مراقبة فورية ومزامنة سحابية لحظية عبر Firebase لجميع العلامات الحيوية، أجهزة التنفس ومضخات الحقن'
-                        : 'Real-time telemetry, ventilator metrics, and infusion pump monitoring with Firebase Cloud Sync'}
-                    </p>
-                  </div>
-
-                  {/* Direct Admission Button with Automatic Vacant Bed Detection */}
-                  {beds.length > 0 && (
-                    <button
-                      onClick={handleSmartAdmission}
-                      className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-teal-600 to-teal-500 hover:from-teal-500 hover:to-teal-400 text-slate-950 text-xs sm:text-sm font-bold transition-all shadow-lg shadow-teal-500/20 active:scale-95 flex-shrink-0 cursor-pointer"
-                      title={lang === 'ar' ? 'إدخال مريض جديد واختيار أول سرير شاغر تلقائياً' : 'Admit new ICU patient (Auto-detect vacant bed)'}
-                    >
-                      <UserPlus className="w-4 h-4 text-slate-950" />
-                      <span>{lang === 'ar' ? 'دخول جديد (اختيار السرير تلقائياً)' : 'New Admission (Auto-Detect Bed)'}</span>
-                    </button>
-                  )}
-                </div>
-
                 {/* Responsive Grid: 1 col on mobile, 2 on tablet, 3 on desktop */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {beds.map((bed) => {

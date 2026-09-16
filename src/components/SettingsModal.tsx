@@ -29,11 +29,16 @@ import {
   FolderMinus,
   Sparkles,
   CheckCircle2,
-  Camera
+  Camera,
+  Plus,
+  Trash2,
+  Edit3,
+  AlertTriangle
 } from 'lucide-react';
 import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
 import { SystemFeatureFlags } from '../types/settings.ts';
+import { LabsTemplateManager } from './LabsTemplateManager.tsx';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -53,6 +58,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
     rbac: false,
     language: false,
     unit: false,
+    labsConfig: false,
   });
 
   const [unitForm, setUnitForm] = useState(settings.unit);
@@ -75,6 +81,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
       rbac: true,
       language: true,
       unit: true,
+      labsConfig: true,
     });
   };
 
@@ -86,6 +93,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
       rbac: false,
       language: false,
       unit: false,
+      labsConfig: false,
     });
   };
 
@@ -317,6 +325,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
       items: featureItems.filter(f => f.category === 'alerts')
     },
     {
+      id: 'labsConfig',
+      labelAr: 'إعداد وتخصيص صناديق التحاليل الطبية (صورة الدم، كيمياء، غازات الدم...)',
+      labelEn: 'Customize Lab Panel Categories & Parameters',
+      badgeAr: 'تعديل الإضافة والحذف',
+      badgeEn: 'Dynamic Lab Panels',
+      icon: FlaskConical,
+      isCustom: true
+    },
+    {
       id: 'language',
       labelAr: 'لغة المنظومة والترميز الطبي',
       labelEn: 'System Language & Medical Coding',
@@ -489,6 +506,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                                 </div>
                                 <span className="text-xs opacity-75 mt-1 block">واجهة معربة مع الحفاظ على الاختصارات الطبية (RTL)</span>
                               </button>
+                            </div>
+                          ) : section.id === 'labsConfig' ? (
+                            <div className="mt-2">
+                              <LabsTemplateManager />
                             </div>
                           ) : (
                             <form onSubmit={handleSaveUnit} className="space-y-4 max-w-3xl mt-2">

@@ -78,9 +78,9 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
 
   const [mrn, setMrn] = useState<string>('');
   const [fullNameAr, setFullNameAr] = useState<string>('');
-  const [fullNameEn, setFullNameEn] = useState<string>('');
   const [age, setAge] = useState<number>(65);
-  const [gender, setGender] = useState<Gender>(Gender.MALE);
+  const [gender, setGender] = useState<Gender>(Gender.UNSPECIFIED);
+  const [bloodType, setBloodType] = useState<string>('');
   const [heightCm, setHeightCm] = useState<number>(170);
   const [weightKg, setWeightKg] = useState<number>(78);
   const [codeStatus, setCodeStatus] = useState<CodeStatus>(CodeStatus.FULL_CODE);
@@ -90,8 +90,7 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
   const [primaryDiagnosisEn, setPrimaryDiagnosisEn] = useState<string>('Acute Respiratory Failure secondary to Severe Community-Acquired Pneumonia');
   const [allergiesInput, setAllergiesInput] = useState<string>('None Known');
   const [isolation, setIsolation] = useState<string>('Standard Precautions');
-  const [attendingDoctor, setAttendingDoctor] = useState<string>('Dr. Hesham Talaat');
-  const [primaryNurse, setPrimaryNurse] = useState<string>('RN Mona Hassan');
+  const [recalledArchiveNotice, setRecalledArchiveNotice] = useState<string | null>(null);
   
   // Baselines
   const [initialMap, setInitialMap] = useState<number>(65);
@@ -100,15 +99,50 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
   const [initialFio2, setInitialFio2] = useState<number>(50);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
-  // Generate MRN on mount
+  // Auto-search archive/patients when entering last 4 digits of Card ID or MRN
   useEffect(() => {
-    setMrn(`MRN-${Math.floor(100000 + Math.random() * 900000)}`);
-  }, [targetBed]);
+    async function searchArchive() {
+      const cleanInput = mrn.trim();
+      if (!cleanInput || cleanInput.length < 3) {
+        setRecalledArchiveNotice(null);
+        return;
+      }
+      try {
+        const allRecords = await db.patients.toArray();
+        const match = allRecords.find(p => 
+          p.mrn.endsWith(cleanInput) || 
+          p.mrn.includes(cleanInput) ||
+          (p.nationalId && p.nationalId.endsWith(cleanInput))
+        );
+        if (match) {
+          if (match.fullNameAr) setFullNameAr(match.fullNameAr);
+          if (match.age) setAge(match.age);
+          if (match.gender) setGender(match.gender as Gender);
+          if (match.bloodType) setBloodType(match.bloodType);
+          if (match.heightCm) setHeightCm(match.heightCm);
+          if (match.weightKg) setWeightKg(match.weightKg);
+          if (match.primaryDiagnosisAr) setPrimaryDiagnosisAr(match.primaryDiagnosisAr);
+          if (match.allergies && match.allergies.length > 0) {
+            setAllergiesInput(match.allergies.map(a => a.allergen).join(', '));
+          }
+          if (match.isolationPrecautions && match.isolationPrecautions.length > 0) {
+            setIsolation(match.isolationPrecautions[0]);
+          }
+          setRecalledArchiveNotice(match.fullNameAr || match.fullNameEn || match.mrn);
+        } else {
+          setRecalledArchiveNotice(null);
+        }
+      } catch (e) {
+        console.error('Error searching patient archive:', e);
+      }
+    }
+    searchArchive();
+  }, [mrn]);
 
   const calculatedIbw = calculateIdealBodyWeight(heightCm, gender);
 
   const regenerateMrn = () => {
-    setMrn(`MRN-${Math.floor(100000 + Math.random() * 900000)}`);
+    setMrn(`${Math.floor(1000 + Math.random() * 9000)}`);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -124,7 +158,7 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
       return;
     }
 
-    if (!fullNameAr.trim() && !fullNameEn.trim()) {
+    if (!fullNameAr.trim()) {
       setAdmissionError(lang === 'ar' ? 'يرجى إدخال اسم المريض بالكامل.' : 'Please enter patient full name.');
       return;
     }
@@ -138,28 +172,42 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
           }]
         : [];
 
+      // Detect current logged in physician / user in background
+      let docName = 'د. هشام طلعت (الاستشاري المسجل)';
+      let nurseName = 'ممرض السرير المسؤول (RN)';
+      try {
+        const storedUser = localStorage.getItem('icu_current_user') || localStorage.getItem('soli_logged_user');
+        if (storedUser) {
+          const parsed = JSON.parse(storedUser);
+          if (parsed.nameAr || parsed.nameEn || parsed.name) {
+            docName = parsed.nameAr || parsed.nameEn || parsed.name;
+          }
+        }
+      } catch (e) {}
+
       await admitPatient({
         targetBed,
-        mrn: toEnglishDigits(mrn.trim()),
-        fullNameAr: fullNameAr.trim() || fullNameEn.trim(),
-        fullNameEn: fullNameEn.trim() || fullNameAr.trim(),
+        mrn: toEnglishDigits(mrn.trim() || `CARD-${Math.floor(1000 + Math.random() * 9000)}`),
+        fullNameAr: fullNameAr.trim(),
+        fullNameEn: fullNameAr.trim(), // Automatically mirrored for system compatibility
         age: parseEnglishInt(age) || 65,
-        gender,
+        gender: gender || Gender.UNSPECIFIED,
+        bloodType: bloodType || undefined,
         heightCm: parseEnglishFloat(heightCm) || 170,
         weightKg: parseEnglishFloat(weightKg) || 75,
         codeStatus,
         acuityLevel,
         intakePathway,
         primaryDiagnosisAr: primaryDiagnosisAr.trim(),
-        primaryDiagnosisEn: primaryDiagnosisEn.trim(),
+        primaryDiagnosisEn: primaryDiagnosisEn.trim() || primaryDiagnosisAr.trim(),
         attendingDoctor: {
-          staffId: 'DOC-102',
-          name: attendingDoctor,
+          staffId: 'DOC-ACTIVE',
+          name: docName,
           role: StaffRole.CONSULTANT,
         },
         assignedNurse: {
-          staffId: 'NUR-405',
-          name: primaryNurse,
+          staffId: 'NUR-ACTIVE',
+          name: nurseName,
           role: StaffRole.LEAD_RN,
         },
         allergies: allergiesList,
@@ -175,7 +223,7 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
           coreTemperatureCelsius: 38.2,
           gcsTotalScore: 12,
         },
-        initialAdmissionNote: `Direct full-page admission protocol completed for Bed ${targetBed}. Attending: ${attendingDoctor}, RN: ${primaryNurse}.`,
+        initialAdmissionNote: `Direct admission completed for Bed ${targetBed}. Recorded by logged user: ${docName}.`,
       });
 
       onAdmissionSuccess();
@@ -189,60 +237,6 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
 
   return (
     <div className="space-y-5 animate-in fade-in duration-300">
-      {/* Upper Navigation Bar */}
-      <div className="flex items-center justify-between bg-[#0b1224] border border-slate-700/80 rounded-2xl p-4 shadow-xl">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onCancel}
-            className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-all flex-shrink-0"
-            title={lang === 'ar' ? 'العودة' : 'Back'}
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <div>
-            <div className="flex items-center gap-2">
-              <label htmlFor="target-bed-select" className="sr-only">Target ICU Bed</label>
-              <select
-                id="target-bed-select"
-                value={targetBed}
-                onChange={(e) => {
-                  setTargetBed(e.target.value as BedNumber);
-                  setAdmissionError(null);
-                }}
-                className="px-2.5 py-1 rounded-lg bg-[#070c18] text-teal-300 border border-teal-500/40 font-mono font-bold text-xs focus:outline-none focus:ring-1 focus:ring-teal-500 cursor-pointer"
-              >
-                {bedsList.map((b) => {
-                  const isOcc = b.status === BedStatus.OCCUPIED || !!b.currentPatientId;
-                  const p = isOcc && b.currentPatientId ? patientsList.find(pt => pt.id === b.currentPatientId) : null;
-                  return (
-                    <option key={b.bedNumber} value={b.bedNumber} className="bg-slate-900 text-slate-200">
-                      Bed {b.bedNumber} {isOcc ? `(Occupied - ${p?.fullNameAr || p?.fullNameEn || 'Active'})` : '(Vacant - جاهز)'}
-                    </option>
-                  );
-                })}
-              </select>
-              <h1 className="text-base sm:text-lg font-bold text-white">
-                {lang === 'ar' ? 'تسجيل قبول مريض جديد بجانب السرير' : 'Direct Bedside ICU Admission'}
-              </h1>
-            </div>
-            <p className="text-xs text-slate-400 mt-0.5">
-              {isTargetOccupied
-                ? (lang === 'ar' 
-                    ? `تنبيه: السرير ${targetBed} مشغول حالياً. اختر سريراً شاغراً من القائمة أعلاه.`
-                    : `Notice: Bed ${targetBed} is currently occupied. Please select a vacant bed from the selector above.`)
-                : (lang === 'ar' 
-                    ? 'السرير شاغر وجاهز للاستقبال. تعبئة هذا النموذج ينشئ ملفاً حيوياً مفعلاً لحظياً على المونيتور المركزي.' 
-                    : 'This bed is currently vacant. Admitting a patient initializes their telemetry, clinical charts, and real-time flowsheet.')}
-            </p>
-          </div>
-        </div>
-
-        <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-teal-950/40 border border-teal-500/20 text-teal-300 text-xs font-semibold">
-          <UserPlus className="w-4 h-4 text-teal-400" />
-          <span>{lang === 'ar' ? 'بروتوكول القبول الإلكتروني المباشر' : 'Direct Electronic Admission Protocol'}</span>
-        </div>
-      </div>
-
       {/* Error / Conflict Alert */}
       {admissionError && (
         <div className="p-4 rounded-xl bg-red-950/40 border border-red-500/40 flex items-start gap-3 text-red-300">
@@ -258,8 +252,8 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
 
       {/* Main Full-Page Admission Form */}
       <form onSubmit={handleSubmit} className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-6 shadow-xl space-y-6 text-xs">
-        {/* Bed Status Warning */}
-        {isTargetOccupied ? (
+        {/* Bed Status Warning (Only if target bed is occupied) */}
+        {isTargetOccupied && (
           <div className="p-4 rounded-xl bg-amber-950/30 border border-amber-500/40 flex items-start gap-3">
             <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
             <div>
@@ -273,38 +267,32 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
               </p>
             </div>
           </div>
-        ) : (
-          <div className="p-4 rounded-xl bg-emerald-950/20 border border-emerald-500/30 flex items-start gap-3">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse mt-1 flex-shrink-0" />
-            <div>
-              <strong className="text-emerald-300 block text-xs">
-                {lang === 'ar' ? `السرير ${targetBed} معقم ومعد للاستقبال الفوري` : `Bed ${targetBed} Cleaned, Calibrated & Ready for Immediate Care`}
-              </strong>
-              <p className="text-slate-400 mt-0.5 text-[11px]">
-                {lang === 'ar' 
-                  ? 'تم فحص أجهزة المراقبة الحيوية، واختبار ضغط الأكسجين والشفط الجداري. يمكنك المباشرة بتسكين المريض.' 
-                  : 'Bedside hardware, central gases, wall suction, and monitors have been checked. Proceed with direct clinical entry.'}
-              </p>
-            </div>
-          </div>
         )}
 
         {/* Section 1: Demographics & Identifiers */}
         <div className="space-y-4">
-          <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider border-b border-slate-800 pb-2">
-            1. {lang === 'ar' ? 'البيانات الشخصية والتعريفية للمريض' : 'Patient Identifiers & Demographics'}
+          <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider border-b border-slate-800 pb-2 flex items-center justify-between">
+            <span>1. {lang === 'ar' ? 'البيانات الشخصية والتعريفية للمريض' : 'Patient Identifiers & Demographics'}</span>
+            {recalledArchiveNotice && (
+              <span className="text-[11px] font-normal text-teal-300 bg-teal-950/80 border border-teal-500/50 px-2.5 py-1 rounded-lg animate-pulse">
+                {lang === 'ar' 
+                  ? `✨ تم استرجاع الملف الطبي السابق من الأرشيف تلقائياً (${recalledArchiveNotice})`
+                  : `✨ Archived record auto-recalled (${recalledArchiveNotice})`}
+              </span>
+            )}
           </h3>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="text-[11px] text-slate-300 font-semibold block mb-1">
-                {lang === 'ar' ? 'الرقم الطبي للمريض (MRN)' : 'Medical Record Number (MRN)'}
+                {lang === 'ar' ? 'رقم بطاقة المريض (آخر 4 أرقام)' : 'Patient Card / Medical ID (Last 4 Digits)'}
               </label>
               <div className="relative">
                 <input
                   type="text"
                   value={mrn}
                   onChange={(e) => setMrn(e.target.value)}
+                  placeholder="مثال: 5044 أو 350440"
                   className="w-full bg-[#070c18] border border-slate-700 rounded-lg pl-10 pr-3 py-2 text-white font-mono font-bold focus:border-teal-500 focus:outline-none"
                   required
                 />
@@ -312,7 +300,7 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
                   type="button"
                   onClick={regenerateMrn}
                   className="absolute left-2.5 top-2.5 text-slate-500 hover:text-teal-400 transition-colors"
-                  title={lang === 'ar' ? 'توليد رقم طبي جديد' : 'Regenerate MRN'}
+                  title={lang === 'ar' ? 'توليد رقم عشوائي' : 'Regenerate Code'}
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
                 </button>
@@ -332,22 +320,9 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
                 required
               />
             </div>
-
-            <div>
-              <label className="text-[11px] text-slate-300 font-semibold block mb-1">
-                {lang === 'ar' ? 'الاسم بالكامل (EN)' : 'Patient Full Name (English)'}
-              </label>
-              <input
-                type="text"
-                value={fullNameEn}
-                onChange={(e) => setFullNameEn(e.target.value)}
-                placeholder="e.g. Yehia Mamdouh El-Sayed"
-                className="w-full bg-[#070c18] border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-teal-500 focus:outline-none text-xs font-bold"
-              />
-            </div>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-[#070c18] p-4 rounded-xl border border-slate-800/60">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 bg-[#070c18] p-4 rounded-xl border border-slate-800/60">
             <div>
               <label className="text-[11px] text-slate-400 block mb-1">{lang === 'ar' ? 'العمر (بالسنوات)' : 'Age (Years)'}</label>
               <input
@@ -366,13 +341,33 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
                 onChange={(e) => setGender(e.target.value as Gender)}
                 className="w-full bg-[#0b1224] border border-slate-700 rounded-lg px-3 py-1.5 text-white focus:border-teal-500 focus:outline-none"
               >
+                <option value={Gender.UNSPECIFIED}>{lang === 'ar' ? 'غير محدد' : 'Unspecified'}</option>
                 <option value={Gender.MALE}>{lang === 'ar' ? 'ذكر (Male)' : 'Male'}</option>
                 <option value={Gender.FEMALE}>{lang === 'ar' ? 'أنثى (Female)' : 'Female'}</option>
               </select>
             </div>
 
             <div>
-              <label className="text-[11px] text-slate-400 block mb-1">{lang === 'ar' ? 'الطول (الطول بالسم)' : 'Height (cm)'}</label>
+              <label className="text-[11px] text-slate-400 block mb-1">{lang === 'ar' ? 'فصيلة الدم (Blood Group)' : 'Blood Type'}</label>
+              <select
+                value={bloodType}
+                onChange={(e) => setBloodType(e.target.value)}
+                className="w-full bg-[#0b1224] border border-slate-700 rounded-lg px-3 py-1.5 text-white focus:border-teal-500 focus:outline-none font-bold text-teal-300"
+              >
+                <option value="">{lang === 'ar' ? 'غير محدد' : 'Unspecified'}</option>
+                <option value="A+">A+</option>
+                <option value="A-">A-</option>
+                <option value="B+">B+</option>
+                <option value="B-">B-</option>
+                <option value="AB+">AB+</option>
+                <option value="AB-">AB-</option>
+                <option value="O+">O+</option>
+                <option value="O-">O-</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="text-[11px] text-slate-400 block mb-1">{lang === 'ar' ? 'الطول (بالسم)' : 'Height (cm)'}</label>
               <input
                 type="number"
                 value={heightCm}
@@ -383,7 +378,7 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
             </div>
 
             <div>
-              <label className="text-[11px] text-slate-400 block mb-1">{lang === 'ar' ? 'الوزن الفعلي (كجم)' : 'Actual Weight (kg)'}</label>
+              <label className="text-[11px] text-slate-400 block mb-1">{lang === 'ar' ? 'الوزن (كجم)' : 'Actual Weight (kg)'}</label>
               <input
                 type="number"
                 value={weightKg}
@@ -391,8 +386,8 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
                 className="w-full bg-[#0b1224] border border-slate-700 rounded-lg px-3 py-1.5 text-white font-mono focus:border-teal-500 focus:outline-none"
                 required
               />
-              <div className="text-[10px] text-teal-400 font-mono mt-1 font-semibold">
-                {lang === 'ar' ? `الوزن المثالي (IBW): ${calculatedIbw} كجم` : `Ideal Body Weight (IBW): ${calculatedIbw} kg`}
+              <div className="text-[10px] text-teal-400 font-mono mt-1 font-semibold truncate">
+                {lang === 'ar' ? `الوزن المثالي: ${calculatedIbw} كجم` : `IBW: ${calculatedIbw} kg`}
               </div>
             </div>
           </div>
@@ -454,32 +449,21 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="text-[11px] text-slate-300 font-semibold block mb-1">
-                {lang === 'ar' ? 'التشخيص الأساسي (عربي)' : 'Primary Admitting Diagnosis (Arabic)'}
-              </label>
-              <input
-                type="text"
-                value={primaryDiagnosisAr}
-                onChange={(e) => setPrimaryDiagnosisAr(e.target.value)}
-                className="w-full bg-[#070c18] border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-teal-500 focus:outline-none text-xs font-semibold"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="text-[11px] text-slate-300 font-semibold block mb-1">
-                {lang === 'ar' ? 'التشخيص الأساسي بالإنجليزي (Primary Diagnosis ICD-10)' : 'Primary Admitting Diagnosis (English)'}
-              </label>
-              <input
-                type="text"
-                value={primaryDiagnosisEn}
-                onChange={(e) => setPrimaryDiagnosisEn(e.target.value)}
-                className="w-full bg-[#070c18] border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-teal-500 focus:outline-none text-xs font-semibold"
-                required
-              />
-            </div>
+          <div>
+            <label className="text-[11px] text-slate-300 font-semibold block mb-1">
+              {lang === 'ar' ? 'التشخيص الطبي الأساسي (Primary Diagnosis ICD-10)' : 'Primary Admitting Diagnosis (ICD-10)'}
+            </label>
+            <input
+              type="text"
+              value={primaryDiagnosisEn}
+              onChange={(e) => {
+                setPrimaryDiagnosisEn(e.target.value);
+                setPrimaryDiagnosisAr(e.target.value);
+              }}
+              placeholder={lang === 'ar' ? 'مثال: فشل تنفسي حاد - Acute Respiratory Failure' : 'e.g. Acute Respiratory Failure'}
+              className="w-full bg-[#070c18] border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-teal-500 focus:outline-none text-xs font-semibold"
+              required
+            />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -509,45 +493,10 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
           </div>
         </div>
 
-        {/* Section 3: Staff & Team Allocation */}
+        {/* Section 3: Initial Telemetry Baseline */}
         <div className="space-y-4">
           <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider border-b border-slate-800 pb-2">
-            3. {lang === 'ar' ? 'تخصيص الفريق السريري المسؤول' : 'Clinical Care Team Allocation'}
-          </h3>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="text-[11px] text-slate-300 font-semibold block mb-1">
-                {lang === 'ar' ? 'استشاري العناية المشرف (ICU Consultant)' : 'Attending ICU Consultant'}
-              </label>
-              <input
-                type="text"
-                value={attendingDoctor}
-                onChange={(e) => setAttendingDoctor(e.target.value)}
-                className="w-full bg-[#070c18] border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-teal-500 focus:outline-none font-bold"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="text-[11px] text-slate-300 font-semibold block mb-1">
-                {lang === 'ar' ? 'ممرض السرير المسؤول (Primary Bedside RN)' : 'Primary Bedside Nurse (RN)'}
-              </label>
-              <input
-                type="text"
-                value={primaryNurse}
-                onChange={(e) => setPrimaryNurse(e.target.value)}
-                className="w-full bg-[#070c18] border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-teal-500 focus:outline-none font-bold"
-                required
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Section 4: Initial Telemetry Baseline */}
-        <div className="space-y-4">
-          <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider border-b border-slate-800 pb-2">
-            4. {lang === 'ar' ? 'العلامات الحيوية الأولية لتشغيل المونيتور' : 'Initial Telemetry Monitor Baseline'}
+            3. {lang === 'ar' ? 'العلامات الحيوية الأولية لتشغيل المونيتور' : 'Initial Telemetry Monitor Baseline'}
           </h3>
 
           <div className="bg-[#070c18] p-4 rounded-xl border border-slate-800/60 space-y-2">

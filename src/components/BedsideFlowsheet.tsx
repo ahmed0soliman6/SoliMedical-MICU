@@ -69,6 +69,7 @@ import { AiLabScannerModal } from './AiLabScannerModal.tsx';
 import { VentilatorModal } from './VentilatorModal.tsx';
 import { InfusionPumpModal } from './InfusionPumpModal.tsx';
 import { FluidBalanceModal } from './FluidBalanceModal.tsx';
+import { LabsTemplateManager } from './LabsTemplateManager.tsx';
 import { 
   BedsideCardsConfigModal, 
   BedsideCardsConfig, 
@@ -104,7 +105,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
   const { t, lang, isRTL } = useTranslation();
   const { currentUser } = useAuth();
   
-  const [activeTab, setActiveTab] = useState<'all' | 'paperFlowsheet' | 'labs' | 'investigations' | 'vitals' | 'vent' | 'pumps' | 'fluids' | 'sbar' | 'notes' | 'disposition'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'paperFlowsheet' | 'labs' | 'investigations' | 'vitals' | 'vent' | 'pumps' | 'fluids' | 'sbar' | 'notes' | 'disposition' | 'labTemplates'>('all');
   const [isPatientCardCollapsed, setIsPatientCardCollapsed] = useState<boolean>(true);
   const [isDispositionCardCollapsed, setIsDispositionCardCollapsed] = useState<boolean>(true);
   const [isHistoryCardCollapsed, setIsHistoryCardCollapsed] = useState<boolean>(true);
@@ -171,6 +172,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
 
   // Lab modal and form states
   const [isAddLabModalOpen, setIsAddLabModalOpen] = useState(false);
+  const [selectedModalCatId, setSelectedModalCatId] = useState<string>('all');
   const [editingLabId, setEditingLabId] = useState<string | null>(null);
   const [isAiLabScannerOpen, setIsAiLabScannerOpen] = useState(false);
   const [aiScannerPreset, setAiScannerPreset] = useState<'ABG' | 'CBC' | 'CHEMISTRY' | 'ALL'>('ALL');
@@ -200,17 +202,69 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
     setHistoryInput(patient.history || '');
     setPresentingComplaintInput(patient.presentingComplaint || '');
     setChronicDiseasesInput(patient.chronicDiseases || '');
-    setPrimaryDiagnosisEnInput(patient.primaryDiagnosisEn || '');
+    setPrimaryDiagnosisEnInput(patient.primaryDiagnosisEn || patient.primaryDiagnosisAr || '');
     setPrimaryDiagnosisArInput(patient.primaryDiagnosisAr || '');
     setIsHistoryEditing(false);
-  }, [patient.id]);
+
+    loadBedsideData();
+    const interval = setInterval(() => {
+      loadBedsideData();
+    }, 2500);
+    return () => clearInterval(interval);
+  }, [bed.bedNumber, patient.id]);
 
   const loadBedsideData = async () => {
-    const vitals = await db.vitals
+    let vitals = await db.vitals
       .where('patientId')
       .equals(patient.id)
       .reverse()
       .sortBy('timestamp');
+
+    if (vitals.length === 0 && bed.bedNumber) {
+      const bedVitals = await db.vitals
+        .where('bedId')
+        .equals(bed.bedNumber)
+        .reverse()
+        .sortBy('timestamp');
+      if (bedVitals.length > 0) {
+        vitals = bedVitals;
+      }
+    }
+
+    if (vitals.length === 0) {
+      const mapVal = Math.round(65 + (110 - 65) / 3);
+      const seedVital: TelemetryVitals = {
+        id: `vit-seed-${patient.id}`,
+        bedId: bed.bedNumber,
+        bedNumber: bed.bedNumber,
+        patientId: patient.id,
+        timestamp: new Date().toISOString(),
+        heartRateBpm: 88,
+        heartRhythm: 'Normal Sinus Rhythm',
+        systolicBpMmHg: 110,
+        diastolicBpMmHg: 65,
+        meanArterialPressureMmHg: mapVal,
+        isArterialLine: false,
+        spo2Percent: 97,
+        fio2SuppliedPercent: 40,
+        respiratoryRateCpm: 18,
+        coreTemperatureCelsius: 37.1,
+        temperatureSite: 'FOLEY_CORE',
+        gcsTotalScore: 15,
+        gcsBreakdown: { eyeOpening: 4, verbalResponse: 5, motorResponse: 6 },
+        sedationRassScore: 0,
+        lactateMmolPerL: 1.4,
+        bloodGlucoseMgDl: 120,
+        recordedBy: {
+          staffId: '1001',
+          name: 'ICU Triage Staff',
+          role: StaffRole.BEDSIDE_RN,
+        },
+        clinicalNotes: 'Initial admission baseline vitals',
+      };
+      await db.vitals.put(seedVital);
+      vitals = [seedVital];
+    }
     setVitalsHistory(vitals);
 
     const vent = await db.ventilators
@@ -559,7 +613,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
         presentingComplaint: presentingComplaintInput,
         chronicDiseases: chronicDiseasesInput,
         primaryDiagnosisEn: primaryDiagnosisEnInput,
-        primaryDiagnosisAr: primaryDiagnosisArInput,
+        primaryDiagnosisAr: primaryDiagnosisEnInput,
         updatedAt: new Date().toISOString()
       };
       await db.patients.put(updatedPatient);
@@ -573,18 +627,67 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
     }
   };
 
+  const getLabParamValue = (lab: StatLabPanel, paramId: string): string => {
+    if (lab.values && lab.values[paramId] !== undefined) {
+      return lab.values[paramId];
+    }
+    const pid = paramId.toLowerCase();
+    switch (pid) {
+      case 'wbc': return lab.cbc?.wbcCountKPerUl?.toString() || '';
+      case 'hb': return lab.cbc?.hemoglobinGPerDl?.toString() || '';
+      case 'hct': return lab.cbc?.hematocritPercent?.toString() || '';
+      case 'plt': return lab.cbc?.plateletCountKPerUl?.toString() || '';
+      case 'diff': return lab.cbc?.differential || '';
+      case 'typeanemia': return lab.cbc?.typeAnemia || '';
+      case 'inr': return lab.coagulation?.inr?.toString() || '';
+      case 'pt': return lab.coagulation?.ptSeconds?.toString() || '';
+      case 'ptt': return lab.coagulation?.pttSeconds?.toString() || '';
+      case 'fib': return lab.coagulation?.fibrinogenMgPerDl?.toString() || '';
+      case 'k': return lab.biochemistry?.potassiumMeqPerL?.toString() || '';
+      case 'na': return lab.biochemistry?.sodiumMeqPerL?.toString() || '';
+      case 'creat': return lab.biochemistry?.creatinineMgPerDl?.toString() || '';
+      case 'bun': return lab.biochemistry?.bunMgPerDl?.toString() || '';
+      case 'totalbili': return lab.biochemistry?.totalBilirubinMgPerDl?.toString() || '';
+      case 'alb': return lab.biochemistry?.albuminGPerDl?.toString() || '';
+      case 'procalc': return lab.biochemistry?.procalcitoninNgPerMl?.toString() || '';
+      case 'crp': return lab.biochemistry?.crpMgPerL?.toString() || '';
+      case 'ca': return lab.biochemistry?.calciumMeqPerL?.toString() || '';
+      case 'phos': return lab.biochemistry?.phosphorusMeqPerL?.toString() || '';
+      case 'mg': return lab.biochemistry?.magnesiumMeqPerL?.toString() || '';
+      case 'alt': return lab.biochemistry?.altUPerL?.toString() || '';
+      case 'ast': return lab.biochemistry?.astUPerL?.toString() || '';
+      case 'alp': return lab.biochemistry?.alpUPerL?.toString() || '';
+      case 'ggt': return lab.biochemistry?.ggtUPerL?.toString() || '';
+      case 'amylase': return lab.biochemistry?.amylaseUPerL?.toString() || '';
+      case 'lipase': return lab.biochemistry?.lipaseUPerL?.toString() || '';
+      case 'troponin': return lab.biochemistry?.troponinNgPerMl?.toString() || '';
+      case 'ck': return lab.biochemistry?.ckUPerL?.toString() || '';
+      case 'ckmb': return lab.biochemistry?.ckMbUPerL?.toString() || '';
+      case 'esr': return lab.biochemistry?.esrMmHr?.toString() || '';
+      case 'urea': return lab.biochemistry?.ureaMgPerDl?.toString() || '';
+      case 'uricacid': return lab.biochemistry?.uricAcidMgPerDl?.toString() || '';
+      case 'ph': return lab.abg?.ph?.toString() || '';
+      case 'pco2': return lab.abg?.pco2MmHg?.toString() || '';
+      case 'po2': return lab.abg?.po2MmHg?.toString() || '';
+      case 'hco3': return lab.abg?.hco3MmolPerL?.toString() || '';
+      case 'be': return lab.abg?.baseExcessMmolPerL?.toString() || '';
+      case 'lactate': return lab.abg?.lactateMmolPerL?.toString() || '';
+      case 'pf': return lab.abg?.pao2Fio2Ratio?.toString() || '';
+      default: return '';
+    }
+  };
+
   const handleOpenAddLabColumn = () => {
     setEditingLabId(null);
-    setLabForm({
-      timestamp: new Date().toISOString().slice(0, 16),
-      wbc: '', hb: '', hct: '', plt: '', diff: '', typeAnemia: '',
-      inr: '', pt: '', ptt: '', fib: '',
-      k: '', na: '', creat: '', bun: '', totalBili: '', alb: '', procalc: '', crp: '',
-      ca: '', phos: '', mg: '', alt: '', ast: '', alp: '', ggt: '',
-      amylase: '', lipase: '', troponin: '', ck: '', ckMb: '', esr: '',
-      urea: '', uricAcid: '',
-      ph: '', pco2: '', po2: '', hco3: '', be: '', lactate: '', pf: '',
+    const initialForm: Record<string, string> = {
+      timestamp: new Date().toISOString().slice(0, 16)
+    };
+    settings.labCategories?.forEach((cat: any) => {
+      cat.parameters?.forEach((p: any) => {
+        initialForm[p.id] = '';
+      });
     });
+    setLabForm(initialForm as any);
     setIsAddLabModalOpen(true);
   };
 
@@ -712,49 +815,15 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
     }
 
     setEditingLabId(lab.id);
-    setLabForm({
-      timestamp: lab.timestamp.slice(0, 16),
-      wbc: lab.cbc.wbcCountKPerUl?.toString() || '',
-      hb: lab.cbc.hemoglobinGPerDl?.toString() || '',
-      hct: lab.cbc.hematocritPercent?.toString() || '',
-      plt: lab.cbc.plateletCountKPerUl?.toString() || '',
-      diff: lab.cbc.differential || '',
-      typeAnemia: lab.cbc.typeAnemia || '',
-      inr: lab.coagulation.inr?.toString() || '',
-      pt: lab.coagulation.ptSeconds?.toString() || '',
-      ptt: lab.coagulation.pttSeconds?.toString() || '',
-      fib: lab.coagulation.fibrinogenMgPerDl?.toString() || '',
-      k: lab.biochemistry.potassiumMeqPerL?.toString() || '',
-      na: lab.biochemistry.sodiumMeqPerL?.toString() || '',
-      creat: lab.biochemistry.creatinineMgPerDl?.toString() || '',
-      bun: lab.biochemistry.bunMgPerDl?.toString() || '',
-      totalBili: lab.biochemistry.totalBilirubinMgPerDl?.toString() || '',
-      alb: lab.biochemistry.albuminGPerDl?.toString() || '',
-      procalc: lab.biochemistry.procalcitoninNgPerMl?.toString() || '',
-      crp: lab.biochemistry.crpMgPerL?.toString() || '',
-      ca: lab.biochemistry.calciumMeqPerL?.toString() || '',
-      phos: lab.biochemistry.phosphorusMeqPerL?.toString() || '',
-      mg: lab.biochemistry.magnesiumMeqPerL?.toString() || '',
-      alt: lab.biochemistry.altUPerL?.toString() || '',
-      ast: lab.biochemistry.astUPerL?.toString() || '',
-      alp: lab.biochemistry.alpUPerL?.toString() || '',
-      ggt: lab.biochemistry.ggtUPerL?.toString() || '',
-      amylase: lab.biochemistry.amylaseUPerL?.toString() || '',
-      lipase: lab.biochemistry.lipaseUPerL?.toString() || '',
-      troponin: lab.biochemistry.troponinNgPerMl?.toString() || '',
-      ck: lab.biochemistry.ckUPerL?.toString() || '',
-      ckMb: lab.biochemistry.ckMbUPerL?.toString() || '',
-      esr: lab.biochemistry.esrMmHr?.toString() || '',
-      urea: lab.biochemistry.ureaMgPerDl?.toString() || '',
-      uricAcid: lab.biochemistry.uricAcidMgPerDl?.toString() || '',
-      ph: lab.abg.ph?.toString() || '',
-      pco2: lab.abg.pco2MmHg?.toString() || '',
-      po2: lab.abg.po2MmHg?.toString() || '',
-      hco3: lab.abg.hco3MmolPerL?.toString() || '',
-      be: lab.abg.baseExcessMmolPerL?.toString() || '',
-      lactate: lab.abg.lactateMmolPerL?.toString() || '',
-      pf: lab.abg.pao2Fio2Ratio?.toString() || '',
+    const editForm: Record<string, string> = {
+      timestamp: lab.timestamp.slice(0, 16)
+    };
+    settings.labCategories?.forEach((cat: any) => {
+      cat.parameters?.forEach((p: any) => {
+        editForm[p.id] = getLabParamValue(lab, p.id);
+      });
     });
+    setLabForm(editForm as any);
     setIsAddLabModalOpen(true);
   };
 
@@ -849,6 +918,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
         reviewedByDoctorName: editingLabId 
           ? (labsList.find(l => l.id === editingLabId)?.reviewedByDoctorName || doctorName)
           : doctorName,
+        values: { ...labForm },
       };
 
       await db.statLabs.put(labEntry);
@@ -940,212 +1010,101 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
         </div>
       )}
 
-      {/* Top Dossier Header Card (Collapsible) */}
-      <div 
-        onClick={() => setIsPatientCardCollapsed(!isPatientCardCollapsed)}
-        className="bg-[#0b1224] border border-slate-700/80 hover:border-teal-500/40 rounded-2xl p-3.5 sm:p-4 shadow-xl transition-all cursor-pointer select-none"
-      >
-        {isPatientCardCollapsed ? (
-          /* Collapsed View: ONLY Bed Number, Patient Name, Diagnosis Subtitle, and Chevron indicator */
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3 min-w-0 flex-1">
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onBack();
-                }}
-                className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-all flex-shrink-0"
-                title={lang === 'ar' ? 'العودة لشبكة الأسِرّة' : 'Back to Bed Matrix'}
-              >
-                <ArrowLeft className="w-4 h-4" />
-              </button>
+      {/* Top Patient Header Banner Card (Clean minimal view, folded by default) */}
+      <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-3 sm:p-3.5 shadow-xl transition-all">
+        <div className="flex items-center justify-between gap-3">
+          {/* Back Button, Bed Number, Patient Name & SBAR Handover Button Right Beside Name */}
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
+            <button
+              onClick={onBack}
+              className="p-2 sm:p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-all flex-shrink-0 cursor-pointer"
+              title={lang === 'ar' ? 'العودة لشبكة الأسِرّة' : 'Back to Bed Matrix'}
+            >
+              <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
+            </button>
 
-              <span className="w-8 h-8 rounded-xl bg-teal-500/20 text-teal-300 border border-teal-500/40 font-mono font-black text-sm flex items-center justify-center shadow-md flex-shrink-0">
-                {bed.bedNumber}
-              </span>
+            <span className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-teal-500/20 text-teal-300 border border-teal-500/40 font-mono font-black text-xs sm:text-sm flex items-center justify-center shadow-md flex-shrink-0">
+              {bed.bedNumber}
+            </span>
 
-              <div className="min-w-0 flex-1">
-                <h1 className="text-base sm:text-lg font-bold text-white truncate">
-                  {patient.fullNameAr || patient.fullNameEn}
-                </h1>
+            <div className="flex items-center gap-2.5 min-w-0 flex-wrap flex-1">
+              <h1 className="text-base sm:text-lg font-bold text-white truncate max-w-[220px] sm:max-w-xs md:max-w-md">
+                {patient.fullNameAr || patient.fullNameEn}
+              </h1>
 
-                {(patient.primaryDiagnosisAr || patient.primaryDiagnosisEn) && (
-                  <p className="text-xs text-teal-300/80 font-mono truncate mt-0.5">
-                    <span className="text-slate-400 font-sans">{lang === 'ar' ? 'التشخيص:' : 'Dx:'}</span>{' '}
-                    {lang === 'ar' 
-                      ? (patient.primaryDiagnosisAr || patient.primaryDiagnosisEn) 
-                      : (patient.primaryDiagnosisEn || patient.primaryDiagnosisAr)}
-                  </p>
-                )}
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-              <div className="p-1.5 rounded-xl bg-teal-500/10 text-teal-400 border border-teal-500/30 flex items-center justify-center">
-                <ChevronDown className="w-5 h-5 text-teal-400" />
-              </div>
+              {/* زر تسليم SBAR بجوار الاسم مباشرة */}
+              {settings.features.enableSbarHandover && (
+                <button
+                  onClick={onOpenSbarSign}
+                  className="flex items-center gap-1.5 px-2.5 py-1 sm:py-1.5 rounded-xl bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-slate-950 text-xs font-bold transition-all shadow-md shadow-teal-500/20 active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
+                  title={lang === 'ar' ? 'تسليم SBAR السريري' : 'SBAR Handover Sign'}
+                >
+                  <ShieldCheck className="w-3.5 h-3.5 stroke-[2.5]" />
+                  <span>{lang === 'ar' ? 'تسليم SBAR' : 'SBAR Sign'}</span>
+                </button>
+              )}
             </div>
           </div>
-        ) : (
-          /* Expanded View: Complete Dossier Details & CTAs */
-          <div className="space-y-4">
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-              {/* Back Button & Patient Summary */}
-              <div className="flex items-start gap-3">
-                <button
-                  onClick={onBack}
-                  className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-all flex-shrink-0 mt-0.5"
-                  title={lang === 'ar' ? 'العودة لشبكة الأسِرّة' : 'Back to Bed Matrix'}
-                >
-                  <ArrowLeft className="w-5 h-5" />
-                </button>
 
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="w-8 h-8 rounded-xl bg-teal-500/20 text-teal-300 border border-teal-500/40 font-mono font-black text-sm flex items-center justify-center shadow-md">
-                      {bed.bedNumber}
-                    </span>
-                    <h1 className="text-lg sm:text-xl font-bold text-white">
-                      {patient.fullNameAr || patient.fullNameEn}
-                    </h1>
-                    
-                    {/* Fixed Patient ID */}
-                    <div className="flex items-center gap-1 font-mono text-xs text-teal-300 font-semibold px-2.5 py-0.5 rounded bg-teal-950/80 border border-teal-800/80 shadow-sm">
-                      <Fingerprint className="w-3.5 h-3.5 text-teal-400" />
-                      <span>ID: {patient.id}</span>
-                    </div>
+          {/* Toggle Fold / Expand Button */}
+          <button
+            type="button"
+            onClick={() => setIsPatientCardCollapsed(!isPatientCardCollapsed)}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-medium border border-slate-700/60 transition-all cursor-pointer shrink-0"
+            title={isPatientCardCollapsed ? (lang === 'ar' ? 'توسيع البطاقة' : 'Expand Card') : (lang === 'ar' ? 'طي البطاقة' : 'Collapse Card')}
+          >
+            <span className="hidden sm:inline text-[11px] text-slate-400">
+              {isPatientCardCollapsed ? (lang === 'ar' ? 'تفاصيل السرير' : 'Details') : (lang === 'ar' ? 'طي' : 'Collapse')}
+            </span>
+            {isPatientCardCollapsed ? (
+              <ChevronDown className="w-4 h-4 text-teal-400" />
+            ) : (
+              <ChevronUp className="w-4 h-4 text-teal-400" />
+            )}
+          </button>
+        </div>
 
-                    <span className="font-mono text-xs text-slate-300 font-semibold px-2 py-0.5 rounded bg-slate-800 border border-slate-700">
-                      MRN #{patient.mrn}
-                    </span>
+        {/* Expandable Details: Primary Diagnosis & Action Buttons (Hidden when collapsed) */}
+        {!isPatientCardCollapsed && (
+          <div className="mt-3 pt-3 border-t border-slate-800/80 flex flex-col lg:flex-row lg:items-center justify-between gap-3 animate-in fade-in duration-200">
+            {/* Primary Diagnosis */}
+            <div className="min-w-0">
+              <p className="text-xs text-teal-300/90 font-mono truncate">
+                <span className="text-slate-400 font-sans">{lang === 'ar' ? 'التشخيص الأساسي:' : 'Primary Dx:'}</span>{' '}
+                {lang === 'ar' 
+                  ? (patient.primaryDiagnosisAr || patient.primaryDiagnosisEn || '—') 
+                  : (patient.primaryDiagnosisEn || patient.primaryDiagnosisAr || '—')}
+              </p>
+            </div>
 
-                    {/* Bed Status Badge */}
-                    <span className={`text-xs font-bold px-2.5 py-0.5 rounded-md flex items-center gap-1 ${
-                      bed.status === BedStatus.ISOLATION || (bed.isolation?.isIsolated ?? false)
-                        ? 'bg-amber-950 text-amber-300 border border-amber-600'
-                        : bed.status === BedStatus.UNAVAILABLE
-                        ? 'bg-red-950 text-red-300 border border-red-800'
-                        : bed.status === BedStatus.OCCUPIED
-                        ? 'bg-emerald-950 text-emerald-300 border border-emerald-700'
-                        : 'bg-slate-800 text-slate-300 border border-slate-700'
-                    }`}>
-                      {bed.status === BedStatus.ISOLATION || (bed.isolation?.isIsolated ?? false)
-                        ? (lang === 'ar' ? '⚠️ سرير عزل طبي' : '⚠️ ISOLATION BED')
-                        : bed.status === BedStatus.UNAVAILABLE
-                        ? (lang === 'ar' ? '🔒 سرير غير متاح' : '🔒 UNAVAILABLE')
-                        : bed.status === BedStatus.OCCUPIED
-                        ? (lang === 'ar' ? '● سرير مشغول' : '● OCCUPIED')
-                        : (lang === 'ar' ? '○ سرير شاغر' : '○ VACANT')}
-                    </span>
+            {/* Action Buttons: Transfer, Swap, Isolation */}
+            <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
+              <button
+                onClick={() => setIsTransferModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-500/40 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
+                title={lang === 'ar' ? 'نقل المريض لسرير شاغر' : 'Transfer patient to vacant bed'}
+              >
+                <ArrowRightLeft className="w-3.5 h-3.5 text-blue-400" />
+                <span>{lang === 'ar' ? 'نقل المريض' : 'Transfer Bed'}</span>
+              </button>
 
-                    {settings.features.enableCodeStatus && (
-                      <span className={`text-xs font-mono font-bold px-2.5 py-0.5 rounded-md ${
-                        patient.codeStatus === CodeStatus.DNR 
-                          ? 'bg-purple-950 text-purple-300 border border-purple-700' 
-                          : 'bg-emerald-950 text-emerald-300 border border-emerald-700'
-                      }`}>
-                        {patient.codeStatus}
-                      </span>
-                    )}
-                    {settings.features.enableAcuityLevels && (
-                      <span className={`text-xs font-bold px-2.5 py-0.5 rounded-md ${
-                        patient.acuityLevel === 'CRITICAL_STAT'
-                          ? 'bg-red-950 text-red-400 border border-red-700 animate-pulse'
-                          : 'bg-teal-950 text-teal-300 border border-teal-800'
-                      }`}>
-                        {patient.acuityLevel}
-                      </span>
-                    )}
-                  </div>
+              <button
+                onClick={() => setIsSwapModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
+                title={lang === 'ar' ? 'تبديل سريرين ومشغولين' : 'Swap beds'}
+              >
+                <Layers className="w-3.5 h-3.5 text-purple-400" />
+                <span>{lang === 'ar' ? 'تبديل سريرين' : 'Swap Beds'}</span>
+              </button>
 
-                  <p className="text-xs text-slate-300 mt-1 max-w-3xl">
-                    <span className="font-semibold text-slate-200">{lang === 'ar' ? 'التشخيص الأساسي:' : 'Primary Diagnosis:'}</span>{' '}
-                    {lang === 'ar' 
-                      ? `${patient.primaryDiagnosisAr} — ${patient.primaryDiagnosisEn}` 
-                      : `${patient.primaryDiagnosisEn} — ${patient.primaryDiagnosisAr}`}
-                  </p>
-
-                  <div className="flex items-center gap-3 text-[11px] text-slate-300 mt-1.5 flex-wrap font-mono">
-                    <span>{lang === 'ar' ? 'العمر والنوع:' : 'Age/Gender:'} <strong className="text-white">{patient.age} {lang === 'ar' ? 'سنة' : 'yo'} ({patient.gender === 'MALE' ? (lang === 'ar' ? 'ذكر' : 'Male') : (lang === 'ar' ? 'أنثى' : 'Female')})</strong></span>
-                    <span>•</span>
-                    <span className="flex items-center gap-1">
-                      <Phone className="w-3 h-3 text-teal-400" />
-                      <span>{lang === 'ar' ? 'الهاتف:' : 'Phone:'} <strong className="text-white">{patient.phoneNumber || '—'}</strong></span>
-                    </span>
-                    <span>•</span>
-                    <span className="flex items-center gap-1">
-                      <Calendar className="w-3 h-3 text-slate-400" />
-                      <span>{lang === 'ar' ? 'تاريخ الدخول:' : 'Admitted:'} <strong className="text-white">{new Date(patient.admissionDate).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</strong></span>
-                    </span>
-                    <span>•</span>
-                    <span>{lang === 'ar' ? 'الوزن:' : 'Weight:'} <strong className="text-white">{patient.weightKg}</strong> {lang === 'ar' ? 'كجم' : 'kg'} (IBW: <strong className="text-teal-400">{patient.idealBodyWeightKg}</strong> {lang === 'ar' ? 'كجم' : 'kg'})</span>
-                    <span>•</span>
-                    <span>{lang === 'ar' ? 'الاستشاري:' : 'Attending:'} <strong className="text-slate-200">{patient.attendingPhysician.name}</strong></span>
-                    <span>•</span>
-                    <span>{lang === 'ar' ? 'التمريض:' : 'Primary RN:'} <strong className="text-slate-200">{patient.primaryNurse.name}</strong></span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Bed Operational Controls & Collapse Button */}
-              <div className="flex items-center gap-2 flex-shrink-0 self-end lg:self-center flex-wrap justify-end">
-                <button
-                  onClick={() => setIsTransferModalOpen(true)}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-500/40 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
-                  title={lang === 'ar' ? 'نقل المريض لسرير شاغر مع الاحتفاظ بكافة بياناته وسجلاته' : 'Transfer patient to vacant bed'}
-                >
-                  <ArrowRightLeft className="w-3.5 h-3.5 text-blue-400" />
-                  <span>{lang === 'ar' ? 'نقل المريض' : 'Transfer Bed'}</span>
-                </button>
-
-                <button
-                  onClick={() => setIsSwapModalOpen(true)}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
-                  title={lang === 'ar' ? 'تبديل سريرين ومشغولين في عملية موحدة واحدة آمنة' : 'Atomic bed swap between two patients'}
-                >
-                  <Layers className="w-3.5 h-3.5 text-purple-400" />
-                  <span>{lang === 'ar' ? 'تبديل سريرين' : 'Swap Beds'}</span>
-                </button>
-
-                <button
-                  onClick={() => setIsIsolationModalOpen(true)}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
-                  title={lang === 'ar' ? 'تعديل حالة السرير وتدابير العزل الطبي' : 'Manage bed status & isolation precautions'}
-                >
-                  <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
-                  <span>{lang === 'ar' ? 'العزل والحالة' : 'Bed Status'}</span>
-                </button>
-
-                {settings.features.enableTelemetryVitals && (
-                  <button
-                    onClick={onOpenAddVitals}
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
-                  >
-                    <Activity className="w-4 h-4" />
-                    <span>{lang === 'ar' ? 'تسجيل علامات' : 'Record Vitals'}</span>
-                  </button>
-                )}
-
-                {settings.features.enableSbarHandover && (
-                  <button
-                    onClick={onOpenSbarSign}
-                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-teal-600 to-teal-500 hover:from-teal-500 hover:to-teal-400 text-slate-950 text-xs font-bold transition-all shadow-lg shadow-teal-500/20 active:scale-95 cursor-pointer"
-                  >
-                    <ShieldCheck className="w-4 h-4" />
-                    <span>{lang === 'ar' ? 'تسليم SBAR' : 'SBAR Sign'}</span>
-                  </button>
-                )}
-
-                <button
-                  type="button"
-                  onClick={() => setIsPatientCardCollapsed(true)}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
-                >
-                  <ChevronUp className="w-4 h-4 text-slate-400" />
-                  <span>{lang === 'ar' ? 'طي بطاقة البيانات' : 'Collapse Details'}</span>
-                </button>
-              </div>
+              <button
+                onClick={() => setIsIsolationModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
+                title={lang === 'ar' ? 'تدابير العزل وحالة السرير' : 'Manage bed status & isolation'}
+              >
+                <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
+                <span>{lang === 'ar' ? 'العزل والحالة' : 'Bed Status'}</span>
+              </button>
             </div>
           </div>
         )}
@@ -1282,21 +1241,30 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                     </div>
 
                     <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
-                      <div className="text-[10px] text-slate-500">{lang === 'ar' ? 'رقم السجل المدني / الهوية' : 'National ID'}</div>
-                      <div className="text-slate-300 font-bold mt-0.5">{patient.nationalId || '—'}</div>
+                      <div className="text-[10px] text-slate-500">{lang === 'ar' ? 'رقم بطاقة المريض (آخر 4 أرقام)' : 'Card ID / MRN (Last 4)'}</div>
+                      <div className="text-teal-400 font-bold mt-0.5 font-mono text-sm">
+                        •••• {(patient.mrn || patient.nationalId || '').slice(-4) || '—'}
+                      </div>
                     </div>
 
                     <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
                       <div className="text-[10px] text-slate-500">{lang === 'ar' ? 'السن والجنس' : 'Age & Gender'}</div>
                       <div className="text-white font-bold mt-0.5">
-                        {patient.age} {lang === 'ar' ? 'سنة' : 'yo'} / {patient.gender}
+                        {patient.age} {lang === 'ar' ? 'سنة' : 'yo'} / {patient.gender === 'MALE' ? (lang === 'ar' ? 'ذكر' : 'Male') : patient.gender === 'FEMALE' ? (lang === 'ar' ? 'أنثى' : 'Female') : patient.gender}
+                      </div>
+                    </div>
+
+                    <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
+                      <div className="text-[10px] text-slate-500">{lang === 'ar' ? 'فصيلة الدم' : 'Blood Group'}</div>
+                      <div className="text-amber-400 font-bold mt-0.5">
+                        {patient.bloodType || (lang === 'ar' ? 'غير محدد' : 'N/A')}
                       </div>
                     </div>
 
                     <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
                       <div className="text-[10px] text-slate-500">{lang === 'ar' ? 'تاريخ دخول العناية' : 'ICU Admission Date'}</div>
                       <div className="text-teal-400 font-bold mt-0.5">
-                        {new Date(patient.admissionDate).toLocaleDateString(lang === 'ar' ? 'ar-EG' : 'en-US', { day: '2-digit', month: 'short' })}
+                        {new Date(patient.admissionDate).toLocaleDateString(lang === 'ar' ? 'ar-EG' : 'en-US', { day: '2-digit', month: 'short', year: 'numeric' })}
                       </div>
                     </div>
 
@@ -1304,13 +1272,6 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                       <div className="text-[10px] text-slate-500">{lang === 'ar' ? 'الوزن والوزن المثالي' : 'Weight / IBW'}</div>
                       <div className="text-white font-bold mt-0.5">
                         {patient.weightKg}kg (IBW: <span className="text-teal-400">{patient.idealBodyWeightKg}</span>kg)
-                      </div>
-                    </div>
-
-                    <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
-                      <div className="text-[10px] text-slate-500">{lang === 'ar' ? 'الطبيب والممرض المسؤول' : 'Team RN / MD'}</div>
-                      <div className="text-slate-300 mt-0.5 text-[10px] truncate">
-                        MD: {patient.attendingPhysician.name}
                       </div>
                     </div>
                   </div>
@@ -1405,26 +1366,19 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                     />
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-800/80">
+                  <div className="pt-2 border-t border-slate-800/80">
                     <div>
                       <label className="block text-slate-400 font-semibold mb-1">
-                        {lang === 'ar' ? 'التشخيص الأساسي (EN)' : 'Primary Diagnosis (EN)'}
+                        {lang === 'ar' ? 'التشخيص الطبي الأساسي (Primary Diagnosis ICD-10)' : 'Primary Admitting Diagnosis (ICD-10)'}
                       </label>
                       <input
                         type="text"
                         value={primaryDiagnosisEnInput}
-                        onChange={(e) => setPrimaryDiagnosisEnInput(e.target.value)}
-                        className="w-full bg-[#070c18] border border-slate-800 rounded-xl px-3 py-2 text-white focus:border-teal-500 focus:outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-slate-400 font-semibold mb-1">
-                        {lang === 'ar' ? 'التشخيص الأساسي (AR)' : 'Primary Diagnosis (AR)'}
-                      </label>
-                      <input
-                        type="text"
-                        value={primaryDiagnosisArInput}
-                        onChange={(e) => setPrimaryDiagnosisArInput(e.target.value)}
+                        onChange={(e) => {
+                          setPrimaryDiagnosisEnInput(e.target.value);
+                          setPrimaryDiagnosisArInput(e.target.value);
+                        }}
+                        placeholder="e.g. Acute Respiratory Failure"
                         className="w-full bg-[#070c18] border border-slate-800 rounded-xl px-3 py-2 text-white focus:border-teal-500 focus:outline-none"
                       />
                     </div>
@@ -1486,7 +1440,174 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
               )}
             </div>
           </div>
+        </div>
+      )}
 
+      {/* Tab 1: Continuous Vitals & Telemetry (Top Section after Patient Data) */}
+      {(activeTab === 'vitals' || activeTab === 'all' || activeTab === 'paperFlowsheet') && (
+        <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-4 shadow-xl space-y-4">
+          <div 
+            onClick={() => setIsPaperVitalsCardCollapsed(!isPaperVitalsCardCollapsed)}
+            className="flex items-center justify-between border-b border-slate-800 pb-2.5 cursor-pointer hover:bg-slate-800/40 p-2 rounded-xl transition-all"
+          >
+            <div className="flex items-center gap-2">
+              <Activity className="w-5 h-5 text-teal-400" />
+              <h3 className="text-base font-bold text-white">
+                {lang === 'ar' ? 'العلامات الحيوية والمراقبة المستمرة (Vitals & Telemetry)' : 'Continuous Vitals & Telemetry'}
+              </h3>
+            </div>
+            <div className="p-1 rounded-lg bg-slate-800 text-slate-400">
+              {isPaperVitalsCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+            </div>
+          </div>
+
+          {!isPaperVitalsCardCollapsed && (
+            <div className="space-y-4 animate-in fade-in duration-300">
+              {latestVitals && (
+                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+                  {/* MAP */}
+                  <div className="bg-[#090f1d] border border-slate-800 p-3.5 rounded-2xl">
+                    <div className="text-[10px] text-slate-400 uppercase font-bold">Mean Arterial Pressure (MAP)</div>
+                    <div className={`text-xl sm:text-2xl font-black font-mono mt-1 ${
+                      latestVitals.meanArterialPressureMmHg < 65 ? 'text-red-400 animate-pulse' : 'text-cyan-300'
+                    }`}>
+                      {latestVitals.meanArterialPressureMmHg} <span className="text-xs font-normal text-slate-400">mmHg</span>
+                    </div>
+                    <div className="text-[11px] text-slate-400 font-mono mt-0.5">
+                      BP: {latestVitals.systolicBpMmHg}/{latestVitals.diastolicBpMmHg}
+                    </div>
+                  </div>
+
+                  {/* Heart Rate */}
+                  <div className="bg-[#090f1d] border border-slate-800 p-3.5 rounded-2xl">
+                    <div className="text-[10px] text-slate-400 uppercase font-bold flex items-center gap-1">
+                      <Heart className="w-3 h-3 text-red-400" />
+                      <span>Heart Rate (HR)</span>
+                    </div>
+                    <div className="text-xl sm:text-2xl font-black font-mono mt-1 text-emerald-400">
+                      {latestVitals.heartRateBpm} <span className="text-xs font-normal text-slate-400">bpm</span>
+                    </div>
+                    <div className="text-[11px] text-slate-400 truncate mt-0.5">
+                      {latestVitals.heartRhythm}
+                    </div>
+                  </div>
+
+                  {/* SpO2 */}
+                  <div className="bg-[#090f1d] border border-slate-800 p-3.5 rounded-2xl">
+                    <div className="text-[10px] text-slate-400 uppercase font-bold">SpO₂ & FiO₂</div>
+                    <div className="text-xl sm:text-2xl font-black font-mono mt-1 text-teal-300">
+                      {latestVitals.spo2Percent}%
+                    </div>
+                    <div className="text-[11px] text-slate-400 font-mono mt-0.5">
+                      FiO₂: {latestVitals.fio2SuppliedPercent}%
+                    </div>
+                  </div>
+
+                  {/* Core Temp */}
+                  <div className="bg-[#090f1d] border border-slate-800 p-3.5 rounded-2xl">
+                    <div className="text-[10px] text-slate-400 uppercase font-bold">Core Temp</div>
+                    <div className="text-xl sm:text-2xl font-black font-mono mt-1 text-amber-300">
+                      {latestVitals.coreTemperatureCelsius}°C
+                    </div>
+                    <div className="text-[11px] text-slate-400 mt-0.5">
+                      Site: {latestVitals.temperatureSite}
+                    </div>
+                  </div>
+
+                  {/* GCS & RASS */}
+                  <div className="bg-[#090f1d] border border-slate-800 p-3.5 rounded-2xl">
+                    <div className="text-[10px] text-slate-400 uppercase font-bold">GCS / RASS</div>
+                    <div className="text-xl sm:text-2xl font-black font-mono mt-1 text-indigo-300">
+                      {latestVitals.gcsTotalScore}/15
+                    </div>
+                    <div className="text-[11px] text-slate-400 mt-0.5">
+                      RASS: {latestVitals.sedationRassScore ?? 'N/A'}
+                    </div>
+                  </div>
+
+                  {/* Lactate */}
+                  <div className="bg-[#090f1d] border border-slate-800 p-3.5 rounded-2xl">
+                    <div className="text-[10px] text-slate-400 uppercase font-bold">Lactate & Glucose</div>
+                    <div className="text-xl sm:text-2xl font-black font-mono mt-1 text-purple-300">
+                      {latestVitals.lactateMmolPerL ?? '—'} <span className="text-xs font-normal text-slate-400">mmol/L</span>
+                    </div>
+                    <div className="text-[11px] text-slate-400 mt-0.5">
+                      RBG: {latestVitals.bloodGlucoseMgDl ?? '—'} mg/dL
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Historical Feed Table (Flattened - No nested cards) */}
+              <div className="pt-4 border-t border-slate-800/60 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-teal-400" />
+                    <span>{lang === 'ar' ? 'سجل العلامات الحيوية التاريخية (Telemetry Trajectory)' : 'Telemetry History Trajectory'}</span>
+                  </h3>
+                  <button
+                    onClick={onOpenAddVitals}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-teal-500/20 text-teal-300 text-xs font-bold cursor-pointer hover:bg-teal-500/30 transition-all"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>{lang === 'ar' ? 'إضافة قراءة جديدة' : 'Add Reading'}</span>
+                  </button>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className={`w-full text-xs ${isRTL ? 'text-right' : 'text-left'}`}>
+                    <thead>
+                      <tr className="border-b border-slate-800 text-slate-400 font-mono">
+                        <th className="py-2 px-3">{lang === 'ar' ? 'التوقيت' : 'Time'}</th>
+                        <th className="py-2 px-3">MAP (mmHg)</th>
+                        <th className="py-2 px-3">BP (Sys/Dia)</th>
+                        <th className="py-2 px-3">HR (bpm)</th>
+                        <th className="py-2 px-3">SpO₂ (%)</th>
+                        <th className="py-2 px-3">RR (cpm)</th>
+                        <th className="py-2 px-3">{lang === 'ar' ? 'اللاكتات' : 'Lactate'}</th>
+                        <th className="py-2 px-3">{lang === 'ar' ? 'المسجل' : 'Staff'}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60 font-mono">
+                      {vitalsHistory.map((v) => (
+                        <tr key={v.id} className="hover:bg-slate-800/30">
+                          <td className="py-2.5 px-3 text-slate-400">
+                            {new Date(v.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}
+                          </td>
+                          <td className={`py-2.5 px-3 font-bold ${v.meanArterialPressureMmHg < 65 ? 'text-red-400' : 'text-cyan-300'}`}>
+                            {v.meanArterialPressureMmHg}
+                          </td>
+                          <td className="py-2.5 px-3 text-white">
+                            {v.systolicBpMmHg}/{v.diastolicBpMmHg} {v.isArterialLine ? '(Art)' : '(Cuff)'}
+                          </td>
+                          <td className="py-2.5 px-3 text-emerald-400">
+                            {v.heartRateBpm}
+                          </td>
+                          <td className="py-2.5 px-3 text-teal-300">
+                            {v.spo2Percent}% ({v.fio2SuppliedPercent}% Fi)
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-300">
+                            {v.respiratoryRateCpm}
+                          </td>
+                          <td className="py-2.5 px-3 text-purple-300">
+                            {v.lactateMmolPerL ?? '—'}
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-400 text-[11px] font-sans">
+                            {v.recordedBy.name}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === 'paperFlowsheet' && (
+        <div className="space-y-4 animate-in fade-in duration-300">
           {/* Interactive Labs Grid Table (التحاليل الطبية المتسلسلة التراكمية) */}
           <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-4 shadow-xl space-y-3">
             <div 
@@ -2180,195 +2301,93 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 overflow-y-auto max-h-[400px] pr-2">
-                    {/* CBC Panel */}
-                    <div className="bg-[#070c18] p-4 rounded-xl border border-slate-800 space-y-3">
-                      <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
-                        <div className="text-xs font-bold text-teal-400 uppercase font-mono">{lang === 'ar' ? 'صورة الدم (CBC)' : 'Complete Blood Count (CBC)'}</div>
-                        {settings.enableAiLabScanner && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setAiScannerPreset('CBC');
-                              setIsAiLabScannerOpen(true);
-                            }}
-                            className="px-2 py-0.5 rounded-md bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all"
-                            title={lang === 'ar' ? 'تصوير وقراءة تقرير CBC بالذكاء الاصطناعي' : 'Scan CBC report with AI'}
-                          >
-                            <Camera className="w-3 h-3 text-teal-400" />
-                            <span>{lang === 'ar' ? 'تصوير CBC' : 'Scan CBC'}</span>
-                          </button>
-                        )}
-                      </div>
-                      <div>
-                        <label className="text-slate-400 mb-1 block">WBCs (k/uL)</label>
-                        <input type="number" step="any" value={labForm.wbc} onChange={e => setLabForm({ ...labForm, wbc: e.target.value })} className="w-full bg-[#0b1224] border border-slate-800 rounded-lg p-2 text-white text-xs font-mono focus:border-teal-500 focus:outline-none" />
-                      </div>
-                      <div>
-                        <label className="text-slate-400 mb-1 block">Hb Hemoglobin (g/dL)</label>
-                        <input type="number" step="any" value={labForm.hb} onChange={e => setLabForm({ ...labForm, hb: e.target.value })} className="w-full bg-[#0b1224] border border-slate-800 rounded-lg p-2 text-white text-xs font-mono focus:border-teal-500 focus:outline-none" />
-                      </div>
-                      <div>
-                        <label className="text-slate-400 mb-1 block">Hematocrit Hct (%)</label>
-                        <input type="number" step="any" value={labForm.hct} onChange={e => setLabForm({ ...labForm, hct: e.target.value })} className="w-full bg-[#0b1224] border border-slate-800 rounded-lg p-2 text-white text-xs font-mono focus:border-teal-500 focus:outline-none" />
-                      </div>
-                      <div>
-                        <label className="text-slate-400 mb-1 block">Platelets PLT (k/uL)</label>
-                        <input type="number" step="any" value={labForm.plt} onChange={e => setLabForm({ ...labForm, plt: e.target.value })} className="w-full bg-[#0b1224] border border-slate-800 rounded-lg p-2 text-white text-xs font-mono focus:border-teal-500 focus:outline-none" />
-                      </div>
-                      <div>
-                        <label className="text-slate-400 mb-1 block">{lang === 'ar' ? 'العد التفريقي' : 'WBC Differential'}</label>
-                        <input type="text" value={labForm.diff} onChange={e => setLabForm({ ...labForm, diff: e.target.value })} className="w-full bg-[#0b1224] border border-slate-800 rounded-lg p-2 text-white text-xs font-mono focus:border-teal-500 focus:outline-none" />
-                      </div>
-                      <div>
-                        <label className="text-slate-400 mb-1 block">{lang === 'ar' ? 'نوع الأنيميا' : 'Type of Anemia'}</label>
-                        <input type="text" value={labForm.typeAnemia} onChange={e => setLabForm({ ...labForm, typeAnemia: e.target.value })} className="w-full bg-[#0b1224] border border-slate-800 rounded-lg p-2 text-white text-xs font-mono focus:border-teal-500 focus:outline-none" />
-                      </div>
+                  {/* Panel Selection Filter Tabs */}
+                  <div className="flex items-center justify-between gap-2 flex-wrap pb-1">
+                    <div className="flex items-center gap-1.5 overflow-x-auto max-w-full pb-1 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedModalCatId('all')}
+                        className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition-all ${
+                          selectedModalCatId === 'all'
+                            ? 'bg-teal-500 text-slate-950 shadow-md'
+                            : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                        }`}
+                      >
+                        {lang === 'ar' ? 'الكل (جميع الصناديق)' : 'All Panels'}
+                      </button>
+                      {settings.labCategories?.map((cat: any) => (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          onClick={() => setSelectedModalCatId(cat.id)}
+                          className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition-all ${
+                            selectedModalCatId === cat.id
+                              ? 'bg-teal-500 text-slate-950 shadow-md'
+                              : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                          }`}
+                        >
+                          {lang === 'ar' ? cat.nameAr : cat.nameEn}
+                        </button>
+                      ))}
                     </div>
+                  </div>
 
-                    {/* Biochemistry & KFTs / Electrolytes */}
-                    <div className="bg-[#070c18] p-4 rounded-xl border border-slate-800 space-y-3">
-                      <div className="text-xs font-bold text-cyan-400 border-b border-slate-800 pb-1.5 uppercase font-mono">{lang === 'ar' ? 'الكيمياء والوظائف والأملاح' : 'Chemistry & Kidney / Electrolytes'}</div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="text-slate-400 mb-1 block">Urea</label>
-                          <input type="number" step="any" value={labForm.urea} onChange={e => setLabForm({ ...labForm, urea: e.target.value })} className="w-full bg-[#0b1224] border border-slate-800 rounded-lg p-2 text-white text-xs font-mono focus:border-teal-500 focus:outline-none" />
+                  <div className={`grid gap-4 overflow-y-auto max-h-[420px] pr-2 ${
+                    selectedModalCatId === 'all' ? 'grid-cols-1 md:grid-cols-3' : 'grid-cols-1 md:grid-cols-2'
+                  }`}>
+                    {settings.labCategories
+                      ?.filter((cat: any) => selectedModalCatId === 'all' || cat.id === selectedModalCatId)
+                      ?.map((cat: any) => (
+                      <div key={cat.id} className="bg-[#070c18] p-4 rounded-xl border border-slate-800 space-y-3 shadow-md">
+                        <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                          <div className="text-xs font-extrabold text-teal-400 uppercase font-mono flex items-center gap-1.5">
+                            <FlaskConical className="w-3.5 h-3.5 text-teal-400" />
+                            <span>{lang === 'ar' ? cat.nameAr : cat.nameEn}</span>
+                            <span className="text-[10px] text-slate-400 font-normal">
+                              ({lang === 'ar' ? cat.nameEn : cat.nameAr})
+                            </span>
+                          </div>
+                          {settings.enableAiLabScanner && (cat.id === 'cbc' || cat.id === 'abg') && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAiScannerPreset(cat.id === 'cbc' ? 'CBC' : 'ABG');
+                                setIsAiLabScannerOpen(true);
+                              }}
+                              className="px-2 py-0.5 rounded-md bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all"
+                            >
+                              <Camera className="w-3 h-3 text-teal-400" />
+                              <span>{lang === 'ar' ? `تصوير ${cat.id.toUpperCase()}` : `Scan ${cat.id.toUpperCase()}`}</span>
+                            </button>
+                          )}
                         </div>
-                        <div>
-                          <label className="text-slate-400 mb-1 block">Creatinine</label>
-                          <input type="number" step="any" value={labForm.creat} onChange={e => setLabForm({ ...labForm, creat: e.target.value })} className="w-full bg-[#0b1224] border border-slate-800 rounded-lg p-2 text-white text-xs font-mono focus:border-teal-500 focus:outline-none" />
-                        </div>
-                        <div>
-                          <label className="text-slate-400 mb-1 block">Uric Acid</label>
-                          <input type="number" step="any" value={labForm.uricAcid} onChange={e => setLabForm({ ...labForm, uricAcid: e.target.value })} className="w-full bg-[#0b1224] border border-slate-800 rounded-lg p-2 text-white text-xs font-mono focus:border-teal-500 focus:outline-none" />
-                        </div>
-                        <div>
-                          <label className="text-slate-400 mb-1 block">BUN</label>
-                          <input type="number" step="any" value={labForm.bun} onChange={e => setLabForm({ ...labForm, bun: e.target.value })} className="w-full bg-[#0b1224] border border-slate-800 rounded-lg p-2 text-white text-xs font-mono focus:border-teal-500 focus:outline-none" />
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="text-slate-400 mb-1 block">Sodium Na</label>
-                          <input type="number" step="any" value={labForm.na} onChange={e => setLabForm({ ...labForm, na: e.target.value })} className="w-full bg-[#0b1224] border border-slate-800 rounded-lg p-2 text-white text-xs font-mono focus:border-teal-500 focus:outline-none" />
-                        </div>
-                        <div>
-                          <label className="text-slate-400 mb-1 block">Potass K</label>
-                          <input type="number" step="any" value={labForm.k} onChange={e => setLabForm({ ...labForm, k: e.target.value })} className="w-full bg-[#0b1224] border border-slate-800 rounded-lg p-2 text-white text-xs font-mono focus:border-teal-500 focus:outline-none" />
-                        </div>
-                        <div>
-                          <label className="text-slate-400 mb-1 block">Calcium Ca</label>
-                          <input type="number" step="any" value={labForm.ca} onChange={e => setLabForm({ ...labForm, ca: e.target.value })} className="w-full bg-[#0b1224] border border-slate-800 rounded-lg p-2 text-white text-xs font-mono focus:border-teal-500 focus:outline-none" />
-                        </div>
-                        <div>
-                          <label className="text-slate-400 mb-1 block">Phos</label>
-                          <input type="number" step="any" value={labForm.phos} onChange={e => setLabForm({ ...labForm, phos: e.target.value })} className="w-full bg-[#0b1224] border border-slate-800 rounded-lg p-2 text-white text-xs font-mono focus:border-teal-500 focus:outline-none" />
-                        </div>
-                        <div className="col-span-2">
-                          <label className="text-slate-400 mb-1 block">Magnesium Mg</label>
-                          <input type="number" step="any" value={labForm.mg} onChange={e => setLabForm({ ...labForm, mg: e.target.value })} className="w-full bg-[#0b1224] border border-slate-800 rounded-lg p-2 text-white text-xs font-mono focus:border-teal-500 focus:outline-none" />
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="text-slate-400 mb-1 block">Tot Bilirubin</label>
-                          <input type="number" step="any" value={labForm.totalBili} onChange={e => setLabForm({ ...labForm, totalBili: e.target.value })} className="w-full bg-[#0b1224] border border-slate-800 rounded-lg p-2 text-white text-xs font-mono focus:border-teal-500 focus:outline-none" />
-                        </div>
-                        <div>
-                          <label className="text-slate-400 mb-1 block">Albumin</label>
-                          <input type="number" step="any" value={labForm.alb} onChange={e => setLabForm({ ...labForm, alb: e.target.value })} className="w-full bg-[#0b1224] border border-slate-800 rounded-lg p-2 text-white text-xs font-mono focus:border-teal-500 focus:outline-none" />
-                        </div>
-                        <div>
-                          <label className="text-slate-400 mb-1 block">ALT</label>
-                          <input type="number" step="any" value={labForm.alt} onChange={e => setLabForm({ ...labForm, alt: e.target.value })} className="w-full bg-[#0b1224] border border-slate-800 rounded-lg p-2 text-white text-xs font-mono focus:border-teal-500 focus:outline-none" />
-                        </div>
-                        <div>
-                          <label className="text-slate-400 mb-1 block">AST</label>
-                          <input type="number" step="any" value={labForm.ast} onChange={e => setLabForm({ ...labForm, ast: e.target.value })} className="w-full bg-[#0b1224] border border-slate-800 rounded-lg p-2 text-white text-xs font-mono focus:border-teal-500 focus:outline-none" />
-                        </div>
-                        <div>
-                          <label className="text-slate-400 mb-1 block">ALP</label>
-                          <input type="number" step="any" value={labForm.alp} onChange={e => setLabForm({ ...labForm, alp: e.target.value })} className="w-full bg-[#0b1224] border border-slate-800 rounded-lg p-2 text-white text-xs font-mono focus:border-teal-500 focus:outline-none" />
-                        </div>
-                        <div>
-                          <label className="text-slate-400 mb-1 block">GGT</label>
-                          <input type="number" step="any" value={labForm.ggt} onChange={e => setLabForm({ ...labForm, ggt: e.target.value })} className="w-full bg-[#0b1224] border border-slate-800 rounded-lg p-2 text-white text-xs font-mono focus:border-teal-500 focus:outline-none" />
+                        <div className="space-y-2.5">
+                          {cat.parameters?.map((p: any) => {
+                            const isText = p.id === 'diff' || p.id === 'typeanemia' || p.id.includes('type') || p.id.includes('diff');
+                            return (
+                              <div key={p.id}>
+                                <label className="text-slate-400 mb-1 block font-semibold flex justify-between items-center text-[10px] sm:text-[11px]">
+                                  <span>{p.name} {p.unit ? `(${p.unit})` : ''}</span>
+                                  <span className="text-[9px] text-slate-500 font-mono font-normal">Normal: {p.normalRange}</span>
+                                </label>
+                                <input
+                                  type="text"
+                                  inputMode={isText ? undefined : "decimal"}
+                                  value={(labForm as any)[p.id] || ''}
+                                  onChange={e => setLabForm({ ...labForm, [p.id]: e.target.value })}
+                                  className="w-full bg-[#0b1224] border border-slate-800 rounded-lg p-2 text-white text-xs font-mono focus:border-teal-500 focus:outline-none"
+                                />
+                              </div>
+                            );
+                          })}
+                          {cat.parameters?.length === 0 && (
+                            <div className="text-center py-4 text-slate-500 text-xs italic">
+                              {lang === 'ar' ? 'لا توجد تحاليل مضافة في هذا الصندوق.' : 'No tests added to this panel.'}
+                            </div>
+                          )}
                         </div>
                       </div>
-                    </div>
-
-                    {/* Coagulation, Biomarkers & ABG */}
-                    <div className="bg-[#070c18] p-4 rounded-xl border border-slate-800 space-y-3">
-                      <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
-                        <div className="text-xs font-bold text-violet-400 uppercase font-mono">{lang === 'ar' ? 'غازات الدم والعلامات (ABG)' : 'ABGs & Cardiac / Coagulation'}</div>
-                        {settings.enableAiLabScanner && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setAiScannerPreset('ABG');
-                              setIsAiLabScannerOpen(true);
-                            }}
-                            className="px-2 py-0.5 rounded-md bg-violet-500/20 hover:bg-violet-500/30 text-violet-300 text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all"
-                            title={lang === 'ar' ? 'تصوير وقراءة شريط غازات الدم ABG بالذكاء الاصطناعي' : 'Scan ABG strip with AI'}
-                          >
-                            <Camera className="w-3 h-3 text-violet-400" />
-                            <span>{lang === 'ar' ? 'تصوير ABG' : 'Scan ABG'}</span>
-                          </button>
-                        )}
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="text-slate-400 mb-1 block">pH</label>
-                          <input type="number" step="any" value={labForm.ph} onChange={e => setLabForm({ ...labForm, ph: e.target.value })} className="w-full bg-[#0b1224] border border-slate-800 rounded-lg p-2 text-white text-xs font-mono focus:border-teal-500 focus:outline-none" />
-                        </div>
-                        <div>
-                          <label className="text-slate-400 mb-1 block">pCO₂ (mmHg)</label>
-                          <input type="number" step="any" value={labForm.pco2} onChange={e => setLabForm({ ...labForm, pco2: e.target.value })} className="w-full bg-[#0b1224] border border-slate-800 rounded-lg p-2 text-white text-xs font-mono focus:border-teal-500 focus:outline-none" />
-                        </div>
-                        <div>
-                          <label className="text-slate-400 mb-1 block">pO₂ (mmHg)</label>
-                          <input type="number" step="any" value={labForm.po2} onChange={e => setLabForm({ ...labForm, po2: e.target.value })} className="w-full bg-[#0b1224] border border-slate-800 rounded-lg p-2 text-white text-xs font-mono focus:border-teal-500 focus:outline-none" />
-                        </div>
-                        <div>
-                          <label className="text-slate-400 mb-1 block">HCO₃</label>
-                          <input type="number" step="any" value={labForm.hco3} onChange={e => setLabForm({ ...labForm, hco3: e.target.value })} className="w-full bg-[#0b1224] border border-slate-800 rounded-lg p-2 text-white text-xs font-mono focus:border-teal-500 focus:outline-none" />
-                        </div>
-                        <div>
-                          <label className="text-slate-400 mb-1 block">Base Excess</label>
-                          <input type="number" step="any" value={labForm.be} onChange={e => setLabForm({ ...labForm, be: e.target.value })} className="w-full bg-[#0b1224] border border-slate-800 rounded-lg p-2 text-white text-xs font-mono focus:border-teal-500 focus:outline-none" />
-                        </div>
-                        <div>
-                          <label className="text-slate-400 mb-1 block">Lactate</label>
-                          <input type="number" step="any" value={labForm.lactate} onChange={e => setLabForm({ ...labForm, lactate: e.target.value })} className="w-full bg-[#0b1224] border border-slate-800 rounded-lg p-2 text-white text-xs font-mono focus:border-teal-500 focus:outline-none font-bold text-orange-400" />
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="text-slate-400 mb-1 block">INR</label>
-                          <input type="number" step="any" value={labForm.inr} onChange={e => setLabForm({ ...labForm, inr: e.target.value })} className="w-full bg-[#0b1224] border border-slate-800 rounded-lg p-2 text-white text-xs font-mono focus:border-teal-500 focus:outline-none" />
-                        </div>
-                        <div>
-                          <label className="text-slate-400 mb-1 block">Fibrinogen</label>
-                          <input type="number" step="any" value={labForm.fib} onChange={e => setLabForm({ ...labForm, fib: e.target.value })} className="w-full bg-[#0b1224] border border-slate-800 rounded-lg p-2 text-white text-xs font-mono focus:border-teal-500 focus:outline-none" />
-                        </div>
-                        <div>
-                          <label className="text-slate-400 mb-1 block">Troponin</label>
-                          <input type="number" step="any" value={labForm.troponin} onChange={e => setLabForm({ ...labForm, troponin: e.target.value })} className="w-full bg-[#0b1224] border border-slate-800 rounded-lg p-2 text-white text-xs font-mono focus:border-teal-500 focus:outline-none" />
-                        </div>
-                        <div>
-                          <label className="text-slate-400 mb-1 block">CRP</label>
-                          <input type="number" step="any" value={labForm.crp} onChange={e => setLabForm({ ...labForm, crp: e.target.value })} className="w-full bg-[#0b1224] border border-slate-800 rounded-lg p-2 text-white text-xs font-mono focus:border-teal-500 focus:outline-none" />
-                        </div>
-                        <div>
-                          <label className="text-slate-400 mb-1 block">Amylase</label>
-                          <input type="number" step="any" value={labForm.amylase} onChange={e => setLabForm({ ...labForm, amylase: e.target.value })} className="w-full bg-[#0b1224] border border-slate-800 rounded-lg p-2 text-white text-xs font-mono focus:border-teal-500 focus:outline-none" />
-                        </div>
-                        <div>
-                          <label className="text-slate-400 mb-1 block">Lipase</label>
-                          <input type="number" step="any" value={labForm.lipase} onChange={e => setLabForm({ ...labForm, lipase: e.target.value })} className="w-full bg-[#0b1224] border border-slate-800 rounded-lg p-2 text-white text-xs font-mono focus:border-teal-500 focus:outline-none" />
-                        </div>
-                      </div>
-                    </div>
+                    ))}
                   </div>
 
                   <div className="flex justify-end gap-2 pt-4 border-t border-slate-800">
@@ -2407,7 +2426,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
             <div className="flex items-center gap-2">
               <FlaskConical className="w-5 h-5 text-teal-400" />
               <h3 className="text-base font-bold text-white">
-                {lang === 'ar' ? 'سجل وتطور التحاليل المخبرية والغازات (Labs & ABGs)' : 'Laboratory Flowsheet & Trends'}
+                {lang === 'ar' ? 'سجل التحاليل' : 'Labs Record'}
               </h3>
             </div>
             <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
@@ -2544,169 +2563,6 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                   {lang === 'ar' ? 'لا توجد قنوات حقن وريدي نشطة حالياً.' : 'No active continuous infusion channels currently.'}
                 </div>
               )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Tab 1: Vitals & Telemetry */}
-      {(activeTab === 'vitals' || activeTab === 'all') && (
-        <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-4 shadow-xl space-y-4">
-          <div 
-            onClick={() => setIsPaperVitalsCardCollapsed(!isPaperVitalsCardCollapsed)}
-            className="flex items-center justify-between border-b border-slate-800 pb-2.5 cursor-pointer hover:bg-slate-800/40 p-2 rounded-xl transition-all"
-          >
-            <div className="flex items-center gap-2">
-              <Activity className="w-5 h-5 text-teal-400" />
-              <h3 className="text-base font-bold text-white">
-                {lang === 'ar' ? 'العلامات الحيوية والمراقبة المستمرة (Vitals & Telemetry)' : 'Continuous Vitals & Telemetry'}
-              </h3>
-            </div>
-            <div className="p-1 rounded-lg bg-slate-800 text-slate-400">
-              {isPaperVitalsCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
-            </div>
-          </div>
-
-          {!isPaperVitalsCardCollapsed && (
-            <div className="space-y-4 animate-in fade-in duration-300">
-              {latestVitals && (
-                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
-                  {/* MAP */}
-                  <div className="bg-[#090f1d] border border-slate-800 p-3.5 rounded-2xl">
-                    <div className="text-[10px] text-slate-400 uppercase font-bold">Mean Arterial Pressure (MAP)</div>
-                    <div className={`text-xl sm:text-2xl font-black font-mono mt-1 ${
-                      latestVitals.meanArterialPressureMmHg < 65 ? 'text-red-400 animate-pulse' : 'text-cyan-300'
-                    }`}>
-                      {latestVitals.meanArterialPressureMmHg} <span className="text-xs font-normal text-slate-400">mmHg</span>
-                    </div>
-                    <div className="text-[11px] text-slate-400 font-mono mt-0.5">
-                      BP: {latestVitals.systolicBpMmHg}/{latestVitals.diastolicBpMmHg}
-                    </div>
-                  </div>
-
-                  {/* Heart Rate */}
-                  <div className="bg-[#090f1d] border border-slate-800 p-3.5 rounded-2xl">
-                    <div className="text-[10px] text-slate-400 uppercase font-bold flex items-center gap-1">
-                      <Heart className="w-3 h-3 text-red-400" />
-                      <span>Heart Rate (HR)</span>
-                    </div>
-                    <div className="text-xl sm:text-2xl font-black font-mono mt-1 text-emerald-400">
-                      {latestVitals.heartRateBpm} <span className="text-xs font-normal text-slate-400">bpm</span>
-                    </div>
-                    <div className="text-[11px] text-slate-400 truncate mt-0.5">
-                      {latestVitals.heartRhythm}
-                    </div>
-                  </div>
-
-                  {/* SpO2 */}
-                  <div className="bg-[#090f1d] border border-slate-800 p-3.5 rounded-2xl">
-                    <div className="text-[10px] text-slate-400 uppercase font-bold">SpO₂ & FiO₂</div>
-                    <div className="text-xl sm:text-2xl font-black font-mono mt-1 text-teal-300">
-                      {latestVitals.spo2Percent}%
-                    </div>
-                    <div className="text-[11px] text-slate-400 font-mono mt-0.5">
-                      FiO₂: {latestVitals.fio2SuppliedPercent}%
-                    </div>
-                  </div>
-
-                  {/* Core Temp */}
-                  <div className="bg-[#090f1d] border border-slate-800 p-3.5 rounded-2xl">
-                    <div className="text-[10px] text-slate-400 uppercase font-bold">Core Temp</div>
-                    <div className="text-xl sm:text-2xl font-black font-mono mt-1 text-amber-300">
-                      {latestVitals.coreTemperatureCelsius}°C
-                    </div>
-                    <div className="text-[11px] text-slate-400 mt-0.5">
-                      Site: {latestVitals.temperatureSite}
-                    </div>
-                  </div>
-
-                  {/* GCS & RASS */}
-                  <div className="bg-[#090f1d] border border-slate-800 p-3.5 rounded-2xl">
-                    <div className="text-[10px] text-slate-400 uppercase font-bold">GCS / RASS</div>
-                    <div className="text-xl sm:text-2xl font-black font-mono mt-1 text-indigo-300">
-                      {latestVitals.gcsTotalScore}/15
-                    </div>
-                    <div className="text-[11px] text-slate-400 mt-0.5">
-                      RASS: {latestVitals.sedationRassScore ?? 'N/A'}
-                    </div>
-                  </div>
-
-                  {/* Lactate */}
-                  <div className="bg-[#090f1d] border border-slate-800 p-3.5 rounded-2xl">
-                    <div className="text-[10px] text-slate-400 uppercase font-bold">Lactate & Glucose</div>
-                    <div className="text-xl sm:text-2xl font-black font-mono mt-1 text-purple-300">
-                      {latestVitals.lactateMmolPerL ?? '—'} <span className="text-xs font-normal text-slate-400">mmol/L</span>
-                    </div>
-                    <div className="text-[11px] text-slate-400 mt-0.5">
-                      RBG: {latestVitals.bloodGlucoseMgDl ?? '—'} mg/dL
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Historical Feed Table (Flattened - No nested cards) */}
-              <div className="pt-4 border-t border-slate-800/60 space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                    <Clock className="w-4 h-4 text-teal-400" />
-                    <span>{lang === 'ar' ? 'سجل العلامات الحيوية التاريخية (Telemetry Trajectory)' : 'Telemetry History Trajectory'}</span>
-                  </h3>
-                  <button
-                    onClick={onOpenAddVitals}
-                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-teal-500/20 text-teal-300 text-xs font-bold"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>{lang === 'ar' ? 'إضافة قراءة جديدة' : 'Add Reading'}</span>
-                  </button>
-                </div>
-
-                <div className="overflow-x-auto">
-                  <table className={`w-full text-xs ${isRTL ? 'text-right' : 'text-left'}`}>
-                    <thead>
-                      <tr className="border-b border-slate-800 text-slate-400 font-mono">
-                        <th className="py-2 px-3">{lang === 'ar' ? 'التوقيت' : 'Time'}</th>
-                        <th className="py-2 px-3">MAP (mmHg)</th>
-                        <th className="py-2 px-3">BP (Sys/Dia)</th>
-                        <th className="py-2 px-3">HR (bpm)</th>
-                        <th className="py-2 px-3">SpO₂ (%)</th>
-                        <th className="py-2 px-3">RR (cpm)</th>
-                        <th className="py-2 px-3">{lang === 'ar' ? 'اللاكتات' : 'Lactate'}</th>
-                        <th className="py-2 px-3">{lang === 'ar' ? 'المسجل' : 'Staff'}</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-800/60 font-mono">
-                      {vitalsHistory.map((v) => (
-                        <tr key={v.id} className="hover:bg-slate-800/30">
-                          <td className="py-2.5 px-3 text-slate-400">
-                            {new Date(v.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}
-                          </td>
-                          <td className={`py-2.5 px-3 font-bold ${v.meanArterialPressureMmHg < 65 ? 'text-red-400' : 'text-cyan-300'}`}>
-                            {v.meanArterialPressureMmHg}
-                          </td>
-                          <td className="py-2.5 px-3 text-white">
-                            {v.systolicBpMmHg}/{v.diastolicBpMmHg} {v.isArterialLine ? '(Art)' : '(Cuff)'}
-                          </td>
-                          <td className="py-2.5 px-3 text-emerald-400">
-                            {v.heartRateBpm}
-                          </td>
-                          <td className="py-2.5 px-3 text-teal-300">
-                            {v.spo2Percent}% ({v.fio2SuppliedPercent}% Fi)
-                          </td>
-                          <td className="py-2.5 px-3 text-slate-300">
-                            {v.respiratoryRateCpm}
-                          </td>
-                          <td className="py-2.5 px-3 text-purple-300">
-                            {v.lactateMmolPerL ?? '—'}
-                          </td>
-                          <td className="py-2.5 px-3 text-slate-400 text-[11px] font-sans">
-                            {v.recordedBy.name}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
             </div>
           )}
         </div>

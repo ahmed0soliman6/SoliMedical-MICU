@@ -53,6 +53,7 @@ export enum Gender {
   MALE = 'MALE',
   FEMALE = 'FEMALE',
   OTHER = 'OTHER',
+  UNSPECIFIED = 'UNSPECIFIED',
 }
 
 export enum StaffRole {
@@ -499,6 +500,7 @@ export interface StatLabPanel {
   };
   isCriticalAlert: boolean;
   reviewedByDoctorName?: string;
+  values?: Record<string, string>;
 }
 
 // -------------------------------------------------------------
@@ -606,6 +608,7 @@ export interface PatientDossier {
   fullNameAr: string;
   age: number;
   gender: Gender;
+  bloodType?: string;
   weightKg: number;
   heightCm: number;
   idealBodyWeightKg: number;

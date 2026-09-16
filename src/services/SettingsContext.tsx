@@ -20,6 +20,7 @@ export function loadSavedSettings(): SystemSettings {
         ...DEFAULT_SYSTEM_SETTINGS.unit,
         ...(parsed.unit || {}),
       },
+      labCategories: parsed.labCategories || DEFAULT_SYSTEM_SETTINGS.labCategories,
     };
   } catch (e) {
     console.error('Failed to load system settings:', e);

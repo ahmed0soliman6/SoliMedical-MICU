@@ -11,7 +11,10 @@ import {
   BellRing,
   Sliders,
   Languages,
-  Menu
+  Menu,
+  X,
+  Volume2,
+  CheckCircle2
 } from 'lucide-react';
 import { BedRecord, PatientDossier, BedNumber } from '../types/schema.ts';
 import { requestNotificationPermission, playIcuAlarmAudio } from '../services/firebase.ts';
@@ -50,13 +53,14 @@ export const Header: React.FC<HeaderProps> = ({
   activeAlertMessage,
   onDismissAlert,
 }) => {
-  const { settings } = useSystemSettings();
+  const { settings, updateSettings } = useSystemSettings();
   const { t, lang, setLanguage, isRTL } = useTranslation();
   const occupiedBedsCount = (beds || []).filter(b => b && b.status === 'OCCUPIED').length;
   const criticalCount = (patients || []).filter(p => p && p.patientStatus === 'ACTIVE_ICU' && p.acuityLevel === 'CRITICAL_STAT').length;
   
   const [notificationPermission, setNotificationPermission] = useState<string>('default');
   const [syncToastMessage, setSyncToastMessage] = useState<string | null>(null);
+  const [isNotificationMenuOpen, setIsNotificationMenuOpen] = useState(false);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
@@ -92,32 +96,12 @@ export const Header: React.FC<HeaderProps> = ({
     }, 3500);
   };
 
+  const hasActiveNotice = !!activeAlertMessage || criticalCount > 0;
+
   return (
     <header className="sticky top-0 z-40 bg-[#0a1122]/95 backdrop-blur-md border-b border-slate-800/80 px-2.5 sm:px-6 py-2 shadow-lg">
-      {/* STAT Emergency Alert Banner across top if active */}
-      {activeAlertMessage && (
-        <div className="mb-2 bg-red-950/90 border border-red-500/80 text-red-200 px-3 sm:px-4 py-2 rounded-xl flex items-center justify-between animate-pulse">
-          <div className="flex items-center gap-2 text-xs sm:text-sm font-bold">
-            <ShieldAlert className="w-4 h-4 text-red-400 flex-shrink-0" />
-            <span className="truncate">
-              {lang === 'ar' 
-                ? `🚨 إنذار حرج فوري (ICU STAT): ${activeAlertMessage}` 
-                : `🚨 STAT ALERT: ${activeAlertMessage}`}
-            </span>
-          </div>
-          {onDismissAlert && (
-            <button 
-              onClick={onDismissAlert}
-              className="text-[10px] sm:text-[11px] bg-red-900/60 hover:bg-red-800 text-white px-2 py-0.5 rounded-md border border-red-700 flex-shrink-0"
-            >
-              {lang === 'ar' ? 'إلغاء' : 'Dismiss'}
-            </button>
-          )}
-        </div>
-      )}
-
       <div className="max-w-[1600px] mx-auto flex items-center justify-between gap-2">
-        {/* Left Side: Sidebar Navigation Toggle (Mobile & Tablet) */}
+        {/* Left Side: Sidebar Navigation Toggle & Live Status Indicator */}
         <div className="flex items-center gap-3">
           {/* Hamburger Menu Button for Mobile/Tablet */}
           <button
@@ -132,12 +116,9 @@ export const Header: React.FC<HeaderProps> = ({
             </span>
           </button>
 
-          {/* Active View / System Brand */}
+          {/* Active System Indicator Dot */}
           <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
-            <h1 className="text-xs sm:text-sm font-extrabold tracking-tight text-white leading-none">
-              Soli Medical
-            </h1>
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" title={lang === 'ar' ? 'النظام يعمل بكفاءة' : 'System Operational'}></span>
           </div>
         </div>
 
@@ -190,7 +171,7 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* Action Controls: Compact Search Icon, Alerts & Settings */}
-        <div className="flex items-center gap-2 sm:gap-2.5">
+        <div className="flex items-center gap-2 sm:gap-2.5 relative">
           {/* Universal Search Icon Button (Freeing header space) */}
           {settings.features.enableArchiveSearch && (
             <button
@@ -207,60 +188,147 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           )}
 
-          {/* Prominent Notifications & Alert Center */}
+          {/* Integrated Notification & Alert Center Bell */}
           {settings.features.enablePushNotifications && (
-            <button
-              onClick={handleToggleNotifications}
-              className={`relative flex items-center gap-2 px-3 py-1.5 sm:py-2 rounded-xl border text-xs font-semibold transition-all active:scale-95 shadow-sm cursor-pointer ${
-                criticalCount > 0
-                  ? 'bg-red-950/70 border-red-500/60 text-red-200 hover:bg-red-900/80'
-                  : notificationPermission === 'granted'
-                  ? 'bg-emerald-950/50 border-emerald-500/50 text-emerald-300 hover:bg-emerald-900/60'
-                  : 'bg-[#0b1325] hover:bg-[#111d38] border-amber-500/50 text-amber-300'
-              }`}
-              title={
-                criticalCount > 0
-                  ? (lang === 'ar' ? `يوجد ${criticalCount} حالات حرجة STAT` : `${criticalCount} Critical STAT alerts`)
-                  : (lang === 'ar' ? 'نظام الإشعارات والتنبيهات' : 'System Notifications')
-              }
-            >
-              {criticalCount > 0 ? (
-                <>
-                  <BellRing className="w-4 h-4 text-red-400 animate-bounce" />
-                  <span className="hidden sm:inline">{lang === 'ar' ? 'إشعارات طارئة' : 'STAT Alerts'}</span>
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[11px] font-black text-white shadow-md">
-                    {criticalCount}
-                  </span>
-                </>
-              ) : notificationPermission === 'granted' ? (
-                <>
-                  <BellRing className="w-4 h-4 text-emerald-400" />
-                  <span className="hidden sm:inline">{lang === 'ar' ? 'الإشعارات' : 'Alerts'}</span>
-                  <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-                </>
-              ) : (
-                <>
-                  <Bell className="w-4 h-4 text-amber-400 animate-pulse" />
-                  <span className="hidden sm:inline">{lang === 'ar' ? 'تفعيل التنبيهات' : 'Enable Alerts'}</span>
-                  <span className="w-2 h-2 rounded-full bg-amber-400"></span>
-                </>
-              )}
-            </button>
-          )}
+            <div className="relative">
+              <button
+                onClick={() => {
+                  setIsNotificationMenuOpen(!isNotificationMenuOpen);
+                  if (notificationPermission !== 'granted') {
+                    handleToggleNotifications();
+                  }
+                }}
+                className={`relative flex items-center gap-2 px-3 py-1.5 sm:py-2 rounded-xl border text-xs font-semibold transition-all active:scale-95 shadow-sm cursor-pointer ${
+                  hasActiveNotice
+                    ? 'bg-red-950/80 border-red-500 text-red-200 hover:bg-red-900 ring-2 ring-red-500/30'
+                    : notificationPermission === 'granted'
+                    ? 'bg-emerald-950/50 border-emerald-500/50 text-emerald-300 hover:bg-emerald-900/60'
+                    : 'bg-[#0b1325] hover:bg-[#111d38] border-amber-500/50 text-amber-300'
+                }`}
+                title={
+                  hasActiveNotice
+                    ? (lang === 'ar' ? 'تنبيه طارئ نشط - انقر للتفاصيل' : 'Active Emergency Alert - Click for details')
+                    : (lang === 'ar' ? 'نظام الإشعارات والتنبيهات' : 'System Notifications')
+                }
+              >
+                {hasActiveNotice ? (
+                  <>
+                    <BellRing className="w-4 h-4 text-red-400 animate-bounce" />
+                    <span className="hidden sm:inline">{lang === 'ar' ? 'تنبيه طارئ' : 'Emergency Alert'}</span>
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[11px] font-black text-white shadow-md animate-pulse">
+                      {activeAlertMessage ? 1 : criticalCount}
+                    </span>
+                  </>
+                ) : notificationPermission === 'granted' ? (
+                  <>
+                    <BellRing className="w-4 h-4 text-emerald-400" />
+                    <span className="hidden sm:inline">{lang === 'ar' ? 'الإشعارات' : 'Alerts'}</span>
+                    <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                  </>
+                ) : (
+                  <>
+                    <Bell className="w-4 h-4 text-amber-400 animate-pulse" />
+                    <span className="hidden sm:inline">{lang === 'ar' ? 'تفعيل التنبيهات' : 'Enable Alerts'}</span>
+                    <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                  </>
+                )}
+              </button>
 
-          {/* System Settings Control Center Button */}
-          <button
-            onClick={onOpenSettings}
-            className={`flex items-center gap-1.5 px-3 py-1.5 sm:py-2 rounded-xl border text-xs font-semibold transition-all active:scale-95 shadow-sm cursor-pointer ${
-              activeTab === 'settings'
-                ? 'bg-teal-500/20 border-teal-500 text-teal-300 shadow-teal-500/20'
-                : 'bg-[#0b1325] hover:bg-[#111d38] border-slate-700/80 text-slate-300 hover:text-teal-300 hover:border-teal-500/50'
-            }`}
-            title={lang === 'ar' ? 'مركز تخصيص وإعدادات المنظومة الشامل' : 'System Settings & Control Center'}
-          >
-            <Sliders className="w-4 h-4 text-teal-400" />
-            <span className="hidden sm:inline">{t('settings')}</span>
-          </button>
+              {/* Integrated Notification Popover Dropdown */}
+              {isNotificationMenuOpen && (
+                <div className={`absolute top-full mt-2 ${isRTL ? 'left-0' : 'right-0'} w-80 sm:w-96 bg-[#0c162c] border border-slate-700/80 rounded-2xl shadow-2xl p-4 z-50 animate-in fade-in zoom-in-95`}>
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                    <div className="flex items-center gap-2">
+                      <BellRing className="w-4 h-4 text-teal-400" />
+                      <span className="text-xs font-bold text-white">
+                        {lang === 'ar' ? 'مركز التنبيهات والإشعارات' : 'Notification Center'}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => setIsNotificationMenuOpen(false)}
+                      className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <div className="mt-3 space-y-3 max-h-80 overflow-y-auto text-xs">
+                    {/* Active STAT Alert Item */}
+                    {activeAlertMessage ? (
+                      <div className="p-3 bg-red-950/80 border border-red-500/80 text-red-200 rounded-xl space-y-2 animate-pulse">
+                        <div className="flex items-start gap-2 font-bold">
+                          <ShieldAlert className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                          <div className="leading-snug">
+                            {activeAlertMessage}
+                          </div>
+                        </div>
+                        {onDismissAlert && (
+                          <div className="flex justify-end pt-1">
+                            <button
+                              onClick={() => {
+                                onDismissAlert();
+                              }}
+                              className="px-2.5 py-1 bg-red-900 hover:bg-red-800 text-white text-[11px] font-bold rounded-lg border border-red-700 transition-colors cursor-pointer"
+                            >
+                              {lang === 'ar' ? 'إلغاء التنبيه' : 'Dismiss Alert'}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="p-3 bg-slate-900/60 border border-slate-800 rounded-xl text-slate-400 text-center text-[11px]">
+                        {lang === 'ar' ? 'لا يوجد إنذار طارئ نشط حالياً' : 'No active emergency alarms at the moment'}
+                      </div>
+                    )}
+
+                    {/* Critical STAT Count Summary */}
+                    {criticalCount > 0 && (
+                      <div className="p-3 bg-amber-950/40 border border-amber-800/60 rounded-xl text-amber-200 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" />
+                          <span>
+                            {lang === 'ar' 
+                              ? `يوجد ${criticalCount} حالات حرجة STAT جارية بالعناية` 
+                              : `${criticalCount} active critical STAT patients`}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* System Audio & Notification Settings Toggle */}
+                    <div className="p-3 bg-slate-900/80 border border-slate-800 rounded-xl flex items-center justify-between text-slate-300">
+                      <div className="flex items-center gap-2">
+                        <Volume2 className="w-4 h-4 text-teal-400" />
+                        <span>{lang === 'ar' ? 'التنبيهات الصوتية المباشرة' : 'Audio Alarms'}</span>
+                      </div>
+                      <button
+                        onClick={() => {
+                          updateSettings({
+                            features: {
+                              ...settings.features,
+                              enableAudioAlarms: !settings.features.enableAudioAlarms,
+                            }
+                          });
+                          if (!settings.features.enableAudioAlarms) {
+                            playIcuAlarmAudio('MEDIUM');
+                          }
+                        }}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                          settings.features.enableAudioAlarms
+                            ? 'bg-teal-500/20 text-teal-300 border border-teal-500/50'
+                            : 'bg-slate-800 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        {settings.features.enableAudioAlarms 
+                          ? (lang === 'ar' ? 'مفضّلة / مفعّلة' : 'Enabled') 
+                          : (lang === 'ar' ? 'مكتومة' : 'Muted')}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
