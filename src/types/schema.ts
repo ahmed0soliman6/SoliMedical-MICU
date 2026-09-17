@@ -329,6 +329,7 @@ export interface TelemetryVitals {
   lactateMmolPerL?: number;
   lactateClearancePercent?: number;
   bloodGlucoseMgDl?: number;
+  cvpMmHg?: number;
   recordedBy: {
     staffId: string;
     name: string;
@@ -574,6 +575,7 @@ export interface SbarHandoverReport {
     infectiousDiseaseAndAntibiotics: string;
   };
   recommendationAndOrders: string[]; // R: Action items for upcoming shift
+  customFields?: Record<string, string>;
   isLocked: boolean; // Once signed, immutable
   cryptographicHash: string;
 }

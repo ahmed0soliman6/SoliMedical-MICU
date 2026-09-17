@@ -458,7 +458,7 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
           </div>
         </div>
 
-        {settings.enableAiLabScanner && (
+        {settings.features.enableAiLabScanner && (
           <div className="flex items-center gap-1 bg-slate-900/80 p-1 rounded-xl border border-slate-800 overflow-x-auto max-w-full">
             <button
               type="button"
@@ -1142,7 +1142,7 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
       )}
 
       {/* AI Lab OCR Scanner Modal */}
-      {settings.enableAiLabScanner && (
+      {settings.features.enableAiLabScanner && (
         <AiLabScannerModal
           isOpen={isAiScannerOpen}
           onClose={() => setIsAiScannerOpen(false)}

@@ -1,3 +1,4 @@
+import { LabsTemplateManager } from './LabsTemplateManager.tsx';
 import React, { useState } from 'react';
 import { 
   Droplet, 
@@ -31,7 +32,7 @@ export const ClinicalOptionsManager: React.FC = () => {
   const { settings, updateSettings } = useSystemSettings();
   const { lang, isRTL } = useTranslation();
 
-  const [activeTab, setActiveTab] = useState<'pumps' | 'vent' | 'fluids' | 'antibiotics'>('pumps');
+  const [activeTab, setActiveTab] = useState<'pumps' | 'vent' | 'fluids' | 'antibiotics' | 'labs' | 'sbar'>('pumps');
 
   // Drug Form State
   const [showAddDrug, setShowAddDrug] = useState(false);
@@ -300,6 +301,32 @@ export const ClinicalOptionsManager: React.FC = () => {
           <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-slate-800 text-slate-300 font-mono">
             {antibioticsPresets.length}
           </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('labs')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            activeTab === 'labs'
+              ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40 shadow-sm'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <Activity className="w-4 h-4 text-purple-400" />
+          <span>{lang === 'ar' ? 'صناديق التحاليل الطبية' : 'Lab Panels Config'}</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('sbar')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            activeTab === 'sbar'
+              ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 shadow-sm'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <ShieldAlert className="w-4 h-4 text-teal-400" />
+          <span>{lang === 'ar' ? 'تسليم واستلام المناوبة (SBAR)' : 'SBAR Handover Config'}</span>
         </button>
       </div>
 
@@ -1156,6 +1183,95 @@ export const ClinicalOptionsManager: React.FC = () => {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 5: LABS */}
+      {activeTab === 'labs' && (
+        <div className="mt-4">
+          <LabsTemplateManager />
+        </div>
+      )}
+
+      {/* TAB 6: SBAR */}
+      {activeTab === 'sbar' && (
+        <div className="space-y-4">
+          <div className="p-4 bg-[#0a101c] rounded-xl border border-slate-800">
+            <h4 className="text-sm font-bold text-teal-400 mb-2 flex items-center gap-2">
+              <ShieldAlert className="w-4 h-4" />
+              {lang === 'ar' ? 'تخصيص نموذج تسليم المناوبة (SBAR)' : 'SBAR Handover Template Configuration'}
+            </h4>
+            <p className="text-xs text-slate-400 mb-4">
+              {lang === 'ar'
+                ? 'إدارة الحقول المطلوبة أثناء عملية الاستلام والتسليم بين الكوادر الطبية (SBAR Protocol).'
+                : 'Manage the required fields during the shift handover process (SBAR Protocol).'}
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {(settings.sbarFields || []).map((field) => (
+                <div key={field.id} className="bg-slate-900/50 p-3 rounded-xl border border-slate-700/60 flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="w-5 h-5 rounded flex items-center justify-center bg-teal-500/20 text-teal-400 font-bold text-xs border border-teal-500/30">
+                        {field.section}
+                      </span>
+                      <span className="font-bold text-xs text-slate-200">
+                        {lang === 'ar' ? field.labelAr : field.labelEn}
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // Logic to remove a field
+                      const updated = (settings.sbarFields || []).filter(f => f.id !== field.id);
+                      updateSettings({ sbarFields: updated });
+                    }}
+                    className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                    title={lang === 'ar' ? 'حذف الحقل' : 'Delete field'}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-6 pt-4 border-t border-slate-800/60 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  // Reset to default
+                  import('../types/settings.ts').then((mod) => {
+                    updateSettings({ sbarFields: mod.DEFAULT_SBAR_FIELDS });
+                  });
+                }}
+                className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold transition-colors"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                {lang === 'ar' ? 'استعادة الافتراضيات' : 'Reset to Defaults'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  // Add a new custom field
+                  const newId = `custom-${Date.now()}`;
+                  const newField = {
+                    id: newId,
+                    labelEn: 'New Custom Field',
+                    labelAr: 'حقل مخصص جديد',
+                    section: 'A' as const,
+                    isRequired: false,
+                    order: (settings.sbarFields?.length || 0) + 1,
+                  };
+                  updateSettings({ sbarFields: [...(settings.sbarFields || []), newField] });
+                }}
+                className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-500 text-white rounded-xl text-xs font-bold transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                {lang === 'ar' ? 'إضافة حقل جديد' : 'Add New Field'}
+              </button>
+            </div>
           </div>
         </div>
       )}

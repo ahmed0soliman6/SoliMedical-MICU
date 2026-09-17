@@ -36,7 +36,7 @@ export const ClinicalNotesView: React.FC<ClinicalNotesViewProps> = ({
             </div>
             <div>
               <h2 className="text-base sm:text-lg font-bold text-white">
-                {lang === 'ar' ? 'الملاحظات الطبية المشفرة المجمعة (Rule 2.6 Immutability)' : 'Central Immutable Clinical Notes & Ledger'}
+                {lang === 'ar' ? 'الملاحظات الطبية وملحقاتها (Rule 2.6 Immutability)' : 'Central Immutable Clinical Notes & Ledger'}
               </h2>
               <p className="text-xs text-slate-400">
                 {lang === 'ar' 

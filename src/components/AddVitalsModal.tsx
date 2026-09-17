@@ -3,7 +3,7 @@ import { X, Activity, Heart, Wind, Thermometer, ShieldCheck, Pencil } from 'luci
 import { BedNumber, StaffRole, TelemetryVitals } from '../types/schema.ts';
 import { addTimestampedVitals } from '../services/dataModel.ts';
 import { useTranslation } from '../services/i18n.ts';
-import { parseEnglishFloat, parseEnglishInt } from '../services/numberUtils.ts';
+import { parseEnglishFloat, parseEnglishInt, toEnglishDigits } from '../services/numberUtils.ts';
 import { useAuth } from '../services/AuthContext.tsx';
 import { db } from '../db/icuSyncDb.ts';
 
@@ -28,62 +28,68 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
 }) => {
   const { t, lang, isRTL } = useTranslation();
   const { currentUser } = useAuth();
-  const [heartRate, setHeartRate] = useState<number>(110);
-  const [heartRhythm, setHeartRhythm] = useState<string>('Sinus Tachycardia');
-  const [systolicBp, setSystolicBp] = useState<number>(95);
-  const [diastolicBp, setDiastolicBp] = useState<number>(60);
+  const [heartRate, setHeartRate] = useState<string>('');
+  const [heartRhythm, setHeartRhythm] = useState<string>('Normal Sinus Rhythm');
+  const [systolicBp, setSystolicBp] = useState<string>('');
+  const [diastolicBp, setDiastolicBp] = useState<string>('');
   const [isArterialLine, setIsArterialLine] = useState<boolean>(true);
-  const [spo2, setSpo2] = useState<number>(94);
-  const [fio2, setFio2] = useState<number>(60);
-  const [respiratoryRate, setRespiratoryRate] = useState<number>(22);
-  const [coreTemp, setCoreTemp] = useState<number>(38.2);
+  const [spo2, setSpo2] = useState<string>('');
+  const [fio2, setFio2] = useState<string>('');
+  const [respiratoryRate, setRespiratoryRate] = useState<string>('');
+  const [coreTemp, setCoreTemp] = useState<string>('');
   const [tempSite, setTempSite] = useState<'FOLEY_CORE' | 'AXILLARY' | 'TYMPANIC'>('FOLEY_CORE');
-  const [gcsTotal, setGcsTotal] = useState<number>(10);
-  const [sedationRass, setSedationRass] = useState<number>(-2);
-  const [lactate, setLactate] = useState<number>(3.2);
-  const [bloodGlucose, setBloodGlucose] = useState<number>(165);
+  const [gcsTotal, setGcsTotal] = useState<string>('');
+  const [sedationRass, setSedationRass] = useState<string>('0');
+  const [cvp, setCvp] = useState<string>('');
+  const [bloodGlucose, setBloodGlucose] = useState<string>('');
   const [clinicalNotes, setClinicalNotes] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   useEffect(() => {
     if (vitalsToEdit) {
-      setHeartRate(vitalsToEdit.heartRateBpm ?? 110);
-      setHeartRhythm(vitalsToEdit.heartRhythm || 'Sinus Tachycardia');
-      setSystolicBp(vitalsToEdit.systolicBpMmHg ?? 95);
-      setDiastolicBp(vitalsToEdit.diastolicBpMmHg ?? 60);
+      setHeartRate(vitalsToEdit.heartRateBpm !== undefined && vitalsToEdit.heartRateBpm !== null ? String(vitalsToEdit.heartRateBpm) : '');
+      setHeartRhythm(vitalsToEdit.heartRhythm || 'Normal Sinus Rhythm');
+      setSystolicBp(vitalsToEdit.systolicBpMmHg !== undefined && vitalsToEdit.systolicBpMmHg !== null ? String(vitalsToEdit.systolicBpMmHg) : '');
+      setDiastolicBp(vitalsToEdit.diastolicBpMmHg !== undefined && vitalsToEdit.diastolicBpMmHg !== null ? String(vitalsToEdit.diastolicBpMmHg) : '');
       setIsArterialLine(vitalsToEdit.isArterialLine ?? true);
-      setSpo2(vitalsToEdit.spo2Percent ?? 94);
-      setFio2(vitalsToEdit.fio2SuppliedPercent ?? 60);
-      setRespiratoryRate(vitalsToEdit.respiratoryRateCpm ?? 22);
-      setCoreTemp(vitalsToEdit.coreTemperatureCelsius ?? 38.2);
+      setSpo2(vitalsToEdit.spo2Percent !== undefined && vitalsToEdit.spo2Percent !== null ? String(vitalsToEdit.spo2Percent) : '');
+      setFio2(vitalsToEdit.fio2SuppliedPercent !== undefined && vitalsToEdit.fio2SuppliedPercent !== null ? String(vitalsToEdit.fio2SuppliedPercent) : '');
+      setRespiratoryRate(vitalsToEdit.respiratoryRateCpm !== undefined && vitalsToEdit.respiratoryRateCpm !== null ? String(vitalsToEdit.respiratoryRateCpm) : '');
+      setCoreTemp(vitalsToEdit.coreTemperatureCelsius !== undefined && vitalsToEdit.coreTemperatureCelsius !== null ? String(vitalsToEdit.coreTemperatureCelsius) : '');
       if (vitalsToEdit.temperatureSite) setTempSite(vitalsToEdit.temperatureSite as any);
-      setGcsTotal(vitalsToEdit.gcsTotalScore ?? 10);
-      if (vitalsToEdit.sedationRassScore !== undefined) setSedationRass(vitalsToEdit.sedationRassScore);
-      if (vitalsToEdit.lactateMmolPerL !== undefined) setLactate(vitalsToEdit.lactateMmolPerL);
-      if (vitalsToEdit.bloodGlucoseMgDl !== undefined) setBloodGlucose(vitalsToEdit.bloodGlucoseMgDl);
+      setGcsTotal(vitalsToEdit.gcsTotalScore !== undefined && vitalsToEdit.gcsTotalScore !== null ? String(vitalsToEdit.gcsTotalScore) : '');
+      if (vitalsToEdit.sedationRassScore !== undefined && vitalsToEdit.sedationRassScore !== null) {
+        setSedationRass(String(vitalsToEdit.sedationRassScore));
+      } else {
+        setSedationRass('0');
+      }
+      setCvp(vitalsToEdit.cvpMmHg !== undefined && vitalsToEdit.cvpMmHg !== null ? String(vitalsToEdit.cvpMmHg) : '');
+      setBloodGlucose(vitalsToEdit.bloodGlucoseMgDl !== undefined && vitalsToEdit.bloodGlucoseMgDl !== null ? String(vitalsToEdit.bloodGlucoseMgDl) : '');
       setClinicalNotes(vitalsToEdit.clinicalNotes || '');
     } else {
-      setHeartRate(110);
-      setHeartRhythm('Sinus Tachycardia');
-      setSystolicBp(95);
-      setDiastolicBp(60);
+      setHeartRate('');
+      setHeartRhythm('Normal Sinus Rhythm');
+      setSystolicBp('');
+      setDiastolicBp('');
       setIsArterialLine(true);
-      setSpo2(94);
-      setFio2(60);
-      setRespiratoryRate(22);
-      setCoreTemp(38.2);
+      setSpo2('');
+      setFio2('');
+      setRespiratoryRate('');
+      setCoreTemp('');
       setTempSite('FOLEY_CORE');
-      setGcsTotal(10);
-      setSedationRass(-2);
-      setLactate(3.2);
-      setBloodGlucose(165);
+      setGcsTotal('');
+      setSedationRass('0');
+      setCvp('');
+      setBloodGlucose('');
       setClinicalNotes('');
     }
   }, [vitalsToEdit, isOpen]);
 
   if (!isOpen) return null;
 
-  const map = Math.round(diastolicBp + (systolicBp - diastolicBp) / 3);
+  const sysVal = parseEnglishInt(systolicBp) || 0;
+  const diaVal = parseEnglishInt(diastolicBp) || 0;
+  const map = sysVal && diaVal ? Math.round(diaVal + (sysVal - diaVal) / 3) : 0;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -96,20 +102,20 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
       if (vitalsToEdit) {
         const updatedVitals: TelemetryVitals = {
           ...vitalsToEdit,
-          heartRateBpm: parseEnglishInt(heartRate) || 110,
+          heartRateBpm: parseEnglishInt(heartRate) || 80,
           heartRhythm,
-          systolicBpMmHg: parseEnglishInt(systolicBp) || 95,
-          diastolicBpMmHg: parseEnglishInt(diastolicBp) || 60,
-          meanArterialPressureMmHg: map,
+          systolicBpMmHg: parseEnglishInt(systolicBp) || 120,
+          diastolicBpMmHg: parseEnglishInt(diastolicBp) || 80,
+          meanArterialPressureMmHg: map || 93,
           isArterialLine,
-          spo2Percent: parseEnglishInt(spo2) || 94,
-          fio2SuppliedPercent: parseEnglishInt(fio2) || 60,
-          respiratoryRateCpm: parseEnglishInt(respiratoryRate) || 22,
-          coreTemperatureCelsius: parseEnglishFloat(coreTemp) || 38.2,
+          spo2Percent: parseEnglishInt(spo2) || 98,
+          fio2SuppliedPercent: parseEnglishInt(fio2) || 21,
+          respiratoryRateCpm: parseEnglishInt(respiratoryRate) || 16,
+          coreTemperatureCelsius: parseEnglishFloat(coreTemp) || 37.0,
           temperatureSite: tempSite,
-          gcsTotalScore: parseEnglishInt(gcsTotal) || 10,
-          sedationRassScore: parseEnglishInt(sedationRass) || -2,
-          lactateMmolPerL: lactate ? parseEnglishFloat(lactate) : undefined,
+          gcsTotalScore: parseEnglishInt(gcsTotal) || 15,
+          sedationRassScore: !isNaN(parseEnglishInt(sedationRass)) ? parseEnglishInt(sedationRass) : 0,
+          cvpMmHg: cvp ? parseEnglishInt(cvp) : undefined,
           bloodGlucoseMgDl: bloodGlucose ? parseEnglishFloat(bloodGlucose) : undefined,
           clinicalNotes: clinicalNotes.trim() || undefined,
           recordedBy: {
@@ -123,19 +129,19 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
         await addTimestampedVitals({
           bedId: bedNumber,
           patientId,
-          heartRateBpm: parseEnglishInt(heartRate) || 110,
+          heartRateBpm: parseEnglishInt(heartRate) || 80,
           heartRhythm,
-          systolicBpMmHg: parseEnglishInt(systolicBp) || 95,
-          diastolicBpMmHg: parseEnglishInt(diastolicBp) || 60,
+          systolicBpMmHg: parseEnglishInt(systolicBp) || 120,
+          diastolicBpMmHg: parseEnglishInt(diastolicBp) || 80,
           isArterialLine,
-          spo2Percent: parseEnglishInt(spo2) || 94,
-          fio2SuppliedPercent: parseEnglishInt(fio2) || 60,
-          respiratoryRateCpm: parseEnglishInt(respiratoryRate) || 22,
-          coreTemperatureCelsius: parseEnglishFloat(coreTemp) || 38.2,
+          spo2Percent: parseEnglishInt(spo2) || 98,
+          fio2SuppliedPercent: parseEnglishInt(fio2) || 21,
+          respiratoryRateCpm: parseEnglishInt(respiratoryRate) || 16,
+          coreTemperatureCelsius: parseEnglishFloat(coreTemp) || 37.0,
           temperatureSite: tempSite,
-          gcsTotalScore: parseEnglishInt(gcsTotal) || 10,
-          sedationRassScore: parseEnglishInt(sedationRass) || -2,
-          lactateMmolPerL: lactate ? parseEnglishFloat(lactate) : undefined,
+          gcsTotalScore: parseEnglishInt(gcsTotal) || 15,
+          sedationRassScore: !isNaN(parseEnglishInt(sedationRass)) ? parseEnglishInt(sedationRass) : 0,
+          cvpMmHg: cvp ? parseEnglishInt(cvp) : undefined,
           bloodGlucoseMgDl: bloodGlucose ? parseEnglishFloat(bloodGlucose) : undefined,
           recordedBy: {
             staffId,
@@ -204,10 +210,11 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
                   {lang === 'ar' ? 'الانقباضي (Systolic mmHg)' : 'Systolic (mmHg)'}
                 </label>
                 <input
-                  type="number"
-                  inputMode="decimal"
+                  type="text"
+                  inputMode="numeric"
+                  autoFocus
                   value={systolicBp}
-                  onChange={(e) => setSystolicBp(Number(e.target.value))}
+                  onChange={(e) => setSystolicBp(toEnglishDigits(e.target.value))}
                   className="w-full mt-1 bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 text-white font-mono font-bold focus:border-teal-500 focus:outline-none"
                   required
                 />
@@ -218,10 +225,10 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
                   {lang === 'ar' ? 'الانبساطي (Diastolic mmHg)' : 'Diastolic (mmHg)'}
                 </label>
                 <input
-                  type="number"
-                  inputMode="decimal"
+                  type="text"
+                  inputMode="numeric"
                   value={diastolicBp}
-                  onChange={(e) => setDiastolicBp(Number(e.target.value))}
+                  onChange={(e) => setDiastolicBp(toEnglishDigits(e.target.value))}
                   className="w-full mt-1 bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 text-white font-mono font-bold focus:border-teal-500 focus:outline-none"
                   required
                 />
@@ -252,10 +259,10 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
                 <span>{lang === 'ar' ? 'النبض (HR bpm)' : 'Heart Rate (bpm)'}</span>
               </label>
               <input
-                type="number"
-                inputMode="decimal"
+                type="text"
+                inputMode="numeric"
                 value={heartRate}
-                onChange={(e) => setHeartRate(Number(e.target.value))}
+                onChange={(e) => setHeartRate(toEnglishDigits(e.target.value))}
                 className="w-full mt-1 bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 text-white font-mono font-bold focus:border-teal-500 focus:outline-none"
                 required
               />
@@ -268,8 +275,8 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
                 onChange={(e) => setHeartRhythm(e.target.value)}
                 className="w-full mt-1 bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 text-white text-xs focus:border-teal-500 focus:outline-none"
               >
-                <option value="Sinus Tachycardia">Sinus Tachycardia</option>
                 <option value="Normal Sinus Rhythm">Normal Sinus Rhythm</option>
+                <option value="Sinus Tachycardia">Sinus Tachycardia</option>
                 <option value="Atrial Fibrillation (AFib)">Atrial Fibrillation (AFib)</option>
                 <option value="Sinus Bradycardia">Sinus Bradycardia</option>
               </select>
@@ -281,10 +288,10 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
             <div>
               <label className="text-[11px] text-slate-400">SpO₂ (%)</label>
               <input
-                type="number"
-                inputMode="decimal"
+                type="text"
+                inputMode="numeric"
                 value={spo2}
-                onChange={(e) => setSpo2(Number(e.target.value))}
+                onChange={(e) => setSpo2(toEnglishDigits(e.target.value))}
                 className="w-full mt-1 bg-[#0f172a] border border-slate-700 rounded-lg px-2.5 py-2 text-white font-mono font-bold focus:border-teal-500 focus:outline-none"
                 required
               />
@@ -293,10 +300,10 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
             <div>
               <label className="text-[11px] text-slate-400">FiO₂ (%)</label>
               <input
-                type="number"
-                inputMode="decimal"
+                type="text"
+                inputMode="numeric"
                 value={fio2}
-                onChange={(e) => setFio2(Number(e.target.value))}
+                onChange={(e) => setFio2(toEnglishDigits(e.target.value))}
                 className="w-full mt-1 bg-[#0f172a] border border-slate-700 rounded-lg px-2.5 py-2 text-white font-mono font-bold focus:border-teal-500 focus:outline-none"
                 required
               />
@@ -308,10 +315,10 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
                 <span>{lang === 'ar' ? 'التنفس (RR)' : 'Resp Rate (RR)'}</span>
               </label>
               <input
-                type="number"
-                inputMode="decimal"
+                type="text"
+                inputMode="numeric"
                 value={respiratoryRate}
-                onChange={(e) => setRespiratoryRate(Number(e.target.value))}
+                onChange={(e) => setRespiratoryRate(toEnglishDigits(e.target.value))}
                 className="w-full mt-1 bg-[#0f172a] border border-slate-700 rounded-lg px-2.5 py-2 text-white font-mono font-bold focus:border-teal-500 focus:outline-none"
                 required
               />
@@ -326,11 +333,10 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
                 <span>{lang === 'ar' ? 'حرارة (°C)' : 'Temp (°C)'}</span>
               </label>
               <input
-                type="number"
-                step="0.1"
+                type="text"
                 inputMode="decimal"
                 value={coreTemp}
-                onChange={(e) => setCoreTemp(Number(e.target.value))}
+                onChange={(e) => setCoreTemp(toEnglishDigits(e.target.value))}
                 className="w-full mt-1 bg-[#0f172a] border border-slate-700 rounded-lg px-2.5 py-2 text-white font-mono font-bold focus:border-teal-500 focus:outline-none"
                 required
               />
@@ -339,12 +345,10 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
             <div>
               <label className="text-[11px] text-slate-400">GCS Score</label>
               <input
-                type="number"
-                min="3"
-                max="15"
-                inputMode="decimal"
+                type="text"
+                inputMode="numeric"
                 value={gcsTotal}
-                onChange={(e) => setGcsTotal(Number(e.target.value))}
+                onChange={(e) => setGcsTotal(toEnglishDigits(e.target.value))}
                 className="w-full mt-1 bg-[#0f172a] border border-slate-700 rounded-lg px-2.5 py-2 text-white font-mono font-bold focus:border-teal-500 focus:outline-none"
                 required
               />
@@ -354,7 +358,7 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
               <label className="text-[11px] text-slate-400">RASS Score</label>
               <select
                 value={sedationRass}
-                onChange={(e) => setSedationRass(Number(e.target.value))}
+                onChange={(e) => setSedationRass(e.target.value)}
                 className="w-full mt-1 bg-[#0f172a] border border-slate-700 rounded-lg px-2 py-2 text-white text-xs focus:border-teal-500 focus:outline-none"
               >
                 <option value="0">0 (Alert & Calm)</option>
@@ -369,16 +373,15 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
             </div>
           </div>
 
-          {/* Lactate & Blood Glucose */}
+          {/* CVP & Blood Glucose */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-[11px] text-slate-400">{lang === 'ar' ? 'اللاكتات (Lactate mmol/L)' : 'Lactate (mmol/L)'}</label>
+              <label className="text-[11px] text-slate-400">{lang === 'ar' ? 'الضغط الوريدي المركزي CVP (mmHg)' : 'Central Venous Pressure CVP (mmHg)'}</label>
               <input
-                type="number"
-                step="0.1"
-                inputMode="decimal"
-                value={lactate}
-                onChange={(e) => setLactate(Number(e.target.value))}
+                type="text"
+                inputMode="numeric"
+                value={cvp}
+                onChange={(e) => setCvp(toEnglishDigits(e.target.value))}
                 className="w-full mt-1 bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 text-white font-mono focus:border-teal-500 focus:outline-none"
               />
             </div>
@@ -386,10 +389,10 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
             <div>
               <label className="text-[11px] text-slate-400">{lang === 'ar' ? 'السكر العشوائي (RBG mg/dL)' : 'Random Glucose (mg/dL)'}</label>
               <input
-                type="number"
-                inputMode="decimal"
+                type="text"
+                inputMode="numeric"
                 value={bloodGlucose}
-                onChange={(e) => setBloodGlucose(Number(e.target.value))}
+                onChange={(e) => setBloodGlucose(toEnglishDigits(e.target.value))}
                 className="w-full mt-1 bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 text-white font-mono focus:border-teal-500 focus:outline-none"
               />
             </div>

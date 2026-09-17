@@ -34,12 +34,12 @@ import {
   Trash2,
   Edit3,
   AlertTriangle,
-  Pill
+  Pill,
+  FileCheck2
 } from 'lucide-react';
 import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
 import { SystemFeatureFlags } from '../types/settings.ts';
-import { LabsTemplateManager } from './LabsTemplateManager.tsx';
 import { ClinicalOptionsManager } from './ClinicalOptionsManager.tsx';
 
 interface SettingsModalProps {
@@ -210,6 +210,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
       color: 'text-teal-400',
     },
     {
+      key: 'enableSbarHandover',
+      category: 'bedside',
+      labelAr: 'بطاقة تسليم واستلام المناوبة (SBAR Shift Handover)',
+      labelEn: 'SBAR Shift Handover Module',
+      descriptionAr: 'بطاقة لتسجيل واستلام المناوبات الطبية للمريض وفق بروتوكول SBAR.',
+      descriptionEn: 'Clinical shift handover management with mandatory SBAR protocol review.',
+      icon: ShieldCheck,
+      color: 'text-amber-400',
+    },
+    {
+      key: 'enableClinicalNotes',
+      category: 'bedside',
+      labelAr: 'بطاقة الملاحظات الطبية وملحقاتها (Clinical Notes)',
+      labelEn: 'Clinical Notes & Addendums',
+      descriptionAr: 'بطاقة لتوثيق الملاحظات الطبية، والملحقات الموقعة إلكترونياً بختم SHA-256.',
+      descriptionEn: 'Document and authenticate medical notes and immutable signed addendums.',
+      icon: FileCheck2,
+      color: 'text-blue-400',
+    },
+    {
       key: 'enableVentilatorParameters',
       category: 'bedside',
       labelAr: 'معايير التنفس الصناعي (Ventilator Parameters)',
@@ -346,15 +366,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
       badgeAr: 'خيارات سريرية',
       badgeEn: 'Equipment & Drugs',
       icon: Droplet,
-      isCustom: true
-    },
-    {
-      id: 'labsConfig',
-      labelAr: 'إعداد وتخصيص صناديق التحاليل الطبية (صورة الدم، كيمياء، غازات الدم...)',
-      labelEn: 'Customize Lab Panel Categories & Parameters',
-      badgeAr: 'تعديل الإضافة والحذف',
-      badgeEn: 'Dynamic Lab Panels',
-      icon: FlaskConical,
       isCustom: true
     },
     {
@@ -534,10 +545,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                           ) : section.id === 'clinicalCatalogs' ? (
                             <div className="mt-2">
                               <ClinicalOptionsManager />
-                            </div>
-                          ) : section.id === 'labsConfig' ? (
-                            <div className="mt-2">
-                              <LabsTemplateManager />
                             </div>
                           ) : (
                             <form onSubmit={handleSaveUnit} className="space-y-4 max-w-3xl mt-2">

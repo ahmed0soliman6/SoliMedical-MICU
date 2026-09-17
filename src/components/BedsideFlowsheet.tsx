@@ -98,6 +98,7 @@ interface BedsideFlowsheetProps {
   onSelectBed?: (bedNumber: BedNumber) => void;
   onBack: () => void;
   onOpenAddVitals: () => void;
+  onOpenAddClinicalNote?: () => void;
   onOpenAddAddendum: (noteId: string, author: string) => void;
   onOpenSbarSign: () => void;
   onDataUpdated: () => void;
@@ -125,6 +126,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
   onSelectBed,
   onBack,
   onOpenAddVitals,
+  onOpenAddClinicalNote,
   onOpenAddAddendum,
   onOpenSbarSign,
   onDataUpdated,
@@ -263,9 +265,11 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
   });
 
   // Disposition form state
-  const [dispType, setDispType] = useState<DispositionType>(DispositionType.TRANSFER_GENERAL_WARD);
-  const [dispSummary, setDispSummary] = useState<string>('Patient stabilized and transferred to High Dependency Unit (HDU).');
+  const [dispType, setDispType] = useState<DispositionType | null>(null);
+  const [dispSummary, setDispSummary] = useState<string>('');
   const [physicianSign, setPhysicianSign] = useState<string>('Dr. Hesham Talaat');
+  const [useOtherConsultant, setUseOtherConsultant] = useState<boolean>(false);
+  const [otherConsultantName, setOtherConsultantName] = useState<string>('');
   const [isDispPanelOpen, setIsDispPanelOpen] = useState<boolean>(false);
 
   useEffect(() => {
@@ -1107,6 +1111,16 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
   };
 
   const handleExecuteDisposition = async () => {
+    if (!dispType) {
+      alert(lang === 'ar' ? 'يرجى اختيار مسار إنهاء الإقامة أولاً.' : 'Please select a disposition pathway first.');
+      return;
+    }
+    const currentUserName = currentUser ? (lang === 'ar' ? currentUser.nameAr || currentUser.nameEn : currentUser.nameEn || currentUser.nameAr) : 'Dr. Hesham Talaat';
+    const finalPhysicianSign = useOtherConsultant ? otherConsultantName.trim() : currentUserName;
+    if (useOtherConsultant && !otherConsultantName.trim()) {
+      alert(lang === 'ar' ? 'يرجى إدخال اسم الطبيب الاستشاري المعتمد الآخر.' : 'Please enter the name of the other attending consultant.');
+      return;
+    }
     const confirmPrompt = lang === 'ar'
       ? `هل أنت متأكد من تسجيل خروج / نقل مريض السرير ${bed.bedNumber}؟`
       : `Confirm discharge/transfer for Bed ${bed.bedNumber}?`;
@@ -1119,7 +1133,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
         summaryText: dispSummary,
         authorStaff: {
           staffId: 'DOC-8811',
-          name: physicianSign,
+          name: finalPhysicianSign,
           role: StaffRole.CONSULTANT,
         },
       });
@@ -1755,92 +1769,63 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
 
           {!isPaperVitalsCardCollapsed && (
             <div className="space-y-4 animate-in fade-in duration-300">
-              <div className="flex items-center justify-between pb-1">
-                <span className="text-xs text-slate-400 font-mono">
-                  {vitalsHistory.length} {lang === 'ar' ? 'قراءات مسجلة' : 'Readings Recorded'}
-                </span>
-                <button
-                  type="button"
-                  onClick={onOpenAddVitals}
-                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shadow-md active:scale-95 cursor-pointer"
-                  title={lang === 'ar' ? 'إضافة قراءة علامات حيوية جديدة' : 'Add New Vitals Reading'}
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>{lang === 'ar' ? 'إضافة قراءة حيوية' : 'Add Vitals Reading'}</span>
-                </button>
-              </div>
-
               {latestVitals && (
-                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
-                  {/* MAP */}
-                  <div className="bg-[#090f1d] border border-slate-800 p-3.5 rounded-2xl">
-                    <div className="text-[10px] text-slate-400 uppercase font-bold">Mean Arterial Pressure (MAP)</div>
-                    <div className={`text-xl sm:text-2xl font-black font-mono mt-1 ${
-                      latestVitals.meanArterialPressureMmHg < 65 ? 'text-red-400 animate-pulse' : 'text-cyan-300'
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+                  {/* Blood Pressure (BP) replacing MAP */}
+                  <div className="bg-[#070c18] px-3 py-2 rounded-xl border border-slate-800/80 flex items-center justify-between hover:border-slate-700 transition-colors">
+                    <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">BP</span>
+                    <span className={`text-sm font-extrabold font-mono ${
+                      latestVitals.meanArterialPressureMmHg < 65 ? 'text-red-400 animate-pulse font-black' : 'text-cyan-300'
                     }`}>
-                      {latestVitals.meanArterialPressureMmHg} <span className="text-xs font-normal text-slate-400">mmHg</span>
-                    </div>
-                    <div className="text-[11px] text-slate-400 font-mono mt-0.5">
-                      BP: {latestVitals.systolicBpMmHg}/{latestVitals.diastolicBpMmHg}
-                    </div>
+                      {latestVitals.systolicBpMmHg}/{latestVitals.diastolicBpMmHg}
+                    </span>
                   </div>
 
-                  {/* Heart Rate */}
-                  <div className="bg-[#090f1d] border border-slate-800 p-3.5 rounded-2xl">
-                    <div className="text-[10px] text-slate-400 uppercase font-bold flex items-center gap-1">
-                      <Heart className="w-3 h-3 text-red-400" />
-                      <span>Heart Rate (HR)</span>
+                  {/* Heart Rate (HR) */}
+                  <div className="bg-[#070c18] px-3 py-2 rounded-xl border border-slate-800/80 flex items-center justify-between hover:border-slate-700 transition-colors">
+                    <div className="flex items-center gap-1">
+                      <Heart className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                      <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">HR</span>
                     </div>
-                    <div className="text-xl sm:text-2xl font-black font-mono mt-1 text-emerald-400">
-                      {latestVitals.heartRateBpm} <span className="text-xs font-normal text-slate-400">bpm</span>
-                    </div>
-                    <div className="text-[11px] text-slate-400 truncate mt-0.5">
-                      {latestVitals.heartRhythm}
-                    </div>
+                    <span className="text-sm font-extrabold text-emerald-400 font-mono">
+                      {latestVitals.heartRateBpm} <span className="text-[10px] text-slate-500 font-bold">bpm</span>
+                    </span>
                   </div>
 
                   {/* SpO2 */}
-                  <div className="bg-[#090f1d] border border-slate-800 p-3.5 rounded-2xl">
-                    <div className="text-[10px] text-slate-400 uppercase font-bold">SpO₂ & FiO₂</div>
-                    <div className="text-xl sm:text-2xl font-black font-mono mt-1 text-teal-300">
-                      {latestVitals.spo2Percent}%
-                    </div>
-                    <div className="text-[11px] text-slate-400 font-mono mt-0.5">
-                      FiO₂: {latestVitals.fio2SuppliedPercent}%
-                    </div>
+                  <div className="bg-[#070c18] px-3 py-2 rounded-xl border border-slate-800/80 flex items-center justify-between hover:border-slate-700 transition-colors">
+                    <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">SpO₂</span>
+                    <span className="text-sm font-extrabold text-teal-300 font-mono flex items-center gap-1">
+                      <span>{latestVitals.spo2Percent}%</span>
+                      <span className="text-[10px] text-slate-500 font-normal">({latestVitals.fio2SuppliedPercent}% Fi)</span>
+                    </span>
                   </div>
 
                   {/* Core Temp */}
-                  <div className="bg-[#090f1d] border border-slate-800 p-3.5 rounded-2xl">
-                    <div className="text-[10px] text-slate-400 uppercase font-bold">Core Temp</div>
-                    <div className="text-xl sm:text-2xl font-black font-mono mt-1 text-amber-300">
-                      {latestVitals.coreTemperatureCelsius}°C
-                    </div>
-                    <div className="text-[11px] text-slate-400 mt-0.5">
-                      Site: {latestVitals.temperatureSite}
-                    </div>
+                  <div className="bg-[#070c18] px-3 py-2 rounded-xl border border-slate-800/80 flex items-center justify-between hover:border-slate-700 transition-colors">
+                    <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Temp</span>
+                    <span className="text-sm font-extrabold text-amber-300 font-mono flex items-center gap-1">
+                      <span>{latestVitals.coreTemperatureCelsius}°C</span>
+                      <span className="text-[10px] text-slate-500 font-normal">({latestVitals.temperatureSite})</span>
+                    </span>
                   </div>
 
                   {/* GCS & RASS */}
-                  <div className="bg-[#090f1d] border border-slate-800 p-3.5 rounded-2xl">
-                    <div className="text-[10px] text-slate-400 uppercase font-bold">GCS / RASS</div>
-                    <div className="text-xl sm:text-2xl font-black font-mono mt-1 text-indigo-300">
-                      {latestVitals.gcsTotalScore}/15
-                    </div>
-                    <div className="text-[11px] text-slate-400 mt-0.5">
-                      RASS: {latestVitals.sedationRassScore ?? 'N/A'}
-                    </div>
+                  <div className="bg-[#070c18] px-3 py-2 rounded-xl border border-slate-800/80 flex items-center justify-between hover:border-slate-700 transition-colors">
+                    <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">GCS</span>
+                    <span className="text-sm font-extrabold text-indigo-300 font-mono flex items-center gap-1">
+                      <span>{latestVitals.gcsTotalScore}/15</span>
+                      <span className="text-[10px] text-slate-500 font-normal">({latestVitals.sedationRassScore ?? 'N/A'} R)</span>
+                    </span>
                   </div>
 
-                  {/* Lactate */}
-                  <div className="bg-[#090f1d] border border-slate-800 p-3.5 rounded-2xl">
-                    <div className="text-[10px] text-slate-400 uppercase font-bold">Lactate & Glucose</div>
-                    <div className="text-xl sm:text-2xl font-black font-mono mt-1 text-purple-300">
-                      {latestVitals.lactateMmolPerL ?? '—'} <span className="text-xs font-normal text-slate-400">mmol/L</span>
-                    </div>
-                    <div className="text-[11px] text-slate-400 mt-0.5">
-                      RBG: {latestVitals.bloodGlucoseMgDl ?? '—'} mg/dL
-                    </div>
+                  {/* CVP & Glucose */}
+                  <div className="bg-[#070c18] px-3 py-2 rounded-xl border border-slate-800/80 flex items-center justify-between hover:border-slate-700 transition-colors animate-in fade-in">
+                    <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">CVP</span>
+                    <span className="text-sm font-extrabold text-blue-400 font-mono flex items-center gap-1">
+                      <span>{latestVitals.cvpMmHg !== undefined && latestVitals.cvpMmHg !== null ? `${latestVitals.cvpMmHg} mmHg` : '—'}</span>
+                      <span className="text-[10px] text-slate-500 font-normal">({latestVitals.bloodGlucoseMgDl ?? '—'} G)</span>
+                    </span>
                   </div>
                 </div>
               )}
@@ -1866,12 +1851,11 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                     <thead>
                       <tr className="border-b border-slate-800 text-slate-400 font-mono">
                         <th className="py-2 px-3">{lang === 'ar' ? 'التاريخ والوقت' : 'Date & Time'}</th>
-                        <th className="py-2 px-3">MAP (mmHg)</th>
                         <th className="py-2 px-3">BP (Sys/Dia)</th>
                         <th className="py-2 px-3">HR (bpm)</th>
                         <th className="py-2 px-3">SpO₂ (%)</th>
                         <th className="py-2 px-3">RR (cpm)</th>
-                        <th className="py-2 px-3">{lang === 'ar' ? 'اللاكتات' : 'Lactate'}</th>
+                        <th className="py-2 px-3">{lang === 'ar' ? 'الضغط الوريدي CVP' : 'CVP'}</th>
                         <th className="py-2 px-3">{lang === 'ar' ? 'المسجل والتعديل' : 'Staff / Actions'}</th>
                       </tr>
                     </thead>
@@ -1888,10 +1872,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                                 <span className="text-[10px] text-slate-400 font-mono">{timeStr}</span>
                               </div>
                             </td>
-                            <td className={`py-2.5 px-3 font-bold ${v.meanArterialPressureMmHg < 65 ? 'text-red-400' : 'text-cyan-300'}`}>
-                              {v.meanArterialPressureMmHg}
-                            </td>
-                            <td className="py-2.5 px-3 text-white">
+                            <td className={`py-2.5 px-3 text-white font-bold ${v.meanArterialPressureMmHg < 65 ? 'text-red-400 animate-pulse font-black' : ''}`}>
                               {v.systolicBpMmHg}/{v.diastolicBpMmHg} {v.isArterialLine ? '(Art)' : '(Cuff)'}
                             </td>
                             <td className="py-2.5 px-3 text-emerald-400">
@@ -1903,8 +1884,8 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                             <td className="py-2.5 px-3 text-slate-300">
                               {v.respiratoryRateCpm}
                             </td>
-                            <td className="py-2.5 px-3 text-purple-300">
-                              {v.lactateMmolPerL ?? '—'}
+                            <td className="py-2.5 px-3 text-blue-400">
+                              {v.cvpMmHg !== undefined && v.cvpMmHg !== null ? `${v.cvpMmHg} mmHg` : '—'}
                             </td>
                             <td className="py-2.5 px-3">
                               <div className="flex items-center justify-between gap-2">
@@ -2000,7 +1981,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                   </div>
 
                   <div className="flex items-center gap-2 flex-wrap justify-end">
-                    {settings.enableAiLabScanner && (
+                    {settings.features.enableAiLabScanner && (
                       <div className="flex items-center gap-1 bg-slate-900/90 p-1 rounded-xl border border-slate-800">
                         <button
                           type="button"
@@ -2768,7 +2749,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                     </span>
                   </h3>
                   <div className="flex items-center gap-2">
-                    {settings.enableAiLabScanner && (
+                    {settings.features.enableAiLabScanner && (
                       <button
                         type="button"
                         onClick={() => {
@@ -2868,7 +2849,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                               ({lang === 'ar' ? cat.nameEn : cat.nameAr})
                             </span>
                           </div>
-                          {settings.enableAiLabScanner && (cat.id === 'cbc' || cat.id === 'abg') && (
+                          {settings.features.enableAiLabScanner && (cat.id === 'cbc' || cat.id === 'abg') && (
                             <button
                               type="button"
                               onClick={() => {
@@ -4019,7 +4000,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
               <FileText className="w-5 h-5 text-teal-400" />
               <div>
                 <h3 className="text-base font-bold text-white">
-                  {lang === 'ar' ? 'الملاحظات الطبية المشفرة وملحقاتها' : 'Clinical Progress Notes & Cryptographic Addendums'}
+                  {lang === 'ar' ? 'الملاحظات الطبية وملحقاتها' : 'Clinical Progress Notes & Cryptographic Addendums'}
                 </h3>
                 <p className="text-[10px] text-slate-400 hidden sm:block">
                   {lang === 'ar' 
@@ -4029,6 +4010,19 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
               </div>
             </div>
             <div className="flex items-center gap-2">
+              {onOpenAddClinicalNote && !isPaperNotesCardCollapsed && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenAddClinicalNote();
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shadow-md active:scale-95 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>{lang === 'ar' ? 'توقيع ملاحظة جديدة' : 'Sign New Note'}</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={(e) => {
@@ -4127,12 +4121,12 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
               <ExternalLink className="w-5 h-5 text-amber-400" />
               <div>
                 <h3 className="text-base font-bold text-white">
-                  {lang === 'ar' ? 'بروتوكول إنهاء الإقامة بالرعاية (ICU Disposition & Discharge)' : 'ICU Disposition & Discharge Protocol'}
+                  {lang === 'ar' ? 'إنهاء الاقامة' : 'ICU Disposition & Discharge'}
                 </h3>
                 <p className="text-[10px] text-slate-400 hidden sm:block">
                   {lang === 'ar' 
-                    ? 'تحويل المريض للأقسام الداخلية، النقل لمستشفى آخر، أو تسجيل الوفاة القانونية.'
-                    : 'Discharge to ward / HDU, external hospital transfer, or mortality registration.'}
+                    ? 'تحويل المريض للأقسام الداخلية، الخروج للمنزل، أو تسجيل الوفاة القانونية.'
+                    : 'Discharge home, inpatient ward transfer, or mortality registration.'}
                 </p>
               </div>
             </div>
@@ -4154,86 +4148,146 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
           {!isPaperDispCardCollapsed && (
             <div className="bg-[#070c18] p-4 rounded-xl border border-slate-800 space-y-4 text-xs animate-in fade-in duration-300">
               <div>
-                <label className="text-[11px] text-slate-300 font-semibold">
-                  {lang === 'ar' ? 'نوع الإجراء (Disposition Pathway)' : 'Disposition Pathway'}
+                <label className="text-[11px] text-slate-300 font-semibold block mb-2">
+                  {lang === 'ar' ? 'اختر الإجراء المطلوبة (Select Disposition Type)' : 'Select Disposition Type'}
                 </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-1.5">
+                <div className="grid grid-cols-3 gap-2.5">
                   <button
                     type="button"
-                    onClick={() => setDispType(DispositionType.TRANSFER_GENERAL_WARD)}
-                    className={`p-3 rounded-xl border font-bold text-xs ${isRTL ? 'text-right' : 'text-left'} transition-all ${
+                    onClick={() => {
+                      setDispType(DispositionType.TRANSFER_GENERAL_WARD);
+                      setDispSummary(lang === 'ar' ? 'تم تحويل المريض لجناح الباطنة / الرعاية المتوسطة بعد استقرار حالته.' : 'Patient stabilized and transferred to general ward.');
+                    }}
+                    className={`p-3 rounded-xl border font-bold text-xs text-center transition-all cursor-pointer ${
                       dispType === DispositionType.TRANSFER_GENERAL_WARD
-                        ? 'bg-teal-500/20 text-teal-300 border-teal-500/50'
-                        : 'bg-[#0b1224] border-slate-800 text-slate-400'
+                        ? 'bg-teal-500/20 text-teal-300 border-teal-500/50 shadow-md'
+                        : 'bg-[#0b1224] border-slate-800 text-slate-400 hover:border-slate-700'
                     }`}
                   >
-                    <div>{lang === 'ar' ? 'تحويل / خروج تحسن (Stepdown / Ward)' : 'Stepdown Transfer / Ward'}</div>
-                    <div className="text-[10px] font-normal text-slate-400 mt-1">
-                      {lang === 'ar' ? 'نقل المريض لجناح الباطنة أو الرعاية المتوسطة HDU' : 'Transfer to inpatient ward or High Dependency Unit (HDU)'}
-                    </div>
+                    <span className="block text-sm mb-0.5">🔄</span>
+                    <span>{lang === 'ar' ? 'تحويل' : 'Transfer'}</span>
                   </button>
 
                   <button
                     type="button"
-                    onClick={() => setDispType(DispositionType.CLINICAL_MORTALITY)}
-                    className={`p-3 rounded-xl border font-bold text-xs ${isRTL ? 'text-right' : 'text-left'} transition-all ${
-                      dispType === DispositionType.CLINICAL_MORTALITY
-                        ? 'bg-red-950/60 text-red-300 border-red-500/50'
-                        : 'bg-[#0b1224] border-slate-800 text-slate-400'
+                    onClick={() => {
+                      setDispType(DispositionType.DISCHARGE_HOME);
+                      setDispSummary(lang === 'ar' ? 'خروج المريض للمنزل بحالة مستقرة مع التوصية بالمتابعة في العيادة.' : 'Patient fully recovered and discharged home.');
+                    }}
+                    className={`p-3 rounded-xl border font-bold text-xs text-center transition-all cursor-pointer ${
+                      dispType === DispositionType.DISCHARGE_HOME
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-md'
+                        : 'bg-[#0b1224] border-slate-800 text-slate-400 hover:border-slate-700'
                     }`}
                   >
-                    <div>{lang === 'ar' ? 'تسجيل وفاة سريرية (Clinical Mortality)' : 'Clinical Mortality Registration'}</div>
-                    <div className="text-[10px] font-normal text-slate-400 mt-1">
-                      {lang === 'ar' ? 'تفعيل بروتوكول حفظ الملف لمدة 10 أيام قبل الأرشفة النهائية' : '10-day active record retention prior to final archive'}
-                    </div>
+                    <span className="block text-sm mb-0.5">🏠</span>
+                    <span>{lang === 'ar' ? 'خروج' : 'Discharge'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDispType(DispositionType.CLINICAL_MORTALITY);
+                      setDispSummary(lang === 'ar' ? 'تم إعلان الوفاة السريرية بعد توقف القلب والتنفس وفشل محاولات الإنعاش.' : 'Clinical mortality declared after cardiopulmonary arrest.');
+                    }}
+                    className={`p-3 rounded-xl border font-bold text-xs text-center transition-all cursor-pointer ${
+                      dispType === DispositionType.CLINICAL_MORTALITY
+                        ? 'bg-red-950/50 text-red-300 border-red-500/50 shadow-md'
+                        : 'bg-[#0b1224] border-slate-800 text-slate-400 hover:border-slate-700'
+                    }`}
+                  >
+                    <span className="block text-sm mb-0.5">🕯️</span>
+                    <span>{lang === 'ar' ? 'وفاة' : 'Mortality'}</span>
                   </button>
                 </div>
               </div>
 
-              <div>
-                <label className="text-[11px] text-slate-300 font-semibold">
-                  {lang === 'ar' ? 'ملخص الخروج / سبب الوفاة' : 'Clinical Summary & Reason'}
-                </label>
-                <textarea
-                  rows={3}
-                  value={dispSummary}
-                  onChange={(e) => setDispSummary(e.target.value)}
-                  className="w-full mt-1 bg-[#0f172a] border border-slate-700 rounded-lg p-2.5 text-white focus:border-teal-500 focus:outline-none"
-                  required
-                />
-              </div>
+              {dispType !== null && (
+                <div className="space-y-4 pt-1 animate-in slide-in-from-top-2 duration-300">
+                  <div>
+                    <label className="text-[11px] text-slate-300 font-semibold block mb-1">
+                      {dispType === DispositionType.TRANSFER_GENERAL_WARD
+                        ? (lang === 'ar' ? 'ملخص التحويل' : 'Transfer Summary')
+                        : dispType === DispositionType.DISCHARGE_HOME
+                        ? (lang === 'ar' ? 'ملخص الخروج' : 'Discharge Summary')
+                        : (lang === 'ar' ? 'ملخص الوفاة' : 'Mortality Summary')}
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={dispSummary}
+                      onChange={(e) => setDispSummary(e.target.value)}
+                      placeholder={lang === 'ar' ? 'اكتب الملخص الطبي السريري والتشخيص النهائي هنا...' : 'Enter clinical summary...'}
+                      className="w-full bg-[#0f172a] border border-slate-700 rounded-lg p-2.5 text-white focus:border-teal-500 focus:outline-none"
+                      required
+                    />
+                  </div>
 
-              <div>
-                <label className="text-[11px] text-slate-300 font-semibold">
-                  {lang === 'ar' ? 'الطبيب الاستشاري المعتمد' : 'Attending Physician Signature'}
-                </label>
-                <input
-                  type="text"
-                  value={physicianSign}
-                  onChange={(e) => setPhysicianSign(e.target.value)}
-                  className="w-full mt-1 bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-teal-500 focus:outline-none"
-                  required
-                />
-              </div>
+                  <div className="space-y-2">
+                    <label className="text-[11px] text-slate-300 font-semibold block">
+                      {lang === 'ar' ? 'الطبيب الاستشاري المعتمد' : 'Attending Consultant Signature'}
+                    </label>
+                    <div className="flex flex-col sm:flex-row gap-2 bg-[#090f1d] p-3 rounded-xl border border-slate-800/80">
+                      <label className="flex items-center gap-2 cursor-pointer text-slate-200 select-none flex-1">
+                        <input
+                          type="radio"
+                          name="consultantType"
+                          checked={!useOtherConsultant}
+                          onChange={() => setUseOtherConsultant(false)}
+                          className="accent-teal-500 text-teal-500 focus:ring-0 focus:ring-offset-0"
+                        />
+                        <span className="text-xs">
+                          {lang === 'ar' 
+                            ? `الاستشاري المسجل الحالي: ${currentUser ? (currentUser.nameAr || currentUser.nameEn) : 'Dr. Hesham Talaat'}` 
+                            : `Current Attending: ${currentUser ? (currentUser.nameEn || currentUser.nameAr) : 'Dr. Hesham Talaat'}`}
+                        </span>
+                      </label>
+                      
+                      <label className="flex items-center gap-2 cursor-pointer text-slate-200 select-none flex-1">
+                        <input
+                          type="radio"
+                          name="consultantType"
+                          checked={useOtherConsultant}
+                          onChange={() => setUseOtherConsultant(true)}
+                          className="accent-teal-500 text-teal-500 focus:ring-0 focus:ring-offset-0"
+                        />
+                        <span className="text-xs">
+                          {lang === 'ar' ? 'تسجيل استشاري آخر' : 'Sign as Another Consultant'}
+                        </span>
+                      </label>
+                    </div>
 
-              <div className="pt-2 flex justify-end">
-                <button
-                  type="button"
-                  onClick={handleExecuteDisposition}
-                  className={`px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg transition-all active:scale-95 ${
-                    dispType === DispositionType.CLINICAL_MORTALITY
-                      ? 'bg-red-600 hover:bg-red-500 text-white'
-                      : 'bg-teal-500 hover:bg-teal-400 text-slate-950'
-                  }`}
-                >
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>
-                    {lang === 'ar' 
-                      ? `تأكيد الإجراء وإخلاء السرير ${bed.bedNumber}` 
-                      : `Confirm & Vacate Bed ${bed.bedNumber}`}
-                  </span>
-                </button>
-              </div>
+                    {useOtherConsultant && (
+                      <input
+                        type="text"
+                        value={otherConsultantName}
+                        onChange={(e) => setOtherConsultantName(e.target.value)}
+                        placeholder={lang === 'ar' ? 'أدخل اسم الاستشاري المعتمد...' : 'Enter attending consultant name...'}
+                        className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-teal-500 focus:outline-none animate-in fade-in duration-200"
+                        required
+                      />
+                    )}
+                  </div>
+
+                  <div className="pt-2 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={handleExecuteDisposition}
+                      className={`px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg transition-all active:scale-95 cursor-pointer ${
+                        dispType === DispositionType.CLINICAL_MORTALITY
+                          ? 'bg-red-600 hover:bg-red-500 text-white'
+                          : 'bg-teal-500 hover:bg-teal-400 text-slate-950'
+                      }`}
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>
+                        {lang === 'ar' 
+                          ? `تأكيد الإجراء وإخلاء السرير ${bed.bedNumber}` 
+                          : `Confirm & Vacate Bed ${bed.bedNumber}`}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -4284,7 +4338,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       />
 
       {/* AI Lab OCR Optical Scanner Modal */}
-      {settings.enableAiLabScanner && (
+      {settings.features.enableAiLabScanner && (
         <AiLabScannerModal
           isOpen={isAiLabScannerOpen}
           onClose={() => setIsAiLabScannerOpen(false)}

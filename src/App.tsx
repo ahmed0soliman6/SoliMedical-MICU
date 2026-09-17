@@ -16,6 +16,7 @@ import { BedMatrixCard } from './components/BedMatrixCard.tsx';
 import { BedsideFlowsheet } from './components/BedsideFlowsheet.tsx';
 import { AddVitalsModal } from './components/AddVitalsModal.tsx';
 import { AddAddendumModal } from './components/AddAddendumModal.tsx';
+import { AddClinicalNoteModal } from './components/AddClinicalNoteModal.tsx';
 import { SbarSignModal } from './components/SbarSignModal.tsx';
 import { ArchiveSearchModal } from './components/ArchiveSearchModal.tsx';
 import { SettingsModal } from './components/SettingsModal.tsx';
@@ -58,6 +59,8 @@ export default function App() {
   const [vitalsTarget, setVitalsTarget] = useState<{ bedNumber: BedNumber; patientId: string; patientName: string } | null>(null);
   const [isAddendumOpen, setIsAddendumOpen] = useState(false);
   const [addendumTarget, setAddendumTarget] = useState<{ noteId: string; patientId: string; author: string } | null>(null);
+  const [isClinicalNoteOpen, setIsClinicalNoteOpen] = useState(false);
+  const [clinicalNoteTarget, setClinicalNoteTarget] = useState<{ bedNumber?: BedNumber; patientId: string; patientName: string } | null>(null);
   const [isSbarModalOpen, setIsSbarModalOpen] = useState(false);
   const [sbarTarget, setSbarTarget] = useState<{ bedNumber: BedNumber; patientId: string; patientName: string; diagnosis: string; codeStatus: any } | null>(null);
 
@@ -335,6 +338,14 @@ export default function App() {
                     });
                     setIsQuickVitalsOpen(true);
                   }}
+                  onOpenAddClinicalNote={() => {
+                    setClinicalNoteTarget({
+                      bedNumber: selectedBed.bedNumber,
+                      patientId: selectedPatient.id,
+                      patientName: selectedPatient.fullNameAr,
+                    });
+                    setIsClinicalNoteOpen(true);
+                  }}
                   onOpenAddAddendum={(noteId, author) => {
                     setAddendumTarget({ noteId, patientId: selectedPatient.id, author });
                     setIsAddendumOpen(true);
@@ -420,6 +431,18 @@ export default function App() {
           originalNoteAuthor={addendumTarget.author}
           patientName="المريض المحدد"
           onAddendumAppended={reloadData}
+        />
+      )}
+
+      {/* Sign New Clinical Note Modal */}
+      {isClinicalNoteOpen && clinicalNoteTarget && (
+        <AddClinicalNoteModal
+          isOpen={isClinicalNoteOpen}
+          onClose={() => setIsClinicalNoteOpen(false)}
+          bedNumber={clinicalNoteTarget.bedNumber}
+          patientId={clinicalNoteTarget.patientId}
+          patientName={clinicalNoteTarget.patientName}
+          onNoteCreated={reloadData}
         />
       )}
 

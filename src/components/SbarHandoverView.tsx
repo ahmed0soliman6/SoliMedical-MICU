@@ -110,6 +110,20 @@ export const SbarHandoverView: React.FC<SbarHandoverViewProps> = ({
                           ))}
                         </ul>
                       </div>
+                      
+                      {sbar.customFields && Object.keys(sbar.customFields).length > 0 && (
+                        <div className="bg-[#0a101f] p-3 rounded-lg border border-slate-800/60 mt-2">
+                          <span className="text-slate-400 font-bold font-mono">Additional Fields:</span>
+                          <div className="text-slate-200 mt-1 space-y-1">
+                            {Object.entries(sbar.customFields).map(([key, val]) => (
+                              <div key={key}>
+                                <strong className="text-slate-400 font-mono text-[10px] uppercase block">{key}:</strong>
+                                <span>{val}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <div className="text-[11px] text-slate-400 flex items-center justify-between pt-1 flex-wrap gap-2">

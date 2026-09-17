@@ -1,3 +1,5 @@
+import { DEFAULT_SBAR_FIELDS } from "../types/settings.ts";
+import { useSystemSettings } from "../services/SettingsContext.tsx";
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   X, 
@@ -81,6 +83,7 @@ export const SbarSignModal: React.FC<SbarSignModalProps> = ({
 }) => {
   const { lang, isRTL } = useTranslation();
   const { currentUser, allUsers } = useAuth();
+  const { settings } = useSystemSettings();
 
   // Internal fetched states if not supplied via props
   const [patient, setPatient] = useState<PatientDossier | null>(initialPatient || null);
@@ -94,11 +97,11 @@ export const SbarSignModal: React.FC<SbarSignModalProps> = ({
   // Form states
   const [shiftType, setShiftType] = useState<'NIGHT' | 'DAY'>(() => {
     const hour = new Date().getHours();
-    return hour >= 19 || hour < 7 ? 'NIGHT' : 'DAY';
+    return hour >= 20 || hour < 8 ? 'NIGHT' : 'DAY';
   });
   const [shiftDate, setShiftDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
-  const [shiftStartTime, setShiftStartTime] = useState<string>(() => (shiftType === 'NIGHT' ? '19:00' : '07:00'));
-  const [shiftEndTime, setShiftEndTime] = useState<string>(() => (shiftType === 'NIGHT' ? '07:00' : '19:00'));
+  const [shiftStartTime, setShiftStartTime] = useState<string>(() => (shiftType === 'NIGHT' ? '20:00' : '08:00'));
+  const [shiftEndTime, setShiftEndTime] = useState<string>(() => (shiftType === 'NIGHT' ? '08:00' : '20:00'));
 
   const [situation, setSituation] = useState<string>('');
   const [background, setBackground] = useState<string>('');
@@ -108,6 +111,7 @@ export const SbarSignModal: React.FC<SbarSignModalProps> = ({
   const [neurology, setNeurology] = useState<string>('');
   const [infectious, setInfectious] = useState<string>('');
   const [recommendation, setRecommendation] = useState<string>('');
+  const [customFieldValues, setCustomFieldValues] = useState<Record<string, string>>({});
 
   const [outgoingDoctorName, setOutgoingDoctorName] = useState<string>('');
   const [outgoingDoctorRole, setOutgoingDoctorRole] = useState<StaffRole>(StaffRole.SPECIALIST);
@@ -119,6 +123,11 @@ export const SbarSignModal: React.FC<SbarSignModalProps> = ({
   const [modalTab, setModalTab] = useState<'RECEIVE' | 'NEW'>('NEW');
   const [showPreviousDrawer, setShowPreviousDrawer] = useState<boolean>(false);
   const [selectedPrevForCompare, setSelectedPrevForCompare] = useState<SbarHandoverReport | null>(null);
+
+  const configuredFields = settings.sbarFields && settings.sbarFields.length > 0 ? settings.sbarFields : DEFAULT_SBAR_FIELDS;
+  const hasField = (id: string) => configuredFields.some(f => f.id === id);
+  const standardIds = ['situation', 'background', 'hemodynamics', 'pulmonary', 'metabolic', 'neurology', 'infectious', 'recommendation'];
+  const customFieldsConfig = configuredFields.filter(f => !standardIds.includes(f.id));
 
   // Compute pending unacknowledged handover from previous colleague
   const pendingHandover = useMemo(() => {
@@ -451,6 +460,7 @@ export const SbarSignModal: React.FC<SbarSignModalProps> = ({
           .split('\n')
           .map(r => r.trim())
           .filter(r => r.length > 0),
+        customFields: customFieldValues,
         outgoingDoctor: {
           staffId: currentUser?.badgeId || currentUser?.uid || outgoingDoctorStaffId || 'DOC-101',
           name: currentUser?.nameAr || currentUser?.nameEn || outgoingDoctorName.trim() || (lang === 'ar' ? 'د. الطبيب المعالج' : 'Attending Physician'),
@@ -474,114 +484,120 @@ export const SbarSignModal: React.FC<SbarSignModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md overflow-y-auto animate-in fade-in duration-200">
-      <div 
-        className="w-full max-w-4xl bg-[#091122] border border-teal-500/30 rounded-2xl shadow-2xl overflow-hidden my-auto flex flex-col max-h-[94vh]"
-        dir={isRTL ? 'rtl' : 'ltr'}
-      >
+    <div className="fixed inset-0 z-50 flex flex-col bg-[#091122] w-screen h-screen overflow-hidden animate-in fade-in duration-200" dir={isRTL ? 'rtl' : 'ltr'}>
+      <div className="w-full h-full bg-[#091122] flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="px-5 py-3.5 bg-[#060b17] border-b border-slate-800 flex items-center justify-between flex-wrap gap-2">
+        <div className="px-6 py-4 bg-[#060b17] border-b border-slate-800 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-teal-500/15 border border-teal-500/30 flex items-center justify-center text-teal-400">
               <ShieldCheck className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-base font-bold text-white">
+                <h3 className="text-base sm:text-lg font-bold text-white">
                   {lang === 'ar' ? 'تسليم واستلام المناوبة السريرية (SBAR Shift Handover)' : 'Clinical Shift Handover (SBAR Protocol)'}
                 </h3>
                 <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-teal-950 border border-teal-800 text-teal-300">
                   {lang === 'ar' ? `سرير ${bedNumber}` : `Bed ${bedNumber}`}
                 </span>
               </div>
-              <p className="text-xs text-slate-400 font-mono mt-0.5">
-                {patientName || (patient?.fullNameAr || patient?.fullNameEn)} • {patient?.mrn || 'MRN'} • {lang === 'ar' ? 'حالة الإنعاش:' : 'Code:'} <strong className="text-emerald-400">{codeStatus}</strong>
-              </p>
+              {modalTab !== 'RECEIVE' && (
+                <p className="text-xs text-slate-400 font-mono mt-0.5">
+                  {patientName || (patient?.fullNameAr || patient?.fullNameEn)} • {patient?.mrn || 'MRN'} • {lang === 'ar' ? 'حالة الإنعاش:' : 'Code:'} <strong className="text-emerald-400">{codeStatus}</strong>
+                </p>
+              )}
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Auto-Synthesize Button */}
-            <button
-              type="button"
-              onClick={() => autoSynthesizeSbar(patient, vitals, ventilator, pumps, fluidBalance, labs)}
-              className="px-3 py-1.5 rounded-xl bg-teal-500/20 hover:bg-teal-500/30 border border-teal-500/40 text-teal-300 text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-sm"
-              title={lang === 'ar' ? 'التعرف التلقائي على العلامات والمدخلات السريرية' : 'Auto-fill from current telemetry & inputs'}
-            >
-              <Sparkles className="w-3.5 h-3.5 text-teal-400" />
-              <span>{lang === 'ar' ? 'توليد ذكي من بيانات السرير' : 'Auto-Fill from Live Vitals'}</span>
-            </button>
+            {modalTab !== 'RECEIVE' && (
+              <>
+                {/* Auto-Synthesize Button */}
+                <button
+                  type="button"
+                  onClick={() => autoSynthesizeSbar(patient, vitals, ventilator, pumps, fluidBalance, labs)}
+                  className="px-3 py-1.5 rounded-xl bg-teal-500/20 hover:bg-teal-500/30 border border-teal-500/40 text-teal-300 text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-sm"
+                  title={lang === 'ar' ? 'التعرف التلقائي على العلامات والمدخلات السريرية' : 'Auto-fill from current telemetry & inputs'}
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-teal-400" />
+                  <span>{lang === 'ar' ? 'توليد ذكي من بيانات السرير' : 'Auto-Fill from Live Vitals'}</span>
+                </button>
 
-            {/* Copy from Previous Handover Button */}
-            {previousHandovers.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setShowPreviousDrawer(!showPreviousDrawer)}
-                className="px-3 py-1.5 rounded-xl bg-blue-950/80 hover:bg-blue-900 border border-blue-800 text-blue-300 text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
-              >
-                <History className="w-3.5 h-3.5 text-blue-400" />
-                <span>
-                  {lang === 'ar' 
-                    ? `مقارنة / نسخ من السابق (${previousHandovers.length})` 
-                    : `Previous Handovers (${previousHandovers.length})`}
-                </span>
-                {showPreviousDrawer ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-              </button>
+                {/* Copy from Previous Handover Button */}
+                {previousHandovers.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowPreviousDrawer(!showPreviousDrawer)}
+                    className="px-3 py-1.5 rounded-xl bg-blue-950/80 hover:bg-blue-900 border border-blue-800 text-blue-300 text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                  >
+                    <History className="w-3.5 h-3.5 text-blue-400" />
+                    <span>
+                      {lang === 'ar' 
+                        ? `مقارنة / نسخ من السابق (${previousHandovers.length})` 
+                        : `Previous Handovers (${previousHandovers.length})`}
+                    </span>
+                    {showPreviousDrawer ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                  </button>
+                )}
+              </>
             )}
 
             <button
               onClick={onClose}
-              className="w-8 h-8 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+              className="w-10 h-10 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition-colors cursor-pointer border border-slate-750"
+              title={lang === 'ar' ? 'إغلاق التسليم' : 'Close Handover'}
             >
-              <X className="w-4 h-4" />
+              <X className="w-5 h-5" />
             </button>
           </div>
         </div>
 
-        {/* Mode Switch Tabs */}
-        <div className="bg-[#050b18] px-5 py-2.5 border-b border-slate-800 flex items-center gap-2 overflow-x-auto shrink-0">
-          <button
-            type="button"
-            onClick={() => setModalTab('RECEIVE')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
-              modalTab === 'RECEIVE'
-                ? 'bg-amber-500 text-slate-950 shadow-lg font-black shadow-amber-500/20'
-                : 'bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-800'
-            }`}
-          >
-            <CheckCircle2 className="w-4 h-4" />
-            <span>
-              {lang === 'ar' 
-                ? `استلام ومراجعة المناوبة ${pendingHandover ? `(${pendingHandover.shiftType === 'NIGHT' ? 'الليلية' : 'الصباحية'})` : ''}` 
-                : `Review & Receive Shift ${pendingHandover ? `(${pendingHandover.shiftType})` : ''}`}
-            </span>
-            {pendingHandover ? (
-              <span className="px-2 py-0.5 rounded-full bg-slate-950 text-amber-400 text-[10px] font-black font-mono shadow border border-amber-400/40 animate-pulse">
-                {lang === 'ar' ? 'غير مَستَلَم' : 'Pending'}
+        {/* Mode Switch Tabs - Only show when NOT in RECEIVE mode */}
+        {modalTab !== 'RECEIVE' && (
+          <div className="bg-[#050b18] px-5 py-2.5 border-b border-slate-800 flex items-center gap-2 overflow-x-auto shrink-0">
+            <button
+              type="button"
+              onClick={() => setModalTab('RECEIVE')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
+                modalTab === 'RECEIVE'
+                  ? 'bg-amber-500 text-slate-950 shadow-lg font-black shadow-amber-500/20'
+                  : 'bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-800'
+              }`}
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              <span>
+                {lang === 'ar' 
+                  ? `استلام ومراجعة المناوبة ${pendingHandover ? `(${pendingHandover.shiftType === 'NIGHT' ? 'الليلية' : 'الصباحية'})` : ''}` 
+                  : `Review & Receive Shift ${pendingHandover ? `(${pendingHandover.shiftType})` : ''}`}
               </span>
-            ) : (
-              <span className="px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 text-[10px] font-bold font-mono border border-emerald-800">
-                {lang === 'ar' ? 'تم الاستلام' : 'Received'}
-              </span>
-            )}
-          </button>
+              {pendingHandover ? (
+                <span className="px-2 py-0.5 rounded-full bg-slate-950 text-amber-400 text-[10px] font-black font-mono shadow border border-amber-400/40 animate-pulse">
+                  {lang === 'ar' ? 'غير مَستَلَم' : 'Pending'}
+                </span>
+              ) : (
+                <span className="px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 text-[10px] font-bold font-mono border border-emerald-800">
+                  {lang === 'ar' ? 'تم الاستلام' : 'Received'}
+                </span>
+              )}
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setModalTab('NEW')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
-              modalTab === 'NEW'
-                ? 'bg-teal-500 text-slate-950 shadow-lg font-black shadow-teal-500/20'
-                : 'bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-800'
-            }`}
-          >
-            <Plus className="w-4 h-4" />
-            <span>{lang === 'ar' ? 'توثيق وتسليم مناوبة جديدة' : 'Create New Shift Handover'}</span>
-            {pendingHandover && (
-              <Lock className="w-3.5 h-3.5 text-amber-400" />
-            )}
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={() => setModalTab('NEW')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
+                modalTab === 'NEW'
+                  ? 'bg-teal-500 text-slate-950 shadow-lg font-black shadow-teal-500/20'
+                  : 'bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-800'
+              }`}
+            >
+              <Plus className="w-4 h-4" />
+              <span>{lang === 'ar' ? 'توثيق وتسليم مناوبة جديدة' : 'Create New Shift Handover'}</span>
+              {pendingHandover && (
+                <Lock className="w-3.5 h-3.5 text-amber-400" />
+              )}
+            </button>
+          </div>
+        )}
 
         {/* Previous Handover Reference Drawer */}
         {showPreviousDrawer && previousHandovers.length > 0 && (
@@ -826,7 +842,7 @@ export const SbarSignModal: React.FC<SbarSignModalProps> = ({
 
             {/* Shift Metadata Row */}
           <div className="p-3.5 rounded-xl bg-[#060b17] border border-slate-800 space-y-2">
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-center">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
               {/* Shift Type */}
               <div>
                 <label className="block text-[11px] text-slate-300 font-semibold mb-1">
@@ -842,8 +858,8 @@ export const SbarSignModal: React.FC<SbarSignModalProps> = ({
                       key={s.id}
                       onClick={() => {
                         setShiftType(s.id as any);
-                        setShiftStartTime(s.id === 'NIGHT' ? '19:00' : '07:00');
-                        setShiftEndTime(s.id === 'NIGHT' ? '07:00' : '19:00');
+                        setShiftStartTime(s.id === 'NIGHT' ? '20:00' : '08:00');
+                        setShiftEndTime(s.id === 'NIGHT' ? '08:00' : '20:00');
                       }}
                       className={`py-1.5 px-2 rounded-lg font-bold text-xs transition-all cursor-pointer ${
                         shiftType === s.id
@@ -881,81 +897,87 @@ export const SbarSignModal: React.FC<SbarSignModalProps> = ({
                 />
               </div>
 
-              {/* Shift Start Time with Clock picker */}
-              <div>
-                <label className="block text-[11px] text-slate-300 font-semibold mb-1 flex items-center gap-1">
-                  <Clock className="w-3.5 h-3.5 text-cyan-400" />
-                  <span>{lang === 'ar' ? 'بداية المناوبة (الساعة)' : 'Start Time'}</span>
-                </label>
-                <input
-                  type="time"
-                  value={shiftStartTime}
-                  onChange={(e) => setShiftStartTime(e.target.value)}
-                  onClick={(e) => (e.target as any).showPicker?.()}
-                  style={{ colorScheme: 'dark' }}
-                  className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-2.5 py-1.5 text-white font-mono text-xs focus:border-teal-500 focus:outline-none text-center cursor-pointer"
-                  required
-                />
-              </div>
+              {/* Shift Times Group (Start & End in one row) */}
+              <div className="grid grid-cols-2 gap-2">
+                {/* Shift Start Time with Clock picker */}
+                <div>
+                  <label className="block text-[11px] text-slate-300 font-semibold mb-1 flex items-center gap-1">
+                    <Clock className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>{lang === 'ar' ? 'بداية المناوبة' : 'Start Time'}</span>
+                  </label>
+                  <input
+                    type="time"
+                    value={shiftStartTime}
+                    onChange={(e) => setShiftStartTime(e.target.value)}
+                    onClick={(e) => (e.target as any).showPicker?.()}
+                    style={{ colorScheme: 'dark' }}
+                    className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-2.5 py-1.5 text-white font-mono text-xs focus:border-teal-500 focus:outline-none text-center cursor-pointer"
+                    required
+                  />
+                </div>
 
-              {/* Shift End Time with Clock picker */}
-              <div>
-                <label className="block text-[11px] text-slate-300 font-semibold mb-1 flex items-center gap-1">
-                  <Clock className="w-3.5 h-3.5 text-amber-400" />
-                  <span>{lang === 'ar' ? 'نهاية المناوبة (الساعة)' : 'End Time'}</span>
-                </label>
-                <input
-                  type="time"
-                  value={shiftEndTime}
-                  onChange={(e) => setShiftEndTime(e.target.value)}
-                  onClick={(e) => (e.target as any).showPicker?.()}
-                  style={{ colorScheme: 'dark' }}
-                  className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-2.5 py-1.5 text-white font-mono text-xs focus:border-teal-500 focus:outline-none text-center cursor-pointer"
-                  required
-                />
+                {/* Shift End Time with Clock picker */}
+                <div>
+                  <label className="block text-[11px] text-slate-300 font-semibold mb-1 flex items-center gap-1">
+                    <Clock className="w-3.5 h-3.5 text-amber-400" />
+                    <span>{lang === 'ar' ? 'نهاية المناوبة' : 'End Time'}</span>
+                  </label>
+                  <input
+                    type="time"
+                    value={shiftEndTime}
+                    onChange={(e) => setShiftEndTime(e.target.value)}
+                    onClick={(e) => (e.target as any).showPicker?.()}
+                    style={{ colorScheme: 'dark' }}
+                    className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-2.5 py-1.5 text-white font-mono text-xs focus:border-teal-500 focus:outline-none text-center cursor-pointer"
+                    required
+                  />
+                </div>
               </div>
             </div>
           </div>
 
-          {/* 1. S - SITUATION (الموقف الحالي) */}
-          <div className="bg-[#060b17] p-3.5 rounded-xl border border-teal-900/60 space-y-1.5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5 text-teal-400 font-bold font-mono text-xs">
-                <span className="w-5 h-5 rounded-full bg-teal-500/20 border border-teal-500/40 flex items-center justify-center text-xs font-black">S</span>
-                <span>{lang === 'ar' ? 'Situation (الموقف الحالي، السرير والتشخيص والمسار)' : 'S - Situation (Patient, Bed, Diagnosis & Active State)'}</span>
+          {hasField("situation") && ( 
+            <div className="bg-[#060b17] p-3.5 rounded-xl border border-teal-900/60 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-teal-400 font-bold font-mono text-xs">
+                  <span className="w-5 h-5 rounded-full bg-teal-500/20 border border-teal-500/40 flex items-center justify-center text-xs font-black">S</span>
+                  <span>{lang === 'ar' ? 'Situation (الموقف الحالي، السرير والتشخيص والمسار)' : 'S - Situation (Patient, Bed, Diagnosis & Active State)'}</span>
+                </div>
+                <span className="text-[10px] text-teal-400/80 font-mono">
+                  {lang === 'ar' ? 'تم التوليد التلقائي' : 'Auto-recognized'}
+                </span>
               </div>
-              <span className="text-[10px] text-teal-400/80 font-mono">
-                {lang === 'ar' ? 'تم التوليد التلقائي' : 'Auto-recognized'}
-              </span>
+              <textarea
+                rows={2}
+                value={situation}
+                onChange={(e) => setSituation(e.target.value)}
+                className="w-full bg-[#0b1428] border border-slate-700/80 rounded-lg p-2.5 text-white text-xs leading-relaxed focus:border-teal-400 focus:outline-none font-sans"
+                required
+              />
             </div>
-            <textarea
-              rows={2}
-              value={situation}
-              onChange={(e) => setSituation(e.target.value)}
-              className="w-full bg-[#0b1428] border border-slate-700/80 rounded-lg p-2.5 text-white text-xs leading-relaxed focus:border-teal-400 focus:outline-none font-sans"
-              required
-            />
-          </div>
+          )}
 
           {/* 2. B - BACKGROUND (الخلفية المرضية ومسار الدخول) */}
-          <div className="bg-[#060b17] p-3.5 rounded-xl border border-cyan-900/60 space-y-1.5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5 text-cyan-400 font-bold font-mono text-xs">
-                <span className="w-5 h-5 rounded-full bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-xs font-black">B</span>
-                <span>{lang === 'ar' ? 'Background (الخلفية المرضية، الأمراض المزمنة، الحساسية والقساطر)' : 'B - Background (History, Allergies, Lines & Clinical Timeline)'}</span>
+          {hasField("background") && (
+            <div className="bg-[#060b17] p-3.5 rounded-xl border border-cyan-900/60 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-cyan-400 font-bold font-mono text-xs">
+                  <span className="w-5 h-5 rounded-full bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-xs font-black">B</span>
+                  <span>{lang === 'ar' ? 'Background (الخلفية المرضية، الأمراض المزمنة، الحساسية والقساطر)' : 'B - Background (History, Allergies, Lines & Clinical Timeline)'}</span>
+                </div>
+                <span className="text-[10px] text-cyan-400/80 font-mono">
+                  {lang === 'ar' ? 'تم التعرف التلقائي' : 'Auto-recognized'}
+                </span>
               </div>
-              <span className="text-[10px] text-cyan-400/80 font-mono">
-                {lang === 'ar' ? 'تم التعرف التلقائي' : 'Auto-recognized'}
-              </span>
+              <textarea
+                rows={2}
+                value={background}
+                onChange={(e) => setBackground(e.target.value)}
+                className="w-full bg-[#0b1428] border border-slate-700/80 rounded-lg p-2.5 text-white text-xs leading-relaxed focus:border-cyan-400 focus:outline-none font-sans"
+                required
+              />
             </div>
-            <textarea
-              rows={2}
-              value={background}
-              onChange={(e) => setBackground(e.target.value)}
-              className="w-full bg-[#0b1428] border border-slate-700/80 rounded-lg p-2.5 text-white text-xs leading-relaxed focus:border-cyan-400 focus:outline-none font-sans"
-              required
-            />
-          </div>
+          )}
 
           {/* 3. A - ASSESSMENT (التقييم السريري الشامل للأجهزة الحيوية) */}
           <div className="bg-[#060b17] p-3.5 rounded-xl border border-amber-900/60 space-y-3">
@@ -971,82 +993,93 @@ export const SbarSignModal: React.FC<SbarSignModalProps> = ({
 
             <div className="space-y-2">
               {/* Hemodynamics */}
-              <div>
-                <label className="flex items-center gap-1.5 text-[11px] font-bold text-red-300 mb-1">
-                  <Heart className="w-3.5 h-3.5 text-red-400" />
-                  <span>{lang === 'ar' ? 'الدورة الدموية، الضغط والمضخات (Hemodynamics & Pressors):' : 'Hemodynamics & Inotropes:'}</span>
-                </label>
-                <input
-                  type="text"
-                  value={hemodynamics}
-                  onChange={(e) => setHemodynamics(e.target.value)}
-                  className="w-full bg-[#0b1428] border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-100 text-xs focus:border-red-400 focus:outline-none"
-                  required
-                />
-              </div>
+              {hasField("hemodynamics") && (
+                <div>
+                  <label className="flex items-center gap-1.5 text-[11px] font-bold text-red-300 mb-1">
+                    <Heart className="w-3.5 h-3.5 text-red-400" />
+                    <span>{lang === 'ar' ? 'الدورة الدموية، الضغط والمضخات (Hemodynamics & Pressors):' : 'Hemodynamics & Inotropes:'}</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={hemodynamics}
+                    onChange={(e) => setHemodynamics(e.target.value)}
+                    className="w-full bg-[#0b1428] border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-100 text-xs focus:border-red-400 focus:outline-none"
+                    required
+                  />
+                </div>
+              )}
 
               {/* Pulmonary */}
-              <div>
-                <label className="flex items-center gap-1.5 text-[11px] font-bold text-cyan-300 mb-1">
-                  <Wind className="w-3.5 h-3.5 text-cyan-400" />
-                  <span>{lang === 'ar' ? 'التنفس، جهاز التنفس الصناعي والغازات (Pulmonary, Vent & Mechanics):' : 'Pulmonary & Ventilation:'}</span>
-                </label>
-                <input
-                  type="text"
-                  value={pulmonary}
-                  onChange={(e) => setPulmonary(e.target.value)}
-                  className="w-full bg-[#0b1428] border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-100 text-xs focus:border-cyan-400 focus:outline-none"
-                  required
-                />
-              </div>
+              {hasField("pulmonary") && (
+                <div>
+                  <label className="flex items-center gap-1.5 text-[11px] font-bold text-cyan-300 mb-1">
+                    <Wind className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>{lang === 'ar' ? 'التنفس، جهاز التنفس الصناعي والغازات (Pulmonary, Vent & Mechanics):' : 'Pulmonary & Ventilation:'}</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={pulmonary}
+                    onChange={(e) => setPulmonary(e.target.value)}
+                    className="w-full bg-[#0b1428] border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-100 text-xs focus:border-cyan-400 focus:outline-none"
+                    required
+                  />
+                </div>
+              )}
 
               {/* Metabolic & Renal */}
-              <div>
-                <label className="flex items-center gap-1.5 text-[11px] font-bold text-amber-300 mb-1">
-                  <Droplet className="w-3.5 h-3.5 text-amber-400" />
-                  <span>{lang === 'ar' ? 'الكلى، ميزان السوائل 24 ساعة ونقل الدم (Renal, 24H Fluid Balance & MTP):' : 'Renal, Fluid Balance & Transfusion:'}</span>
-                </label>
-                <input
-                  type="text"
-                  value={metabolic}
-                  onChange={(e) => setMetabolic(e.target.value)}
-                  className="w-full bg-[#0b1428] border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-100 text-xs focus:border-amber-400 focus:outline-none"
-                  required
-                />
-              </div>
+              {hasField("metabolic") && (
+                <div>
+                  <label className="flex items-center gap-1.5 text-[11px] font-bold text-amber-300 mb-1">
+                    <Droplet className="w-3.5 h-3.5 text-amber-400" />
+                    <span>{lang === 'ar' ? 'الكلى، ميزان السوائل 24 ساعة ونقل الدم (Renal, 24H Fluid Balance & MTP):' : 'Renal, Fluid Balance & Transfusion:'}</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={metabolic}
+                    onChange={(e) => setMetabolic(e.target.value)}
+                    className="w-full bg-[#0b1428] border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-100 text-xs focus:border-amber-400 focus:outline-none"
+                    required
+                  />
+                </div>
+              )}
 
               {/* Neurology & Infectious (2-col) */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <div>
-                  <label className="flex items-center gap-1.5 text-[11px] font-bold text-indigo-300 mb-1">
-                    <Brain className="w-3.5 h-3.5 text-indigo-400" />
-                    <span>{lang === 'ar' ? 'الجهاز العصبي والمهدئات (Neurology/Sedation):' : 'Neurology & Sedation:'}</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={neurology}
-                    onChange={(e) => setNeurology(e.target.value)}
-                    className="w-full bg-[#0b1428] border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-100 text-xs focus:border-indigo-400 focus:outline-none"
-                  />
-                </div>
+                {hasField("neurology") && (
+                  <div>
+                    <label className="flex items-center gap-1.5 text-[11px] font-bold text-indigo-300 mb-1">
+                      <Brain className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>{lang === 'ar' ? 'الجهاز العصبي والمهدئات (Neurology/Sedation):' : 'Neurology & Sedation:'}</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={neurology}
+                      onChange={(e) => setNeurology(e.target.value)}
+                      className="w-full bg-[#0b1428] border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-100 text-xs focus:border-indigo-400 focus:outline-none"
+                    />
+                  </div>
+                )}
 
-                <div>
-                  <label className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-300 mb-1">
-                    <Bug className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>{lang === 'ar' ? 'الحرارة والمضادات الحيوية (Infectious/Antibiotics):' : 'Infection & Antimicrobials:'}</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={infectious}
-                    onChange={(e) => setInfectious(e.target.value)}
-                    className="w-full bg-[#0b1428] border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-100 text-xs focus:border-emerald-400 focus:outline-none"
-                  />
-                </div>
+                {hasField("infectious") && (
+                  <div>
+                    <label className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-300 mb-1">
+                      <Bug className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>{lang === 'ar' ? 'الحرارة والمضادات الحيوية (Infectious/Antibiotics):' : 'Infection & Antimicrobials:'}</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={infectious}
+                      onChange={(e) => setInfectious(e.target.value)}
+                      className="w-full bg-[#0b1428] border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-100 text-xs focus:border-emerald-400 focus:outline-none"
+                    />
+                  </div>
+                )}
               </div>
             </div>
           </div>
 
           {/* 4. R - RECOMMENDATION & ORDERS (التوصيات والخطة العلاجية) */}
+          {hasField("recommendation") && (
           <div className="bg-[#060b17] p-3.5 rounded-xl border border-emerald-900/60 space-y-2">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div className="flex items-center gap-1.5 text-emerald-400 font-bold font-mono text-xs">
@@ -1082,6 +1115,34 @@ export const SbarSignModal: React.FC<SbarSignModalProps> = ({
               required
             />
           </div>
+          )}
+
+          {/* Custom Configured Fields */}
+          {customFieldsConfig.length > 0 && (
+            <div className="bg-[#060b17] p-3.5 rounded-xl border border-slate-700/60 space-y-3">
+              <div className="flex items-center gap-1.5 text-slate-300 font-bold font-mono text-xs">
+                <span className="w-5 h-5 rounded-full bg-slate-500/20 border border-slate-500/40 flex items-center justify-center text-xs font-black">+</span>
+                <span>{lang === 'ar' ? 'معلومات مخصصة إضافية' : 'Additional Custom Fields'}</span>
+              </div>
+              <div className="space-y-2">
+                {customFieldsConfig.map(field => (
+                  <div key={field.id}>
+                    <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400 mb-1">
+                      <span>{lang === 'ar' ? field.labelAr : field.labelEn}</span>
+                      {field.isRequired && <span className="text-red-400">*</span>}
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={customFieldValues[field.id] || ''}
+                      onChange={(e) => setCustomFieldValues({ ...customFieldValues, [field.id]: e.target.value })}
+                      className="w-full bg-[#0b1428] border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-100 text-xs focus:border-slate-400 focus:outline-none"
+                      required={field.isRequired}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Current Clinician / Data Entry User Card */}
           <div className="p-3.5 rounded-xl bg-[#060b17] border border-teal-500/30 flex items-center justify-between flex-wrap gap-2">

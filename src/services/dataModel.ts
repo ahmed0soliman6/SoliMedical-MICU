@@ -317,6 +317,7 @@ export interface AddVitalsInput {
   lactateMmolPerL?: number;
   lactateClearancePercent?: number;
   bloodGlucoseMgDl?: number;
+  cvpMmHg?: number;
   recordedBy: {
     staffId: string;
     name: string;
@@ -351,6 +352,7 @@ export async function addTimestampedVitals(input: AddVitalsInput): Promise<Telem
     lactateMmolPerL: input.lactateMmolPerL,
     lactateClearancePercent: input.lactateClearancePercent,
     bloodGlucoseMgDl: input.bloodGlucoseMgDl,
+    cvpMmHg: input.cvpMmHg,
     recordedBy: input.recordedBy,
     clinicalNotes: input.clinicalNotes,
   };
@@ -557,6 +559,7 @@ export interface SignSbarInput {
     infectiousDiseaseAndAntibiotics: string;
   };
   recommendationAndOrders: string[];
+  customFields?: Record<string, string>;
 }
 
 export async function signSbarHandover(input: SignSbarInput): Promise<SbarHandoverReport> {
@@ -592,6 +595,7 @@ export async function signSbarHandover(input: SignSbarInput): Promise<SbarHandov
     background: input.background,
     assessment: input.assessment,
     recommendationAndOrders: input.recommendationAndOrders,
+    customFields: input.customFields,
     isLocked: true,
     cryptographicHash: hash,
   };

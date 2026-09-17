@@ -91,6 +91,15 @@ export interface AntibioticPreset {
   standardIndication?: string;
 }
 
+export interface SbarFieldConfig {
+  id: string;
+  labelEn: string;
+  labelAr: string;
+  section: 'S' | 'B' | 'A' | 'R';
+  isRequired: boolean;
+  order: number;
+}
+
 export interface SystemSettings {
   language: 'en' | 'ar';
   features: SystemFeatureFlags;
@@ -100,6 +109,7 @@ export interface SystemSettings {
   ventilatorModes?: VentilatorModePreset[];
   fluidCategories?: FluidCategoryPreset[];
   antibioticsPresets?: AntibioticPreset[];
+  sbarFields?: SbarFieldConfig[];
   lastUpdated: string;
 }
 
@@ -453,5 +463,17 @@ export const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
   ventilatorModes: DEFAULT_VENTILATOR_MODES,
   fluidCategories: DEFAULT_FLUID_CATEGORIES,
   antibioticsPresets: DEFAULT_ANTIBIOTIC_PRESETS,
+  sbarFields: [], // We'll leave it empty to use hardcoded defaults if not overridden, or populate it
   lastUpdated: new Date().toISOString(),
 };
+
+export const DEFAULT_SBAR_FIELDS: SbarFieldConfig[] = [
+  { id: 'situation', labelEn: 'Situation (Patient, Bed, Diagnosis)', labelAr: 'الموقف الحالي، السرير والتشخيص', section: 'S', isRequired: true, order: 1 },
+  { id: 'background', labelEn: 'Background (History, Hospital Course)', labelAr: 'الخلفية الطبية، التاريخ المرضي', section: 'B', isRequired: true, order: 2 },
+  { id: 'hemodynamics', labelEn: 'Hemodynamics & Cardiovascular', labelAr: 'الدورة الدموية والقلب', section: 'A', isRequired: true, order: 3 },
+  { id: 'pulmonary', labelEn: 'Pulmonary & Airway', labelAr: 'التنفس والمجرى الهوائي', section: 'A', isRequired: true, order: 4 },
+  { id: 'metabolic', labelEn: 'Metabolic & Renal', labelAr: 'الأيض والكلى (السوائل)', section: 'A', isRequired: true, order: 5 },
+  { id: 'neurology', labelEn: 'Neurology, Pain & Sedation', labelAr: 'الأعصاب، الألم والتهدئة', section: 'A', isRequired: true, order: 6 },
+  { id: 'infectious', labelEn: 'Infectious & GI', labelAr: 'العدوى والجهاز الهضمي', section: 'A', isRequired: true, order: 7 },
+  { id: 'recommendation', labelEn: 'Recommendation & Plan', labelAr: 'التوصيات والخطة العلاجية', section: 'R', isRequired: true, order: 8 },
+];
