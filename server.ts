@@ -223,14 +223,16 @@ Always respond in strictly valid JSON format.`,
       data: parsedData,
     });
   } catch (error: any) {
-    console.error('[API /api/ai/scan-lab] Error:', error);
     const errMsg = error?.message || 'Failed to analyze lab image with Gemini AI';
-    
-    // Check if it's a 503 overload error from Gemini
     const isOverload = errMsg.includes('503') || errMsg.includes('UNAVAILABLE') || errMsg.includes('high demand');
-    const statusCode = isOverload ? 503 : 500;
     
-    return res.status(statusCode).json({
+    if (isOverload) {
+      console.log('[API /api/ai/scan-lab] Overload (Logged as info to prevent false alarm):', errMsg);
+    } else {
+      console.error('[API /api/ai/scan-lab] Error:', error);
+    }
+    
+    return res.status(500).json({
       success: false,
       error: errMsg,
     });

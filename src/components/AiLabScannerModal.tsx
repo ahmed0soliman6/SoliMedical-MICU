@@ -228,12 +228,19 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
         }
       }
     } catch (err: any) {
-      console.error('Scan Lab Error:', err);
+      const errStr = typeof err?.message === 'string' ? err.message : JSON.stringify(err);
+      const isOverload = errStr.includes('503') || errStr.includes('UNAVAILABLE') || errStr.includes('high demand');
+      
+      if (isOverload) {
+        console.log('Scan Lab Overload (Logged as info):', err);
+      } else {
+        console.error('Scan Lab Error:', err);
+      }
+      
       let userErrorMsg = err?.message || (lang === 'ar' ? 'فشل التعرف على تقرير التحليل. يرجى التأكد من وضوح الصورة.' : 'Failed to recognize lab report. Ensure the image is legible and well-lit.');
       
       // Handle 503 / Overload Errors specifically
-      const errStr = typeof err?.message === 'string' ? err.message : JSON.stringify(err);
-      if (errStr.includes('503') || errStr.includes('UNAVAILABLE') || errStr.includes('high demand')) {
+      if (isOverload) {
         userErrorMsg = lang === 'ar' 
           ? 'نموذج الذكاء الاصطناعي يواجه ضغطاً عالياً حالياً (503). يرجى المحاولة مرة أخرى بعد قليل.' 
           : 'The AI model is currently experiencing high demand (503). Please try again in a few moments.';
