@@ -487,59 +487,46 @@ export const SbarSignModal: React.FC<SbarSignModalProps> = ({
     <div className="fixed inset-0 z-50 flex flex-col bg-[#091122] w-screen h-screen overflow-hidden animate-in fade-in duration-200" dir={isRTL ? 'rtl' : 'ltr'}>
       <div className="w-full h-full bg-[#091122] flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="px-6 py-4 bg-[#060b17] border-b border-slate-800 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-teal-500/15 border border-teal-500/30 flex items-center justify-center text-teal-400">
-              <ShieldCheck className="w-5 h-5" />
+        <div className="px-4 py-3 bg-[#060b17] border-b border-slate-800 flex items-center justify-between shrink-0">
+          <div className="flex flex-col gap-1 w-full">
+            <div className="flex items-center justify-between w-full">
+              <h3 className="text-sm font-bold text-white">
+                {lang === 'ar' ? 'استلام مناوبة SBAR' : 'SBAR Shift Handover'}
+              </h3>
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-base sm:text-lg font-bold text-white">
-                  {lang === 'ar' ? 'تسليم واستلام المناوبة السريرية (SBAR Shift Handover)' : 'Clinical Shift Handover (SBAR Protocol)'}
-                </h3>
-                <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-teal-950 border border-teal-800 text-teal-300">
-                  {lang === 'ar' ? `سرير ${bedNumber}` : `Bed ${bedNumber}`}
-                </span>
-              </div>
-              {modalTab !== 'RECEIVE' && (
-                <p className="text-xs text-slate-400 font-mono mt-0.5">
-                  {patientName || (patient?.fullNameAr || patient?.fullNameEn)} • {patient?.mrn || 'MRN'} • {lang === 'ar' ? 'حالة الإنعاش:' : 'Code:'} <strong className="text-emerald-400">{codeStatus}</strong>
-                </p>
-              )}
-            </div>
+            <p className="text-[11px] text-slate-300 font-mono w-full truncate">
+              {patientName || (patient?.fullNameAr || patient?.fullNameEn)} • {lang === 'ar' ? `سرير ${bedNumber}` : `Bed ${bedNumber}`}
+            </p>
+
+            {modalTab !== 'RECEIVE' && (
+              <button
+                type="button"
+                onClick={() => autoSynthesizeSbar(patient, vitals, ventilator, pumps, fluidBalance, labs)}
+                className="w-full mt-1.5 px-3 py-1 rounded-md bg-teal-500/10 border border-teal-500/30 text-teal-300 text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all active:scale-98 cursor-pointer hover:bg-teal-500/20"
+                title={lang === 'ar' ? 'التعرف التلقائي' : 'Auto-fill'}
+              >
+                <Sparkles className="w-3.5 h-3.5 text-teal-400" />
+                <span>{lang === 'ar' ? 'توليد ذكي من بيانات السرير' : 'Auto-Fill from Live Vitals'}</span>
+              </button>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
-            {modalTab !== 'RECEIVE' && (
-              <>
-                {/* Auto-Synthesize Button */}
-                <button
-                  type="button"
-                  onClick={() => autoSynthesizeSbar(patient, vitals, ventilator, pumps, fluidBalance, labs)}
-                  className="px-3 py-1.5 rounded-xl bg-teal-500/20 hover:bg-teal-500/30 border border-teal-500/40 text-teal-300 text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-sm"
-                  title={lang === 'ar' ? 'التعرف التلقائي على العلامات والمدخلات السريرية' : 'Auto-fill from current telemetry & inputs'}
-                >
-                  <Sparkles className="w-3.5 h-3.5 text-teal-400" />
-                  <span>{lang === 'ar' ? 'توليد ذكي من بيانات السرير' : 'Auto-Fill from Live Vitals'}</span>
-                </button>
-
-                {/* Copy from Previous Handover Button */}
-                {previousHandovers.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setShowPreviousDrawer(!showPreviousDrawer)}
-                    className="px-3 py-1.5 rounded-xl bg-blue-950/80 hover:bg-blue-900 border border-blue-800 text-blue-300 text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
-                  >
-                    <History className="w-3.5 h-3.5 text-blue-400" />
-                    <span>
-                      {lang === 'ar' 
-                        ? `مقارنة / نسخ من السابق (${previousHandovers.length})` 
-                        : `Previous Handovers (${previousHandovers.length})`}
-                    </span>
-                    {showPreviousDrawer ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                  </button>
-                )}
-              </>
+            {/* Copy from Previous Handover Button */}
+            {previousHandovers.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowPreviousDrawer(!showPreviousDrawer)}
+                className="px-3 py-1.5 rounded-xl bg-blue-950/80 hover:bg-blue-900 border border-blue-800 text-blue-300 text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+              >
+                <History className="w-3.5 h-3.5 text-blue-400" />
+                <span>
+                  {lang === 'ar' 
+                    ? `مقارنة / نسخ من السابق (${previousHandovers.length})` 
+                    : `Previous Handovers (${previousHandovers.length})`}
+                </span>
+                {showPreviousDrawer ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+              </button>
             )}
 
             <button
@@ -669,28 +656,37 @@ export const SbarSignModal: React.FC<SbarSignModalProps> = ({
             {pendingHandover ? (
               <div className="space-y-4">
                 {/* Banner */}
-                <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-950/90 via-amber-900/40 to-[#070c18] border border-amber-500/50 space-y-2 shadow-xl">
-                  <div className="flex items-center justify-between flex-wrap gap-2">
-                    <div className="flex items-center gap-3">
-                      <span className="w-10 h-10 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-black shrink-0 shadow-md">
-                        <CheckCircle2 className="w-6 h-6 stroke-[2.5]" />
-                      </span>
-                      <div>
-                        <h4 className="text-sm sm:text-base font-extrabold text-amber-300">
+                <div className="p-3 rounded-xl bg-gradient-to-r from-amber-950/90 via-amber-900/40 to-[#070c18] border border-amber-500/50 shadow-md">
+                  <div className="flex items-start gap-2.5">
+                    <span className="w-7 h-7 rounded-md bg-amber-500 text-slate-950 flex items-center justify-center font-black shrink-0 mt-0.5">
+                      <CheckCircle2 className="w-4 h-4 stroke-[2.5]" />
+                    </span>
+                    <div className="flex flex-col gap-1 w-full">
+                      {/* Row 1: Shift type & Doctor */}
+                      <h4 className="text-xs sm:text-sm font-extrabold text-amber-300 flex items-center gap-2 flex-wrap">
+                        <span>
                           {lang === 'ar' 
-                            ? `مراجعة بيانات تسليم المناوبة ${pendingHandover.shiftType === 'NIGHT' ? 'الليلية' : 'الصباحية'}` 
-                            : `Pending ${pendingHandover.shiftType} Shift Handover Review`}
-                        </h4>
-                        <p className="text-xs text-amber-200/90 mt-0.5">
-                          {lang === 'ar' 
-                            ? `الطبيب المُسَلِّم: د. ${pendingHandover.outgoingDoctor.name} (${pendingHandover.outgoingDoctor.role})`
-                            : `Outgoing clinician: Dr. ${pendingHandover.outgoingDoctor.name} (${pendingHandover.outgoingDoctor.role})`}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-right font-mono text-xs text-amber-300 bg-amber-950/60 px-3 py-1.5 rounded-xl border border-amber-800/80">
-                      <div className="font-bold">{pendingHandover.shiftDate}</div>
-                      <div className="text-amber-200/70 text-[11px]">({pendingHandover.shiftStartTime} - {pendingHandover.shiftEndTime})</div>
+                            ? (pendingHandover.shiftType === 'NIGHT' ? 'تسليم مسائي' : 'تسليم صباحي') 
+                            : `${pendingHandover.shiftType === 'NIGHT' ? 'Night' : 'Day'} Shift`}
+                        </span>
+                        <span className="text-amber-500/50">|</span>
+                        <span className="text-amber-100/90 text-xs sm:text-sm">
+                          {lang === 'ar' ? `د. ${pendingHandover.outgoingDoctor.name}` : `Dr. ${pendingHandover.outgoingDoctor.name}`}
+                        </span>
+                      </h4>
+                      {/* Row 2: Date & Time (Foldable) */}
+                      <details className="text-xs font-mono text-amber-200/80 cursor-pointer">
+                        <summary className="outline-none">
+                          {lang === 'ar' ? 'عرض تفاصيل المناوبة' : 'Show shift details'}
+                        </summary>
+                        <div className="flex items-center gap-2 mt-1">
+                          <Calendar className="w-3.5 h-3.5 opacity-70" />
+                          <span>{pendingHandover.shiftDate}</span>
+                          <span className="text-amber-500/50 mx-1">|</span>
+                          <Clock className="w-3.5 h-3.5 opacity-70" />
+                          <span>{pendingHandover.shiftStartTime} - {pendingHandover.shiftEndTime}</span>
+                        </div>
+                      </details>
                     </div>
                   </div>
                 </div>
@@ -1144,29 +1140,12 @@ export const SbarSignModal: React.FC<SbarSignModalProps> = ({
             </div>
           )}
 
-          {/* Current Clinician / Data Entry User Card */}
-          <div className="p-3.5 rounded-xl bg-[#060b17] border border-teal-500/30 flex items-center justify-between flex-wrap gap-2">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-teal-500/15 border border-teal-500/30 flex items-center justify-center text-teal-400">
-                <User className="w-4 h-4" />
-              </div>
-              <div>
-                <span className="block text-[11px] text-slate-400 font-semibold">
-                  {lang === 'ar' ? 'اسم الطبيب المستخدم الحالي (مدخل البيانات):' : 'Current Logging Clinician (Data Entry User):'}
-                </span>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <strong className="text-teal-300 text-xs font-bold font-mono">
-                    {currentUser?.nameAr || currentUser?.nameEn || (lang === 'ar' ? 'د. الطبيب الحالي' : 'Dr. Current User')}
-                  </strong>
-                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-teal-950 text-teal-400 border border-teal-800">
-                    {currentUser?.role || StaffRole.SPECIALIST}
-                  </span>
-                </div>
-              </div>
-            </div>
-            <div className="text-[10px] font-mono text-slate-400 bg-slate-900/80 px-2.5 py-1 rounded-lg border border-slate-800">
-              {lang === 'ar' ? 'مُوثّق بحساب المستخدم المعتمد' : 'Authenticated Logged-in User'}
-            </div>
+          {/* Current Clinician */}
+          <div className="p-2 rounded-xl bg-[#060b17] border border-teal-500/20 text-xs font-mono text-teal-400">
+            {lang === 'ar' ? 'الطبيب المُسَلِّم / ' : 'Outgoing Clinician / '}
+            <strong className="text-white">
+              {currentUser?.nameAr || currentUser?.nameEn || (lang === 'ar' ? 'د. الطبيب الحالي' : 'Dr. Current User')}
+            </strong>
           </div>
 
           {/* Action Footer */}
