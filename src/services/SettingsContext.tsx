@@ -24,6 +24,7 @@ export function loadSavedSettings(): SystemSettings {
       infusionDrugs: parsed.infusionDrugs || DEFAULT_SYSTEM_SETTINGS.infusionDrugs,
       ventilatorModes: parsed.ventilatorModes || DEFAULT_SYSTEM_SETTINGS.ventilatorModes,
       fluidCategories: parsed.fluidCategories || DEFAULT_SYSTEM_SETTINGS.fluidCategories,
+      antibioticsPresets: parsed.antibioticsPresets || DEFAULT_SYSTEM_SETTINGS.antibioticsPresets,
     };
   } catch (e) {
     console.error('Failed to load system settings:', e);

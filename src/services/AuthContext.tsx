@@ -281,11 +281,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // 1. Find user in current loaded users list or local DB
     let user = allUsers.find(
-      u => u.email.toLowerCase() === convertedFirebaseEmail || 
-           u.email.toLowerCase() === trimmedId || 
-           u.badgeId.toLowerCase() === trimmedId || 
-           u.uid.toLowerCase() === trimmedId ||
-           u.email.split('@')[0].toLowerCase() === trimmedId
+      u => (u?.email || '').toLowerCase() === convertedFirebaseEmail || 
+           (u?.email || '').toLowerCase() === trimmedId || 
+           (u?.badgeId || '').toLowerCase() === trimmedId || 
+           (u?.uid || '').toLowerCase() === trimmedId ||
+           (u?.email ? u.email.split('@')[0].toLowerCase() === trimmedId : false)
     );
 
     // If user not found in local memory, check IndexedDB directly
@@ -293,11 +293,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         const localUsers = await db.users.toArray();
         user = localUsers.find(
-          u => u.email.toLowerCase() === convertedFirebaseEmail || 
-               u.email.toLowerCase() === trimmedId || 
-               u.badgeId.toLowerCase() === trimmedId || 
-               u.uid.toLowerCase() === trimmedId ||
-               u.email.split('@')[0].toLowerCase() === trimmedId
+          u => (u?.email || '').toLowerCase() === convertedFirebaseEmail || 
+               (u?.email || '').toLowerCase() === trimmedId || 
+               (u?.badgeId || '').toLowerCase() === trimmedId || 
+               (u?.uid || '').toLowerCase() === trimmedId ||
+               (u?.email ? u.email.split('@')[0].toLowerCase() === trimmedId : false)
         );
       } catch (e) {
         console.warn('Local Dexie query error:', e);

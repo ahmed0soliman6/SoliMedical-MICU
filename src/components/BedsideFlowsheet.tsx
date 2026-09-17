@@ -37,7 +37,8 @@ import {
   Minus,
   Play,
   Pause,
-  PowerOff
+  PowerOff,
+  Pill
 } from 'lucide-react';
 import { 
   BedRecord, 
@@ -48,6 +49,7 @@ import {
   FluidBalance24H, 
   SbarHandoverReport, 
   ClinicalNote,
+  PatientAntibiotic,
   CodeStatus,
   StaffRole,
   DispositionType,
@@ -67,6 +69,7 @@ import { useAuth } from '../services/AuthContext.tsx';
 import { syncStatLabsToCloud, syncPatientToCloud, syncPumpToCloud, firestore } from '../services/firebase.ts';
 import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { LabFlowsheetSection } from './LabFlowsheetSection.tsx';
+import { AntibioticsSection } from './AntibioticsSection.tsx';
 import { InvestigationsSection } from './InvestigationsSection.tsx';
 import { PatientTransferModal } from './PatientTransferModal.tsx';
 import { BedSwapModal } from './BedSwapModal.tsx';
@@ -75,6 +78,7 @@ import { AiLabScannerModal } from './AiLabScannerModal.tsx';
 import { VentilatorModal } from './VentilatorModal.tsx';
 import { InfusionPumpModal } from './InfusionPumpModal.tsx';
 import { FluidBalanceModal } from './FluidBalanceModal.tsx';
+import { SbarSignModal } from './SbarSignModal.tsx';
 import { LabsTemplateManager } from './LabsTemplateManager.tsx';
 import { 
   BedsideCardsConfigModal, 
@@ -111,7 +115,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
   const { t, lang, isRTL } = useTranslation();
   const { currentUser } = useAuth();
   
-  const [activeTab, setActiveTab] = useState<'all' | 'paperFlowsheet' | 'labs' | 'investigations' | 'vitals' | 'vent' | 'pumps' | 'fluids' | 'sbar' | 'notes' | 'disposition' | 'labTemplates'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'paperFlowsheet' | 'labs' | 'antibiotics' | 'investigations' | 'vitals' | 'vent' | 'pumps' | 'fluids' | 'sbar' | 'notes' | 'disposition' | 'labTemplates'>('all');
   const [isPatientCardCollapsed, setIsPatientCardCollapsed] = useState<boolean>(true);
   const [isDispositionCardCollapsed, setIsDispositionCardCollapsed] = useState<boolean>(true);
   const [isHistoryCardCollapsed, setIsHistoryCardCollapsed] = useState<boolean>(true);
@@ -122,6 +126,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
   const [isPaperPumpsCardCollapsed, setIsPaperPumpsCardCollapsed] = useState<boolean>(true);
   const [isPaperFluidsCardCollapsed, setIsPaperFluidsCardCollapsed] = useState<boolean>(true);
   const [isPaperLabsCardCollapsed, setIsPaperLabsCardCollapsed] = useState<boolean>(true);
+  const [isPaperAntibioticsCardCollapsed, setIsPaperAntibioticsCardCollapsed] = useState<boolean>(true);
   const [isPaperInvestigationsCardCollapsed, setIsPaperInvestigationsCardCollapsed] = useState<boolean>(true);
   const [isPaperSbarCardCollapsed, setIsPaperSbarCardCollapsed] = useState<boolean>(true);
   const [isPaperNotesCardCollapsed, setIsPaperNotesCardCollapsed] = useState<boolean>(true);
@@ -131,6 +136,8 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
   const [ventilator, setVentilator] = useState<VentilatorParameters | null>(null);
   const [pumps, setPumps] = useState<InfusionPumpLine[]>([]);
   const [fluidBalance, setFluidBalance] = useState<FluidBalance24H | null>(null);
+  const [allFluidBalances, setAllFluidBalances] = useState<FluidBalance24H[]>([]);
+  const [antibioticsList, setAntibioticsList] = useState<PatientAntibiotic[]>([]);
   const [sbarList, setSbarList] = useState<SbarHandoverReport[]>([]);
   const [notesList, setNotesList] = useState<ClinicalNote[]>([]);
   const [labsList, setLabsList] = useState<StatLabPanel[]>([]);
@@ -142,7 +149,11 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
   const [isPumpModalOpen, setIsPumpModalOpen] = useState(false);
   const [selectedPumpForEdit, setSelectedPumpForEdit] = useState<InfusionPumpLine | null>(null);
   const [isFluidModalOpen, setIsFluidModalOpen] = useState(false);
+  const [selectedFluidBalanceForEdit, setSelectedFluidBalanceForEdit] = useState<FluidBalance24H | null>(null);
   const [isCardsConfigModalOpen, setIsCardsConfigModalOpen] = useState(false);
+  const [isBedsideSbarModalOpen, setIsBedsideSbarModalOpen] = useState(false);
+  const [selectedTemplateSbar, setSelectedTemplateSbar] = useState<SbarHandoverReport | null>(null);
+  const [selectedSbarIdForView, setSelectedSbarIdForView] = useState<string | 'ALL'>('ALL');
 
   // Bedside cards configuration per bed
   const [cardsConfig, setCardsConfig] = useState<BedsideCardsConfig>(() => {
@@ -288,8 +299,10 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
     const fluids = await db.fluidBalances
       .where('patientId')
       .equals(patient.id)
-      .first();
-    setFluidBalance(fluids || null);
+      .toArray();
+    fluids.sort((a, b) => new Date(b.periodEndTimestamp || (b as any).date || 0).getTime() - new Date(a.periodEndTimestamp || (a as any).date || 0).getTime());
+    setAllFluidBalances(fluids);
+    setFluidBalance(fluids[0] || null);
 
     const sbars = await db.sbarHandovers
       .where('patientId')
@@ -602,6 +615,14 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       invItems = seedInvs;
     }
     setInvestigations(invItems);
+
+    // Load Active & Past Antibiotics for patient
+    const abxItems = await db.patientAntibiotics
+      .where('patientId')
+      .equals(patient.id)
+      .reverse()
+      .sortBy('createdAt');
+    setAntibioticsList(abxItems);
   };
 
   const latestVitals = vitalsHistory[0] || null;
@@ -699,12 +720,6 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
 
   const handleDeletePumpLine = async (pump: InfusionPumpLine) => {
     try {
-      const drugLabel = lang === 'ar' ? (pump.drugNameAr || pump.drugNameEn) : pump.drugNameEn;
-      const confirmMsg = lang === 'ar'
-        ? `هل أنت متأكد من إيقاف والاستغناء عن محلول [${drugLabel}] وحذف قناة المضخة؟`
-        : `Are you sure you want to stop, discontinue, and remove pump line [${drugLabel}]?`;
-      if (!window.confirm(confirmMsg)) return;
-
       await db.infusionPumps.delete(pump.id);
       try {
         const pumpRef = doc(firestore, 'infusionPumps', pump.id);
@@ -723,7 +738,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
     if (lab.values && lab.values[paramId] !== undefined) {
       return lab.values[paramId];
     }
-    const pid = paramId.toLowerCase();
+    const pid = (paramId || '').toLowerCase();
     switch (pid) {
       case 'wbc': return lab.cbc?.wbcCountKPerUl?.toString() || '';
       case 'hb': return lab.cbc?.hemoglobinGPerDl?.toString() || '';
@@ -1223,6 +1238,12 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
               label: lang === 'ar' ? `التحاليل والجدول اليومي (${labResults.length})` : `Daily Lab Flowsheet (${labResults.length})`, 
               icon: FlaskConical, 
               enabled: true 
+            },
+            { 
+              id: 'antibiotics', 
+              label: lang === 'ar' ? `المضادات الحيوية (${antibioticsList.filter(a => a.status === 'ACTIVE').length})` : `Antibiotics & Regimens (${antibioticsList.filter(a => a.status === 'ACTIVE').length})`, 
+              icon: Pill, 
+              enabled: settings.features.enableAntibioticsCard !== false 
             },
             { 
               id: 'investigations', 
@@ -2245,9 +2266,6 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                               <div className="flex items-start justify-between gap-2">
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-700 font-bold">
-                                      {p.pumpChannel}
-                                    </span>
                                     <span className="font-bold text-white text-xs font-mono truncate">{p.drugNameEn}</span>
                                   </div>
                                   <div className="text-[9px] text-slate-400 mt-0.5">
@@ -2321,8 +2339,6 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
 
                                 <div className="text-right text-[10px] text-slate-400">
                                   <span>{p.flowRateMlPerHour} mL/h</span>
-                                  <span className="text-slate-600 mx-1">•</span>
-                                  <span>Rem: {p.volumeRemainingMl ?? (p as any).remainingVolumeMl ?? 0}mL</span>
                                 </div>
                               </div>
                             </div>
@@ -2390,31 +2406,54 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                   {!isPaperFluidsCardCollapsed && (
                     <>
                       {fluidBalance ? (() => {
+                        const netVal = fluidBalance.netCumulativeBalanceMl ?? (fluidBalance as any).netBalance24HMl ?? 0;
                         const totalIntake = fluidBalance.intakeBreakdown?.totalIntakeMl ?? (fluidBalance as any).totalIntakeMl ?? 0;
+                        const totalOutput = fluidBalance.outputBreakdown?.totalOutputMl ?? (fluidBalance as any).totalOutputMl ?? 0;
                         const urineVal = fluidBalance.outputBreakdown?.urineOutputMl ?? (fluidBalance as any).outputBreakdown?.urineMl ?? 0;
                         return (
                           <div className="mt-3 space-y-2.5">
-                            <div className="flex justify-end">
+                            <div className="flex items-center justify-end gap-1.5 flex-wrap">
                               <button
                                 type="button"
-                                onClick={() => setIsFluidModalOpen(true)}
-                                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 border border-teal-500/40 text-xs font-bold transition-all cursor-pointer"
+                                onClick={() => {
+                                  setSelectedFluidBalanceForEdit(fluidBalance);
+                                  setIsFluidModalOpen(true);
+                                }}
+                                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-teal-300 border border-teal-500/30 text-xs font-bold transition-all cursor-pointer"
+                                title={lang === 'ar' ? 'تعديل ميزان السوائل الحالي' : 'Edit Current 24H Balance'}
                               >
                                 <Edit3 className="w-3.5 h-3.5" />
                                 <span>{lang === 'ar' ? 'تعديل ميزان السوائل' : 'Edit Balance'}</span>
                               </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedFluidBalanceForEdit(null);
+                                  setIsFluidModalOpen(true);
+                                }}
+                                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-teal-500 hover:bg-teal-400 text-slate-950 text-xs font-bold transition-all cursor-pointer shadow-sm"
+                                title={lang === 'ar' ? 'إضافة ميزان سوائل ليوم جديد أو لاحق' : 'Add Fluid Balance for Next / New Day'}
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                                <span>{lang === 'ar' ? 'إضافة يوم' : 'Add Day'}</span>
+                              </button>
                             </div>
-                            <div 
-                              onClick={() => setIsFluidModalOpen(true)}
-                              className="grid grid-cols-2 gap-2 text-xs font-mono cursor-pointer hover:opacity-90 transition-opacity"
-                            >
-                              <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
-                                <div className="text-[10px] text-slate-500">Intake Total</div>
-                                <div className="text-cyan-300 font-bold mt-0.5">{totalIntake} mL</div>
+                            
+                            <div className="grid grid-cols-3 gap-1.5 text-xs font-mono">
+                              <div className="bg-[#070c18] p-2 rounded-xl border border-slate-800 flex flex-col justify-between">
+                                <div className="text-[9px] text-cyan-400 font-bold truncate">{lang === 'ar' ? 'الوارد (IN)' : 'Intake (IN)'}</div>
+                                <div className="text-cyan-300 font-bold mt-0.5 truncate">{totalIntake} <span className="text-[8px] text-slate-400">mL</span></div>
                               </div>
-                              <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
-                                <div className="text-[10px] text-slate-500">Output Urine (UOP)</div>
-                                <div className="text-amber-400 font-bold mt-0.5">{urineVal} mL</div>
+                              <div className="bg-[#070c18] p-2 rounded-xl border border-slate-800 flex flex-col justify-between">
+                                <div className="text-[9px] text-amber-400 font-bold truncate">{lang === 'ar' ? 'الصادر (OUT)' : 'Output (OUT)'}</div>
+                                <div className="text-amber-400 font-bold mt-0.5 truncate">{totalOutput} <span className="text-[8px] text-slate-400">mL</span></div>
+                              </div>
+                              <div className="bg-[#070c18] p-2 rounded-xl border border-slate-800 flex flex-col justify-between">
+                                <div className="text-[9px] text-indigo-400 font-bold truncate">{lang === 'ar' ? 'الصافي (NET)' : 'Net (NET)'}</div>
+                                <div className={`font-bold mt-0.5 truncate ${netVal >= 0 ? 'text-indigo-300' : 'text-emerald-300'}`}>
+                                  {netVal > 0 ? `+${netVal}` : netVal} <span className="text-[8px] text-slate-400">mL</span>
+                                </div>
                               </div>
                             </div>
                           </div>
@@ -2425,6 +2464,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                           <button
                             type="button"
                             onClick={() => {
+                              setSelectedFluidBalanceForEdit(null);
                               setIsFluidModalOpen(true);
                               setIsPaperFluidsCardCollapsed(false);
                             }}
@@ -2669,6 +2709,21 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
         </div>
       )}
 
+      {/* Tab: Patient Antibiotics & Antimicrobial Therapy (Rendered right after Labs card) */}
+      {(activeTab === 'antibiotics' || activeTab === 'all') && (cardsConfig.showAntibioticsCard !== false) && (settings.features.enableAntibioticsCard !== false) && (
+        <AntibioticsSection
+          patient={patient}
+          bed={bed}
+          settings={settings}
+          antibiotics={antibioticsList}
+          currentUser={currentUser}
+          onDataUpdated={() => {
+            loadBedsideData();
+            onDataUpdated();
+          }}
+        />
+      )}
+
       {/* Tab: Investigations, Radiology & POCUS Studies */}
       {(activeTab === 'investigations' || activeTab === 'all') && (
         <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-4 shadow-xl space-y-4">
@@ -2773,32 +2828,14 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                   >
                     <div className="flex items-start justify-between">
                       <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-700 font-bold">
-                            {pump.pumpChannel}
-                          </span>
-                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900 text-slate-300 border border-slate-700">
-                            {pump.vascularAccessLine || 'IV Line'}
-                          </span>
-                        </div>
                         <h4 className="text-sm font-bold text-white mt-1">
-                          {lang === 'ar' ? `${pump.drugNameEn} (${pump.drugNameAr})` : pump.drugNameEn}
+                          {pump.drugNameEn}
                         </h4>
                         <p className="text-xs text-slate-400">
                           {lang === 'ar' 
                             ? `التركيز: ${pump.concentrationMgPerMl} mg/mL • المحلول: ${pump.diluentFluid || pump.solutionCarrier}` 
                             : `Concentration: ${pump.concentrationMgPerMl} mg/mL • Diluent: ${pump.diluentFluid || pump.solutionCarrier}`}
                         </p>
-                      </div>
-
-                      <div className="flex items-center gap-1.5">
-                        <span className={`px-2 py-0.5 rounded-lg text-xs font-mono font-bold ${
-                          pump.status === PumpStatus.RUNNING 
-                            ? 'bg-emerald-950 text-emerald-300 border border-emerald-700' 
-                            : 'bg-amber-950 text-amber-300 border border-amber-700'
-                        }`}>
-                          {pump.status}
-                        </span>
                       </div>
                     </div>
 
@@ -2812,9 +2849,9 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                       </div>
 
                       <div className={isRTL ? 'text-right' : 'text-left'}>
-                        <div className="text-[10px] text-slate-400">{lang === 'ar' ? 'معدل الحجم المتبقي' : 'Flow & Remaining'}</div>
+                        <div className="text-[10px] text-slate-400">{lang === 'ar' ? 'معدل الضخ (Flow Rate)' : 'Flow Rate'}</div>
                         <div className="text-sm font-bold text-slate-200">
-                          {pump.flowRateMlPerHour} mL/h • <span className="text-amber-300">{pump.volumeRemainingMl ?? (pump as any).remainingVolumeMl ?? 0} mL</span>
+                          {pump.flowRateMlPerHour} mL/h
                         </div>
                       </div>
                     </div>
@@ -3111,21 +3148,66 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
           </div>
 
           {!isPaperFluidsCardCollapsed && (
-            <div className="space-y-4 animate-in fade-in duration-300">
+            <div className="space-y-3 animate-in fade-in duration-300">
               {/* Action Toolbar inside expanded card */}
-              <div className="flex items-center justify-between bg-[#070c18] p-2.5 rounded-xl border border-slate-800/80">
-                <span className="text-xs text-teal-300 font-mono">
-                  {fluidBalance ? (lang === 'ar' ? 'ميزان السوائل اليومي مسجل' : '24H Fluid Balance Logged') : (lang === 'ar' ? 'لا يوجد ميزان مسجل اليوم' : 'No balance logged yet')}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setIsFluidModalOpen(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shadow-md active:scale-95 cursor-pointer"
-                  title={lang === 'ar' ? 'تسجيل أو تعديل ميزان السوائل والبول' : 'Log / Edit Fluid Balance'}
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>{fluidBalance ? (lang === 'ar' ? 'تعديل ميزان السوائل' : 'Edit Balance') : (lang === 'ar' ? 'تسجيل ميزان جديد' : 'Log Balance')}</span>
-                </button>
+              <div className="flex items-center justify-between bg-[#070c18] p-2.5 rounded-xl border border-slate-800/80 gap-2 flex-wrap">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs text-teal-300 font-mono">
+                    {fluidBalance ? (lang === 'ar' ? 'ميزان السوائل 24 ساعة مسجل' : '24H Fluid Balance Logged') : (lang === 'ar' ? 'لا يوجد ميزان مسجل اليوم' : 'No balance logged yet')}
+                  </span>
+                  {allFluidBalances.length > 1 && (
+                    <div className="flex items-center gap-1">
+                      {allFluidBalances.map((fRec, idx) => {
+                        const recDateStr = fRec.periodEndTimestamp ? fRec.periodEndTimestamp.split('T')[0] : (fRec as any).date;
+                        const isSelected = fluidBalance?.id === fRec.id;
+                        return (
+                          <button
+                            key={fRec.id || idx}
+                            type="button"
+                            onClick={() => setFluidBalance(fRec)}
+                            className={`px-2 py-0.5 rounded text-[10px] font-mono border transition-all cursor-pointer ${
+                              isSelected
+                                ? 'bg-teal-950 text-teal-300 border-teal-600 font-bold shadow'
+                                : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white'
+                            }`}
+                          >
+                            {recDateStr || `Day ${idx + 1}`}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  {fluidBalance && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedFluidBalanceForEdit(fluidBalance);
+                        setIsFluidModalOpen(true);
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-teal-300 border border-teal-500/30 font-bold text-xs shadow-md active:scale-95 cursor-pointer transition-colors"
+                      title={lang === 'ar' ? 'تعديل ميزان السوائل الحالي' : 'Edit Current 24H Balance'}
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                      <span>{lang === 'ar' ? 'تعديل ميزان السوائل' : 'Edit Balance'}</span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedFluidBalanceForEdit(null);
+                      setIsFluidModalOpen(true);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shadow-md active:scale-95 cursor-pointer transition-colors"
+                    title={lang === 'ar' ? 'إضافة ميزان سوائل ليوم جديد أو لاحق' : 'Add Fluid Balance for Next / New Day'}
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>{lang === 'ar' ? 'إضافة ميزان يوم جديد' : 'Add Day Balance'}</span>
+                  </button>
+                </div>
               </div>
 
               {fluidBalance ? (() => {
@@ -3143,34 +3225,69 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                 const plateletsUnits = (fluidBalance as any).transfusionProductsGiven?.plateletsUnits ?? 0;
 
                 return (
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 font-mono">
-                    <div className="bg-[#070c18] p-3.5 rounded-xl border border-slate-800">
-                      <div className="text-[10px] text-slate-400">{lang === 'ar' ? 'إجمالي المدخلات (Total Intake)' : 'Total Intake'}</div>
-                      <div className="text-xl font-bold text-cyan-300 mt-1">{totalIntake} mL</div>
-                      <div className="text-[10px] text-slate-400 mt-1">
-                        {lang === 'ar'
-                          ? `محاليل: ${ivMaint} mL • مضخات: ${ivMeds} mL`
-                          : `Crystalloid: ${ivMaint} mL • Infusions: ${ivMeds} mL`}
+                  <div className="space-y-2.5 font-mono">
+                    {/* Compact 3-Column Row: Intake (IN), Output (OUT), Net (NET) side-by-side on mobile */}
+                    <div className="grid grid-cols-3 gap-1.5 sm:gap-3">
+                      {/* 1. Total Intake */}
+                      <div className="bg-[#070c18] p-2.5 sm:p-3 rounded-xl border border-slate-800 flex flex-col justify-between">
+                        <div className="text-[9px] sm:text-[11px] font-bold text-cyan-400 truncate">
+                          {lang === 'ar' ? 'الوارد الكلي (IN)' : 'Total Intake (IN)'}
+                        </div>
+                        <div className="text-sm sm:text-base md:text-lg font-black text-cyan-300 mt-1 truncate">
+                          {totalIntake} <span className="text-[8px] sm:text-[10px] font-normal text-slate-400">mL</span>
+                        </div>
+                        <div className="text-[8px] sm:text-[10px] text-slate-400 mt-1 truncate">
+                          {lang === 'ar'
+                            ? `محاليل: ${ivMaint} | مضخات: ${ivMeds}`
+                            : `IV: ${ivMaint} | Pumps: ${ivMeds}`}
+                        </div>
+                      </div>
+
+                      {/* 2. Total Output */}
+                      <div className="bg-[#070c18] p-2.5 sm:p-3 rounded-xl border border-slate-800 flex flex-col justify-between">
+                        <div className="text-[9px] sm:text-[11px] font-bold text-amber-400 truncate">
+                          {lang === 'ar' ? 'الصادر الكلي (OUT)' : 'Total Output (OUT)'}
+                        </div>
+                        <div className="text-sm sm:text-base md:text-lg font-black text-amber-300 mt-1 truncate">
+                          {totalOutput} <span className="text-[8px] sm:text-[10px] font-normal text-slate-400">mL</span>
+                        </div>
+                        <div className="text-[8px] sm:text-[10px] text-slate-400 mt-1 truncate">
+                          {lang === 'ar'
+                            ? `بول: ${urineVal} mL`
+                            : `Urine: ${urineVal} mL`}
+                        </div>
+                      </div>
+
+                      {/* 3. Net Balance */}
+                      <div className="bg-[#070c18] p-2.5 sm:p-3 rounded-xl border border-slate-800 flex flex-col justify-between">
+                        <div className="text-[9px] sm:text-[11px] font-bold text-indigo-400 truncate">
+                          {lang === 'ar' ? 'صافي الميزان (NET)' : 'Net Balance (NET)'}
+                        </div>
+                        <div className={`text-sm sm:text-base md:text-lg font-black mt-1 truncate ${
+                          netVal >= 0 ? 'text-indigo-300' : 'text-emerald-300'
+                        }`}>
+                          {netVal > 0 ? `+${netVal}` : netVal} <span className="text-[8px] sm:text-[10px] font-normal text-slate-400">mL</span>
+                        </div>
+                        <div className="text-[8px] sm:text-[10px] text-slate-400 mt-1 truncate">
+                          {lang === 'ar' ? 'ميزان 24 ساعة' : '24h Balance'}
+                        </div>
                       </div>
                     </div>
 
-                    <div className="bg-[#070c18] p-3.5 rounded-xl border border-slate-800">
-                      <div className="text-[10px] text-slate-400">{lang === 'ar' ? 'إجمالي المخرجات (Total Output)' : 'Total Output'}</div>
-                      <div className="text-xl font-bold text-amber-300 mt-1">{totalOutput} mL</div>
-                      <div className="text-[10px] text-slate-400 mt-1">
-                        {lang === 'ar'
-                          ? `بول: ${urineVal} mL (${uopRate} mL/hr)`
-                          : `Urine: ${urineVal} mL (${uopRate} mL/hr)`}
+                    {/* Secondary Row: MTP & Urine Hourly Rate */}
+                    <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800 flex items-center justify-between text-[10px] sm:text-xs text-slate-300 flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-red-400 font-bold">{lang === 'ar' ? 'نقل الدم (MTP):' : 'MTP Blood:'}</span>
+                        <span className="text-red-300 font-mono font-bold">PRBC: {prbcUnits} {lang === 'ar' ? 'أكياس' : 'U'}</span>
+                        <span className="text-slate-600">•</span>
+                        <span className="text-slate-400 font-mono">FFP: {ffpUnits}</span>
+                        <span className="text-slate-600">•</span>
+                        <span className="text-slate-400 font-mono">PLT: {plateletsUnits}</span>
                       </div>
-                    </div>
 
-                    <div className="bg-[#070c18] p-3.5 rounded-xl border border-slate-800">
-                      <div className="text-[10px] text-slate-400">{lang === 'ar' ? 'بروتوكول نقل الدم (MTP Transfusions)' : 'MTP Blood Transfusion'}</div>
-                      <div className="text-sm font-bold text-red-300 mt-1">
-                        PRBC: {prbcUnits} {lang === 'ar' ? 'أكياس' : 'Units'}
-                      </div>
-                      <div className="text-[10px] text-slate-400 mt-0.5">
-                        FFP: {ffpUnits} • Platelets: {plateletsUnits}
+                      <div className="text-slate-400 font-mono">
+                        <span className="text-amber-400 font-semibold">{lang === 'ar' ? 'معدل البول (UOP):' : 'UOP Rate:'} </span>
+                        <span className="text-slate-200 font-bold">{uopRate} mL/hr</span>
                       </div>
                     </div>
                   </div>
@@ -3181,6 +3298,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                   <button
                     type="button"
                     onClick={() => {
+                      setSelectedFluidBalanceForEdit(null);
                       setIsFluidModalOpen(true);
                       setIsPaperFluidsCardCollapsed(false);
                     }}
@@ -3205,9 +3323,16 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
           >
             <div className="flex items-center gap-2">
               <ShieldCheck className="w-5 h-5 text-teal-400" />
-              <h3 className="text-base font-bold text-white">
-                {lang === 'ar' ? 'سجلات تسليم واستلام المناوبات السريرية (SBAR Archive)' : 'SBAR Shift Handover Reports'}
-              </h3>
+              <div>
+                <h3 className="text-base font-bold text-white">
+                  {lang === 'ar' ? 'سجلات تسليم واستلام المناوبات السريرية (SBAR Shift Handover)' : 'SBAR Shift Handover Reports'}
+                </h3>
+                <p className="text-[11px] text-slate-400 font-mono">
+                  {lang === 'ar' 
+                    ? 'توثيق وتشفير تسليم المناوبات بالبروتوكول السريري SBAR مع التعرف التلقائي على العلامات والمدخلات'
+                    : 'Standardized SBAR clinical handover protocol with live telemetry and ventilator auto-synthesis'}
+                </p>
+              </div>
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -3226,81 +3351,211 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
 
           {!isPaperSbarCardCollapsed && (
             <div className="space-y-3 animate-in fade-in duration-300">
-              {/* Action Toolbar inside expanded card */}
-              <div className="flex items-center justify-between bg-[#070c18] p-2.5 rounded-xl border border-slate-800/80">
-                <span className="text-xs text-teal-300 font-mono">
-                  {sbarList.length} {lang === 'ar' ? 'تقارير تسليم مسجلة وموثقة' : 'Recorded SBAR Handover Reports'}
-                </span>
-                <button
-                  type="button"
-                  onClick={onOpenSbarSign}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shadow-md active:scale-95 cursor-pointer"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>{lang === 'ar' ? 'تسليم مناوبة جديد' : 'New Handover'}</span>
-                </button>
-              </div>
-              {sbarList.length > 0 ? sbarList.map((sbar) => (
-                <div 
-                  key={sbar.id}
-                  className="bg-[#070c18] border border-slate-800 p-4 rounded-xl space-y-3"
-                >
-                  <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-xs font-bold text-teal-300 px-2 py-0.5 rounded bg-teal-950 border border-teal-800">
-                        {sbar.shiftType}
-                      </span>
-                      <span className="text-xs text-slate-400 font-mono">
-                        {sbar.shiftDate} ({sbar.shiftStartTime} - {sbar.shiftEndTime})
-                      </span>
-                    </div>
+              {/* Action Toolbar inside expanded card: New Handover + Quick status */}
+              <div className="flex items-center justify-between bg-[#070c18] p-3 rounded-xl border border-slate-800/80 flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-teal-300 font-mono font-bold">
+                    {sbarList.length} {lang === 'ar' ? 'تقارير تسليم مسجلة' : 'Logged SBAR Reports'}
+                  </span>
+                  {sbarList.length > 0 && (
+                    <span className="text-[11px] text-slate-400 font-mono">
+                      • {lang === 'ar' ? `آخر تسليم: ${sbarList[0].shiftDate} (${sbarList[0].outgoingDoctor.name})` : `Latest: ${sbarList[0].shiftDate} (${sbarList[0].outgoingDoctor.name})`}
+                    </span>
+                  )}
+                </div>
 
-                    <div className="flex items-center gap-1 text-[11px] text-emerald-400 font-mono">
-                      <Lock className="w-3 h-3" />
-                      <span>{sbar.cryptographicHash ? sbar.cryptographicHash.slice(0, 16) : 'HASH'}...</span>
-                    </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedTemplateSbar(null);
+                      setIsBedsideSbarModalOpen(true);
+                    }}
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-slate-950 font-black text-xs shadow-md shadow-teal-500/20 active:scale-95 cursor-pointer transition-all"
+                  >
+                    <Plus className="w-4 h-4 text-slate-950" />
+                    <span>{lang === 'ar' ? 'تسليم مناوبة جديد SBAR' : 'New SBAR Handover'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Historical SBAR Timeline Selector: Show previous records by Name, Date, Time and Shift Type */}
+              {sbarList.length > 0 && (
+                <div className="bg-[#070d1c] p-2.5 rounded-xl border border-slate-800/90 space-y-1.5">
+                  <div className="flex items-center justify-between text-[11px] text-slate-400 font-semibold px-1">
+                    <span>{lang === 'ar' ? 'السجلات القديمة والسابقة (بالاسم والتاريخ والوقت):' : 'Previous Handover Archive (By Name, Date & Time):'}</span>
+                    <span className="text-teal-400 font-mono text-[10px]">{lang === 'ar' ? 'اضغط لعرض التقرير أو استخدامه كقالب' : 'Click to view or clone'}</span>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-                    <div className="bg-[#0a101f] p-3 rounded-lg">
-                      <span className="text-teal-400 font-bold font-mono">S - Situation:</span>
-                      <p className="text-slate-200 mt-1">{sbar.situation}</p>
-                    </div>
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedSbarIdForView('ALL')}
+                      className={`px-3 py-1 rounded-lg text-xs font-mono transition-all cursor-pointer flex-shrink-0 ${
+                        selectedSbarIdForView === 'ALL'
+                          ? 'bg-teal-500 text-slate-950 font-black shadow'
+                          : 'bg-slate-900 text-slate-300 border border-slate-800 hover:bg-slate-800'
+                      }`}
+                    >
+                      {lang === 'ar' ? 'عرض جميع التقارير (All)' : 'All Reports'} ({sbarList.length})
+                    </button>
 
-                    <div className="bg-[#0a101f] p-3 rounded-lg">
-                      <span className="text-cyan-400 font-bold font-mono">B - Background:</span>
-                      <p className="text-slate-200 mt-1">{sbar.background}</p>
-                    </div>
+                    {sbarList.map((sbar, idx) => {
+                      const isSelected = selectedSbarIdForView === sbar.id;
+                      return (
+                        <button
+                          key={sbar.id || idx}
+                          type="button"
+                          onClick={() => setSelectedSbarIdForView(sbar.id)}
+                          className={`px-3 py-1 rounded-lg text-xs font-mono transition-all cursor-pointer flex-shrink-0 flex items-center gap-1.5 ${
+                            isSelected
+                              ? 'bg-teal-950 text-teal-300 border border-teal-500 font-bold shadow-md'
+                              : 'bg-slate-900 text-slate-300 border border-slate-800 hover:bg-slate-800'
+                          }`}
+                        >
+                          <span className={`px-1 py-0.2 text-[9px] font-bold rounded ${
+                            sbar.shiftType === 'NIGHT' ? 'bg-indigo-900/80 text-indigo-200' : 'bg-amber-900/80 text-amber-200'
+                          }`}>
+                            {sbar.shiftType}
+                          </span>
+                          <span className="font-bold text-white">{sbar.shiftDate}</span>
+                          <span className="text-slate-400">({sbar.shiftStartTime} - {sbar.shiftEndTime})</span>
+                          <span className="text-slate-500">•</span>
+                          <span className="text-teal-300 font-sans font-medium">{sbar.outgoingDoctor.name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
-                    <div className="bg-[#0a101f] p-3 rounded-lg">
-                      <span className="text-amber-400 font-bold font-mono">A - Assessment:</span>
-                      <div className="text-slate-200 mt-1 space-y-0.5">
-                        <div>• {sbar.assessment.hemodynamics}</div>
-                        <div>• {sbar.assessment.pulmonaryAndAirway}</div>
-                        <div>• {sbar.assessment.metabolicAndRenal}</div>
+              {/* Handover Cards Display */}
+              {sbarList.length > 0 ? (
+                (selectedSbarIdForView === 'ALL' 
+                  ? sbarList 
+                  : sbarList.filter(s => s.id === selectedSbarIdForView)
+                ).map((sbar) => (
+                  <div 
+                    key={sbar.id}
+                    className="bg-[#070c18] border border-slate-800 p-4 rounded-xl space-y-3 shadow-md"
+                  >
+                    <div className="flex items-center justify-between border-b border-slate-800/80 pb-2.5 flex-wrap gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`font-mono text-xs font-bold px-2 py-0.5 rounded border ${
+                          sbar.shiftType === 'NIGHT' 
+                            ? 'bg-indigo-950 text-indigo-300 border-indigo-800' 
+                            : 'bg-amber-950 text-amber-300 border-amber-800'
+                        }`}>
+                          {sbar.shiftType} SHIFT
+                        </span>
+                        <span className="text-xs text-slate-300 font-mono font-bold">
+                          {sbar.shiftDate} ({sbar.shiftStartTime} - {sbar.shiftEndTime})
+                        </span>
+                        <span className="text-slate-600">•</span>
+                        <span className="text-xs text-teal-300">
+                          {lang === 'ar' ? 'المُسلِّم: ' : 'Outgoing: '}
+                          <strong className="text-white">{sbar.outgoingDoctor.name}</strong> ({sbar.outgoingDoctor.role})
+                        </span>
+                        {sbar.incomingDoctor && (
+                          <span className="text-xs text-slate-400">
+                            → {lang === 'ar' ? 'المُستلِم: ' : 'Incoming: '}
+                            <strong className="text-slate-200">{sbar.incomingDoctor.name}</strong>
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {/* Clone/Template Action */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedTemplateSbar(sbar);
+                            setIsBedsideSbarModalOpen(true);
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-teal-950 hover:bg-teal-900 border border-teal-700/80 text-teal-300 text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer active:scale-95"
+                          title={lang === 'ar' ? 'استخدام هذا التقرير كمسوّدة لتسليم جديد' : 'Use this report as a template for new handover'}
+                        >
+                          <Sparkles className="w-3 h-3 text-teal-400" />
+                          <span>{lang === 'ar' ? 'استخدام كقالب لمناوبة جديدة' : 'Use as Template'}</span>
+                        </button>
+
+                        <div className="flex items-center gap-1 text-[11px] text-emerald-400 font-mono bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-900/60">
+                          <Lock className="w-3 h-3" />
+                          <span>{sbar.cryptographicHash ? sbar.cryptographicHash.slice(0, 12) : 'HASH'}...</span>
+                        </div>
                       </div>
                     </div>
 
-                    <div className="bg-[#0a101f] p-3 rounded-lg">
-                      <span className="text-emerald-400 font-bold font-mono">R - Recommendation:</span>
-                      <ul className="text-slate-200 mt-1 list-disc list-inside space-y-0.5">
-                        {sbar.recommendationAndOrders.map((rec, idx) => (
-                          <li key={idx}>{rec}</li>
-                        ))}
-                      </ul>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                      {/* S - Situation */}
+                      <div className="bg-[#0a101f] p-3 rounded-lg border border-teal-900/40">
+                        <div className="flex items-center gap-1.5 text-teal-400 font-bold font-mono">
+                          <span className="w-4 h-4 rounded-full bg-teal-500/20 flex items-center justify-center text-[10px]">S</span>
+                          <span>Situation (الموقف الحالي):</span>
+                        </div>
+                        <p className="text-slate-200 mt-1.5 leading-relaxed">{sbar.situation}</p>
+                      </div>
+
+                      {/* B - Background */}
+                      <div className="bg-[#0a101f] p-3 rounded-lg border border-cyan-900/40">
+                        <div className="flex items-center gap-1.5 text-cyan-400 font-bold font-mono">
+                          <span className="w-4 h-4 rounded-full bg-cyan-500/20 flex items-center justify-center text-[10px]">B</span>
+                          <span>Background (الخلفية المرضية):</span>
+                        </div>
+                        <p className="text-slate-200 mt-1.5 leading-relaxed">{sbar.background}</p>
+                      </div>
+
+                      {/* A - Assessment */}
+                      <div className="bg-[#0a101f] p-3 rounded-lg border border-amber-900/40">
+                        <div className="flex items-center gap-1.5 text-amber-400 font-bold font-mono">
+                          <span className="w-4 h-4 rounded-full bg-amber-500/20 flex items-center justify-center text-[10px]">A</span>
+                          <span>Assessment (التقييم السريري):</span>
+                        </div>
+                        <div className="text-slate-200 mt-1.5 space-y-1">
+                          <div className="text-[11px]"><strong className="text-red-300">• الدورة والضغط:</strong> {sbar.assessment.hemodynamics}</div>
+                          <div className="text-[11px]"><strong className="text-cyan-300">• الرئة والتنفس:</strong> {sbar.assessment.pulmonaryAndAirway}</div>
+                          <div className="text-[11px]"><strong className="text-amber-300">• الكلى والسوائل:</strong> {sbar.assessment.metabolicAndRenal}</div>
+                          {sbar.assessment.neurologyAndSedation && (
+                            <div className="text-[11px]"><strong className="text-indigo-300">• الأعصاب والمهدئات:</strong> {sbar.assessment.neurologyAndSedation}</div>
+                          )}
+                          {sbar.assessment.infectiousDiseaseAndAntibiotics && (
+                            <div className="text-[11px]"><strong className="text-emerald-300">• الحرارة والمضادات:</strong> {sbar.assessment.infectiousDiseaseAndAntibiotics}</div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* R - Recommendation */}
+                      <div className="bg-[#0a101f] p-3 rounded-lg border border-emerald-900/40">
+                        <div className="flex items-center gap-1.5 text-emerald-400 font-bold font-mono">
+                          <span className="w-4 h-4 rounded-full bg-emerald-500/20 flex items-center justify-center text-[10px]">R</span>
+                          <span>Recommendation (الخطة والأوامر):</span>
+                        </div>
+                        <ul className="text-slate-200 mt-1.5 space-y-1">
+                          {sbar.recommendationAndOrders.map((rec, idx) => (
+                            <li key={idx} className="text-[11px] flex items-start gap-1.5">
+                              <span className="text-emerald-400 font-bold">•</span>
+                              <span>{rec}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
                     </div>
                   </div>
-
-                  <div className="text-[11px] text-slate-400 flex items-center justify-between pt-1">
-                    <span>{lang === 'ar' ? 'المُسَلِّم:' : 'Outgoing:'} <strong className="text-slate-200">{sbar.outgoingDoctor.name}</strong></span>
-                    {sbar.incomingDoctor && (
-                      <span>{lang === 'ar' ? 'المُستَلِم:' : 'Incoming:'} <strong className="text-slate-200">{sbar.incomingDoctor.name}</strong></span>
-                    )}
-                  </div>
-                </div>
-              )) : (
-                <div className="p-6 text-center text-slate-400 bg-slate-950/40 rounded-xl border border-slate-800">
-                  {lang === 'ar' ? 'لا توجد تقارير تسليم مناوبة مسجلة.' : 'No shift handover reports recorded.'}
+                ))
+              ) : (
+                <div className="p-6 text-center text-slate-400 bg-slate-950/40 rounded-xl border border-slate-800 space-y-3">
+                  <div>{lang === 'ar' ? 'لا توجد تقارير تسليم مناوبة مسجلة لهذا المريض بعد.' : 'No shift handover reports recorded yet for this patient.'}</div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedTemplateSbar(null);
+                      setIsBedsideSbarModalOpen(true);
+                    }}
+                    className="px-4 py-2 rounded-xl bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 border border-teal-500/40 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>{lang === 'ar' ? 'تسليم مناوبة جديد وتوثيق SBAR' : 'Create First SBAR Handover'}</span>
+                  </button>
                 </div>
               )}
             </div>
@@ -3632,12 +3887,17 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       {/* Fluid Balance 24h Tracker Modal */}
       <FluidBalanceModal
         isOpen={isFluidModalOpen}
-        onClose={() => setIsFluidModalOpen(false)}
+        onClose={() => {
+          setIsFluidModalOpen(false);
+          setSelectedFluidBalanceForEdit(null);
+        }}
         bedNumber={bed.bedNumber}
         patient={patient}
-        initialFluidBalance={fluidBalance}
+        initialFluidBalance={selectedFluidBalanceForEdit}
+        allFluidBalances={allFluidBalances}
         onSaved={() => {
           setIsFluidModalOpen(false);
+          setSelectedFluidBalanceForEdit(null);
           loadBedsideData();
           onDataUpdated();
         }}
@@ -3670,13 +3930,44 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
         }}
         onOpenAddSbar={() => {
           setIsCardsConfigModalOpen(false);
-          onOpenSbarSign();
+          setSelectedTemplateSbar(null);
+          setIsBedsideSbarModalOpen(true);
         }}
         onOpenAddLab={() => {
           setIsCardsConfigModalOpen(false);
           setIsAddLabModalOpen(true);
         }}
       />
+
+      {/* SBAR Shift Handover Modal for Bedside */}
+      {isBedsideSbarModalOpen && (
+        <SbarSignModal
+          isOpen={isBedsideSbarModalOpen}
+          onClose={() => {
+            setIsBedsideSbarModalOpen(false);
+            setSelectedTemplateSbar(null);
+          }}
+          bedNumber={bed.bedNumber}
+          patientId={patient.id}
+          patientName={patient.fullNameAr || patient.fullNameEn}
+          primaryDiagnosis={patient.primaryDiagnosisAr || patient.primaryDiagnosisEn}
+          codeStatus={patient.codeStatus}
+          patient={patient}
+          currentVitals={vitalsHistory[0] || null}
+          currentVentilator={ventilator}
+          currentPumps={pumps}
+          currentFluidBalance={fluidBalance}
+          currentLabs={labsList}
+          previousHandovers={sbarList}
+          templateSbar={selectedTemplateSbar}
+          onHandoverSigned={() => {
+            loadBedsideData();
+            onDataUpdated();
+            setIsBedsideSbarModalOpen(false);
+            setSelectedTemplateSbar(null);
+          }}
+        />
+      )}
     </div>
   );
 };

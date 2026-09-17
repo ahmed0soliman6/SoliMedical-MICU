@@ -260,7 +260,7 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
     try {
       const userDisplay = currentUser?.nameAr || currentUser?.nameEn || 'الطبيب المناوب';
       const labId = `lab-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
-      const preset = dynamicPresets.find(p => p.name.toLowerCase() === testName.toLowerCase());
+      const preset = dynamicPresets.find(p => (p?.name || '').toLowerCase() === (testName || '').toLowerCase());
 
       const newRecord: LabResultItem = {
         id: labId,

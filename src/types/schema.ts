@@ -397,6 +397,10 @@ export interface FluidBalance24H {
     bloodProductsMl: number;
     oralFluidsMl: number;
     totalIntakeMl: number;
+    prbcMl?: number;
+    ffpPlasmaMl?: number;
+    plateletsMl?: number;
+    cryoMl?: number;
   };
   outputBreakdown: {
     urineOutputMl: number;
@@ -406,6 +410,12 @@ export interface FluidBalance24H {
     surgicalDrainageMl: number;
     insensibleLossMl?: number;
     totalOutputMl: number;
+  };
+  transfusionProductsGiven?: {
+    prbcUnits?: number;
+    ffpUnits?: number;
+    plateletsUnits?: number;
+    cryoUnits?: number;
   };
   netCumulativeBalanceMl: number; // Intake - Output (+ve / -ve)
   recordedByStaffName: string;
@@ -702,6 +712,34 @@ export interface WardAuditLog {
   targetPatientMrn?: string;
   description: string;
   immutableHash: string;
+}
+
+export interface PatientAntibiotic {
+  id: string;
+  patientId: string;
+  bedNumber: BedNumber | string;
+  drugNameEn: string;
+  drugNameAr: string;
+  dose: string; // e.g. "1 g", "4.5 g", "500 mg"
+  route: 'IV' | 'PO' | 'Inhalation' | 'Intrathecal' | 'Topical' | 'IM' | string;
+  frequency: 'Q6H' | 'Q8H' | 'Q12H' | 'Q24H' | 'Q48H' | 'Continuous Infusion' | 'Stat Dose' | 'Post-HD' | string;
+  indication: string; // e.g. "VAP / Sepsis", "Septic Shock", "Intra-abdominal Sepsis", "Empirical Broad-Spectrum", "Targeted MDR"
+  category?: string; // Beta-Lactam / Carbapenem, Glycopeptide, Aminoglycoside, etc.
+  startDate: string; // ISO date or YYYY-MM-DD
+  plannedDurationDays: number; // e.g. 7 or 14
+  status: 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'DISCONTINUED';
+  renalAdjustment?: string; // e.g. "Adjusted for eGFR < 30 mL/min", "Normal Renal Function"
+  requiresTdm?: boolean;
+  tdmTarget?: string; // e.g. "Trough 15-20 mcg/mL"
+  latestTdmLevel?: string;
+  latestTdmTimestamp?: string;
+  prescribedByDoctorName?: string;
+  administeredByRN?: string;
+  notes?: string;
+  discontinuedAt?: string;
+  discontinueReason?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // -------------------------------------------------------------

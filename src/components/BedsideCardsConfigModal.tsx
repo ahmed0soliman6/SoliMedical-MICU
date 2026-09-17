@@ -13,7 +13,8 @@ import {
   FileText, 
   Sparkles,
   RotateCcw,
-  Microscope
+  Microscope,
+  Pill
 } from 'lucide-react';
 import { BedNumber } from '../types/schema.ts';
 import { useTranslation } from '../services/i18n.ts';
@@ -23,6 +24,7 @@ export interface BedsideCardsConfig {
   showInfusionPumpsCard: boolean;
   showFluidBalanceCard: boolean;
   showLabsCard: boolean;
+  showAntibioticsCard: boolean;
   showVitalsCard: boolean;
   showSbarCard: boolean;
   showInvestigationsCard: boolean;
@@ -33,6 +35,7 @@ export const DEFAULT_BEDSIDE_CARDS_CONFIG: BedsideCardsConfig = {
   showInfusionPumpsCard: true,
   showFluidBalanceCard: true,
   showLabsCard: true,
+  showAntibioticsCard: true,
   showVitalsCard: true,
   showSbarCard: true,
   showInvestigationsCard: true,
@@ -124,6 +127,15 @@ export const BedsideCardsConfigModal: React.FC<BedsideCardsConfigModalProps> = (
       descEn: 'Display sequential lab columns, blood gases, coagulation, and trend analysis',
       icon: <FlaskConical className="w-5 h-5 text-purple-400" />,
       color: 'border-purple-500/40 bg-purple-950/20',
+    },
+    {
+      key: 'showAntibioticsCard',
+      titleAr: 'بطاقة المضادات الحيوية والبروتوكول العلاجي',
+      titleEn: 'Active Antibiotics & Antimicrobial Therapy',
+      descAr: 'عرض وإدارة المضادات الحيوية، الجرعات، التعديل الكلوي، أيام العلاج (DOT)، وتحاليل مستوى الدواء TDM',
+      descEn: 'Display and manage active antibiotics, Day of Therapy (DOT), renal adjustment, and TDM levels',
+      icon: <Pill className="w-5 h-5 text-amber-400" />,
+      color: 'border-amber-500/40 bg-amber-950/20',
     },
     {
       key: 'showVitalsCard',

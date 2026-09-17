@@ -17,6 +17,7 @@ import {
   WardAuditLog,
   LabResultItem,
   InvestigationItem,
+  PatientAntibiotic,
   Gender,
   CodeStatus,
   IntakePathway,
@@ -40,6 +41,7 @@ export class IcuSyncDatabase extends Dexie {
   auditLogs!: Table<WardAuditLog, string>;
   labResults!: Table<LabResultItem, string>;
   investigations!: Table<InvestigationItem, string>;
+  patientAntibiotics!: Table<PatientAntibiotic, string>;
 
   constructor() {
     super('SoliMedicalIcuSyncDB');
@@ -66,6 +68,10 @@ export class IcuSyncDatabase extends Dexie {
 
     this.version(3).stores({
       patients: 'id, mrn, fullNameEn, fullNameAr, patientStatus, currentBedId',
+    });
+
+    this.version(4).stores({
+      patientAntibiotics: 'id, patientId, bedNumber, drugNameEn, status, startDate',
     });
   }
 }
@@ -361,6 +367,162 @@ export async function initializeDatabaseSeed(): Promise<void> {
     ];
 
     await db.investigations.bulkPut(sampleInv);
+
+    // Seed initial active antibiotics for Bed 01 & Bed 02
+    const sampleAntibiotics: PatientAntibiotic[] = [
+      {
+        id: 'abx-bed01-mero',
+        patientId: 'pat-bed-01',
+        bedNumber: '01',
+        drugNameEn: 'Meropenem',
+        drugNameAr: 'ميروبينيم',
+        dose: '1 g',
+        route: 'IV',
+        frequency: 'Q8H (Extended 3h Infusion)',
+        indication: 'Severe Sepsis & Ventilator-Associated Pneumonia (VAP)',
+        category: 'Beta-Lactam / Carbapenem',
+        startDate: threeDaysAgo.slice(0, 10),
+        plannedDurationDays: 7,
+        status: 'ACTIVE',
+        renalAdjustment: 'Normal renal dose (CrCl > 50 mL/min)',
+        requiresTdm: false,
+        prescribedByDoctorName: 'Dr. Tarek Mansour (Consultant)',
+        administeredByRN: 'RN Sarah Jenkins',
+        notes: 'Extended 3-hour infusion protocol for optimal MIC time-dependent killing.',
+        createdAt: threeDaysAgo,
+        updatedAt: today,
+      },
+      {
+        id: 'abx-bed01-vanco',
+        patientId: 'pat-bed-01',
+        bedNumber: '01',
+        drugNameEn: 'Vancomycin',
+        drugNameAr: 'فانكومايسين',
+        dose: '1 g',
+        route: 'IV',
+        frequency: 'Q12H (Slow 2h infusion)',
+        indication: 'Empirical MRSA coverage & Catheter Sepsis',
+        category: 'Glycopeptide / Lipopeptide',
+        startDate: threeDaysAgo.slice(0, 10),
+        plannedDurationDays: 7,
+        status: 'ACTIVE',
+        renalAdjustment: 'Dose adjusted based on trough monitoring',
+        requiresTdm: true,
+        tdmTarget: 'Trough Target: 15 - 20 mcg/mL',
+        latestTdmLevel: '16.8 mcg/mL',
+        latestTdmTimestamp: twoDaysAgo,
+        prescribedByDoctorName: 'Dr. Hesham Talaat (ICU Specialist)',
+        administeredByRN: 'RN Sarah Jenkins',
+        notes: 'Trough level 16.8 mcg/mL within therapeutic target. Next trough due tomorrow morning.',
+        createdAt: threeDaysAgo,
+        updatedAt: today,
+      },
+      {
+        id: 'abx-bed02-tazo',
+        patientId: 'pat-bed-02',
+        bedNumber: '02',
+        drugNameEn: 'Piperacillin / Tazobactam (Tazocin)',
+        drugNameAr: 'بيبراسيلين / تازوباكتام (تازوسين)',
+        dose: '4.5 g',
+        route: 'IV',
+        frequency: 'Q6H',
+        indication: 'Complicated Intra-Abdominal Sepsis Post-Op',
+        category: 'Beta-Lactam / Carbapenem',
+        startDate: twoDaysAgo.slice(0, 10),
+        plannedDurationDays: 7,
+        status: 'ACTIVE',
+        renalAdjustment: 'CrCl > 50 mL/min standard dosing',
+        requiresTdm: false,
+        prescribedByDoctorName: 'Dr. Hesham Talaat',
+        administeredByRN: 'RN Ahmed Khaled',
+        notes: 'Post-exploratory laparotomy broad spectrum coverage.',
+        createdAt: twoDaysAgo,
+        updatedAt: today,
+      }
+    ];
+
+    await db.patientAntibiotics.bulkPut(sampleAntibiotics);
+  } else {
+    // Check if antibiotics table needs initial seed if empty
+    const abxCount = await db.patientAntibiotics.count();
+    if (abxCount === 0) {
+      const now = new Date();
+      const threeDaysAgo = new Date(now.getTime() - 3 * 86400000).toISOString();
+      const twoDaysAgo = new Date(now.getTime() - 2 * 86400000).toISOString();
+      const today = now.toISOString();
+
+      await db.patientAntibiotics.bulkPut([
+        {
+          id: 'abx-bed01-mero',
+          patientId: 'pat-bed-01',
+          bedNumber: '01',
+          drugNameEn: 'Meropenem',
+          drugNameAr: 'ميروبينيم',
+          dose: '1 g',
+          route: 'IV',
+          frequency: 'Q8H (Extended 3h Infusion)',
+          indication: 'Severe Sepsis & Ventilator-Associated Pneumonia (VAP)',
+          category: 'Beta-Lactam / Carbapenem',
+          startDate: threeDaysAgo.slice(0, 10),
+          plannedDurationDays: 7,
+          status: 'ACTIVE',
+          renalAdjustment: 'Normal renal dose (CrCl > 50 mL/min)',
+          requiresTdm: false,
+          prescribedByDoctorName: 'Dr. Tarek Mansour (Consultant)',
+          administeredByRN: 'RN Sarah Jenkins',
+          notes: 'Extended 3-hour infusion protocol for optimal MIC time-dependent killing.',
+          createdAt: threeDaysAgo,
+          updatedAt: today,
+        },
+        {
+          id: 'abx-bed01-vanco',
+          patientId: 'pat-bed-01',
+          bedNumber: '01',
+          drugNameEn: 'Vancomycin',
+          drugNameAr: 'فانكومايسين',
+          dose: '1 g',
+          route: 'IV',
+          frequency: 'Q12H (Slow 2h infusion)',
+          indication: 'Empirical MRSA coverage & Catheter Sepsis',
+          category: 'Glycopeptide / Lipopeptide',
+          startDate: threeDaysAgo.slice(0, 10),
+          plannedDurationDays: 7,
+          status: 'ACTIVE',
+          renalAdjustment: 'Dose adjusted based on trough monitoring',
+          requiresTdm: true,
+          tdmTarget: 'Trough Target: 15 - 20 mcg/mL',
+          latestTdmLevel: '16.8 mcg/mL',
+          latestTdmTimestamp: twoDaysAgo,
+          prescribedByDoctorName: 'Dr. Hesham Talaat (ICU Specialist)',
+          administeredByRN: 'RN Sarah Jenkins',
+          notes: 'Trough level 16.8 mcg/mL within therapeutic target. Next trough due tomorrow morning.',
+          createdAt: threeDaysAgo,
+          updatedAt: today,
+        },
+        {
+          id: 'abx-bed02-tazo',
+          patientId: 'pat-bed-02',
+          bedNumber: '02',
+          drugNameEn: 'Piperacillin / Tazobactam (Tazocin)',
+          drugNameAr: 'بيبراسيلين / تازوباكتام (تازوسين)',
+          dose: '4.5 g',
+          route: 'IV',
+          frequency: 'Q6H',
+          indication: 'Complicated Intra-Abdominal Sepsis Post-Op',
+          category: 'Beta-Lactam / Carbapenem',
+          startDate: twoDaysAgo.slice(0, 10),
+          plannedDurationDays: 7,
+          status: 'ACTIVE',
+          renalAdjustment: 'CrCl > 50 mL/min standard dosing',
+          requiresTdm: false,
+          prescribedByDoctorName: 'Dr. Hesham Talaat',
+          administeredByRN: 'RN Ahmed Khaled',
+          notes: 'Post-exploratory laparotomy broad spectrum coverage.',
+          createdAt: twoDaysAgo,
+          updatedAt: today,
+        }
+      ]);
+    }
   }
 
   // Reconcile and synchronize bed occupancy state with active patients in IndexedDB

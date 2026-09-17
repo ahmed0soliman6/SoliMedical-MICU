@@ -11,6 +11,7 @@ export interface SystemFeatureFlags {
   enableVentilatorParameters: boolean;// إعدادات جهاز التنفس الصناعي (Ventilator)
   enableInfusionPumps: boolean;       // مضخات التسريب الوريدي والأدوية الحركية الوعائية
   enableFluidBalance: boolean;        // ميزان السوائل 24 ساعة (I/O Balance)
+  enableAntibioticsCard: boolean;     // بطاقة ومضادات المريض الحيوية وبروتوكولات مكافحة العدوى
   enableLabFlowsheet: boolean;        // جدول ومسار التحاليل المتسلسلة التراكمية
   enableInvestigations: boolean;      // الفحوصات والأشعات وتصوير الموجات الصوتية
   enableAiLabScanner: boolean;        // التعرف البصري الذكي وقراءة التحاليل بالذكاء الاصطناعي (ABG & CBC OCR)
@@ -75,6 +76,21 @@ export interface FluidCategoryPreset {
   defaultMl?: number;
 }
 
+export interface AntibioticPreset {
+  id: string;
+  nameEn: string;
+  nameAr: string;
+  defaultDose: string;
+  defaultRoute: 'IV' | 'PO' | 'Inhalation' | 'Intrathecal' | 'IM';
+  defaultFrequency: string;
+  defaultDurationDays: number;
+  category: 'Beta-Lactam / Carbapenem' | 'Glycopeptide / Lipopeptide' | 'Aminoglycoside' | 'Fluoroquinolone' | 'Macrolide' | 'Antifungal' | 'Polymyxin' | 'Other';
+  renalAdjustmentNotes?: string;
+  requiresTdm?: boolean;
+  tdmTarget?: string;
+  standardIndication?: string;
+}
+
 export interface SystemSettings {
   language: 'en' | 'ar';
   features: SystemFeatureFlags;
@@ -83,6 +99,7 @@ export interface SystemSettings {
   infusionDrugs?: InfusionDrugPreset[];
   ventilatorModes?: VentilatorModePreset[];
   fluidCategories?: FluidCategoryPreset[];
+  antibioticsPresets?: AntibioticPreset[];
   lastUpdated: string;
 }
 
@@ -126,6 +143,193 @@ export const DEFAULT_FLUID_CATEGORIES: FluidCategoryPreset[] = [
   { id: 'insensibleLoss', type: 'output', labelEn: 'Insensible Loss (Perspiration/Resp)', labelAr: 'الفقدان غير المحسوس (تنفس وعرق)', defaultMl: 500 },
 ];
 
+export const DEFAULT_ANTIBIOTIC_PRESETS: AntibioticPreset[] = [
+  {
+    id: 'meropenem',
+    nameEn: 'Meropenem',
+    nameAr: 'ميروبينيم',
+    defaultDose: '1 g',
+    defaultRoute: 'IV',
+    defaultFrequency: 'Q8H (Extended 3h Infusion)',
+    defaultDurationDays: 7,
+    category: 'Beta-Lactam / Carbapenem',
+    renalAdjustmentNotes: 'eGFR 26-50: 1g Q12H; eGFR 10-25: 500mg Q12H; eGFR < 10: 500mg Q24H',
+    requiresTdm: false,
+    standardIndication: 'Severe Sepsis, VAP, Intra-abdominal MDR Gram-Negative Coverage',
+  },
+  {
+    id: 'tazocin',
+    nameEn: 'Piperacillin / Tazobactam (Tazocin)',
+    nameAr: 'بيبراسيلين / تازوباكتام (تازوسين)',
+    defaultDose: '4.5 g',
+    defaultRoute: 'IV',
+    defaultFrequency: 'Q6H (or 4.5g Q8H 4h infusion)',
+    defaultDurationDays: 7,
+    category: 'Beta-Lactam / Carbapenem',
+    renalAdjustmentNotes: 'CrCl 20-50: 3.375g Q6H; CrCl < 20: 2.25g Q6H; HD: 2.25g Q8H + 0.75g post-HD',
+    requiresTdm: false,
+    standardIndication: 'Hospital Acquired Pneumonia, Pseudomonal Sepsis, Intra-abdominal',
+  },
+  {
+    id: 'vancomycin',
+    nameEn: 'Vancomycin',
+    nameAr: 'فانكومايسين',
+    defaultDose: '1 g (15-20 mg/kg)',
+    defaultRoute: 'IV',
+    defaultFrequency: 'Q12H (Slow 2h infusion)',
+    defaultDurationDays: 7,
+    category: 'Glycopeptide / Lipopeptide',
+    renalAdjustmentNotes: 'Strict TDM required. Adjust interval based on trough and eGFR (Q24H or Q48H in renal impairment)',
+    requiresTdm: true,
+    tdmTarget: 'Trough: 15 - 20 mcg/mL (AUC/MIC: 400 - 600)',
+    standardIndication: 'MRSA Sepsis, Catheter-Related Bloodstream Infection (CRBSI), Meningitis',
+  },
+  {
+    id: 'colistin',
+    nameEn: 'Colistin (Colistimethate Sodium)',
+    nameAr: 'كوليستين (مضاد البكتيريا المقاومة)',
+    defaultDose: '3 MIU (Loading: 9 MIU)',
+    defaultRoute: 'IV',
+    defaultFrequency: 'Q8H',
+    defaultDurationDays: 10,
+    category: 'Polymyxin',
+    renalAdjustmentNotes: 'CrCl 30-50: 2-3 MIU Q12H; CrCl 10-30: 1.5-2 MIU Q12-24H; Monitor Nephrotoxicity',
+    requiresTdm: false,
+    standardIndication: 'Carbapenem-Resistant Acinetobacter baumannii (CRAB) / CRE Sepsis',
+  },
+  {
+    id: 'ceftriaxone',
+    nameEn: 'Ceftriaxone (Rocephin)',
+    nameAr: 'سيفترياكسون',
+    defaultDose: '2 g',
+    defaultRoute: 'IV',
+    defaultFrequency: 'Q24H (Q12H for CNS/Meningitis)',
+    defaultDurationDays: 5,
+    category: 'Beta-Lactam / Carbapenem',
+    renalAdjustmentNotes: 'No adjustment needed in renal failure (biliary excretion). Max 2g/day if combined renal+hepatic failure',
+    requiresTdm: false,
+    standardIndication: 'Community-Acquired Pneumonia, Pyelonephritis, Meningitis, Biliary Sepsis',
+  },
+  {
+    id: 'levofloxacin',
+    nameEn: 'Levofloxacin (Tavanic)',
+    nameAr: 'ليفوفلوكساسين',
+    defaultDose: '750 mg',
+    defaultRoute: 'IV',
+    defaultFrequency: 'Q24H',
+    defaultDurationDays: 7,
+    category: 'Fluoroquinolone',
+    renalAdjustmentNotes: 'CrCl 20-49: 750mg Q48H or 500mg initial then 250mg Q24H; CrCl < 20: 750mg initial then 500mg Q48H',
+    requiresTdm: false,
+    standardIndication: 'Atypical & Legionella Pneumonia, Complicated UTI, Severe CAP',
+  },
+  {
+    id: 'linezolid',
+    nameEn: 'Linezolid (Zyvox)',
+    nameAr: 'لينيزوليد (زيفوكس)',
+    defaultDose: '600 mg',
+    defaultRoute: 'IV',
+    defaultFrequency: 'Q12H',
+    defaultDurationDays: 7,
+    category: 'Other',
+    renalAdjustmentNotes: 'No dose adjustment required for renal impairment. Monitor platelets for myelosuppression if > 14 days',
+    requiresTdm: false,
+    standardIndication: 'MRSA / VRE Pneumonia, Skin & Soft Tissue Infection with Vancomycin intolerance',
+  },
+  {
+    id: 'amikacin',
+    nameEn: 'Amikacin',
+    nameAr: 'أميكاسين',
+    defaultDose: '1 g (15-20 mg/kg once daily)',
+    defaultRoute: 'IV',
+    defaultFrequency: 'Q24H',
+    defaultDurationDays: 5,
+    category: 'Aminoglycoside',
+    renalAdjustmentNotes: 'Dose by extended interval. Trough level < 5 mcg/mL; Peak 20-30 mcg/mL. High nephro/ototoxicity vigilance',
+    requiresTdm: true,
+    tdmTarget: 'Trough < 2.5 - 5 mcg/mL, Peak 25 - 35 mcg/mL',
+    standardIndication: 'Synergistic therapy for Gram-Negative Septic Shock / MDR Pseudomonas',
+  },
+  {
+    id: 'fluconazole',
+    nameEn: 'Fluconazole (Diflucan)',
+    nameAr: 'فلوكونازول (ديفلوكان)',
+    defaultDose: '400 mg (Loading: 800 mg)',
+    defaultRoute: 'IV',
+    defaultFrequency: 'Q24H',
+    defaultDurationDays: 14,
+    category: 'Antifungal',
+    renalAdjustmentNotes: 'CrCl ≤ 50 mL/min (no HD): reduce dose by 50% (200mg Q24H); HD: full dose after dialysis',
+    requiresTdm: false,
+    standardIndication: 'Invasive Candidiasis, Candidemia, Fungal Prophylaxis in high-risk ICU',
+  },
+  {
+    id: 'caspofungin',
+    nameEn: 'Caspofungin (Cancidas)',
+    nameAr: 'كاسبوفنجين',
+    defaultDose: '50 mg (Loading: 70 mg Day 1)',
+    defaultRoute: 'IV',
+    defaultFrequency: 'Q24H',
+    defaultDurationDays: 14,
+    category: 'Antifungal',
+    renalAdjustmentNotes: 'No renal dose adjustment. Moderate hepatic impairment (Child-Pugh 7-9): 35 mg Q24H after 70mg loading',
+    requiresTdm: false,
+    standardIndication: 'Empirical treatment in febrile neutropenic patients, Invasive Aspergillosis / Candidiasis',
+  },
+  {
+    id: 'tigecycline',
+    nameEn: 'Tigecycline (Tygacil)',
+    nameAr: 'تيجيسيكلين (تايجاسيل)',
+    defaultDose: '50 mg (Loading: 100 mg Day 1)',
+    defaultRoute: 'IV',
+    defaultFrequency: 'Q12H',
+    defaultDurationDays: 7,
+    category: 'Other',
+    renalAdjustmentNotes: 'No renal adjustment needed. Avoid in bacteremia (rapid tissue distribution / low serum levels)',
+    requiresTdm: false,
+    standardIndication: 'Complicated Intra-Abdominal Infections, MDR Acinetobacter & ESBL soft tissue coverage',
+  },
+  {
+    id: 'metronidazole',
+    nameEn: 'Metronidazole (Flagyl)',
+    nameAr: 'مترونيدازول (فلاجيل)',
+    defaultDose: '500 mg',
+    defaultRoute: 'IV',
+    defaultFrequency: 'Q8H',
+    defaultDurationDays: 7,
+    category: 'Other',
+    renalAdjustmentNotes: 'CrCl < 10: 50% dose. Severe hepatic impairment: reduce dose by 50%',
+    requiresTdm: false,
+    standardIndication: 'Anaerobic coverage, Intra-abdominal sepsis, Clostridioides difficile, Aspiration pneumonia',
+  },
+  {
+    id: 'cefepime',
+    nameEn: 'Cefepime (Maxipime)',
+    nameAr: 'سيفيبيم',
+    defaultDose: '2 g',
+    defaultRoute: 'IV',
+    defaultFrequency: 'Q8H',
+    defaultDurationDays: 7,
+    category: 'Beta-Lactam / Carbapenem',
+    renalAdjustmentNotes: 'CrCl 30-50: 2g Q12H; CrCl 11-29: 1g Q12H; CrCl < 11: 500mg Q24H. Watch for Cefepime neurotoxicity!',
+    requiresTdm: false,
+    standardIndication: 'Pseudomonas Aeruginosa, Febrile Neutropenia, Nosocomial Sepsis',
+  },
+  {
+    id: 'azithromycin',
+    nameEn: 'Azithromycin (Zithromax)',
+    nameAr: 'أزيثروميسين',
+    defaultDose: '500 mg',
+    defaultRoute: 'IV',
+    defaultFrequency: 'Q24H',
+    defaultDurationDays: 3,
+    category: 'Macrolide',
+    renalAdjustmentNotes: 'No dose adjustment in renal impairment. Monitor QTc interval on telemetry monitor',
+    requiresTdm: false,
+    standardIndication: 'Atypical coverage for Severe CAP (Legionella, Mycoplasma, Chlamydia)',
+  },
+];
+
 export const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
   language: 'en',
   features: {
@@ -138,6 +342,7 @@ export const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
     enableVentilatorParameters: true,
     enableInfusionPumps: true,
     enableFluidBalance: true,
+    enableAntibioticsCard: true,
     enableLabFlowsheet: true,
     enableInvestigations: true,
     enableAiLabScanner: true,
@@ -247,5 +452,6 @@ export const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
   infusionDrugs: DEFAULT_INFUSION_DRUGS,
   ventilatorModes: DEFAULT_VENTILATOR_MODES,
   fluidCategories: DEFAULT_FLUID_CATEGORIES,
+  antibioticsPresets: DEFAULT_ANTIBIOTIC_PRESETS,
   lastUpdated: new Date().toISOString(),
 };

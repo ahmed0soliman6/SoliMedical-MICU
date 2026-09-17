@@ -33,7 +33,8 @@ import {
   Plus,
   Trash2,
   Edit3,
-  AlertTriangle
+  AlertTriangle,
+  Pill
 } from 'lucide-react';
 import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
@@ -237,6 +238,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
       descriptionEn: 'Hourly intake vs. output calculation with cumulative 24h balance.',
       icon: Droplet,
       color: 'text-sky-400',
+    },
+    {
+      key: 'enableAntibioticsCard',
+      category: 'bedside',
+      labelAr: 'سجل وبروتوكول المضادات الحيوية (Antibiotics & Regimens)',
+      labelEn: 'Antibiotics & Antimicrobial Stewardship',
+      descriptionAr: 'بطاقة متابعة المضادات الحيوية، مدة العلاج DOT، وظائف الكلى، ومستويات الدواء TDM.',
+      descriptionEn: 'Active antimicrobial courses, Day of Therapy counters, and TDM monitoring.',
+      icon: Pill,
+      color: 'text-amber-400',
     },
     {
       key: 'enableAcuityLevels',

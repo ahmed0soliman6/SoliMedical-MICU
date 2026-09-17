@@ -808,11 +808,11 @@ export async function searchPatients(query: string): Promise<PatientDossier[]> {
 
   return await db.patients
     .filter((p) => {
-      const matchMrn = p.mrn.toLowerCase().includes(cleanQuery);
-      const matchEn = p.fullNameEn.toLowerCase().includes(cleanQuery);
-      const matchAr = p.fullNameAr ? p.fullNameAr.toLowerCase().includes(cleanQuery) : false;
-      const matchDiag = p.primaryDiagnosisEn.toLowerCase().includes(cleanQuery);
-      const matchNat = p.nationalId ? p.nationalId.includes(cleanQuery) : false;
+      const matchMrn = (p?.mrn || '').toLowerCase().includes(cleanQuery);
+      const matchEn = (p?.fullNameEn || '').toLowerCase().includes(cleanQuery);
+      const matchAr = p?.fullNameAr ? p.fullNameAr.toLowerCase().includes(cleanQuery) : false;
+      const matchDiag = (p?.primaryDiagnosisEn || '').toLowerCase().includes(cleanQuery);
+      const matchNat = p?.nationalId ? p.nationalId.includes(cleanQuery) : false;
       return matchMrn || matchEn || matchAr || matchDiag || matchNat;
     })
     .toArray();

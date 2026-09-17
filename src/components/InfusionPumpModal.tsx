@@ -184,18 +184,21 @@ export const InfusionPumpModal: React.FC<InfusionPumpModalProps> = ({
 
   const handleDeletePump = async () => {
     if (!editingPump) return;
-    if (!confirm(lang === 'ar' ? 'هل أنت متأكد من إيقاف وحذف هذه المضخة الوريدية؟' : 'Confirm stopping and removing this infusion pump line?')) {
-      return;
-    }
 
     setIsSubmitting(true);
     try {
       await db.infusionPumps.delete(editingPump.id);
       try {
-        const pumpRef = doc(firestore, 'infusion_pumps', editingPump.id);
+        const pumpRef = doc(firestore, 'infusionPumps', editingPump.id);
         await deleteDoc(pumpRef);
       } catch (cloudErr) {
         console.warn('Firestore delete offline sync:', cloudErr);
+      }
+      try {
+        const pumpRefLegacy = doc(firestore, 'infusion_pumps', editingPump.id);
+        await deleteDoc(pumpRefLegacy);
+      } catch {
+        // ignore legacy collection errors
       }
       onSaved();
       onClose();
@@ -274,34 +277,19 @@ export const InfusionPumpModal: React.FC<InfusionPumpModalProps> = ({
             </div>
           )}
 
-          {/* Drug & Carrier */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                {lang === 'ar' ? 'اسم الدواء (Drug Name En):' : 'Medication Name (English):'}
-              </label>
-              <input
-                type="text"
-                value={drugNameEn}
-                onChange={(e) => setDrugNameEn(e.target.value)}
-                placeholder="e.g. Noradrenaline, Propofol..."
-                required
-                className="w-full bg-[#060b17] border border-slate-700 rounded-xl px-3 py-2 text-white font-mono text-xs focus:border-amber-400 focus:outline-none"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                {lang === 'ar' ? 'الاسم بالعربية (اختياري):' : 'Arabic Name (Optional):'}
-              </label>
-              <input
-                type="text"
-                value={drugNameAr}
-                onChange={(e) => setDrugNameAr(e.target.value)}
-                placeholder="مثال: نورأدرينالين، بروبوفول..."
-                className="w-full bg-[#060b17] border border-slate-700 rounded-xl px-3 py-2 text-slate-200 text-xs focus:border-amber-400 focus:outline-none"
-              />
-            </div>
+          {/* Drug Name */}
+          <div>
+            <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+              {lang === 'ar' ? 'اسم الدواء أو المحلول (Medication Name):' : 'Medication Name (English):'}
+            </label>
+            <input
+              type="text"
+              value={drugNameEn}
+              onChange={(e) => setDrugNameEn(e.target.value)}
+              placeholder="e.g. Noradrenaline, Propofol, Dopamine..."
+              required
+              className="w-full bg-[#060b17] border border-slate-700 rounded-xl px-3 py-2 text-white font-mono text-xs focus:border-amber-400 focus:outline-none"
+            />
           </div>
 
           <div>
@@ -315,42 +303,6 @@ export const InfusionPumpModal: React.FC<InfusionPumpModalProps> = ({
               placeholder="e.g. 4 mg in 50 mL D5W (80 mcg/mL)"
               className="w-full bg-[#060b17] border border-slate-700 rounded-xl px-3 py-2 text-slate-300 font-mono text-xs focus:border-amber-400 focus:outline-none"
             />
-          </div>
-
-          {/* Channel & Vascular Access */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                {lang === 'ar' ? 'قناة المضخة (Pump Channel):' : 'Smart Pump Channel:'}
-              </label>
-              <select
-                value={pumpChannel}
-                onChange={(e) => setPumpChannel(e.target.value as any)}
-                className="w-full bg-[#060b17] border border-slate-700 rounded-xl px-3 py-2 text-white font-mono text-xs focus:border-amber-400 focus:outline-none"
-              >
-                <option value="PUMP_A">Channel A (مضخة 1)</option>
-                <option value="PUMP_B">Channel B (مضخة 2)</option>
-                <option value="PUMP_C">Channel C (مضخة 3)</option>
-                <option value="PUMP_D">Channel D (مضخة 4 / سرنجة)</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                {lang === 'ar' ? 'المدخل الوريدي (Line Access):' : 'Vascular Access Line:'}
-              </label>
-              <select
-                value={lineAccessType}
-                onChange={(e) => setLineAccessType(e.target.value as any)}
-                className="w-full bg-[#060b17] border border-slate-700 rounded-xl px-3 py-2 text-white font-mono text-xs focus:border-amber-400 focus:outline-none"
-              >
-                <option value="CVC_LINE_1">CVC Lumen 1 (قسطرة وريدية مركزية 1)</option>
-                <option value="CVC_LINE_2">CVC Lumen 2 (قسطرة وريدية مركزية 2)</option>
-                <option value="CVC_LINE_3">CVC Lumen 3 (قسطرة وريدية مركزية 3)</option>
-                <option value="PERIPHERAL">Peripheral IV (كانولا طرفية)</option>
-                <option value="ARTERIAL">Arterial Line (شرياني)</option>
-              </select>
-            </div>
           </div>
 
           {/* Dosing & Rates */}
@@ -403,51 +355,19 @@ export const InfusionPumpModal: React.FC<InfusionPumpModalProps> = ({
             </div>
           </div>
 
-          {/* Volume & Status */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                {lang === 'ar' ? 'الحجم الكلي VTBI (mL):' : 'Total Volume VTBI (mL):'}
-              </label>
-              <input
-                type="text"
-                inputMode="decimal"
-                value={totalVolumeMl}
-                onChange={(e) => setTotalVolumeMl(toEnglishDigits(e.target.value))}
-                placeholder="50"
-                className="w-full bg-[#060b17] border border-slate-700 rounded-xl px-3 py-2 text-slate-200 font-mono text-xs focus:border-amber-400 focus:outline-none"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                {lang === 'ar' ? 'المتبقي بالسرنجة (mL):' : 'Remaining Volume (mL):'}
-              </label>
-              <input
-                type="text"
-                inputMode="decimal"
-                value={remainingVolumeMl}
-                onChange={(e) => setRemainingVolumeMl(toEnglishDigits(e.target.value))}
-                placeholder="50"
-                className="w-full bg-[#060b17] border border-slate-700 rounded-xl px-3 py-2 text-slate-200 font-mono text-xs focus:border-amber-400 focus:outline-none"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                {lang === 'ar' ? 'حالة المضخة:' : 'Pump Status:'}
-              </label>
-              <select
-                value={status}
-                onChange={(e) => setStatus(e.target.value as any)}
-                className="w-full bg-[#060b17] border border-slate-700 rounded-xl px-3 py-2 text-white font-mono text-xs focus:border-amber-400 focus:outline-none font-bold"
-              >
-                <option value={PumpStatus.RUNNING}>RUNNING (يعمل)</option>
-                <option value={PumpStatus.PAUSED}>PAUSED (متوقف مؤقتاً)</option>
-                <option value={PumpStatus.STOPPED}>STOPPED (مغلق)</option>
-                <option value={PumpStatus.TITRATING}>TITRATING (معايرة)</option>
-              </select>
-            </div>
+          {/* Volume */}
+          <div>
+            <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+              {lang === 'ar' ? 'الحجم الكلي VTBI (mL):' : 'Total Volume VTBI (mL):'}
+            </label>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={totalVolumeMl}
+              onChange={(e) => setTotalVolumeMl(toEnglishDigits(e.target.value))}
+              placeholder="50"
+              className="w-full bg-[#060b17] border border-slate-700 rounded-xl px-3 py-2 text-slate-200 font-mono text-xs focus:border-amber-400 focus:outline-none"
+            />
           </div>
 
           {/* Clinical Target */}
