@@ -56,7 +56,7 @@ export const ClinicalOptionsManager: React.FC = () => {
   const [fluidId, setFluidId] = useState('');
   const [fluidLabelEn, setFluidLabelEn] = useState('');
   const [fluidLabelAr, setFluidLabelAr] = useState('');
-  const [fluidDefaultMl, setFluidDefaultMl] = useState('0');
+  const [fluidDefaultMl, setFluidDefaultMl] = useState('');
 
   // Antibiotics Form State
   const [showAddAbx, setShowAddAbx] = useState(false);

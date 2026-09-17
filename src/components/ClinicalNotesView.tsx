@@ -68,7 +68,7 @@ export const ClinicalNotesView: React.FC<ClinicalNotesViewProps> = ({
                         {matchedPatient?.fullNameAr || matchedPatient?.fullNameEn || (note.patientId ? (lang === 'ar' ? `مريض #${note.patientId.slice(0, 8)}` : `Patient #${note.patientId.slice(0, 8)}`) : (lang === 'ar' ? 'مريض غير محدد' : 'Unknown Patient'))}
                       </span>
                       <span className="text-[10px] font-mono text-slate-400">
-                        {note.noteType} • {new Date(note.timestamp).toLocaleString(lang === 'ar' ? 'ar-EG' : 'en-US')}
+                        {note.noteType} • {new Date(note.timestamp).toLocaleString('en-US')}
                       </span>
                     </div>
 
@@ -108,7 +108,7 @@ export const ClinicalNotesView: React.FC<ClinicalNotesViewProps> = ({
                       {note.addendums.map((addendum) => (
                         <div key={addendum.id} className="text-xs space-y-1 bg-[#070c17] p-2.5 rounded-lg border border-purple-900/30">
                           <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono">
-                            <span>{new Date(addendum.timestamp).toLocaleString(lang === 'ar' ? 'ar-EG' : 'en-US')}</span>
+                            <span>{new Date(addendum.timestamp).toLocaleString('en-US')}</span>
                             <span className="text-purple-400">
                               PrevHash: {addendum.previousHash ? addendum.previousHash.slice(0, 8) : 'ROOT'}...
                             </span>

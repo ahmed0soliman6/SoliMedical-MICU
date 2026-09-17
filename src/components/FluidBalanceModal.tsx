@@ -513,7 +513,7 @@ export const FluidBalanceModal: React.FC<FluidBalanceModalProps> = ({
                     value={getValue(cat.id)}
                     onChange={(e) => updateValue(cat.id, e.target.value)}
                     onFocus={(e) => e.target.select()}
-                    placeholder="0"
+                    placeholder=""
                     className="w-full bg-[#060b17] border border-slate-700 rounded-xl px-3 py-2 text-cyan-300 font-mono text-xs focus:border-cyan-400 focus:outline-none"
                   />
                 </div>
@@ -646,7 +646,7 @@ export const FluidBalanceModal: React.FC<FluidBalanceModalProps> = ({
                           );
                         }}
                         onFocus={(e) => e.target.select()}
-                        placeholder="0"
+                        placeholder=""
                         className="w-20 bg-[#060b17] border border-slate-700 rounded-lg px-2.5 py-1 text-slate-200 font-mono text-xs text-right focus:border-red-400 focus:outline-none"
                       />
                     </div>
@@ -681,7 +681,7 @@ export const FluidBalanceModal: React.FC<FluidBalanceModalProps> = ({
                     value={getValue(cat.id)}
                     onChange={(e) => updateValue(cat.id, e.target.value)}
                     onFocus={(e) => e.target.select()}
-                    placeholder="0"
+                    placeholder=""
                     required={cat.id === 'urineOutput'}
                     className={`w-full bg-[#060b17] border border-slate-700 rounded-xl px-3 py-2 font-mono text-xs focus:outline-none ${
                       cat.id === 'urineOutput'

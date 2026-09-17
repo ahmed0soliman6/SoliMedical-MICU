@@ -19,14 +19,16 @@ import {
   Camera,
   Sparkles,
   Sliders,
-  Check
+  Check,
+  Trash2,
+  Edit
 } from 'lucide-react';
-import { LabResultItem } from '../types/schema.ts';
+import { LabResultItem, StaffRole } from '../types/schema.ts';
 import { useTranslation } from '../services/i18n.ts';
 import { useAuth } from '../services/AuthContext.tsx';
 import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { db } from '../db/icuSyncDb.ts';
-import { collection, doc, setDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { firestore } from '../services/firebase.ts';
 import { COLLECTIONS } from '../types/contracts.ts';
 import { AiLabScannerModal } from './AiLabScannerModal.tsx';
@@ -149,6 +151,13 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [quickAddTest, setQuickAddTest] = useState<string | null>(null);
   const [quickAddValue, setQuickAddValue] = useState<string>('');
+
+  // Delete & Edit states
+  const [deleteConfirmTest, setDeleteConfirmTest] = useState<string | null>(null);
+  const [deleteErrorMsg, setDeleteErrorMsg] = useState<string | null>(null);
+  const [editingRecordId, setEditingRecordId] = useState<string | null>(null);
+  const [editingValue, setEditingValue] = useState<string>('');
+  const [editingNotes, setEditingNotes] = useState<string>('');
 
   // Group all results for this patient by testName
   const patientLabs = (labResults || []).filter(l => l && l.patientId === patientId);
@@ -309,6 +318,103 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
       setQuickAddValue('');
     } catch (err) {
       console.error('Error quick saving lab:', err);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const triggerDeleteLabType = (testName: string) => {
+    const items = groupedLabs.get(testName) || [];
+    const distinctDoctors = new Set(
+      items
+        .map(it => it.recordedByStaffId || it.recordedByName)
+        .filter(Boolean)
+    );
+    const hasMultipleDoctors = distinctDoctors.size > 1;
+    const canDelete = !hasMultipleDoctors || 
+                      currentUser?.role === StaffRole.ADMIN || 
+                      currentUser?.isSuperAdmin || 
+                      currentUser?.role === StaffRole.CONSULTANT;
+
+    if (!canDelete) {
+      setDeleteErrorMsg(lang === 'ar' 
+        ? 'عذراً، هذا التحليل يحتوي على قراءات مسجلة بواسطة أكثر من طبيب. لا يسمح بحذفه إلا لمدير النظام (Admin) أو الطبيب الاستشاري (Consultant).' 
+        : 'Sorry, this lab contains readings recorded by multiple doctors. Only Admin or Consultant can delete it.'
+      );
+      return;
+    }
+
+    setDeleteConfirmTest(testName);
+  };
+
+  const executeDeleteLabType = async () => {
+    if (!deleteConfirmTest) return;
+    setIsSaving(true);
+    try {
+      const items = groupedLabs.get(deleteConfirmTest) || [];
+      for (const item of items) {
+        await db.labResults.delete(item.id);
+        try {
+          const docRef = doc(firestore, 'medical_records', item.id);
+          await deleteDoc(docRef);
+        } catch (cloudErr) {
+          console.warn('Firestore deletion sync failed:', cloudErr);
+        }
+      }
+
+      onLabAdded();
+      setDeleteConfirmTest(null);
+      if (selectedTestName === deleteConfirmTest) {
+        setSelectedTestName(null);
+      }
+    } catch (err) {
+      console.error('Error executing delete lab type:', err);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const triggerEditRecord = (rec: LabResultItem) => {
+    const isOwner = rec.recordedByStaffId === currentUser?.badgeId || rec.recordedByStaffId === currentUser?.uid;
+    if (!isOwner) {
+      setDeleteErrorMsg(lang === 'ar'
+        ? 'عذراً، لا يمكنك تعديل هذا التحليل. يسمح لكل طبيب فقط بتعديل القراءات التي قام بإدخالها بنفسه.'
+        : 'Sorry, you cannot edit this lab. Each doctor is only allowed to edit readings they entered themselves.'
+      );
+      return;
+    }
+    setEditingRecordId(rec.id);
+    setEditingValue(rec.value);
+    setEditingNotes(rec.notes || '');
+  };
+
+  const executeEditRecord = async (rec: LabResultItem) => {
+    if (!editingValue.trim()) return;
+    setIsSaving(true);
+    try {
+      const updatedRecord: LabResultItem = {
+        ...rec,
+        value: toEnglishDigits(editingValue.trim()),
+        notes: rec.notes || undefined,
+      };
+
+      await db.labResults.put(updatedRecord);
+
+      try {
+        const docRef = doc(firestore, 'medical_records', rec.id);
+        await setDoc(docRef, {
+          ...updatedRecord,
+          recordType: 'LAB',
+          updatedAt: Date.now(),
+        }, { merge: true });
+      } catch (cloudErr) {
+        console.warn('Firestore update sync failed:', cloudErr);
+      }
+
+      onLabAdded();
+      setEditingRecordId(null);
+    } catch (err) {
+      console.error('Error saving edited lab record:', err);
     } finally {
       setIsSaving(false);
     }
@@ -645,20 +751,31 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <button
                   type="button"
                   onClick={() => {
                     handleOpenAddForTest(selectedTestName);
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shrink-0"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>{lang === 'ar' ? 'إضافة قراءة جديدة' : 'Add Reading'}</span>
                 </button>
                 <button
+                  type="button"
+                  onClick={() => {
+                    triggerDeleteLabType(selectedTestName);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-95 shrink-0"
+                  title={lang === 'ar' ? 'حذف هذا التحليل بالكامل' : 'Delete this lab type completely'}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>{lang === 'ar' ? 'حذف بالكامل' : 'Delete All'}</span>
+                </button>
+                <button
                   onClick={() => setSelectedTestName(null)}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors shrink-0"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -700,47 +817,97 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
                       <th className="p-2.5 text-teal-300">{lang === 'ar' ? 'اسم الطبيب' : 'Doctor Name'}</th>
                       <th className="p-2.5">{lang === 'ar' ? 'الحالة' : 'Status'}</th>
                       <th className="p-2.5">{lang === 'ar' ? 'الملاحظات' : 'Notes'}</th>
+                      <th className="p-2.5 text-center">{lang === 'ar' ? 'الإجراءات' : 'Actions'}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/60 bg-[#0d1527]">
-                    {[...(groupedLabs.get(selectedTestName) || [])].reverse().map((rec) => (
-                      <tr key={rec.id} className="hover:bg-slate-800/40 transition-colors">
-                        <td className="p-2.5 font-mono text-slate-300 whitespace-nowrap">
-                          {formatNumericDate(rec.timestamp)} {new Date(rec.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </td>
-                        <td className="p-2.5 font-mono font-bold text-white whitespace-nowrap">
-                          {rec.value ? (
-                            <>
-                              <span className="text-teal-300">{rec.value}</span> {rec.unit}
-                            </>
-                          ) : (
-                            <span className="text-amber-400 font-normal italic text-[11px]">
-                              {lang === 'ar' ? 'طلب معلق (قيد التحليل)' : 'Pending (No Result Yet)'}
+                    {[...(groupedLabs.get(selectedTestName) || [])].reverse().map((rec) => {
+                      const isEditing = editingRecordId === rec.id;
+                      const isOwner = rec.recordedByStaffId === currentUser?.badgeId || rec.recordedByStaffId === currentUser?.uid;
+
+                      return (
+                        <tr key={rec.id} className="hover:bg-slate-800/40 transition-colors">
+                          <td className="p-2.5 font-mono text-slate-300 whitespace-nowrap">
+                            {formatNumericDate(rec.timestamp)} {new Date(rec.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </td>
+                          <td className="p-2.5 font-mono font-bold text-white whitespace-nowrap">
+                            {isEditing ? (
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="text"
+                                  value={editingValue}
+                                  onChange={(e) => setEditingValue(e.target.value)}
+                                  className="w-16 bg-slate-950 border border-teal-500/50 rounded px-1.5 py-0.5 text-white font-mono text-xs focus:outline-none focus:ring-1 focus:ring-teal-500"
+                                />
+                                <span className="text-[10px] text-slate-400 font-normal">{rec.unit}</span>
+                              </div>
+                            ) : rec.value ? (
+                              <>
+                                <span className="text-teal-300">{rec.value}</span> {rec.unit}
+                              </>
+                            ) : (
+                              <span className="text-amber-400 font-normal italic text-[11px]">
+                                {lang === 'ar' ? 'طلب معلق (قيد التحليل)' : 'Pending (No Result Yet)'}
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-2.5 whitespace-nowrap">
+                            <div className="flex items-center gap-1.5">
+                              <User className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+                              <span className="text-teal-300 font-bold">{rec.recordedByName || (lang === 'ar' ? 'الطبيب المناوب' : 'Attending Physician')}</span>
+                            </div>
+                          </td>
+                          <td className="p-2.5 whitespace-nowrap">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              rec.status === 'RESULTED'
+                                ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                                : 'bg-amber-950 text-amber-300 border border-amber-800'
+                            }`}>
+                              {rec.status === 'RESULTED' 
+                                ? (lang === 'ar' ? 'نتيجة معتمدة' : 'Resulted') 
+                                : (lang === 'ar' ? 'طلب معلق' : 'Ordered')}
                             </span>
-                          )}
-                        </td>
-                        <td className="p-2.5 whitespace-nowrap">
-                          <div className="flex items-center gap-1.5">
-                            <User className="w-3.5 h-3.5 text-teal-400 shrink-0" />
-                            <span className="text-teal-300 font-bold">{rec.recordedByName || (lang === 'ar' ? 'الطبيب المناوب' : 'Attending Physician')}</span>
-                          </div>
-                        </td>
-                        <td className="p-2.5 whitespace-nowrap">
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            rec.status === 'RESULTED'
-                              ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
-                              : 'bg-amber-950 text-amber-300 border border-amber-800'
-                          }`}>
-                            {rec.status === 'RESULTED' 
-                              ? (lang === 'ar' ? 'نتيجة معتمدة' : 'Resulted') 
-                              : (lang === 'ar' ? 'طلب معلق' : 'Ordered')}
-                          </span>
-                        </td>
-                        <td className="p-2.5 text-slate-400 max-w-xs truncate">
-                          {rec.notes || '—'}
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                          <td className="p-2.5 text-slate-400 max-w-xs">
+                            <div className="truncate">{rec.notes || '—'}</div>
+                          </td>
+                          <td className="p-2.5 text-center">
+                            {isEditing ? (
+                              <div className="flex items-center justify-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => executeEditRecord(rec)}
+                                  className="px-2 py-0.5 rounded bg-teal-500 hover:bg-teal-400 text-slate-950 text-[10px] font-bold cursor-pointer transition-colors"
+                                >
+                                  {lang === 'ar' ? 'حفظ' : 'Save'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingRecordId(null)}
+                                  className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] cursor-pointer transition-colors"
+                                >
+                                  {lang === 'ar' ? 'إلغاء' : 'Cancel'}
+                                </button>
+                              </div>
+                            ) : isOwner ? (
+                              <button
+                                type="button"
+                                onClick={() => triggerEditRecord(rec)}
+                                className="inline-flex items-center justify-center gap-1 px-2.5 py-1 rounded bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/20 hover:border-indigo-500/40 text-[11px] font-bold transition-all cursor-pointer shadow-sm active:scale-95 mx-auto"
+                                title={lang === 'ar' ? 'تعديل هذا التحليل' : 'Edit my recorded reading'}
+                              >
+                                <Edit className="w-3 h-3 text-indigo-400 shrink-0" />
+                                <span>{lang === 'ar' ? 'تعديل' : 'Edit'}</span>
+                              </button>
+                            ) : (
+                              <span className="text-[10px] text-slate-600 font-medium italic">
+                                —
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -1018,6 +1185,91 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
             onLabAdded();
           }}
         />
+      )}
+
+      {/* Custom Lab Deletion Confirmation Modal */}
+      {deleteConfirmTest && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-in fade-in duration-200">
+          <div 
+            className="w-full max-w-md bg-slate-900 border border-red-500/40 rounded-2xl shadow-2xl p-6 space-y-4"
+            dir={isRTL ? 'rtl' : 'ltr'}
+          >
+            <div className="flex items-center gap-3 text-red-400">
+              <div className="w-12 h-12 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center shrink-0">
+                <Trash2 className="w-6 h-6 text-red-500" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">
+                  {lang === 'ar' ? 'تأكيد حذف التحليل بالكامل' : 'Confirm Lab Type Deletion'}
+                </h3>
+                <p className="text-xs text-slate-400 font-mono mt-0.5">
+                  {deleteConfirmTest}
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed bg-slate-950/80 p-3.5 rounded-xl border border-slate-800">
+              {lang === 'ar' 
+                ? `هل أنت متأكد تماماً من رغبتك في حذف تحليل "${deleteConfirmTest}"؟ سيؤدي هذا الإجراء إلى حذف جميع القراءات والنتائج التاريخية السابقة المسجلة في هذا القسم نهائياً من قاعدة البيانات.` 
+                : `Are you absolutely sure you want to delete "${deleteConfirmTest}"? This action will permanently wipe out all previously recorded results, values, and comments for this test from the database.`}
+            </p>
+
+            <div className="flex items-center justify-end gap-3.5 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmTest(null)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-all cursor-pointer"
+              >
+                {lang === 'ar' ? 'إلغاء' : 'Cancel'}
+              </button>
+              <button
+                type="button"
+                onClick={executeDeleteLabType}
+                className="px-5 py-2 rounded-xl bg-red-500 hover:bg-red-400 text-white text-xs font-bold transition-all active:scale-95 shadow-lg shadow-red-500/10 cursor-pointer"
+              >
+                {lang === 'ar' ? 'تأكيد الحذف النهائي' : 'Confirm Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Security & Permissions Alert Modal */}
+      {deleteErrorMsg && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-in fade-in duration-200">
+          <div 
+            className="w-full max-w-md bg-slate-900 border border-amber-500/40 rounded-2xl shadow-2xl p-6 space-y-4"
+            dir={isRTL ? 'rtl' : 'ltr'}
+          >
+            <div className="flex items-center gap-3 text-amber-400">
+              <div className="w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center shrink-0">
+                <AlertCircle className="w-6 h-6 text-amber-400" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">
+                  {lang === 'ar' ? 'تنبيه الأمان والصلاحيات' : 'Security & Permissions Notice'}
+                </h3>
+                <p className="text-xs text-amber-500 font-mono mt-0.5">
+                  {lang === 'ar' ? 'إجراء غير مصرح به' : 'Unauthorized Action'}
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed bg-slate-950/80 p-3.5 rounded-xl border border-slate-800">
+              {deleteErrorMsg}
+            </p>
+
+            <div className="flex items-center justify-end pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setDeleteErrorMsg(null)}
+                className="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-all cursor-pointer"
+              >
+                {lang === 'ar' ? 'حسناً، فهمت' : 'Okay, Understood'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -6,6 +6,7 @@ import {
   PatientDossier, 
   TelemetryVitals, 
   VentilatorParameters, 
+  VentilatorMode,
   InfusionPumpLine, 
   FluidBalance24H, 
   StatLabPanel, 
@@ -523,6 +524,79 @@ export async function initializeDatabaseSeed(): Promise<void> {
         }
       ]);
     }
+  }
+
+  // Seed default ventilators if empty
+  const ventCount = await db.ventilators.count();
+  if (ventCount === 0) {
+    const now = new Date();
+    const fourHoursAgo = new Date(now.getTime() - 4 * 3600000).toISOString();
+    const threeHoursAgo = new Date(now.getTime() - 3 * 3600000).toISOString();
+    const twoHoursAgo = new Date(now.getTime() - 2 * 3600000).toISOString();
+    const oneHourAgo = new Date(now.getTime() - 1 * 3600000).toISOString();
+
+    await db.ventilators.put({
+      id: 'vent_01_pat-bed-01',
+      bedId: BedNumber.BED_01,
+      patientId: 'pat-bed-01',
+      timestamp: now.toISOString(),
+      deviceModel: 'Dräger Evita V800',
+      mode: VentilatorMode.PRVC,
+      fio2Percent: 40,
+      peepCmH2O: 8,
+      tidalVolumeMl: 420,
+      peakInspiratoryPressureCmH2O: 22,
+      plateauPressureCmH2O: 18,
+      drivingPressureCmH2O: 10,
+      setRespiratoryRateCpm: 16,
+      actualRespiratoryRateCpm: 18,
+      ieRatio: '1:2',
+      isWeaningTrialActive: false,
+      circuitLeakPercent: 2,
+      recordedByStaffName: 'د. طارق منصور (Dr. Tarek)',
+      history: [
+        {
+          id: 'hist-vent-1',
+          timestamp: fourHoursAgo,
+          mode: VentilatorMode.SIMV_VC,
+          fio2Percent: 60,
+          peepCmH2O: 10,
+          tidalVolumeMl: 450,
+          recordedByStaffName: 'د. هشام طلعت (Dr. Hesham)',
+          deviceModel: 'Dräger Evita V800',
+        },
+        {
+          id: 'hist-vent-2',
+          timestamp: threeHoursAgo,
+          mode: VentilatorMode.SIMV_VC,
+          fio2Percent: 50,
+          peepCmH2O: 10,
+          tidalVolumeMl: 450,
+          recordedByStaffName: 'ممرض/ منى حسان (RN Mona)',
+          deviceModel: 'Dräger Evita V800',
+        },
+        {
+          id: 'hist-vent-3',
+          timestamp: twoHoursAgo,
+          mode: VentilatorMode.PRVC,
+          fio2Percent: 45,
+          peepCmH2O: 8,
+          tidalVolumeMl: 420,
+          recordedByStaffName: 'د. طارق منصور (Dr. Tarek)',
+          deviceModel: 'Dräger Evita V800',
+        },
+        {
+          id: 'hist-vent-4',
+          timestamp: oneHourAgo,
+          mode: VentilatorMode.PRVC,
+          fio2Percent: 40,
+          peepCmH2O: 8,
+          tidalVolumeMl: 420,
+          recordedByStaffName: 'د. طارق منصور (Dr. Tarek)',
+          deviceModel: 'Dräger Evita V800',
+        }
+      ]
+    });
   }
 
   // Reconcile and synchronize bed occupancy state with active patients in IndexedDB

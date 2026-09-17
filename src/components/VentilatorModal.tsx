@@ -69,26 +69,35 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
   const [plateauPressure, setPlateauPressure] = useState<string>(String(initialVentilator?.plateauPressureCmH2O || '18'));
   const [ieRatio, setIeRatio] = useState<string>(initialVentilator?.ieRatio || '1:2');
   const [isWeaning, setIsWeaning] = useState<boolean>(initialVentilator?.isWeaningTrialActive || false);
-  const [circuitLeak, setCircuitLeak] = useState<string>(String(initialVentilator?.circuitLeakPercent || '0'));
+  const [circuitLeak, setCircuitLeak] = useState<string>(initialVentilator?.circuitLeakPercent !== undefined ? String(initialVentilator.circuitLeakPercent) : '');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const [hasInitialized, setHasInitialized] = useState<boolean>(false);
+
   useEffect(() => {
-    if (initialVentilator) {
-      setMode(initialVentilator.mode);
-      setDeviceModel(initialVentilator.deviceModel || 'Hamilton-C6 / Dräger V800');
-      setFio2(String(initialVentilator.fio2Percent || '40'));
-      setPeep(String(initialVentilator.peepCmH2O || '8'));
-      setTidalVolume(String(initialVentilator.tidalVolumeMl || '420'));
-      setSetRate(String(initialVentilator.setRespiratoryRateCpm || '16'));
-      setActualRate(String(initialVentilator.actualRespiratoryRateCpm || '18'));
-      setPeakPressure(String(initialVentilator.peakInspiratoryPressureCmH2O || '22'));
-      setPlateauPressure(String(initialVentilator.plateauPressureCmH2O || '18'));
-      setIeRatio(initialVentilator.ieRatio || '1:2');
-      setIsWeaning(initialVentilator.isWeaningTrialActive || false);
-      setCircuitLeak(String(initialVentilator.circuitLeakPercent || '0'));
+    if (!isOpen) {
+      setHasInitialized(false);
+      return;
     }
-  }, [initialVentilator, isOpen]);
+    if (isOpen && !hasInitialized) {
+      if (initialVentilator) {
+        setMode(initialVentilator.mode);
+        setDeviceModel(initialVentilator.deviceModel || 'Hamilton-C6 / Dräger V800');
+        setFio2(String(initialVentilator.fio2Percent || '40'));
+        setPeep(String(initialVentilator.peepCmH2O || '8'));
+        setTidalVolume(String(initialVentilator.tidalVolumeMl || '420'));
+        setSetRate(String(initialVentilator.setRespiratoryRateCpm || '16'));
+        setActualRate(String(initialVentilator.actualRespiratoryRateCpm || '18'));
+        setPeakPressure(String(initialVentilator.peakInspiratoryPressureCmH2O || '22'));
+        setPlateauPressure(String(initialVentilator.plateauPressureCmH2O || '18'));
+        setIeRatio(initialVentilator.ieRatio || '1:2');
+        setIsWeaning(initialVentilator.isWeaningTrialActive || false);
+        setCircuitLeak(initialVentilator.circuitLeakPercent !== undefined ? String(initialVentilator.circuitLeakPercent) : '');
+      }
+      setHasInitialized(true);
+    }
+  }, [isOpen, initialVentilator, hasInitialized]);
 
   if (!isOpen) return null;
 
@@ -108,8 +117,31 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
     const patientId = patient?.id || 'unknown_patient';
 
     try {
+      const existingRecordId = initialVentilator?.id || `vent_${bedNumber}_${patientId}`;
+      const existingRecord = await db.ventilators.get(existingRecordId);
+      const existingHistory = existingRecord?.history || [];
+
+      const newHistoryEntry = {
+        id: `vent_hist_${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        mode,
+        fio2Percent: parseEnglishFloat(fio2) || 40,
+        peepCmH2O: parseEnglishFloat(peep) || 5,
+        tidalVolumeMl: parseEnglishFloat(tidalVolume) || 420,
+        recordedByStaffName: currentUser?.nameEn || currentUser?.nameAr || 'Dr. Guest',
+        recordedByStaffId: currentUser?.badgeId || currentUser?.uid,
+        deviceModel: deviceModel.trim(),
+        setRespiratoryRateCpm: parseEnglishFloat(setRate) || 14,
+        actualRespiratoryRateCpm: parseEnglishFloat(actualRate) || 16,
+        peakInspiratoryPressureCmH2O: parseEnglishFloat(peakPressure) || 20,
+        plateauPressureCmH2O: parseEnglishFloat(plateauPressure) || 16,
+        drivingPressureCmH2O: calculatedDrivingPressure || (parseEnglishFloat(plateauPressure) - parseEnglishFloat(peep)),
+        ieRatio: ieRatio.trim(),
+        circuitLeakPercent: parseEnglishFloat(circuitLeak) || 0,
+      };
+
       const ventRecord: VentilatorParameters = {
-        id: initialVentilator?.id || `vent_${bedNumber}_${patientId}`,
+        id: existingRecordId,
         bedId: bedNumber,
         patientId: patientId,
         timestamp: new Date().toISOString(),
@@ -126,7 +158,8 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
         ieRatio: ieRatio.trim(),
         isWeaningTrialActive: isWeaning,
         circuitLeakPercent: parseEnglishFloat(circuitLeak) || 0,
-        recordedByStaffName: currentUser?.nameAr || currentUser?.nameEn || 'مناوب العناية المركزة',
+        recordedByStaffName: currentUser?.nameEn || currentUser?.nameAr || 'Dr. Guest',
+        history: [...existingHistory, newHistoryEntry],
       };
 
       // Save to Dexie

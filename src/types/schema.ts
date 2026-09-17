@@ -337,6 +337,25 @@ export interface TelemetryVitals {
   clinicalNotes?: string;
 }
 
+export interface VentilatorHistoryEntry {
+  id: string;
+  timestamp: string;
+  mode: VentilatorMode | string;
+  fio2Percent: number;
+  peepCmH2O: number;
+  tidalVolumeMl: number;
+  recordedByStaffName: string;
+  recordedByStaffId?: string;
+  deviceModel?: string;
+  setRespiratoryRateCpm?: number;
+  actualRespiratoryRateCpm?: number;
+  peakInspiratoryPressureCmH2O?: number;
+  plateauPressureCmH2O?: number;
+  drivingPressureCmH2O?: number;
+  ieRatio?: string;
+  circuitLeakPercent?: number;
+}
+
 export interface VentilatorParameters {
   id: string;
   bedId: BedNumber;
@@ -361,6 +380,7 @@ export interface VentilatorParameters {
   circuitLeakPercent: number;
   recordedByStaffName: string;
   isActive?: boolean;
+  history?: VentilatorHistoryEntry[];
 }
 
 export interface InfusionPumpLine {

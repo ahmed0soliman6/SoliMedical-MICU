@@ -141,6 +141,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
   const [isMicrobiologyCardCollapsed, setIsMicrobiologyCardCollapsed] = useState<boolean>(true);
   const [isPaperVitalsCardCollapsed, setIsPaperVitalsCardCollapsed] = useState<boolean>(true);
   const [isPaperVentCardCollapsed, setIsPaperVentCardCollapsed] = useState<boolean>(true);
+  const [isVentHistoryExpanded, setIsVentHistoryExpanded] = useState<boolean>(false);
   const [isPaperPumpsCardCollapsed, setIsPaperPumpsCardCollapsed] = useState<boolean>(true);
   const [isPaperFluidsCardCollapsed, setIsPaperFluidsCardCollapsed] = useState<boolean>(true);
   const [isPaperLabsCardCollapsed, setIsPaperLabsCardCollapsed] = useState<boolean>(true);
@@ -2083,10 +2084,10 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                         return (
                           <th key={lab.id} className="p-2 border-r border-slate-800 text-center min-w-[140px] relative group bg-[#090f1d]">
                             <div className="text-teal-400 font-bold">
-                              {new Date(lab.timestamp).toLocaleDateString(lang === 'ar' ? 'ar-EG' : 'en-US', { day: '2-digit', month: '2-digit' })}
+                              {new Date(lab.timestamp).toLocaleDateString('en-US', { day: '2-digit', month: '2-digit' })}
                             </div>
                             <div className="text-[10px] text-slate-400 mt-0.5">
-                              {new Date(lab.timestamp).toLocaleTimeString(lang === 'ar' ? 'ar-EG' : 'en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}
+                              {new Date(lab.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}
                             </div>
                             <div className="text-[9px] text-slate-500 font-sans mt-0.5 flex items-center justify-center gap-1">
                               <User className="w-2.5 h-2.5 text-indigo-400" />
@@ -2319,7 +2320,14 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                   >
                     <div className="flex items-center gap-2">
                       <Wind className="w-5 h-5 text-cyan-400" />
-                      <h3 className="text-sm font-bold text-white">{lang === 'ar' ? 'جهاز التنفس الصناعي' : 'Ventilator'}</h3>
+                      <div>
+                        <h3 className="text-sm font-bold text-white">{lang === 'ar' ? 'جهاز التنفس الصناعي' : 'Ventilator'}</h3>
+                        {isPaperVentCardCollapsed && ventilator && (
+                          <div className="text-[10px] text-cyan-400 font-bold font-mono mt-0.5">
+                            {lang === 'ar' ? `النمط: ${ventilator.mode}` : `Mode: ${ventilator.mode}`}
+                          </div>
+                        )}
+                      </div>
                     </div>
                     <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                       {ventilator && (
@@ -2356,26 +2364,95 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                               <span>{lang === 'ar' ? 'تعديل إعدادات التنفس' : 'Edit Parameters'}</span>
                             </button>
                           </div>
+                          
+                          {/* Compact High-Contrast Parameter Boxes */}
                           <div 
                             onClick={() => setIsVentilatorModalOpen(true)}
-                            className="grid grid-cols-2 gap-2.5 text-xs font-mono cursor-pointer hover:opacity-90 transition-opacity"
+                            className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 font-mono cursor-pointer hover:opacity-90 transition-opacity"
                           >
-                            <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
-                              <div className="text-[10px] text-slate-500">FiO₂ Provided</div>
-                              <div className="text-teal-300 font-bold text-sm mt-0.5">{ventilator.fio2Percent}%</div>
+                            <div className="bg-[#070c18] px-2.5 py-1.5 rounded-xl border border-slate-800 flex items-center justify-between">
+                              <span className="text-[10px] text-slate-500 font-bold">FiO₂</span>
+                              <span className="text-xs text-teal-300 font-bold">{ventilator.fio2Percent}%</span>
                             </div>
-                            <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
-                              <div className="text-[10px] text-slate-500">PEEP</div>
-                              <div className="text-cyan-300 font-bold text-sm mt-0.5">{ventilator.peepCmH2O} cmH2O</div>
+                            <div className="bg-[#070c18] px-2.5 py-1.5 rounded-xl border border-slate-800 flex items-center justify-between">
+                              <span className="text-[10px] text-slate-500 font-bold">PEEP</span>
+                              <span className="text-xs text-cyan-300 font-bold">{ventilator.peepCmH2O}</span>
                             </div>
-                            <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
-                              <div className="text-[10px] text-slate-500">Tidal Vol (Vt)</div>
-                              <div className="text-white font-bold text-sm mt-0.5">{ventilator.setTidalVolumeMl} mL</div>
+                            <div className="bg-[#070c18] px-2.5 py-1.5 rounded-xl border border-slate-800 flex items-center justify-between">
+                              <span className="text-[10px] text-slate-500 font-bold">(VT)</span>
+                              <span className="text-xs text-white font-bold">{ventilator.tidalVolumeMl || ventilator.setTidalVolumeMl}</span>
                             </div>
-                            <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
-                              <div className="text-[10px] text-slate-500">Set Rate (RR)</div>
-                              <div className="text-slate-200 font-bold text-sm mt-0.5">{ventilator.setRespiratoryRateCpm} bpm</div>
+                            <div className="bg-[#070c18] px-2.5 py-1.5 rounded-xl border border-slate-800 flex items-center justify-between">
+                              <span className="text-[10px] text-slate-500 font-bold">(RR)</span>
+                              <span className="text-xs text-slate-200 font-bold">{ventilator.setRespiratoryRateCpm}</span>
                             </div>
+                          </div>
+
+                          {/* Ventilator Modification Log (سجل تعديلات جهاز التنفس) */}
+                          <div className="mt-3 border-t border-slate-800/80 pt-2.5">
+                            <div className="flex items-center justify-between text-[10px] text-slate-500 font-bold mb-1.5">
+                              <span>{lang === 'ar' ? 'سجل التعديلات والأنماط' : 'Modifications Log'}</span>
+                              <span className="text-[9px] bg-slate-900 px-1 rounded text-cyan-400">
+                                {ventilator.history ? ventilator.history.length : 1} {lang === 'ar' ? 'تعديل' : 'edits'}
+                              </span>
+                            </div>
+
+                            <div className="space-y-1 font-mono text-[10px]">
+                              {ventilator.history && ventilator.history.length > 0 ? (
+                                ventilator.history
+                                  .slice()
+                                  .reverse()
+                                  .slice(0, isVentHistoryExpanded ? undefined : 4)
+                                  .map((entry, idx) => (
+                                    <div 
+                                      key={entry.id || idx}
+                                      className="flex items-center justify-between gap-1.5 py-1 px-2 rounded bg-[#070c18] border border-slate-800/60 hover:bg-slate-900 transition-colors"
+                                    >
+                                      <div className="flex items-center gap-1.5 truncate">
+                                        <span className="text-cyan-400 font-bold bg-cyan-950/40 px-1 rounded">
+                                          {entry.mode}
+                                        </span>
+                                        <span className="text-slate-400 truncate max-w-[80px]" title={entry.recordedByStaffName}>
+                                          {entry.recordedByStaffName}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center gap-1 shrink-0 text-slate-500 text-[9px]">
+                                        <span>FIO₂:{entry.fio2Percent}%</span>
+                                        <span>PEEP:{entry.peepCmH2O}</span>
+                                        <span>{new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}</span>
+                                      </div>
+                                    </div>
+                                  ))
+                              ) : (
+                                <div className="flex items-center justify-between gap-1.5 py-1 px-2 rounded bg-[#070c18] border border-slate-800/60">
+                                  <div className="flex items-center gap-1.5 truncate">
+                                    <span className="text-cyan-400 font-bold bg-cyan-950/40 px-1 rounded">
+                                      {ventilator.mode}
+                                    </span>
+                                    <span className="text-slate-400 truncate max-w-[80px]">
+                                      {ventilator.recordedByStaffName}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-1 shrink-0 text-slate-500 text-[9px]">
+                                    <span>FIO₂:{ventilator.fio2Percent}%</span>
+                                    <span>PEEP:{ventilator.peepCmH2O}</span>
+                                    <span>{new Date(ventilator.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}</span>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+
+                            {ventilator.history && ventilator.history.length > 4 && (
+                              <button
+                                type="button"
+                                onClick={() => setIsVentHistoryExpanded(!isVentHistoryExpanded)}
+                                className="mt-2 w-full text-center py-1 rounded bg-slate-900 hover:bg-slate-800 text-[9px] text-slate-400 font-bold hover:text-white transition-all cursor-pointer"
+                              >
+                                {isVentHistoryExpanded 
+                                  ? (lang === 'ar' ? 'إظهار أقل' : 'Show Less') 
+                                  : (lang === 'ar' ? 'إظهار المزيد من السجلات' : 'Show More Logs')}
+                              </button>
+                            )}
                           </div>
                         </div>
                       ) : (
@@ -3181,20 +3258,22 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
         <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-4 shadow-xl space-y-4">
           <div 
             onClick={() => setIsPaperVentCardCollapsed(!isPaperVentCardCollapsed)}
-            className="flex items-center justify-between border-b border-slate-800 pb-2.5 cursor-pointer hover:bg-slate-800/40 p-2 rounded-xl transition-all"
+            className="flex items-center justify-between border-b border-slate-800 pb-2.5 cursor-pointer hover:bg-slate-800/44 p-2 rounded-xl transition-all"
           >
             <div className="flex items-center gap-2">
               <Wind className="w-5 h-5 text-cyan-400" />
-              <h3 className="text-base font-bold text-white">
-                {lang === 'ar' ? 'إعدادات جهاز التنفس الصناعي والغازات (Ventilator & ABG)' : 'Mechanical Ventilator & ABG Settings'}
-              </h3>
+              <div>
+                <h3 className="text-base font-bold text-white">
+                  {lang === 'ar' ? 'إعدادات جهاز التنفس الصناعي والغازات (Ventilator & ABG)' : 'Mechanical Ventilator & ABG Settings'}
+                </h3>
+                {ventilator && (
+                  <div className="text-xs text-cyan-400 font-bold font-mono mt-0.5">
+                    {lang === 'ar' ? `النمط الحالي: ${ventilator.mode}` : `Current Mode: ${ventilator.mode}`}
+                  </div>
+                )}
+              </div>
             </div>
             <div className="flex items-center gap-2">
-              {ventilator && (
-                <span className="px-3 py-1 rounded-lg bg-cyan-950 text-cyan-300 border border-cyan-700 font-mono font-bold text-xs hidden sm:inline">
-                  MODE: {ventilator.mode}
-                </span>
-              )}
               <button
                 type="button"
                 onClick={(e) => {
@@ -3229,68 +3308,138 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                     </button>
                   </div>
 
-                  {/* Ventilator Matrix */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 font-mono">
-                    <div className="bg-[#070c18] p-3 rounded-xl border border-slate-800">
-                      <div className="text-[10px] text-slate-400">FiO₂ Supplied</div>
-                      <div className="text-xl font-bold text-teal-300 mt-1">{ventilator.fio2Percent}%</div>
+                  {/* Compact High-Contrast Parameter Boxes */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono">
+                    <div className="bg-[#070c18] px-3 py-2 rounded-xl border border-slate-800/80 flex items-center justify-between hover:border-slate-700 transition-colors">
+                      <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">FiO₂</span>
+                      <span className="text-sm font-extrabold text-teal-300">{ventilator.fio2Percent}%</span>
                     </div>
 
-                    <div className="bg-[#070c18] p-3 rounded-xl border border-slate-800">
-                      <div className="text-[10px] text-slate-400">PEEP</div>
-                      <div className="text-xl font-bold text-cyan-300 mt-1">{ventilator.peepCmH2O} <span className="text-xs text-slate-400">cmH2O</span></div>
+                    <div className="bg-[#070c18] px-3 py-2 rounded-xl border border-slate-800/80 flex items-center justify-between hover:border-slate-700 transition-colors">
+                      <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">PEEP</span>
+                      <span className="text-sm font-extrabold text-cyan-300">
+                        {ventilator.peepCmH2O} <span className="text-[10px] text-slate-500 font-bold">cmH₂O</span>
+                      </span>
                     </div>
 
-                    <div className="bg-[#070c18] p-3 rounded-xl border border-slate-800">
-                      <div className="text-[10px] text-slate-400">Set Tidal Volume (Vt)</div>
-                      <div className="text-xl font-bold text-white mt-1">{ventilator.setTidalVolumeMl} <span className="text-xs text-slate-400">mL</span></div>
-                      <div className="text-[10px] text-teal-400 font-sans mt-0.5">
-                        ({Math.round((ventilator.setTidalVolumeMl || ventilator.tidalVolumeMl || 420) / (patient.idealBodyWeightKg || (patient.gender === 'MALE' ? 70 : 60) || 70))} mL/kg IBW)
-                      </div>
+                    <div className="bg-[#070c18] px-3 py-2 rounded-xl border border-slate-800/80 flex items-center justify-between hover:border-slate-700 transition-colors">
+                      <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">(VT)</span>
+                      <span className="text-sm font-extrabold text-white flex items-center gap-1">
+                        <span>{ventilator.tidalVolumeMl || ventilator.setTidalVolumeMl}</span>
+                        <span className="text-[10px] text-slate-500 font-bold">mL</span>
+                        <span className="text-[10px] text-teal-400 font-sans font-bold">
+                          ({Math.round((ventilator.setTidalVolumeMl || ventilator.tidalVolumeMl || 420) / (patient.idealBodyWeightKg || (patient.gender === 'MALE' ? 70 : 60) || 70))}/kg)
+                        </span>
+                      </span>
                     </div>
 
-                    <div className="bg-[#070c18] p-3 rounded-xl border border-slate-800">
-                      <div className="text-[10px] text-slate-400">Set Rate (RR)</div>
-                      <div className="text-xl font-bold text-slate-200 mt-1">{ventilator.setRespiratoryRateCpm} <span className="text-xs text-slate-400">bpm</span></div>
+                    <div className="bg-[#070c18] px-3 py-2 rounded-xl border border-slate-800/80 flex items-center justify-between hover:border-slate-700 transition-colors">
+                      <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">(RR)</span>
+                      <span className="text-sm font-extrabold text-slate-200">
+                        {ventilator.setRespiratoryRateCpm} <span className="text-[10px] text-slate-500 font-bold">bpm</span>
+                      </span>
                     </div>
 
-                    <div className="bg-[#070c18] p-3 rounded-xl border border-slate-800">
-                      <div className="text-[10px] text-slate-400">Peak Pressure (Ppeak)</div>
-                      <div className="text-xl font-bold text-amber-300 mt-1">{ventilator.peakInspiratoryPressureCmH2O ?? '—'} <span className="text-xs text-slate-400">cmH2O</span></div>
+                    <div className="bg-[#070c18] px-3 py-2 rounded-xl border border-slate-800/80 flex items-center justify-between hover:border-slate-700 transition-colors">
+                      <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">(PIP)</span>
+                      <span className="text-sm font-extrabold text-amber-300">
+                        {ventilator.peakInspiratoryPressureCmH2O ?? '—'} <span className="text-[10px] text-slate-500 font-bold">cmH₂O</span>
+                      </span>
                     </div>
 
-                    <div className="bg-[#070c18] p-3 rounded-xl border border-slate-800">
-                      <div className="text-[10px] text-slate-400">Plateau Pressure (Pplat)</div>
-                      <div className="text-xl font-bold text-indigo-300 mt-1">{ventilator.plateauPressureCmH2O ?? '—'} <span className="text-xs text-slate-400">cmH2O</span></div>
+                    <div className="bg-[#070c18] px-3 py-2 rounded-xl border border-slate-800/80 flex items-center justify-between hover:border-slate-700 transition-colors">
+                      <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">(Pplat)</span>
+                      <span className="text-sm font-extrabold text-indigo-300">
+                        {ventilator.plateauPressureCmH2O ?? '—'} <span className="text-[10px] text-slate-500 font-bold">cmH₂O</span>
+                      </span>
                     </div>
 
-                    <div className="bg-[#070c18] p-3 rounded-xl border border-slate-800">
-                      <div className="text-[10px] text-slate-400">Driving Pressure (Pplat - PEEP)</div>
-                      <div className={`text-xl font-bold mt-1 ${
+                    <div className="bg-[#070c18] px-3 py-2 rounded-xl border border-slate-800/80 flex items-center justify-between hover:border-slate-700 transition-colors">
+                      <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">(DP)</span>
+                      <span className={`text-sm font-extrabold ${
                         drivingPressure && drivingPressure > 14 ? 'text-red-400 font-black' : 'text-emerald-400'
                       }`}>
-                        {drivingPressure ?? '—'} <span className="text-xs text-slate-400">cmH2O</span>
-                      </div>
-                      <div className="text-[9px] text-slate-500 font-sans">Target: &lt; 14 cmH2O (Lung-protective)</div>
+                        {drivingPressure ?? '—'} <span className="text-[10px] text-slate-500 font-bold">cmH₂O</span>
+                      </span>
                     </div>
 
-                    <div className="bg-[#070c18] p-3 rounded-xl border border-slate-800">
-                      <div className="text-[10px] text-slate-400">PaO₂ / FiO₂ Ratio (P/F)</div>
-                      <div className={`text-xl font-bold mt-1 ${
-                        ventilator.pao2Fio2Ratio && ventilator.pao2Fio2Ratio < 100 
-                          ? 'text-red-400' 
-                          : ventilator.pao2Fio2Ratio && ventilator.pao2Fio2Ratio < 200 
-                          ? 'text-amber-400' 
-                          : 'text-emerald-400'
+                    <div className="bg-[#070c18] px-3 py-2 rounded-xl border border-slate-800/80 flex items-center justify-between hover:border-slate-700 transition-colors">
+                      <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">(P/F)</span>
+                      <span className={`text-sm font-extrabold ${
+                        ventilator.pao2Fio2Ratio && ventilator.pao2Fio2Ratio < 200 ? 'text-red-400 font-black' : 'text-emerald-400'
                       }`}>
                         {ventilator.pao2Fio2Ratio ?? '—'}
-                      </div>
-                      <div className="text-[9px] text-red-400 font-sans font-bold">
-                        {ventilator.pao2Fio2Ratio && ventilator.pao2Fio2Ratio < 100 && 'Severe ARDS (Berlin definition)'}
-                        {ventilator.pao2Fio2Ratio && ventilator.pao2Fio2Ratio >= 100 && ventilator.pao2Fio2Ratio < 200 && 'Moderate ARDS'}
-                        {ventilator.pao2Fio2Ratio && ventilator.pao2Fio2Ratio >= 200 && ventilator.pao2Fio2Ratio < 300 && 'Mild ARDS'}
-                      </div>
+                      </span>
                     </div>
+                  </div>
+
+                  {/* Ventilator Modification Log (سجل تعديلات جهاز التنفس) */}
+                  <div className="mt-4 border-t border-slate-800/80 pt-3">
+                    <div className="flex items-center justify-between text-xs text-slate-400 font-bold mb-2">
+                      <span>{lang === 'ar' ? 'سجل تعديلات جهاز التنفس ومودات التشغيل' : 'Ventilator Modifications & History Log'}</span>
+                      <span className="text-[10px] bg-slate-900 px-1.5 py-0.5 rounded text-cyan-400">
+                        {ventilator.history ? ventilator.history.length : 1} {lang === 'ar' ? 'تعديل' : 'edits'}
+                      </span>
+                    </div>
+
+                    <div className="space-y-1 font-mono text-xs">
+                      {ventilator.history && ventilator.history.length > 0 ? (
+                        ventilator.history
+                          .slice()
+                          .reverse()
+                          .slice(0, isVentHistoryExpanded ? undefined : 4)
+                          .map((entry, idx) => (
+                            <div 
+                              key={entry.id || idx}
+                              className="flex items-center justify-between gap-2 py-1.5 px-3 rounded-lg bg-[#070c18] border border-slate-800 hover:bg-slate-900 transition-colors text-[11px]"
+                            >
+                              <div className="flex items-center gap-2 truncate">
+                                <span className="text-cyan-400 font-bold bg-cyan-950/40 px-1.5 py-0.5 rounded text-[10px]">
+                                  {entry.mode}
+                                </span>
+                                <span className="text-slate-300 truncate max-w-[120px]" title={entry.recordedByStaffName}>
+                                  {entry.recordedByStaffName}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0 text-slate-400 text-[10px]">
+                                <span className="text-teal-300">FiO₂ {entry.fio2Percent}%</span>
+                                <span className="text-cyan-300">PEEP {entry.peepCmH2O}</span>
+                                <span className="text-white">(VT) {entry.tidalVolumeMl}</span>
+                                <span className="text-slate-500 font-sans">{new Date(entry.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}</span>
+                              </div>
+                            </div>
+                          ))
+                      ) : (
+                        <div className="flex items-center justify-between gap-2 py-1.5 px-3 rounded-lg bg-[#070c18] border border-slate-800 text-[11px]">
+                          <div className="flex items-center gap-2 truncate">
+                            <span className="text-cyan-400 font-bold bg-cyan-950/40 px-1.5 py-0.5 rounded text-[10px]">
+                              {ventilator.mode}
+                            </span>
+                            <span className="text-slate-300 truncate max-w-[120px]">
+                              {ventilator.recordedByStaffName}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0 text-slate-400 text-[10px]">
+                            <span className="text-teal-300">FiO₂ {ventilator.fio2Percent}%</span>
+                            <span className="text-cyan-300">PEEP {ventilator.peepCmH2O}</span>
+                            <span className="text-white">(VT) {ventilator.tidalVolumeMl || ventilator.setTidalVolumeMl}</span>
+                            <span className="text-slate-500 font-sans">{new Date(ventilator.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {ventilator.history && ventilator.history.length > 4 && (
+                      <button
+                        type="button"
+                        onClick={() => setIsVentHistoryExpanded(!isVentHistoryExpanded)}
+                        className="mt-2.5 w-full text-center py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-xs text-slate-400 font-bold hover:text-white transition-all cursor-pointer border border-slate-800"
+                      >
+                        {isVentHistoryExpanded 
+                          ? (lang === 'ar' ? 'إظهار أقل' : 'Show Less') 
+                          : (lang === 'ar' ? 'إظهار المزيد من السجلات' : 'Show More Logs')}
+                      </button>
+                    )}
                   </div>
                 </div>
               ) : (
@@ -3905,7 +4054,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                     <div>
                       <span className="font-bold text-white text-sm">{note.title}</span>
                       <span className="text-[10px] font-mono text-slate-400 mx-2">
-                        {note.noteType} • {new Date(note.timestamp).toLocaleString(lang === 'ar' ? 'ar-EG' : 'en-US')}
+                        {note.noteType} • {new Date(note.timestamp).toLocaleString('en-US')}
                       </span>
                     </div>
 
@@ -3941,7 +4090,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                       {note.addendums.map((addendum) => (
                         <div key={addendum.id} className="text-xs space-y-1 bg-[#070c17] p-2.5 rounded-lg border border-purple-900/30">
                           <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono">
-                            <span>{new Date(addendum.timestamp).toLocaleString(lang === 'ar' ? 'ar-EG' : 'en-US')}</span>
+                            <span>{new Date(addendum.timestamp).toLocaleString('en-US')}</span>
                             <span className="text-purple-400">
                               PrevHash: {addendum.previousHash ? addendum.previousHash.slice(0, 8) : 'ROOT'}...
                             </span>
