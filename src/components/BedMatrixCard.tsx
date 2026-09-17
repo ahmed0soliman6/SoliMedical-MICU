@@ -58,7 +58,7 @@ export const BedMatrixCard: React.FC<BedMatrixCardProps> = ({
       <div className="flex items-start justify-between gap-4">
         {/* Bed Number / Status */}
         <div className="flex items-center gap-2.5">
-          <div className={`w-9 h-9 rounded-xl font-mono font-black text-sm flex items-center justify-center shadow-md ${
+          <div className={`w-12 h-12 rounded-xl font-mono font-black text-xl flex items-center justify-center shadow-md ${
             isUnavailable
               ? 'bg-red-950 text-red-400 border border-red-800'
               : isIsolation
@@ -70,17 +70,17 @@ export const BedMatrixCard: React.FC<BedMatrixCardProps> = ({
             {bed.bedNumber}
           </div>
           <div>
-            <div className="text-xs font-bold text-white tracking-wide">
+            <div className="text-base font-bold text-white tracking-wide">
               {lang === 'ar' ? `سرير ${bed.bedNumber}` : `Bed ${bed.bedNumber}`}
             </div>
-            <div className="text-[10px] text-slate-400 truncate max-w-[130px]">
+            <div className="text-xs text-slate-400 truncate max-w-[130px]">
               {bed.bayName}
             </div>
           </div>
         </div>
 
         {/* Dynamic Status Label */}
-        <div className="text-[10px] font-bold px-2 py-0.5 rounded-md font-mono">
+        <div className="text-xs font-bold px-2 py-0.5 rounded-md font-mono">
           {isIsolation && (
             <span className="bg-amber-950 text-amber-300 border border-amber-600/70 px-1.5 py-0.5 rounded">
               {lang === 'ar' ? 'عزل' : 'Isolation'}
@@ -118,12 +118,13 @@ export const BedMatrixCard: React.FC<BedMatrixCardProps> = ({
       <div className="mt-4">
         {isOccupied || isTransferPending ? (
           <div>
-            <div className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">
-              {lang === 'ar' ? 'المريض' : 'Patient'}
-            </div>
-            <h2 className="text-sm sm:text-base font-bold text-white truncate mt-0.5">
+            <h2 className="text-lg sm:text-xl font-bold text-white truncate">
               {patient?.fullNameAr || patient?.fullNameEn}
+              {patient?.age ? <span className="text-xs text-slate-400 font-normal ml-2">{patient.age}y</span> : ''}
             </h2>
+            <div className="text-xs text-teal-300 truncate mt-0.5">
+              {patient?.diagnosisAr || patient?.diagnosisEn || (lang === 'ar' ? 'بدون تشخيص' : 'No diagnosis')}
+            </div>
           </div>
         ) : isDecontaminating ? (
           <div className="text-xs font-semibold text-purple-300">

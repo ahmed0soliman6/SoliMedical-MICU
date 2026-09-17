@@ -133,15 +133,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <button
                 key={b.bedNumber}
                 onClick={() => handleSelectBed(b.bedNumber as BedNumber)}
-                className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-all cursor-pointer ${
+                className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-sm transition-all cursor-pointer ${
                   isSelected 
                     ? 'bg-teal-500/20 text-teal-300 border border-teal-500/30 font-bold' 
                     : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'
                 }`}
               >
                 <div className="flex items-center gap-2 truncate">
-                  <span className={`font-mono text-[11px] font-bold ${b.status === 'ISOLATION' ? 'text-red-500' : 'text-teal-400'}`}>{b.bedNumber}</span>
-                  <span className="truncate text-[11px] font-medium">
+                  <span className={`font-mono text-base font-bold ${b.status === 'ISOLATION' ? 'text-red-500' : 'text-teal-400'}`}>{b.bedNumber}</span>
+                  <span className="truncate text-sm font-medium">
                     {displayName}
                   </span>
                 </div>
