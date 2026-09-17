@@ -60,6 +60,20 @@ const COMMON_LAB_PRESETS = [
   { name: 'PTT', category: 'Coagulation', unit: 'sec', normal: '25 - 35' },
 ];
 
+const formatNumericDate = (dateVal?: string | Date | number): string => {
+  if (!dateVal) return '—';
+  try {
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return String(dateVal);
+    const day = d.getDate();
+    const month = d.getMonth() + 1;
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  } catch {
+    return '—';
+  }
+};
+
 export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
   patientId,
   bedNumber,
@@ -594,7 +608,7 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
                   </div>
 
                   <span className="text-slate-500 font-mono text-[10px]">
-                    {new Date(latest.timestamp).toLocaleDateString(lang === 'ar' ? 'ar-EG' : 'en-US')} {new Date(latest.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {formatNumericDate(latest.timestamp)} {new Date(latest.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </div>
               </div>
@@ -692,7 +706,7 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
                     {[...(groupedLabs.get(selectedTestName) || [])].reverse().map((rec) => (
                       <tr key={rec.id} className="hover:bg-slate-800/40 transition-colors">
                         <td className="p-2.5 font-mono text-slate-300 whitespace-nowrap">
-                          {new Date(rec.timestamp).toLocaleDateString()} {new Date(rec.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          {formatNumericDate(rec.timestamp)} {new Date(rec.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </td>
                         <td className="p-2.5 font-mono font-bold text-white whitespace-nowrap">
                           {rec.value ? (

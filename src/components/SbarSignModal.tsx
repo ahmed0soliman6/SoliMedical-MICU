@@ -7,6 +7,7 @@ import {
   Copy, 
   History, 
   Clock, 
+  Calendar,
   User, 
   Heart, 
   Wind, 
@@ -19,7 +20,9 @@ import {
   Check,
   Stethoscope,
   FileCheck2,
-  Lock
+  Lock,
+  CheckCircle2,
+  AlertTriangle
 } from 'lucide-react';
 import { 
   BedNumber, 
@@ -34,7 +37,7 @@ import {
   SbarHandoverReport,
   IcuUser
 } from '../types/schema.ts';
-import { signSbarHandover } from '../services/dataModel.ts';
+import { signSbarHandover, acknowledgeSbarHandover } from '../services/dataModel.ts';
 import { useTranslation } from '../services/i18n.ts';
 import { useAuth } from '../services/AuthContext.tsx';
 import { db } from '../db/icuSyncDb.ts';
@@ -112,19 +115,53 @@ export const SbarSignModal: React.FC<SbarSignModalProps> = ({
   const [incomingDoctorName, setIncomingDoctorName] = useState<string>('');
 
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [isAcking, setIsAcking] = useState<boolean>(false);
+  const [modalTab, setModalTab] = useState<'RECEIVE' | 'NEW'>('NEW');
   const [showPreviousDrawer, setShowPreviousDrawer] = useState<boolean>(false);
   const [selectedPrevForCompare, setSelectedPrevForCompare] = useState<SbarHandoverReport | null>(null);
 
-  // Quick Recommendation Chips
+  // Compute pending unacknowledged handover from previous colleague
+  const pendingHandover = useMemo(() => {
+    return previousHandovers.find(h => !h.incomingDoctor?.signedAt);
+  }, [previousHandovers]);
+
+  // Set modal tab to RECEIVE if there is a pending handover when opening
+  useEffect(() => {
+    if (isOpen) {
+      if (pendingHandover) {
+        setModalTab('RECEIVE');
+      }
+    }
+  }, [isOpen, pendingHandover]);
+
+  // Handle shift acknowledgment by incoming doctor
+  const handleAcknowledgeShift = async () => {
+    if (!pendingHandover) return;
+    setIsAcking(true);
+    try {
+      const docInfo = {
+        staffId: currentUser?.badgeId || currentUser?.uid || outgoingDoctorStaffId || 'DOC-INC',
+        name: currentUser?.nameAr || currentUser?.nameEn || outgoingDoctorName || (lang === 'ar' ? 'د. الطبيب المستلم' : 'Incoming Physician'),
+        role: currentUser?.role || outgoingDoctorRole || StaffRole.SPECIALIST,
+      };
+      const updated = await acknowledgeSbarHandover(pendingHandover.id, docInfo);
+      if (updated) {
+        setPreviousHandovers(prev => prev.map(h => h.id === updated.id ? updated : h));
+        onHandoverSigned();
+        setModalTab('NEW');
+      }
+    } catch (err) {
+      console.error('Error acknowledging SBAR handover:', err);
+      alert(lang === 'ar' ? 'حدث خطأ أثناء تأكيد استلام المناوبة.' : 'Error acknowledging shift handover.');
+    } finally {
+      setIsAcking(false);
+    }
+  };
+
+  // Quick Recommendation Chips - Limited to max 2 items
   const quickChips = useMemo(() => [
-    { labelAr: '+ فطام التنفس الصناعي (SBT)', labelEn: '+ SBT Weaning Trial', text: '• Attempt daily Spontaneous Breathing Trial (SBT) if hemodynamically stable & P/F > 200.' },
+    { labelAr: '+ فطام التنفس الصناعي (SBT)', labelEn: '+ SBT Weaning Trial', text: '• Attempt daily Spontaneous Breathing Trial (SBT) if hemodynamically stable.' },
     { labelAr: '+ تقليل الرافعات الوعائية (Pressor Wean)', labelEn: '+ Vasopressor Wean', text: '• Titrate and wean Norepinephrine targeting MAP > 65 mmHg.' },
-    { labelAr: '+ ميزان سوائل سالب (Negative I/O)', labelEn: '+ Target Net Negative I/O', text: '• Maintain strict fluid balance targeting net negative balance (-500 to -1000 mL/24h).' },
-    { labelAr: '+ إعادة غازات الدم 06:00 (Repeat ABG)', labelEn: '+ Repeat ABG @ 06:00', text: '• Repeat morning ABG, Lactate, and Serum Electrolytes at 06:00.' },
-    { labelAr: '+ إيقاف المهدئات الصباحي (Sedation Vacation)', labelEn: '+ Sedation Vacation', text: '• Perform daily morning sedation interruption & neurological evaluation.' },
-    { labelAr: '+ وقاية الجلطات والمعدة (DVT/GI Prophylaxis)', labelEn: '+ DVT & GI Prophylaxis', text: '• Continue Enoxaparin DVT prophylaxis & Pantoprazole stress ulcer prophylaxis.' },
-    { labelAr: '+ متابعة وظائف الكلى وإدرار البول', labelEn: '+ Renal & UOP Monitoring', text: '• Strict hourly urine output monitoring (target > 0.5 mL/kg/hr); notify if oliguric.' },
-    { labelAr: '+ مطابقة ونقل الدم (Blood Cross-match)', labelEn: '+ Transfusion Orders', text: '• Maintain Hemoglobin > 7.0 g/dL (Target > 8.0 g/dL if ACS/ischemic).' },
   ], []);
 
   // Fetch full clinical data if missing
@@ -194,7 +231,7 @@ export const SbarSignModal: React.FC<SbarSignModalProps> = ({
     }
   }, [currentUser]);
 
-  // Dynamic recognition & clinical synthesis function
+  // Dynamic recognition & clinical synthesis function (strictly from real session inputs)
   const autoSynthesizeSbar = (
     targetPatient: PatientDossier | null,
     targetVitals: TelemetryVitals | null,
@@ -203,11 +240,10 @@ export const SbarSignModal: React.FC<SbarSignModalProps> = ({
     targetFluid: FluidBalance24H | null,
     targetLabs: StatLabPanel[]
   ) => {
-    const pName = targetPatient?.fullNameEn || targetPatient?.fullNameAr || patientName || `Patient Bed ${bedNumber}`;
-    const pDiag = targetPatient?.primaryDiagnosisEn || targetPatient?.primaryDiagnosisAr || primaryDiagnosis || 'Critical Illness';
-    const pMrn = targetPatient?.mrn || 'ICU-MRN';
-    const pAge = targetPatient?.age ? `${targetPatient.age}y` : '';
-    const pGender = targetPatient?.gender || '';
+    const pName = targetPatient?.fullNameAr || targetPatient?.fullNameEn || patientName || (lang === 'ar' ? `مريض سرير ${bedNumber}` : `Patient Bed ${bedNumber}`);
+    const pDiag = targetPatient?.primaryDiagnosisAr || targetPatient?.primaryDiagnosisEn || primaryDiagnosis || '';
+    const pMrn = targetPatient?.mrn || '';
+    const pAge = targetPatient?.age ? `${targetPatient.age} ${lang === 'ar' ? 'سنة' : 'y'}` : '';
     const pCode = targetPatient?.codeStatus || codeStatus || 'FULL_CODE';
 
     // Calculate ICU Day
@@ -218,7 +254,7 @@ export const SbarSignModal: React.FC<SbarSignModalProps> = ({
       icuDay = String(diffDays);
     }
 
-    // Active infusions analysis
+    // Active infusions from current session
     const pressorPumps = (targetPumps || []).filter(p => {
       const dName = (p?.drugNameEn || p?.drugNameAr || '').toLowerCase();
       return (
@@ -243,50 +279,53 @@ export const SbarSignModal: React.FC<SbarSignModalProps> = ({
     });
 
     const pressorSummary = pressorPumps.length > 0 
-      ? pressorPumps.map(p => `${p.drugNameEn} @ ${p.flowRateMlPerHour} mL/h (${p.currentRate} ${p.rateUnit})`).join(', ')
-      : 'No active vasopressors/inotropes';
+      ? pressorPumps.map(p => `${p.drugNameAr || p.drugNameEn} @ ${p.flowRateMlPerHour} mL/h`).join(', ')
+      : (lang === 'ar' ? 'بدون رافعات ضغط مستمرة' : 'No continuous vasopressors');
 
     const sedativeSummary = sedativePumps.length > 0
-      ? sedativePumps.map(p => `${p.drugNameEn} @ ${p.flowRateMlPerHour} mL/h`).join(', ')
-      : 'No continuous sedatives running';
+      ? sedativePumps.map(p => `${p.drugNameAr || p.drugNameEn} @ ${p.flowRateMlPerHour} mL/h`).join(', ')
+      : (lang === 'ar' ? 'بدون مهدئات مستمرة' : 'No continuous sedatives');
 
     // Airway / Vent state
-    let airwayStatus = 'Extubated / Room Air';
+    let airwayStatus = lang === 'ar' ? 'تنفس طبيعي' : 'Room Air';
     if (targetVent && targetVent.mode) {
-      airwayStatus = `Invasive MV [Mode: ${targetVent.mode}, FiO2: ${targetVent.fio2Percent}%, PEEP: ${targetVent.peepCmH2O} cmH2O]`;
+      airwayStatus = `${lang === 'ar' ? 'جهاز تنفس صناعي' : 'Mechanical Vent'} [${targetVent.mode}, FiO2: ${targetVent.fio2Percent}%, PEEP: ${targetVent.peepCmH2O}]`;
     } else if (targetVitals?.fio2SuppliedPercent && targetVitals.fio2SuppliedPercent > 21) {
-      airwayStatus = `Supplemental O2 (${targetVitals.fio2SuppliedPercent}% FiO2)`;
+      airwayStatus = `${lang === 'ar' ? 'أكسجين إضافي' : 'Oxygen'} (${targetVitals.fio2SuppliedPercent}% FiO2)`;
     }
 
     // 1. Situation (S)
-    const sitText = `Bed ${bedNumber} | ${pName} (${pMrn}, ${pAge} ${pGender}). Admitted for: ${pDiag}. ICU Day ${icuDay}. Code Status: ${pCode}. Current Airway/Support: ${airwayStatus}. Pressors: ${pressorPumps.length > 0 ? pressorPumps.map(p => p.drugNameEn).join('+') : 'Off pressors'}.`;
+    const sitText = `${lang === 'ar' ? `سرير ${bedNumber}` : `Bed ${bedNumber}`} | ${pName} ${pMrn ? `(${pMrn})` : ''} ${pAge ? `| ${pAge}` : ''}. ${pDiag ? `${lang === 'ar' ? 'التشخيص:' : 'Diag:'} ${pDiag}.` : ''} ${lang === 'ar' ? 'يوم العناية:' : 'ICU Day:'} ${icuDay}. ${lang === 'ar' ? 'حالة الإنعاش:' : 'Code:'} ${pCode}. ${lang === 'ar' ? 'التنفس:' : 'Airway:'} ${airwayStatus}.`.trim();
 
     // 2. Background (B)
-    const chronics = targetPatient?.chronicDiseases || targetPatient?.history || 'No significant prior medical history logged';
-    
+    const chronics = targetPatient?.chronicDiseases || targetPatient?.history || '';
     const allergiesText = targetPatient?.allergies && targetPatient.allergies.length > 0
-      ? targetPatient.allergies.map(a => `${a.allergen} (${a.reaction || 'Allergy'})`).join(', ')
-      : 'NKDA (No Known Drug Allergies)';
+      ? targetPatient.allergies.map(a => a.allergen).join(', ')
+      : '';
 
-    const lines = 'Peripheral IVs, Central Venous Line, Foley Catheter';
-
-    const bgText = `Admission Date: ${targetPatient?.admissionDate ? targetPatient.admissionDate.split('T')[0] : 'Recent'}. Primary Reason: ${targetPatient?.presentingComplaint || pDiag}. Comorbidities: ${chronics}. Allergies: ${allergiesText}. Active Lines & Drains: ${lines}.`;
+    const bgText = `${lang === 'ar' ? 'تاريخ الدخول:' : 'Admit:'} ${targetPatient?.admissionDate ? targetPatient.admissionDate.split('T')[0] : (lang === 'ar' ? 'الجلسة الحالية' : 'Current Session')}. ${pDiag ? `${lang === 'ar' ? 'سبب الدخول:' : 'Reason:'} ${pDiag}.` : ''} ${chronics ? `${lang === 'ar' ? 'الأمراض المزمنة:' : 'History:'} ${chronics}.` : ''} ${allergiesText ? `${lang === 'ar' ? 'الحساسية:' : 'Allergies:'} ${allergiesText}.` : ''}`.trim();
 
     // 3. Assessment (A) - Hemodynamics
-    const hr = targetVitals?.heartRateBpm ?? 80;
-    const bp = targetVitals ? `${targetVitals.systolicBpMmHg}/${targetVitals.diastolicBpMmHg}` : '120/70';
-    const map = targetVitals?.meanArterialPressureMmHg ?? Math.round((2 * 70 + 120) / 3);
-    const rhythm = targetVitals?.heartRhythm || 'Sinus Rhythm';
-    const hemoText = `BP: ${bp} mmHg (MAP: ${map} mmHg), HR: ${hr} bpm (${rhythm}). Pressors: ${pressorSummary}.`;
+    let hemoText = '';
+    if (targetVitals) {
+      const bp = (targetVitals.systolicBpMmHg && targetVitals.diastolicBpMmHg) ? `${targetVitals.systolicBpMmHg}/${targetVitals.diastolicBpMmHg}` : '';
+      const map = targetVitals.meanArterialPressureMmHg ? `MAP: ${targetVitals.meanArterialPressureMmHg} mmHg` : '';
+      const hr = targetVitals.heartRateBpm ? `HR: ${targetVitals.heartRateBpm} bpm` : '';
+      hemoText = `${bp ? `${lang === 'ar' ? 'الضغط:' : 'BP:'} ${bp}` : ''} ${map ? `(${map})` : ''} ${hr ? `| ${hr}` : ''}. ${lang === 'ar' ? 'المضخات:' : 'Pumps:'} ${pressorSummary}.`.trim();
+    } else {
+      hemoText = `${lang === 'ar' ? 'المضخات الحالية:' : 'Pumps:'} ${pressorSummary}.`;
+    }
 
     // Assessment (A) - Pulmonary
     let pulmText = '';
-    const latestPf = targetLabs?.[0]?.abg?.pao2Fio2Ratio ? `P/F Ratio: ${targetLabs[0].abg.pao2Fio2Ratio}` : '';
+    const latestAbg = targetLabs?.[0]?.abg;
+    const pfStr = latestAbg?.pao2Fio2Ratio ? `P/F: ${latestAbg.pao2Fio2Ratio}` : '';
     if (targetVent) {
-      const drivingP = targetVent.drivingPressureCmH2O ? `Driving P: ${targetVent.drivingPressureCmH2O} cmH2O` : '';
-      pulmText = `Vent: ${targetVent.mode} | FiO2: ${targetVent.fio2Percent}% | PEEP: ${targetVent.peepCmH2O} | Vt: ${targetVent.tidalVolumeMl} mL | Ppeak: ${targetVent.peakInspiratoryPressureCmH2O || 18} cmH2O. SpO2: ${targetVitals?.spo2Percent ?? 98}%, RR: ${targetVitals?.respiratoryRateCpm ?? 16}. ${latestPf} ${drivingP}`.trim();
+      pulmText = `${targetVent.mode} | FiO2: ${targetVent.fio2Percent}% | PEEP: ${targetVent.peepCmH2O} cmH2O | Vt: ${targetVent.tidalVolumeMl} mL. ${targetVitals?.spo2Percent ? `SpO2: ${targetVitals.spo2Percent}%` : ''} ${pfStr}`.trim();
+    } else if (targetVitals) {
+      pulmText = `SpO2: ${targetVitals.spo2Percent ?? '--'}% ${targetVitals.fio2SuppliedPercent ? `(${targetVitals.fio2SuppliedPercent}% FiO2)` : ''}. ${pfStr}`.trim();
     } else {
-      pulmText = `SpO2: ${targetVitals?.spo2Percent ?? 98}% on ${targetVitals?.fio2SuppliedPercent ?? 21}% FiO2, RR: ${targetVitals?.respiratoryRateCpm ?? 16} bpm. Chest clear bilaterally. ${latestPf}`.trim();
+      pulmText = lang === 'ar' ? 'متابعة وظائف التنفس حسب الخطة.' : 'Pulmonary function as per protocol.';
     }
 
     // Assessment (A) - Metabolic, Renal, Fluid
@@ -296,33 +335,37 @@ export const SbarSignModal: React.FC<SbarSignModalProps> = ({
       const outVal = targetFluid.outputBreakdown?.totalOutputMl ?? 0;
       const netVal = targetFluid.netCumulativeBalanceMl ?? (inVal - outVal);
       const urineVal = targetFluid.outputBreakdown?.urineOutputMl ?? 0;
-      const uopRate = targetFluid.outputBreakdown?.hourlyUrineAverageMlPerHour ?? Math.round(urineVal / 24);
-      const prbc = targetFluid.transfusionProductsGiven?.prbcUnits ?? 0;
-      const ffp = targetFluid.transfusionProductsGiven?.ffpUnits ?? 0;
-      const plt = targetFluid.transfusionProductsGiven?.plateletsUnits ?? 0;
-      const bldStr = (prbc > 0 || ffp > 0 || plt > 0) ? ` | Blood: PRBC ${prbc}U, FFP ${ffp}U, PLT ${plt}U` : '';
-
-      metaText = `24H Fluid I/O: Intake ${inVal} mL, Output ${outVal} mL, Net: ${netVal > 0 ? `+${netVal}` : netVal} mL. Urine: ${urineVal} mL (${uopRate} mL/h)${bldStr}.`;
+      metaText = `${lang === 'ar' ? 'توازن السوائل:' : 'Fluid I/O:'} ${lang === 'ar' ? 'مدخلات' : 'In'} ${inVal}mL, ${lang === 'ar' ? 'مخرجات' : 'Out'} ${outVal}mL (${lang === 'ar' ? 'الصافي' : 'Net'}: ${netVal > 0 ? `+${netVal}` : netVal}mL). ${lang === 'ar' ? 'البول:' : 'Urine:'} ${urineVal}mL.`.trim();
     } else {
-      metaText = `Urine output adequate (> 0.5 mL/kg/h). Fluid balance on maintenance IV fluids. Electrolytes & Lactate within target limits.`;
+      metaText = lang === 'ar' ? 'متابعة وظائف الكلى وإدرار البول.' : 'Renal output monitored.';
     }
 
     // Assessment (A) - Neurology & Sedation
-    const gcs = targetVitals?.gcsTotalScore ?? 15;
-    const neuroText = `GCS: ${gcs}/15. Pupils equal & reactive to light. Sedation: ${sedativeSummary}.`;
+    const gcs = targetVitals?.gcsTotalScore ? `GCS: ${targetVitals.gcsTotalScore}/15` : 'GCS: --';
+    const neuroText = `${gcs}. ${lang === 'ar' ? 'المهدئات:' : 'Sedation:'} ${sedativeSummary}.`;
 
     // Assessment (A) - Infectious & Antibiotics
-    const temp = targetVitals?.coreTemperatureCelsius ?? 37.0;
-    const infectText = `Temp: ${temp}°C. Afebrile/Controlled. Infection markers & active antimicrobials monitored.`;
+    const temp = targetVitals?.coreTemperatureCelsius ? `${lang === 'ar' ? 'الحرارة:' : 'Temp:'} ${targetVitals.coreTemperatureCelsius}°C` : '';
+    const infectText = `${temp} ${lang === 'ar' ? 'متابعة العلامات الالتهابية والمضادات الحيوية.' : 'Antimicrobial coverage monitored.'}`.trim();
 
-    // 4. Recommendation (R)
-    const recList = [
-      `1. Hemodynamics: Maintain MAP > 65 mmHg; continue weaning ${pressorPumps.length > 0 ? pressorPumps.map(p => p.drugNameEn).join('/') : 'vasopressors'} as tolerated.`,
-      targetVent ? `2. Pulmonary: Daily Spontaneous Breathing Trial (SBT) & evaluate for extubation readiness.` : `2. Pulmonary: Monitor work of breathing & oxygen saturation.`,
-      `3. Fluids/Renal: Strict 24h intake/output tracking; target ${targetFluid && (targetFluid.netCumulativeBalanceMl || 0) > 1000 ? 'net negative balance' : 'euvolemia'}.`,
-      `4. Diagnostics: Repeat morning ABG, CBC, and Serum Electrolytes at 06:00.`,
-      `5. Prophylaxis: Continue DVT mechanical/chemical prophylaxis and GI stress ulcer protection.`,
-    ];
+    // 4. Recommendation (R) - Maximum 2 recommendations strictly!
+    const rec1 = pressorPumps.length > 0 
+      ? (lang === 'ar' 
+          ? `1. الدورة الدموية: استمرار تقليل الرافعات الوعائية (${pressorPumps.map(p => p.drugNameAr || p.drugNameEn).join('/')}) مع الحفاظ على MAP > 65 mmHg.` 
+          : `1. Hemodynamics: Wean ${pressorPumps.map(p => p.drugNameEn).join('/')} targeting MAP > 65 mmHg.`)
+      : (lang === 'ar'
+          ? `1. الدورة الدموية: استقرار العلامات الحيوية والحفاظ على الضغط الشرياني الوسطي MAP > 65 mmHg.`
+          : `1. Hemodynamics: Maintain hemodynamics targeting MAP > 65 mmHg.`);
+
+    const rec2 = targetVent 
+      ? (lang === 'ar'
+          ? `2. التنفس: إجراء تجربة فطام التنفس الصناعي (SBT) وتقييم الجاهزية لنزع الأنبوب الرغامي.`
+          : `2. Pulmonary: Daily Spontaneous Breathing Trial (SBT) & evaluate weaning readiness.`)
+      : (lang === 'ar'
+          ? `2. المتابعة: إعادة الفحوصات وغازات الدم الشريانية ABG عند الساعة 06:00.`
+          : `2. Diagnostics: Repeat morning ABG and serum electrolytes at 06:00.`);
+
+    const recList = [rec1, rec2]; // Strict max 2 recommendations
 
     setSituation(sitText);
     setBackground(bgText);
@@ -334,7 +377,7 @@ export const SbarSignModal: React.FC<SbarSignModalProps> = ({
     setRecommendation(recList.join('\n'));
   };
 
-  // Populate from template or perform initial auto-synthesis
+  // Populate from template if provided, or leave boxes EMPTY by default
   useEffect(() => {
     if (!isOpen) return;
 
@@ -349,8 +392,15 @@ export const SbarSignModal: React.FC<SbarSignModalProps> = ({
       setInfectious(templateSbar.assessment?.infectiousDiseaseAndAntibiotics || '');
       setRecommendation(templateSbar.recommendationAndOrders?.join('\n') || '');
     } else {
-      // Auto-synthesize from live patient parameters
-      autoSynthesizeSbar(patient, vitals, ventilator, pumps, fluidBalance, labs);
+      // Leave boxes EMPTY initially as requested
+      setSituation('');
+      setBackground('');
+      setHemodynamics('');
+      setPulmonary('');
+      setMetabolic('');
+      setNeurology('');
+      setInfectious('');
+      setRecommendation('');
     }
   }, [isOpen, templateSbar]);
 
@@ -402,9 +452,9 @@ export const SbarSignModal: React.FC<SbarSignModalProps> = ({
           .map(r => r.trim())
           .filter(r => r.length > 0),
         outgoingDoctor: {
-          staffId: outgoingDoctorStaffId || 'DOC-101',
-          name: outgoingDoctorName.trim() || 'Attending Physician',
-          role: outgoingDoctorRole,
+          staffId: currentUser?.badgeId || currentUser?.uid || outgoingDoctorStaffId || 'DOC-101',
+          name: currentUser?.nameAr || currentUser?.nameEn || outgoingDoctorName.trim() || (lang === 'ar' ? 'د. الطبيب المعالج' : 'Attending Physician'),
+          role: currentUser?.role || outgoingDoctorRole || StaffRole.SPECIALIST,
         },
         incomingDoctor: incomingDoctorName.trim() ? {
           staffId: 'DOC-INCOMING',
@@ -488,6 +538,51 @@ export const SbarSignModal: React.FC<SbarSignModalProps> = ({
           </div>
         </div>
 
+        {/* Mode Switch Tabs */}
+        <div className="bg-[#050b18] px-5 py-2.5 border-b border-slate-800 flex items-center gap-2 overflow-x-auto shrink-0">
+          <button
+            type="button"
+            onClick={() => setModalTab('RECEIVE')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
+              modalTab === 'RECEIVE'
+                ? 'bg-amber-500 text-slate-950 shadow-lg font-black shadow-amber-500/20'
+                : 'bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-800'
+            }`}
+          >
+            <CheckCircle2 className="w-4 h-4" />
+            <span>
+              {lang === 'ar' 
+                ? `استلام ومراجعة المناوبة ${pendingHandover ? `(${pendingHandover.shiftType === 'NIGHT' ? 'الليلية' : 'الصباحية'})` : ''}` 
+                : `Review & Receive Shift ${pendingHandover ? `(${pendingHandover.shiftType})` : ''}`}
+            </span>
+            {pendingHandover ? (
+              <span className="px-2 py-0.5 rounded-full bg-slate-950 text-amber-400 text-[10px] font-black font-mono shadow border border-amber-400/40 animate-pulse">
+                {lang === 'ar' ? 'غير مَستَلَم' : 'Pending'}
+              </span>
+            ) : (
+              <span className="px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 text-[10px] font-bold font-mono border border-emerald-800">
+                {lang === 'ar' ? 'تم الاستلام' : 'Received'}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setModalTab('NEW')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
+              modalTab === 'NEW'
+                ? 'bg-teal-500 text-slate-950 shadow-lg font-black shadow-teal-500/20'
+                : 'bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-800'
+            }`}
+          >
+            <Plus className="w-4 h-4" />
+            <span>{lang === 'ar' ? 'توثيق وتسليم مناوبة جديدة' : 'Create New Shift Handover'}</span>
+            {pendingHandover && (
+              <Lock className="w-3.5 h-3.5 text-amber-400" />
+            )}
+          </button>
+        </div>
+
         {/* Previous Handover Reference Drawer */}
         {showPreviousDrawer && previousHandovers.length > 0 && (
           <div className="bg-[#050b18] border-b border-blue-900/60 p-3.5 space-y-3 animate-in slide-in-from-top-2 duration-200">
@@ -552,80 +647,273 @@ export const SbarSignModal: React.FC<SbarSignModalProps> = ({
           </div>
         )}
 
-        {/* Main Form Body */}
-        <form onSubmit={handleSubmit} className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1 text-xs">
-          {/* Shift Metadata Row */}
-          <div className="p-3 rounded-xl bg-[#060b17] border border-slate-800 grid grid-cols-1 sm:grid-cols-4 gap-3 items-center">
-            {/* Shift Type */}
-            <div>
-              <label className="block text-[11px] text-slate-400 font-semibold mb-1">
-                {lang === 'ar' ? 'نوع المناوبة (Shift Type)' : 'Shift Type'}
-              </label>
-              <div className="grid grid-cols-2 gap-1.5">
-                {[
-                  { id: 'NIGHT', label: lang === 'ar' ? 'ليلية (Night)' : 'Night' },
-                  { id: 'DAY', label: lang === 'ar' ? 'صباحية (Day)' : 'Day' },
-                ].map((s) => (
+        {/* Body Content based on active tab */}
+        {modalTab === 'RECEIVE' ? (
+          <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1 text-xs">
+            {pendingHandover ? (
+              <div className="space-y-4">
+                {/* Banner */}
+                <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-950/90 via-amber-900/40 to-[#070c18] border border-amber-500/50 space-y-2 shadow-xl">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-3">
+                      <span className="w-10 h-10 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-black shrink-0 shadow-md">
+                        <CheckCircle2 className="w-6 h-6 stroke-[2.5]" />
+                      </span>
+                      <div>
+                        <h4 className="text-sm sm:text-base font-extrabold text-amber-300">
+                          {lang === 'ar' 
+                            ? `مراجعة بيانات تسليم المناوبة ${pendingHandover.shiftType === 'NIGHT' ? 'الليلية' : 'الصباحية'}` 
+                            : `Pending ${pendingHandover.shiftType} Shift Handover Review`}
+                        </h4>
+                        <p className="text-xs text-amber-200/90 mt-0.5">
+                          {lang === 'ar' 
+                            ? `الطبيب المُسَلِّم: د. ${pendingHandover.outgoingDoctor.name} (${pendingHandover.outgoingDoctor.role})`
+                            : `Outgoing clinician: Dr. ${pendingHandover.outgoingDoctor.name} (${pendingHandover.outgoingDoctor.role})`}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right font-mono text-xs text-amber-300 bg-amber-950/60 px-3 py-1.5 rounded-xl border border-amber-800/80">
+                      <div className="font-bold">{pendingHandover.shiftDate}</div>
+                      <div className="text-amber-200/70 text-[11px]">({pendingHandover.shiftStartTime} - {pendingHandover.shiftEndTime})</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Structured SBAR Card Display */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                  {/* Situation */}
+                  <div className="bg-[#060c1a] border border-teal-500/30 p-4 rounded-xl space-y-1.5 shadow-md">
+                    <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                      <span className="font-extrabold text-teal-300 text-xs flex items-center gap-1.5">
+                        <span className="w-5 h-5 rounded bg-teal-500/20 text-teal-300 flex items-center justify-center font-mono text-[10px]">S</span>
+                        <span>{lang === 'ar' ? 'الوضع السريري الحالي (Situation)' : 'Current Situation'}</span>
+                      </span>
+                    </div>
+                    <p className="text-slate-200 leading-relaxed text-xs pt-1 whitespace-pre-wrap">
+                      {pendingHandover.situation}
+                    </p>
+                  </div>
+
+                  {/* Background */}
+                  <div className="bg-[#060c1a] border border-cyan-500/30 p-4 rounded-xl space-y-1.5 shadow-md">
+                    <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                      <span className="font-extrabold text-cyan-300 text-xs flex items-center gap-1.5">
+                        <span className="w-5 h-5 rounded bg-cyan-500/20 text-cyan-300 flex items-center justify-center font-mono text-[10px]">B</span>
+                        <span>{lang === 'ar' ? 'الخلفية المرضية والتاريخ (Background)' : 'Medical Background'}</span>
+                      </span>
+                    </div>
+                    <p className="text-slate-200 leading-relaxed text-xs pt-1 whitespace-pre-wrap">
+                      {pendingHandover.background}
+                    </p>
+                  </div>
+
+                  {/* Assessment */}
+                  <div className="bg-[#060c1a] border border-amber-500/30 p-4 rounded-xl space-y-2.5 shadow-md md:col-span-2">
+                    <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                      <span className="font-extrabold text-amber-300 text-xs flex items-center gap-1.5">
+                        <span className="w-5 h-5 rounded bg-amber-500/20 text-amber-300 flex items-center justify-center font-mono text-[10px]">A</span>
+                        <span>{lang === 'ar' ? 'التقييم الشامل للأجهزة الحيوية (Assessment)' : 'Clinical Assessment'}</span>
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1">
+                      <div className="bg-[#040813] p-3 rounded-lg border border-slate-800">
+                        <span className="font-bold text-teal-400 block mb-0.5">{lang === 'ar' ? 'الدورة الدموية والضغط:' : 'Hemodynamics:'}</span>
+                        <span className="text-slate-200">{pendingHandover.assessment?.hemodynamics || '—'}</span>
+                      </div>
+                      <div className="bg-[#040813] p-3 rounded-lg border border-slate-800">
+                        <span className="font-bold text-cyan-400 block mb-0.5">{lang === 'ar' ? 'التنفس والأنبوب والرئة:' : 'Pulmonary & Airway:'}</span>
+                        <span className="text-slate-200">{pendingHandover.assessment?.pulmonaryAndAirway || '—'}</span>
+                      </div>
+                      <div className="bg-[#040813] p-3 rounded-lg border border-slate-800">
+                        <span className="font-bold text-amber-400 block mb-0.5">{lang === 'ar' ? 'الكلى والميزان والتمريض:' : 'Metabolic & Renal:'}</span>
+                        <span className="text-slate-200">{pendingHandover.assessment?.metabolicAndRenal || '—'}</span>
+                      </div>
+                      <div className="bg-[#040813] p-3 rounded-lg border border-slate-800">
+                        <span className="font-bold text-indigo-400 block mb-0.5">{lang === 'ar' ? 'الأعصاب والمهدئات (Neurology):' : 'Neurology & Sedation:'}</span>
+                        <span className="text-slate-200">{pendingHandover.assessment?.neurologyAndSedation || '—'}</span>
+                      </div>
+                      <div className="bg-[#040813] p-3 rounded-lg border border-slate-800 sm:col-span-2">
+                        <span className="font-bold text-rose-400 block mb-0.5">{lang === 'ar' ? 'المضادات الحيوية والعدوى:' : 'Infectious & Antibiotics:'}</span>
+                        <span className="text-slate-200">{pendingHandover.assessment?.infectiousDiseaseAndAntibiotics || '—'}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Recommendations */}
+                  <div className="bg-[#060c1a] border border-emerald-500/30 p-4 rounded-xl space-y-2 shadow-md md:col-span-2">
+                    <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                      <span className="font-extrabold text-emerald-300 text-xs flex items-center gap-1.5">
+                        <span className="w-5 h-5 rounded bg-emerald-500/20 text-emerald-300 flex items-center justify-center font-mono text-[10px]">R</span>
+                        <span>{lang === 'ar' ? 'التوصيات والأوامر الطبيّة (Recommendations & Orders)' : 'Recommendations'}</span>
+                      </span>
+                    </div>
+                    <ul className="list-disc list-inside space-y-1 text-slate-200 pt-1">
+                      {(pendingHandover.recommendationAndOrders || []).map((rec, i) => (
+                        <li key={i}>{rec}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+
+                {/* Accept / Acknowledge Shift Button */}
+                <div className="pt-3">
                   <button
                     type="button"
-                    key={s.id}
-                    onClick={() => {
-                      setShiftType(s.id as any);
-                      setShiftStartTime(s.id === 'NIGHT' ? '19:00' : '07:00');
-                      setShiftEndTime(s.id === 'NIGHT' ? '07:00' : '19:00');
-                    }}
-                    className={`py-1.5 px-2 rounded-lg font-bold text-xs transition-all cursor-pointer ${
-                      shiftType === s.id
-                        ? 'bg-teal-500 text-slate-950 shadow-md font-black'
-                        : 'bg-slate-800 text-slate-400 hover:text-white'
-                    }`}
+                    onClick={handleAcknowledgeShift}
+                    disabled={isAcking}
+                    className="w-full py-4 px-5 rounded-2xl bg-gradient-to-r from-amber-500 via-teal-500 to-emerald-500 hover:from-amber-400 hover:to-emerald-400 text-slate-950 font-black text-sm sm:text-base flex items-center justify-center gap-3 shadow-2xl shadow-amber-500/20 transition-all cursor-pointer active:scale-98 border-2 border-amber-300"
                   >
-                    {s.label}
+                    <CheckCircle2 className="w-6 h-6 stroke-[2.5]" />
+                    <span>
+                      {isAcking 
+                        ? (lang === 'ar' ? 'جاري توثيق الاستلام...' : 'Acknowledging...') 
+                        : (lang === 'ar' ? 'تم استلام المناوبة وتأكيد المراجعة السريرية' : 'Acknowledge & Confirm Shift Handover')}
+                    </span>
                   </button>
-                ))}
+                </div>
               </div>
-            </div>
+            ) : (
+              /* If no pending handover, show all clear notice */
+              <div className="py-12 text-center text-slate-400 space-y-3 bg-[#060c1a] rounded-2xl border border-slate-800 p-8 my-auto">
+                <FileCheck2 className="w-14 h-14 text-emerald-400 mx-auto" />
+                <h4 className="text-base font-bold text-white">
+                  {lang === 'ar' ? 'تم استلام جميع تسليمات المناوبات لهَذا المريض.' : 'All Shift Handovers Are Acknowledged'}
+                </h4>
+                <p className="text-xs text-slate-400 max-w-md mx-auto">
+                  {lang === 'ar' 
+                    ? 'لا يوجد تسليم معلق بحاجة لاستلام حالياً. يمكنك الآن التبديل لتبويب توثيق مناوبة جديدة لتسليم المريض لزميلك التالي.'
+                    : 'No pending handovers require receipt. You can proceed to create a new shift handover.'}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setModalTab('NEW')}
+                  className="mt-3 px-5 py-2.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-black text-xs cursor-pointer shadow-md inline-flex items-center gap-2 transition-all active:scale-95"
+                >
+                  <Plus className="w-4 h-4 text-slate-950" />
+                  <span>{lang === 'ar' ? 'الانتقال لتوثيق تسليم مناوبة جديدة' : 'Go to Create New Handover'}</span>
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          /* Main Form Body for New Handover */
+          <form onSubmit={handleSubmit} className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1 text-xs">
+            {/* Warning Banner if pending handover exists */}
+            {pendingHandover && (
+              <div className="p-3.5 rounded-xl bg-amber-950/90 border border-amber-600/80 text-amber-200 text-xs flex items-center justify-between gap-3 shadow-md">
+                <div className="flex items-center gap-2.5">
+                  <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
+                  <div>
+                    <strong className="block font-bold text-amber-300">
+                      {lang === 'ar' ? 'يوجد تقرير تسليم مناوبة سابق غير مَستَلَم' : 'Pending Unacknowledged Handover'}
+                    </strong>
+                    <p className="text-[11px] text-amber-200/90 mt-0.5">
+                      {lang === 'ar' 
+                        ? 'يلزمك أولاً الانتقال لتبويب "استلام ومراجعة المناوبة" والضغط على زر "تم استلام المناوبة" لمراجعة بيانات زميلك السابق قبل أن تتمكن من توثيق وتسليم مناوبة جديدة.'
+                        : 'You must first switch to "Review & Receive Shift" tab and click "Acknowledge Shift" before submitting a new handover.'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setModalTab('RECEIVE')}
+                  className="px-3 py-1.5 rounded-xl bg-amber-500 text-slate-950 font-black text-xs shrink-0 cursor-pointer hover:bg-amber-400 transition-all shadow"
+                >
+                  {lang === 'ar' ? 'انتقال للاستلام' : 'Go to Receive'}
+                </button>
+              </div>
+            )}
 
-            {/* Date */}
-            <div>
-              <label className="block text-[11px] text-slate-400 font-semibold mb-1">
-                {lang === 'ar' ? 'تاريخ المناوبة (Date)' : 'Shift Date'}
-              </label>
-              <input
-                type="date"
-                value={shiftDate}
-                onChange={(e) => setShiftDate(e.target.value)}
-                className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-2.5 py-1.5 text-white font-mono text-xs focus:border-teal-500 focus:outline-none"
-                required
-              />
-            </div>
+            {/* Shift Metadata Row */}
+          <div className="p-3.5 rounded-xl bg-[#060b17] border border-slate-800 space-y-2">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-center">
+              {/* Shift Type */}
+              <div>
+                <label className="block text-[11px] text-slate-300 font-semibold mb-1">
+                  {lang === 'ar' ? 'نوع المناوبة (Shift Type)' : 'Shift Type'}
+                </label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {[
+                    { id: 'NIGHT', label: lang === 'ar' ? 'ليلية (Night)' : 'Night' },
+                    { id: 'DAY', label: lang === 'ar' ? 'صباحية (Day)' : 'Day' },
+                  ].map((s) => (
+                    <button
+                      type="button"
+                      key={s.id}
+                      onClick={() => {
+                        setShiftType(s.id as any);
+                        setShiftStartTime(s.id === 'NIGHT' ? '19:00' : '07:00');
+                        setShiftEndTime(s.id === 'NIGHT' ? '07:00' : '19:00');
+                      }}
+                      className={`py-1.5 px-2 rounded-lg font-bold text-xs transition-all cursor-pointer ${
+                        shiftType === s.id
+                          ? 'bg-teal-500 text-slate-950 shadow-md font-black'
+                          : 'bg-slate-800 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
-            {/* Shift Start Time */}
-            <div>
-              <label className="block text-[11px] text-slate-400 font-semibold mb-1">
-                {lang === 'ar' ? 'وقت البدء (Start Time)' : 'Start Time'}
-              </label>
-              <input
-                type="text"
-                value={shiftStartTime}
-                onChange={(e) => setShiftStartTime(e.target.value)}
-                className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-2.5 py-1.5 text-white font-mono text-xs focus:border-teal-500 focus:outline-none text-center"
-                required
-              />
-            </div>
+              {/* Date with Calendar picker */}
+              <div>
+                <label className="block text-[11px] text-slate-300 font-semibold mb-1 flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    <Calendar className="w-3.5 h-3.5 text-teal-400" />
+                    <span>{lang === 'ar' ? 'تاريخ المناوبة' : 'Shift Date'}</span>
+                  </span>
+                  {shiftDate === new Date().toISOString().split('T')[0] && (
+                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-teal-950 text-teal-300 border border-teal-800 font-bold">
+                      {lang === 'ar' ? 'اليوم الحالي' : 'Today'}
+                    </span>
+                  )}
+                </label>
+                <input
+                  type="date"
+                  value={shiftDate}
+                  onChange={(e) => setShiftDate(e.target.value)}
+                  onClick={(e) => (e.target as any).showPicker?.()}
+                  style={{ colorScheme: 'dark' }}
+                  className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-2.5 py-1.5 text-white font-mono text-xs focus:border-teal-500 focus:outline-none cursor-pointer"
+                  required
+                />
+              </div>
 
-            {/* Shift End Time */}
-            <div>
-              <label className="block text-[11px] text-slate-400 font-semibold mb-1">
-                {lang === 'ar' ? 'وقت الانتهاء (End Time)' : 'End Time'}
-              </label>
-              <input
-                type="text"
-                value={shiftEndTime}
-                onChange={(e) => setShiftEndTime(e.target.value)}
-                className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-2.5 py-1.5 text-white font-mono text-xs focus:border-teal-500 focus:outline-none text-center"
-                required
-              />
+              {/* Shift Start Time with Clock picker */}
+              <div>
+                <label className="block text-[11px] text-slate-300 font-semibold mb-1 flex items-center gap-1">
+                  <Clock className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>{lang === 'ar' ? 'بداية المناوبة (الساعة)' : 'Start Time'}</span>
+                </label>
+                <input
+                  type="time"
+                  value={shiftStartTime}
+                  onChange={(e) => setShiftStartTime(e.target.value)}
+                  onClick={(e) => (e.target as any).showPicker?.()}
+                  style={{ colorScheme: 'dark' }}
+                  className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-2.5 py-1.5 text-white font-mono text-xs focus:border-teal-500 focus:outline-none text-center cursor-pointer"
+                  required
+                />
+              </div>
+
+              {/* Shift End Time with Clock picker */}
+              <div>
+                <label className="block text-[11px] text-slate-300 font-semibold mb-1 flex items-center gap-1">
+                  <Clock className="w-3.5 h-3.5 text-amber-400" />
+                  <span>{lang === 'ar' ? 'نهاية المناوبة (الساعة)' : 'End Time'}</span>
+                </label>
+                <input
+                  type="time"
+                  value={shiftEndTime}
+                  onChange={(e) => setShiftEndTime(e.target.value)}
+                  onClick={(e) => (e.target as any).showPicker?.()}
+                  style={{ colorScheme: 'dark' }}
+                  className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-2.5 py-1.5 text-white font-mono text-xs focus:border-teal-500 focus:outline-none text-center cursor-pointer"
+                  required
+                />
+              </div>
             </div>
           </div>
 
@@ -795,48 +1083,28 @@ export const SbarSignModal: React.FC<SbarSignModalProps> = ({
             />
           </div>
 
-          {/* Clinicians & Authentication Signatures */}
-          <div className="p-3.5 rounded-xl bg-[#060b17] border border-slate-800 grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {/* Outgoing Doctor */}
-            <div>
-              <label className="block text-[11px] text-slate-300 font-semibold mb-1">
-                {lang === 'ar' ? 'الطبيب/الممارس المُسَلِّم (Outgoing Staff):' : 'Outgoing Attending Clinician:'}
-              </label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={outgoingDoctorName}
-                  onChange={(e) => setOutgoingDoctorName(e.target.value)}
-                  placeholder="Dr. Name"
-                  className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-1.5 text-white focus:border-teal-500 focus:outline-none text-xs"
-                  required
-                />
-                <select
-                  value={outgoingDoctorRole}
-                  onChange={(e) => setOutgoingDoctorRole(e.target.value as StaffRole)}
-                  className="bg-[#0f172a] border border-slate-700 rounded-lg px-2 py-1.5 text-slate-300 text-xs focus:border-teal-500 focus:outline-none"
-                >
-                  <option value={StaffRole.CONSULTANT}>{lang === 'ar' ? 'استشاري' : 'Consultant'}</option>
-                  <option value={StaffRole.SPECIALIST}>{lang === 'ar' ? 'أخصائي' : 'Specialist'}</option>
-                  <option value={StaffRole.RESIDENT}>{lang === 'ar' ? 'مقيم' : 'Resident'}</option>
-                  <option value={StaffRole.LEAD_RN}>{lang === 'ar' ? 'مشرف تمريض' : 'Charge Nurse / Lead RN'}</option>
-                  <option value={StaffRole.BEDSIDE_RN}>{lang === 'ar' ? 'تمريض سريري' : 'Bedside RN'}</option>
-                </select>
+          {/* Current Clinician / Data Entry User Card */}
+          <div className="p-3.5 rounded-xl bg-[#060b17] border border-teal-500/30 flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-teal-500/15 border border-teal-500/30 flex items-center justify-center text-teal-400">
+                <User className="w-4 h-4" />
+              </div>
+              <div>
+                <span className="block text-[11px] text-slate-400 font-semibold">
+                  {lang === 'ar' ? 'اسم الطبيب المستخدم الحالي (مدخل البيانات):' : 'Current Logging Clinician (Data Entry User):'}
+                </span>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <strong className="text-teal-300 text-xs font-bold font-mono">
+                    {currentUser?.nameAr || currentUser?.nameEn || (lang === 'ar' ? 'د. الطبيب الحالي' : 'Dr. Current User')}
+                  </strong>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-teal-950 text-teal-400 border border-teal-800">
+                    {currentUser?.role || StaffRole.SPECIALIST}
+                  </span>
+                </div>
               </div>
             </div>
-
-            {/* Incoming Doctor */}
-            <div>
-              <label className="block text-[11px] text-slate-300 font-semibold mb-1">
-                {lang === 'ar' ? 'الطبيب/الممارس المُستَلِم (المستهدف اختيارياً):' : 'Incoming Clinician (Optional):'}
-              </label>
-              <input
-                type="text"
-                value={incomingDoctorName}
-                onChange={(e) => setIncomingDoctorName(e.target.value)}
-                placeholder={lang === 'ar' ? 'اسم الطبيب المستلم للمناوبة القادمة' : 'Incoming Doctor Name'}
-                className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-1.5 text-white focus:border-teal-500 focus:outline-none text-xs"
-              />
+            <div className="text-[10px] font-mono text-slate-400 bg-slate-900/80 px-2.5 py-1 rounded-lg border border-slate-800">
+              {lang === 'ar' ? 'مُوثّق بحساب المستخدم المعتمد' : 'Authenticated Logged-in User'}
             </div>
           </div>
 
@@ -858,19 +1126,26 @@ export const SbarSignModal: React.FC<SbarSignModalProps> = ({
               </button>
               <button
                 type="submit"
-                disabled={isSubmitting}
-                className="px-6 py-2 rounded-xl bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-slate-950 font-black text-xs flex items-center gap-2 shadow-lg shadow-teal-500/25 active:scale-95 transition-all cursor-pointer"
+                disabled={isSubmitting || !!pendingHandover}
+                className={`px-6 py-2 rounded-xl font-black text-xs flex items-center gap-2 shadow-lg transition-all cursor-pointer ${
+                  pendingHandover 
+                    ? 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed opacity-60' 
+                    : 'bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-slate-950 shadow-teal-500/25 active:scale-95'
+                }`}
               >
-                <ShieldCheck className="w-4 h-4 text-slate-950" />
+                <ShieldCheck className="w-4 h-4" />
                 <span>
-                  {isSubmitting 
-                    ? (lang === 'ar' ? 'جاري التوقيع والتشفير...' : 'Signing...') 
-                    : (lang === 'ar' ? 'توقيع واعتماد تسليم المناوبة SBAR' : 'Authenticate & Sign SBAR')}
+                  {pendingHandover 
+                    ? (lang === 'ar' ? 'يلزم استلام المناوبة السابقة أولاً' : 'Must Acknowledge Previous Shift First')
+                    : (isSubmitting 
+                        ? (lang === 'ar' ? 'جاري التوقيع والتشفير...' : 'Signing...') 
+                        : (lang === 'ar' ? 'توقيع واعتماد تسليم المناوبة SBAR' : 'Authenticate & Sign SBAR'))}
                 </span>
               </button>
             </div>
           </div>
         </form>
+        )}
       </div>
     </div>
   );

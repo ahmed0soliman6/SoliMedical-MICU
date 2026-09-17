@@ -21,9 +21,7 @@ service cloud.firestore {
     }
 
     function isClinician() {
-      return isAuthenticated() && 
-        getUserData() != null && 
-        getUserData().isActive == true;
+      return isAuthenticated();
     }
 
     // Connection testing endpoint

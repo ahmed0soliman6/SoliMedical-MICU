@@ -151,6 +151,9 @@ export interface InvestigationItem {
   notes?: string;
   recordedByName: string;
   recordedByStaffId?: string;
+  lastModifiedByName?: string;
+  lastModifiedByStaffId?: string;
+  lastModifiedAt?: string;
 }
 
 export interface PatientBedTransfer {
@@ -418,6 +421,8 @@ export interface FluidBalance24H {
     cryoUnits?: number;
   };
   netCumulativeBalanceMl: number; // Intake - Output (+ve / -ve)
+  shiftType?: 'DAY' | 'NIGHT';
+  shiftNameAr?: string;
   recordedByStaffName: string;
 }
 

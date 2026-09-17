@@ -12,6 +12,7 @@ import {
   Lock, 
   CheckCircle2, 
   ExternalLink,
+  History,
   Scale,
   Trash2,
   Edit3,
@@ -58,6 +59,7 @@ import {
   InvestigationItem,
   BedStatus,
   AcuityLevel,
+  IntakePathway,
   BedNumber,
   PumpStatus
 } from '../types/schema.ts';
@@ -68,6 +70,7 @@ import { useTranslation } from '../services/i18n.ts';
 import { useAuth } from '../services/AuthContext.tsx';
 import { syncStatLabsToCloud, syncPatientToCloud, syncPumpToCloud, firestore } from '../services/firebase.ts';
 import { doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { FullPageAdmission } from './FullPageAdmission.tsx';
 import { LabFlowsheetSection } from './LabFlowsheetSection.tsx';
 import { AntibioticsSection } from './AntibioticsSection.tsx';
 import { InvestigationsSection } from './InvestigationsSection.tsx';
@@ -79,6 +82,7 @@ import { VentilatorModal } from './VentilatorModal.tsx';
 import { InfusionPumpModal } from './InfusionPumpModal.tsx';
 import { FluidBalanceModal } from './FluidBalanceModal.tsx';
 import { SbarSignModal } from './SbarSignModal.tsx';
+import { AddVitalsModal } from './AddVitalsModal.tsx';
 import { LabsTemplateManager } from './LabsTemplateManager.tsx';
 import { 
   BedsideCardsConfigModal, 
@@ -98,6 +102,20 @@ interface BedsideFlowsheetProps {
   onOpenSbarSign: () => void;
   onDataUpdated: () => void;
 }
+
+const formatNumericDate = (dateVal?: string | Date | number): string => {
+  if (!dateVal) return '—';
+  try {
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return String(dateVal);
+    const day = d.getDate();
+    const month = d.getMonth() + 1;
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  } catch {
+    return '—';
+  }
+};
 
 export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
   bed,
@@ -154,6 +172,13 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
   const [isBedsideSbarModalOpen, setIsBedsideSbarModalOpen] = useState(false);
   const [selectedTemplateSbar, setSelectedTemplateSbar] = useState<SbarHandoverReport | null>(null);
   const [selectedSbarIdForView, setSelectedSbarIdForView] = useState<string | 'ALL'>('ALL');
+  const [showMoreSbars, setShowMoreSbars] = useState(false);
+  const [showMoreBedsideFluids, setShowMoreBedsideFluids] = useState(false);
+
+  // Vitals pagination and edit states
+  const [showAllVitals, setShowAllVitals] = useState(false);
+  const [selectedVitalForEdit, setSelectedVitalForEdit] = useState<TelemetryVitals | null>(null);
+  const [isEditVitalsModalOpen, setIsEditVitalsModalOpen] = useState(false);
 
   // Bedside cards configuration per bed
   const [cardsConfig, setCardsConfig] = useState<BedsideCardsConfig>(() => {
@@ -174,10 +199,42 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
     }
   };
 
-  // Operation modals
+  // Operation modals & Full Demographics Edit Modal
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [isSwapModalOpen, setIsSwapModalOpen] = useState(false);
   const [isIsolationModalOpen, setIsIsolationModalOpen] = useState(false);
+  const [isEditPatientModalOpen, setIsEditPatientModalOpen] = useState(false);
+
+  // Acuity & Pathway Helper Functions
+  const getAcuityArLabel = (level?: AcuityLevel) => {
+    switch (level) {
+      case AcuityLevel.CRITICAL_STAT: return lang === 'ar' ? 'حالة حرجة جداً (STAT)' : 'Critical (STAT)';
+      case AcuityLevel.HIGH_VIGILANCE: return lang === 'ar' ? 'حرجة مع يقظة عالية' : 'High Vigilance';
+      case AcuityLevel.GUARDED_STABLE: return lang === 'ar' ? 'مستقر تحت الملاحظة' : 'Guarded Stable';
+      case AcuityLevel.STEP_DOWN: return lang === 'ar' ? 'نقاهة / قسم داخلي' : 'Step-Down';
+      default: return level || (lang === 'ar' ? 'حرجة / تحت التقييم' : 'Critical');
+    }
+  };
+
+  const getAcuityStyle = (level?: AcuityLevel) => {
+    switch (level) {
+      case AcuityLevel.CRITICAL_STAT: return 'bg-red-950/80 text-red-300 border-red-800/80';
+      case AcuityLevel.HIGH_VIGILANCE: return 'bg-amber-950/80 text-amber-300 border-amber-800/80';
+      case AcuityLevel.GUARDED_STABLE: return 'bg-teal-950/80 text-teal-300 border-teal-800/80';
+      case AcuityLevel.STEP_DOWN: return 'bg-blue-950/80 text-blue-300 border-blue-800/80';
+      default: return 'bg-red-950/80 text-red-300 border-red-800/80';
+    }
+  };
+
+  const getPathwayArLabel = (pathway?: IntakePathway) => {
+    switch (pathway) {
+      case IntakePathway.STAT_CRITICAL: return lang === 'ar' ? 'طوارئ / استقبال (ER)' : 'ER / Stat Critical';
+      case IntakePathway.ELECTIVE_POST_OP: return lang === 'ar' ? 'عمليات / جراحة (OR)' : 'OR / Elective Post-Op';
+      case IntakePathway.FLOOR_TRANSFER: return lang === 'ar' ? 'قسم داخلي (Ward)' : 'Floor Transfer';
+      case IntakePathway.ER_REFERRAL: return lang === 'ar' ? 'استقبال حرج (ER)' : 'ER Referral';
+      default: return pathway || (lang === 'ar' ? 'استقبال حرج (ER)' : 'ER Admission');
+    }
+  };
 
   // History & Diagnosis edit states
   const [isHistoryEditing, setIsHistoryEditing] = useState(false);
@@ -307,8 +364,8 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
     const sbars = await db.sbarHandovers
       .where('patientId')
       .equals(patient.id)
-      .reverse()
-      .sortBy('shiftDate');
+      .toArray();
+    sbars.sort((a, b) => new Date(b.outgoingDoctor?.signedAt || b.shiftDate || 0).getTime() - new Date(a.outgoingDoctor?.signedAt || a.shiftDate || 0).getTime());
     setSbarList(sbars);
 
     const notes = await db.clinicalNotes
@@ -1118,9 +1175,9 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       )}
 
       {/* Top Patient Header Banner Card (Clean minimal view, folded by default) */}
-      <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-3 sm:p-3.5 shadow-xl transition-all">
+      <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-3 sm:p-4 shadow-xl transition-all space-y-3">
         <div className="flex items-center justify-between gap-3">
-          {/* Back Button, Bed Number, Patient Name & SBAR Handover Button Right Beside Name */}
+          {/* Back Button, Bed Number, Patient Name & Age */}
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
             <button
               onClick={onBack}
@@ -1130,25 +1187,36 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
               <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
 
-            <span className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-teal-500/20 text-teal-300 border border-teal-500/40 font-mono font-black text-xs sm:text-sm flex items-center justify-center shadow-md flex-shrink-0">
+            {/* Bed Number Indicator (Red if bed is isolated) */}
+            <span className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl font-mono font-black text-xs sm:text-sm flex items-center justify-center shadow-md flex-shrink-0 ${
+              (bed.status === 'ISOLATION' || bed.isolation?.isIsolated)
+                ? 'bg-red-950 text-red-500 border border-red-500/40 animate-pulse'
+                : 'bg-teal-500/20 text-teal-300 border border-teal-500/40'
+            }`}>
               {bed.bedNumber}
             </span>
-
-            <div className="flex items-center gap-2.5 min-w-0 flex-wrap flex-1">
-              <h1 className="text-base sm:text-lg font-bold text-white truncate max-w-[220px] sm:max-w-xs md:max-w-md">
-                {patient.fullNameAr || patient.fullNameEn}
-              </h1>
-
-              {/* زر تسليم SBAR بجوار الاسم مباشرة */}
-              {settings.features.enableSbarHandover && (
-                <button
-                  onClick={onOpenSbarSign}
-                  className="flex items-center gap-1.5 px-2.5 py-1 sm:py-1.5 rounded-xl bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-slate-950 text-xs font-bold transition-all shadow-md shadow-teal-500/20 active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
-                  title={lang === 'ar' ? 'تسليم SBAR السريري' : 'SBAR Handover Sign'}
-                >
-                  <ShieldCheck className="w-3.5 h-3.5 stroke-[2.5]" />
-                  <span>{lang === 'ar' ? 'تسليم SBAR' : 'SBAR Sign'}</span>
-                </button>
+ 
+            {/* Name, Age, Diagnosis Column */}
+            <div className="flex flex-col min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-nowrap min-w-0">
+                <h1 className="text-xs xs:text-sm sm:text-base md:text-lg font-black text-white truncate min-w-0 flex-shrink">
+                  {patient.fullNameAr || patient.fullNameEn}
+                </h1>
+                {patient.age && (
+                  <span className="text-[10px] sm:text-xs font-extrabold text-teal-300 font-mono bg-teal-950/90 px-1.5 py-0.5 rounded-lg border border-teal-800/80 shrink-0 whitespace-nowrap">
+                    {patient.age} {lang === 'ar' ? 'سنة' : 'Y'}
+                  </span>
+                )}
+              </div>
+              {isPatientCardCollapsed && (
+                <p className="text-[11px] sm:text-xs text-slate-400 font-medium mt-1 leading-normal break-words">
+                  <span className="text-slate-500">{lang === 'ar' ? 'التشخيص:' : 'Dx:'}</span>{' '}
+                  <span className="text-teal-300 font-semibold">
+                    {lang === 'ar' 
+                      ? (patient.primaryDiagnosisAr || patient.primaryDiagnosisEn || '—') 
+                      : (patient.primaryDiagnosisEn || patient.primaryDiagnosisAr || '—')}
+                  </span>
+                </p>
               )}
             </div>
           </div>
@@ -1171,46 +1239,76 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
           </button>
         </div>
 
-        {/* Expandable Details: Primary Diagnosis & Action Buttons (Hidden when collapsed) */}
-        {!isPatientCardCollapsed && (
-          <div className="mt-3 pt-3 border-t border-slate-800/80 flex flex-col lg:flex-row lg:items-center justify-between gap-3 animate-in fade-in duration-200">
-            {/* Primary Diagnosis */}
-            <div className="min-w-0">
-              <p className="text-xs text-teal-300/90 font-mono truncate">
-                <span className="text-slate-400 font-sans">{lang === 'ar' ? 'التشخيص الأساسي:' : 'Primary Dx:'}</span>{' '}
-                {lang === 'ar' 
-                  ? (patient.primaryDiagnosisAr || patient.primaryDiagnosisEn || '—') 
-                  : (patient.primaryDiagnosisEn || patient.primaryDiagnosisAr || '—')}
-              </p>
-            </div>
+        {/* Responsive Mobile-Friendly Shift Handover Buttons Row */}
+        {settings.features.enableSbarHandover && (() => {
+          const pendingSbar = sbarList.find(s => !s.incomingDoctor?.signedAt);
+          return (
+            <div className="pt-2 border-t border-slate-800/80 flex items-center gap-2 flex-wrap sm:flex-nowrap w-full">
+              {/* Receive Shift Button */}
+              {pendingSbar && (
+                <button
+                  onClick={() => {
+                    setSelectedTemplateSbar(pendingSbar);
+                    setIsBedsideSbarModalOpen(true);
+                  }}
+                  className="flex-1 min-w-[130px] flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black transition-all shadow-lg shadow-amber-500/20 active:scale-98 cursor-pointer animate-pulse border border-amber-300"
+                  title={lang === 'ar' ? 'استلام ومراجعة المناوبة الحالية' : 'Receive Pending Shift Handover'}
+                >
+                  <CheckCircle2 className="w-4 h-4 stroke-[2.5] text-slate-950 shrink-0" />
+                  <span className="truncate">
+                    {lang === 'ar' 
+                      ? `استلام مناوبة ${pendingSbar.shiftType === 'NIGHT' ? 'ليلية' : 'صباحية'}` 
+                      : `Receive ${pendingSbar.shiftType === 'NIGHT' ? 'Night' : 'Day'} Shift`}
+                  </span>
+                </button>
+              )}
 
-            {/* Action Buttons: Transfer, Swap, Isolation */}
-            <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
+              {/* Handover SBAR Sign Button */}
+              <button
+                onClick={onOpenSbarSign}
+                className="flex-1 min-w-[130px] flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-slate-950 text-xs font-black transition-all shadow-md shadow-teal-500/20 active:scale-98 cursor-pointer"
+                title={lang === 'ar' ? 'تسليم SBAR السريري' : 'SBAR Handover Sign'}
+              >
+                <ShieldCheck className="w-4 h-4 stroke-[2.5] shrink-0" />
+                <span>{lang === 'ar' ? 'تسليم SBAR' : 'SBAR Sign'}</span>
+                <span className="px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[10px] font-black font-mono shadow-sm">
+                  {sbarList.length}
+                </span>
+              </button>
+            </div>
+          );
+        })()}
+
+        {/* Expandable Details: Action Buttons (Hidden when collapsed) */}
+        {!isPatientCardCollapsed && (
+          <div className="mt-3 pt-3 border-t border-slate-800/80 animate-in fade-in duration-200">
+            {/* Action Buttons: Transfer, Swap, Isolation - Unified Row */}
+            <div className="grid grid-cols-3 gap-1.5 w-full sm:flex sm:items-center sm:justify-end sm:gap-2">
               <button
                 onClick={() => setIsTransferModalOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-500/40 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
+                className="flex flex-col sm:flex-row items-center justify-center gap-1 px-1 py-1.5 sm:px-3 sm:py-1.5 rounded-xl bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-500/40 text-[10px] xs:text-[11px] sm:text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer text-center min-w-0"
                 title={lang === 'ar' ? 'نقل المريض لسرير شاغر' : 'Transfer patient to vacant bed'}
               >
-                <ArrowRightLeft className="w-3.5 h-3.5 text-blue-400" />
-                <span>{lang === 'ar' ? 'نقل المريض' : 'Transfer Bed'}</span>
+                <ArrowRightLeft className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                <span className="truncate">{lang === 'ar' ? 'نقل المريض' : 'Transfer'}</span>
               </button>
 
               <button
                 onClick={() => setIsSwapModalOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
+                className="flex flex-col sm:flex-row items-center justify-center gap-1 px-1 py-1.5 sm:px-3 sm:py-1.5 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 text-[10px] xs:text-[11px] sm:text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer text-center min-w-0"
                 title={lang === 'ar' ? 'تبديل سريرين ومشغولين' : 'Swap beds'}
               >
-                <Layers className="w-3.5 h-3.5 text-purple-400" />
-                <span>{lang === 'ar' ? 'تبديل سريرين' : 'Swap Beds'}</span>
+                <Layers className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                <span className="truncate">{lang === 'ar' ? 'تبديل سريرين' : 'Swap Beds'}</span>
               </button>
 
               <button
                 onClick={() => setIsIsolationModalOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
+                className="flex flex-col sm:flex-row items-center justify-center gap-1 px-1 py-1.5 sm:px-3 sm:py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-[10px] xs:text-[11px] sm:text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer text-center min-w-0"
                 title={lang === 'ar' ? 'تدابير العزل وحالة السرير' : 'Manage bed status & isolation'}
               >
-                <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
-                <span>{lang === 'ar' ? 'العزل والحالة' : 'Bed Status'}</span>
+                <ShieldAlert className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span className="truncate">{lang === 'ar' ? 'العزل والحالة' : 'Bed Status'}</span>
               </button>
             </div>
           </div>
@@ -1323,51 +1421,94 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
             <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-4 shadow-xl flex flex-col justify-between lg:col-span-1">
               <div 
                 onClick={() => setIsDemographicsCardCollapsed(!isDemographicsCardCollapsed)}
-                className="border-b border-slate-800 pb-2.5 flex items-center justify-between cursor-pointer hover:bg-slate-800/40 p-2 rounded-xl transition-all"
+                className="border-b border-slate-800/80 pb-3 flex flex-col gap-2.5 cursor-pointer hover:bg-slate-800/40 p-2 rounded-xl transition-all"
               >
-                <div className="flex items-center gap-2">
-                  <User className="w-5 h-5 text-indigo-400" />
-                  <h3 className="text-base font-bold text-white">
-                    {lang === 'ar' ? 'بيانات المريض الأساسية' : 'Patient Demographics'}
-                  </h3>
+                {/* Header Row: Title & Action Controls */}
+                <div className="flex items-center justify-between w-full">
+                  <div className="flex items-center gap-2">
+                    <User className="w-5 h-5 text-indigo-400 shrink-0" />
+                    <h3 className="text-base font-bold text-white">
+                      {lang === 'ar' ? 'بيانات المريض الأساسية' : 'Patient Demographics'}
+                    </h3>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-[11px] text-teal-400 bg-teal-950/80 px-2 py-0.5 rounded border border-teal-800 font-bold">
+                      {bed.bedNumber}
+                    </span>
+
+                    {/* Edit Button - ONLY visible when expanded */}
+                    {!isDemographicsCardCollapsed && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIsEditPatientModalOpen(true);
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 border border-teal-500/40 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 active:scale-95 shadow-sm"
+                        title={lang === 'ar' ? 'تعديل كافة بيانات المريض' : 'Edit Demographics'}
+                      >
+                        <Edit3 className="w-3.5 h-3.5 text-teal-400" />
+                        <span>{lang === 'ar' ? 'تعديل' : 'Edit'}</span>
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsDemographicsCardCollapsed(!isDemographicsCardCollapsed);
+                      }}
+                      className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all cursor-pointer"
+                      title={isDemographicsCardCollapsed ? (lang === 'ar' ? 'فتح البطاقة' : 'Expand') : (lang === 'ar' ? 'طي البطاقة' : 'Collapse')}
+                    >
+                      {isDemographicsCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-[11px] text-teal-400 bg-teal-950/80 px-2 py-0.5 rounded border border-teal-800 font-bold">
-                    {bed.bedNumber}
+                {/* Sub-row: Risk Level & Admission Pathway - ALWAYS VISIBLE EVEN WHEN COLLAPSED ON A SINGLE ROW */}
+                <div className="grid grid-cols-2 gap-1.5 w-full pt-0.5">
+                  <span className={`px-2 py-1.5 rounded-lg font-bold border shadow-sm flex items-center justify-center gap-1 text-[9px] xs:text-[10px] sm:text-[11px] truncate ${getAcuityStyle(patient.acuityLevel)}`}>
+                    <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate">{lang === 'ar' ? `${getAcuityArLabel(patient.acuityLevel)}` : `${patient.acuityLevel}`}</span>
                   </span>
 
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setIsDemographicsCardCollapsed(!isDemographicsCardCollapsed);
-                    }}
-                    className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all cursor-pointer"
-                    title={isDemographicsCardCollapsed ? (lang === 'ar' ? 'فتح البطاقة' : 'Expand') : (lang === 'ar' ? 'طي البطاقة' : 'Collapse')}
-                  >
-                    {isDemographicsCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
-                  </button>
+                  <span className="px-2 py-1.5 rounded-lg font-bold border shadow-sm flex items-center justify-center gap-1 text-[9px] xs:text-[10px] sm:text-[11px] bg-slate-900 text-cyan-300 border-cyan-800/80 truncate">
+                    <ArrowRightLeft className="w-3.5 h-3.5 shrink-0 text-cyan-400" />
+                    <span className="truncate">{lang === 'ar' ? `${getPathwayArLabel(patient.intakePathway)}` : `${patient.intakePathway}`}</span>
+                  </span>
                 </div>
               </div>
 
               {!isDemographicsCardCollapsed && (
                 <>
-                  <div className="grid grid-cols-2 gap-3.5 my-4 text-xs font-mono">
-                    <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
+                  <div className="grid grid-cols-2 gap-3 my-4 text-xs font-mono">
+                    {/* Full Name */}
+                    <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800 col-span-2">
                       <div className="text-[10px] text-slate-500">{lang === 'ar' ? 'الاسم كاملاً' : 'Full Name'}</div>
                       <div className="text-white font-bold mt-0.5 text-xs truncate">
                         {patient.fullNameAr || patient.fullNameEn}
                       </div>
                     </div>
 
+                    {/* Medical Record Number (MRN) */}
                     <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
-                      <div className="text-[10px] text-slate-500">{lang === 'ar' ? 'رقم بطاقة المريض (آخر 4 أرقام)' : 'Card ID / MRN (Last 4)'}</div>
-                      <div className="text-teal-400 font-bold mt-0.5 font-mono text-sm">
-                        •••• {(patient.mrn || patient.nationalId || '').slice(-4) || '—'}
+                      <div className="text-[10px] text-slate-500">{lang === 'ar' ? 'رقم الملف الطبي (MRN)' : 'MRN / File No.'}</div>
+                      <div className="text-teal-400 font-bold mt-0.5 font-mono text-xs">
+                        {patient.mrn || '—'}
                       </div>
                     </div>
 
+                    {/* Card ID / National ID */}
+                    <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
+                      <div className="text-[10px] text-slate-500">{lang === 'ar' ? 'رقم البطاقة (الهوية)' : 'Card ID / National ID'}</div>
+                      <div className="text-cyan-300 font-bold mt-0.5 font-mono text-xs">
+                        {patient.nationalId || '—'}
+                      </div>
+                    </div>
+
+                    {/* Age & Gender */}
                     <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
                       <div className="text-[10px] text-slate-500">{lang === 'ar' ? 'السن والجنس' : 'Age & Gender'}</div>
                       <div className="text-white font-bold mt-0.5">
@@ -1375,6 +1516,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                       </div>
                     </div>
 
+                    {/* Blood Group */}
                     <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
                       <div className="text-[10px] text-slate-500">{lang === 'ar' ? 'فصيلة الدم' : 'Blood Group'}</div>
                       <div className="text-amber-400 font-bold mt-0.5">
@@ -1382,29 +1524,31 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                       </div>
                     </div>
 
+                    {/* Height & Weight (without Ideal Weight) */}
+                    <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
+                      <div className="text-[10px] text-slate-500">{lang === 'ar' ? 'الطول والوزن' : 'Height & Weight'}</div>
+                      <div className="text-white font-bold mt-1 flex items-center justify-between gap-2 text-xs">
+                        <div className="flex items-center gap-1">
+                          <span className="text-slate-400">{lang === 'ar' ? 'الطول:' : 'H:'}</span>
+                          <span className="text-cyan-300 font-mono">{patient.heightCm ? `${patient.heightCm}cm` : '170cm'}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span className="text-slate-400">{lang === 'ar' ? 'الوزن:' : 'W:'}</span>
+                          <span className="text-amber-300 font-mono">{patient.weightKg}kg</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* ICU Admission Date - side-by-side with H&W, numeric-formatted */}
                     <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
                       <div className="text-[10px] text-slate-500">{lang === 'ar' ? 'تاريخ دخول العناية' : 'ICU Admission Date'}</div>
-                      <div className="text-teal-400 font-bold mt-0.5">
-                        {new Date(patient.admissionDate).toLocaleDateString(lang === 'ar' ? 'ar-EG' : 'en-US', { day: '2-digit', month: 'short', year: 'numeric' })}
-                      </div>
-                    </div>
-
-                    <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
-                      <div className="text-[10px] text-slate-500">{lang === 'ar' ? 'الوزن والوزن المثالي' : 'Weight / IBW'}</div>
-                      <div className="text-white font-bold mt-0.5">
-                        {patient.weightKg}kg (IBW: <span className="text-teal-400">{patient.idealBodyWeightKg}</span>kg)
+                      <div className="text-teal-400 font-bold mt-1 text-xs">
+                        {formatNumericDate(patient.admissionDate)}
                       </div>
                     </div>
                   </div>
 
-                  <div className="text-[11px] text-slate-400 bg-slate-950/60 p-2.5 rounded-xl border border-slate-800/80 flex items-center gap-1.5 leading-snug">
-                    <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0" />
-                    <span>
-                      {lang === 'ar'
-                        ? 'البيانات الطبية والتاريخ المرضي يتزامن فوريّاً مع شاشات المراقبة السريرية والأجهزة اللوحية.'
-                        : 'Clinical history updates synchronize instantly with core monitors and staff bedside tablets.'}
-                    </span>
-                  </div>
+                  {/* Removed the synchronization warning alert block as requested */}
                 </>
               )}
             </div>
@@ -1577,11 +1721,18 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
             onClick={() => setIsPaperVitalsCardCollapsed(!isPaperVitalsCardCollapsed)}
             className="flex items-center justify-between border-b border-slate-800 pb-2.5 cursor-pointer hover:bg-slate-800/40 p-2 rounded-xl transition-all"
           >
-            <div className="flex items-center gap-2">
-              <Activity className="w-5 h-5 text-teal-400" />
-              <h3 className="text-base font-bold text-white">
-                {lang === 'ar' ? 'العلامات الحيوية والمراقبة المستمرة (Vitals & Telemetry)' : 'Continuous Vitals & Telemetry'}
-              </h3>
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-teal-500/10 border border-teal-500/30 text-teal-400">
+                <Activity className="w-5 h-5" />
+              </div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold text-white">
+                  {lang === 'ar' ? 'العلامات الحيوية' : 'Vital Signs'}
+                </h3>
+                <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/30">
+                  {vitalsHistory.length}
+                </span>
+              </div>
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -1590,9 +1741,12 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                   e.stopPropagation();
                   setIsPaperVitalsCardCollapsed(!isPaperVitalsCardCollapsed);
                 }}
-                className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all cursor-pointer"
+                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all cursor-pointer flex items-center gap-1 text-xs"
                 title={isPaperVitalsCardCollapsed ? (lang === 'ar' ? 'فتح البطاقة' : 'Expand') : (lang === 'ar' ? 'طي البطاقة' : 'Collapse')}
               >
+                <span className="text-[11px] text-slate-400 hidden sm:inline">
+                  {isPaperVitalsCardCollapsed ? (lang === 'ar' ? 'عرض السجل' : 'Expand') : (lang === 'ar' ? 'طي' : 'Collapse')}
+                </span>
                 {isPaperVitalsCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
               </button>
             </div>
@@ -1710,48 +1864,89 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                   <table className={`w-full text-xs ${isRTL ? 'text-right' : 'text-left'}`}>
                     <thead>
                       <tr className="border-b border-slate-800 text-slate-400 font-mono">
-                        <th className="py-2 px-3">{lang === 'ar' ? 'التوقيت' : 'Time'}</th>
+                        <th className="py-2 px-3">{lang === 'ar' ? 'التاريخ والوقت' : 'Date & Time'}</th>
                         <th className="py-2 px-3">MAP (mmHg)</th>
                         <th className="py-2 px-3">BP (Sys/Dia)</th>
                         <th className="py-2 px-3">HR (bpm)</th>
                         <th className="py-2 px-3">SpO₂ (%)</th>
                         <th className="py-2 px-3">RR (cpm)</th>
                         <th className="py-2 px-3">{lang === 'ar' ? 'اللاكتات' : 'Lactate'}</th>
-                        <th className="py-2 px-3">{lang === 'ar' ? 'المسجل' : 'Staff'}</th>
+                        <th className="py-2 px-3">{lang === 'ar' ? 'المسجل والتعديل' : 'Staff / Actions'}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/60 font-mono">
-                      {vitalsHistory.map((v) => (
-                        <tr key={v.id} className="hover:bg-slate-800/30">
-                          <td className="py-2.5 px-3 text-slate-400">
-                            {new Date(v.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}
-                          </td>
-                          <td className={`py-2.5 px-3 font-bold ${v.meanArterialPressureMmHg < 65 ? 'text-red-400' : 'text-cyan-300'}`}>
-                            {v.meanArterialPressureMmHg}
-                          </td>
-                          <td className="py-2.5 px-3 text-white">
-                            {v.systolicBpMmHg}/{v.diastolicBpMmHg} {v.isArterialLine ? '(Art)' : '(Cuff)'}
-                          </td>
-                          <td className="py-2.5 px-3 text-emerald-400">
-                            {v.heartRateBpm}
-                          </td>
-                          <td className="py-2.5 px-3 text-teal-300">
-                            {v.spo2Percent}% ({v.fio2SuppliedPercent}% Fi)
-                          </td>
-                          <td className="py-2.5 px-3 text-slate-300">
-                            {v.respiratoryRateCpm}
-                          </td>
-                          <td className="py-2.5 px-3 text-purple-300">
-                            {v.lactateMmolPerL ?? '—'}
-                          </td>
-                          <td className="py-2.5 px-3 text-slate-400 text-[11px] font-sans">
-                            {v.recordedBy.name}
-                          </td>
-                        </tr>
-                      ))}
+                      {(showAllVitals ? vitalsHistory : vitalsHistory.slice(0, 4)).map((v) => {
+                        const d = new Date(v.timestamp);
+                        const dateStr = formatNumericDate(d);
+                        const timeStr = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+                        return (
+                          <tr key={v.id} className="hover:bg-slate-800/30">
+                            <td className="py-2.5 px-3">
+                              <div className="flex flex-col">
+                                <span className="font-bold text-slate-200">{dateStr}</span>
+                                <span className="text-[10px] text-slate-400 font-mono">{timeStr}</span>
+                              </div>
+                            </td>
+                            <td className={`py-2.5 px-3 font-bold ${v.meanArterialPressureMmHg < 65 ? 'text-red-400' : 'text-cyan-300'}`}>
+                              {v.meanArterialPressureMmHg}
+                            </td>
+                            <td className="py-2.5 px-3 text-white">
+                              {v.systolicBpMmHg}/{v.diastolicBpMmHg} {v.isArterialLine ? '(Art)' : '(Cuff)'}
+                            </td>
+                            <td className="py-2.5 px-3 text-emerald-400">
+                              {v.heartRateBpm}
+                            </td>
+                            <td className="py-2.5 px-3 text-teal-300">
+                              {v.spo2Percent}% ({v.fio2SuppliedPercent}% Fi)
+                            </td>
+                            <td className="py-2.5 px-3 text-slate-300">
+                              {v.respiratoryRateCpm}
+                            </td>
+                            <td className="py-2.5 px-3 text-purple-300">
+                              {v.lactateMmolPerL ?? '—'}
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-slate-400 text-[11px] font-sans truncate max-w-[110px]">
+                                  {v.recordedBy?.name || (lang === 'ar' ? 'الكادر الطبي' : 'Staff')}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedVitalForEdit(v);
+                                    setIsEditVitalsModalOpen(true);
+                                  }}
+                                  className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-teal-500/10 hover:bg-teal-500/20 text-teal-300 border border-teal-500/30 text-[10px] font-bold transition-all cursor-pointer shadow-xs active:scale-95 whitespace-nowrap"
+                                  title={lang === 'ar' ? 'تعديل القراءة الحيوية' : 'Edit vital reading'}
+                                >
+                                  <Edit3 className="w-3 h-3" />
+                                  <span>{lang === 'ar' ? 'تعديل' : 'Edit'}</span>
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
+
+                {vitalsHistory.length > 4 && (
+                  <div className="flex justify-center pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowAllVitals(!showAllVitals)}
+                      className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-teal-300 font-bold text-xs border border-slate-700 transition-all cursor-pointer shadow-sm active:scale-95"
+                    >
+                      <span>
+                        {showAllVitals 
+                          ? (lang === 'ar' ? 'عرض أقل' : 'Show Less') 
+                          : (lang === 'ar' ? `عرض المزيد (${vitalsHistory.length - 4} سجلات إضافية)` : `Show More (${vitalsHistory.length - 4} more records)`)}
+                      </span>
+                      {showAllVitals ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -2672,11 +2867,18 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
             onClick={() => setIsPaperLabsCardCollapsed(!isPaperLabsCardCollapsed)}
             className="flex items-center justify-between border-b border-slate-800 pb-2.5 cursor-pointer hover:bg-slate-800/40 p-2 rounded-xl transition-all"
           >
-            <div className="flex items-center gap-2">
-              <FlaskConical className="w-5 h-5 text-teal-400" />
-              <h3 className="text-base font-bold text-white">
-                {lang === 'ar' ? 'سجل التحاليل' : 'Labs Record'}
-              </h3>
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-teal-500/10 border border-teal-500/30 text-teal-400">
+                <FlaskConical className="w-5 h-5" />
+              </div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold text-white">
+                  {lang === 'ar' ? 'سجل التحاليل' : 'Labs Record'}
+                </h3>
+                <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/30">
+                  {new Set(labResults.map(l => (l.testName || '').trim().toLowerCase())).size}
+                </span>
+              </div>
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -2685,9 +2887,12 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                   e.stopPropagation();
                   setIsPaperLabsCardCollapsed(!isPaperLabsCardCollapsed);
                 }}
-                className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all cursor-pointer"
+                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all cursor-pointer flex items-center gap-1 text-xs"
                 title={isPaperLabsCardCollapsed ? (lang === 'ar' ? 'فتح البطاقة' : 'Expand') : (lang === 'ar' ? 'طي البطاقة' : 'Collapse')}
               >
+                <span className="text-[11px] text-slate-400 hidden sm:inline">
+                  {isPaperLabsCardCollapsed ? (lang === 'ar' ? 'عرض السجل' : 'Expand') : (lang === 'ar' ? 'طي' : 'Collapse')}
+                </span>
                 {isPaperLabsCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
               </button>
             </div>
@@ -2726,16 +2931,23 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
 
       {/* Tab: Investigations, Radiology & POCUS Studies */}
       {(activeTab === 'investigations' || activeTab === 'all') && (
-        <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-4 shadow-xl space-y-4">
+        <div id="patient-investigations-card" className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-4 shadow-xl space-y-4">
           <div 
             onClick={() => setIsPaperInvestigationsCardCollapsed(!isPaperInvestigationsCardCollapsed)}
             className="flex items-center justify-between border-b border-slate-800 pb-2.5 cursor-pointer hover:bg-slate-800/40 p-2 rounded-xl transition-all"
           >
-            <div className="flex items-center gap-2">
-              <Scan className="w-5 h-5 text-teal-400" />
-              <h3 className="text-base font-bold text-white">
-                {lang === 'ar' ? 'الفحوصات والأشعة وموجات القلب الطارئة (Radiology & POCUS)' : 'Radiology, Investigations & POCUS'}
-              </h3>
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-teal-500/10 border border-teal-500/30 text-teal-400">
+                <Scan className="w-5 h-5" />
+              </div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold text-white">
+                  {lang === 'ar' ? 'الفحوصات والأشعة' : 'Investigations & Radiology'}
+                </h3>
+                <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/30">
+                  {investigations.filter(i => i.patientId === patient.id).length}
+                </span>
+              </div>
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -2744,9 +2956,12 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                   e.stopPropagation();
                   setIsPaperInvestigationsCardCollapsed(!isPaperInvestigationsCardCollapsed);
                 }}
-                className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all cursor-pointer"
+                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all cursor-pointer flex items-center gap-1 text-xs"
                 title={isPaperInvestigationsCardCollapsed ? (lang === 'ar' ? 'فتح البطاقة' : 'Expand') : (lang === 'ar' ? 'طي البطاقة' : 'Collapse')}
               >
+                <span className="text-[11px] text-slate-400 hidden sm:inline">
+                  {isPaperInvestigationsCardCollapsed ? (lang === 'ar' ? 'عرض السجل' : 'Expand') : (lang === 'ar' ? 'طي' : 'Collapse')}
+                </span>
                 {isPaperInvestigationsCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
               </button>
             </div>
@@ -3114,8 +3329,8 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
               <Scale className="w-5 h-5 text-teal-400" />
               <h3 className="text-base font-bold text-white">
                 {lang === 'ar' 
-                  ? 'ميزان السوائل ونقل مشتقات الدم (Fluid Balance & MTP)' 
-                  : '24-Hour Fluid Balance & Massive Transfusion (MTP)'}
+                  ? 'ميزان السوائل 12 ساعة ونقل مشتقات الدم (Fluid Balance & MTP)' 
+                  : '12-Hour Fluid Balance & Massive Transfusion (MTP)'}
               </h3>
             </div>
             <div className="flex items-center gap-2">
@@ -3128,7 +3343,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                         ? 'bg-amber-950 text-amber-300 border border-amber-700' 
                         : 'bg-teal-950 text-teal-300 border border-teal-700'
                     }`}>
-                      NET 24H: {netVal > 0 ? `+${netVal}` : netVal} mL
+                      NET 12H: {netVal > 0 ? `+${netVal}` : netVal} mL
                     </span>
                   );
                 })()
@@ -3153,28 +3368,42 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
               <div className="flex items-center justify-between bg-[#070c18] p-2.5 rounded-xl border border-slate-800/80 gap-2 flex-wrap">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-xs text-teal-300 font-mono">
-                    {fluidBalance ? (lang === 'ar' ? 'ميزان السوائل 24 ساعة مسجل' : '24H Fluid Balance Logged') : (lang === 'ar' ? 'لا يوجد ميزان مسجل اليوم' : 'No balance logged yet')}
+                    {fluidBalance ? (lang === 'ar' ? 'ميزان السوائل 12 ساعة مسجل' : '12H Fluid Balance Logged') : (lang === 'ar' ? 'لا يوجد ميزان مسجل للنوبتجية الحالية' : 'No balance logged for shift')}
                   </span>
                   {allFluidBalances.length > 1 && (
-                    <div className="flex items-center gap-1">
-                      {allFluidBalances.map((fRec, idx) => {
+                    <div className="flex items-center gap-1 overflow-x-auto max-w-[300px] sm:max-w-xs scrollbar-none">
+                      {(showMoreBedsideFluids ? allFluidBalances : allFluidBalances.slice(0, 4)).map((fRec, idx) => {
                         const recDateStr = fRec.periodEndTimestamp ? fRec.periodEndTimestamp.split('T')[0] : (fRec as any).date;
                         const isSelected = fluidBalance?.id === fRec.id;
+                        const sLabel = fRec.shiftType === 'NIGHT' ? (lang === 'ar' ? 'ليل' : 'N') : (lang === 'ar' ? 'صباح' : 'D');
                         return (
                           <button
                             key={fRec.id || idx}
                             type="button"
                             onClick={() => setFluidBalance(fRec)}
-                            className={`px-2 py-0.5 rounded text-[10px] font-mono border transition-all cursor-pointer ${
+                            className={`px-2 py-0.5 rounded text-[10px] font-mono border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-1 ${
                               isSelected
                                 ? 'bg-teal-950 text-teal-300 border-teal-600 font-bold shadow'
                                 : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white'
                             }`}
                           >
-                            {recDateStr || `Day ${idx + 1}`}
+                            <span>{recDateStr || `Record ${idx + 1}`}</span>
+                            <span className="text-[9px] opacity-75">({sLabel})</span>
                           </button>
                         );
                       })}
+
+                      {allFluidBalances.length > 4 && (
+                        <button
+                          type="button"
+                          onClick={() => setShowMoreBedsideFluids(!showMoreBedsideFluids)}
+                          className="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 hover:bg-slate-700 text-teal-300 border border-teal-500/30 whitespace-nowrap shrink-0 transition-all cursor-pointer"
+                        >
+                          {showMoreBedsideFluids 
+                            ? (lang === 'ar' ? 'عرض أقل' : 'Less') 
+                            : (lang === 'ar' ? `إظهار المزيد (+${allFluidBalances.length - 4})` : `More (+${allFluidBalances.length - 4})`)}
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -3188,7 +3417,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                         setIsFluidModalOpen(true);
                       }}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-teal-300 border border-teal-500/30 font-bold text-xs shadow-md active:scale-95 cursor-pointer transition-colors"
-                      title={lang === 'ar' ? 'تعديل ميزان السوائل الحالي' : 'Edit Current 24H Balance'}
+                      title={lang === 'ar' ? 'تعديل ميزان السوائل الحالي' : 'Edit Current 12H Balance'}
                     >
                       <Edit3 className="w-3.5 h-3.5" />
                       <span>{lang === 'ar' ? 'تعديل ميزان السوائل' : 'Edit Balance'}</span>
@@ -3202,10 +3431,10 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                       setIsFluidModalOpen(true);
                     }}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shadow-md active:scale-95 cursor-pointer transition-colors"
-                    title={lang === 'ar' ? 'إضافة ميزان سوائل ليوم جديد أو لاحق' : 'Add Fluid Balance for Next / New Day'}
+                    title={lang === 'ar' ? 'إضافة ميزان 12 ساعة للنوبتجية الحالية' : 'Add 12-Hour Fluid Balance'}
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    <span>{lang === 'ar' ? 'إضافة ميزان يوم جديد' : 'Add Day Balance'}</span>
+                    <span>{lang === 'ar' ? 'إضافة ميزان 12 ساعة' : 'Add 12H Balance'}</span>
                   </button>
                 </div>
               </div>
@@ -3309,6 +3538,86 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                   </button>
                 </div>
               )}
+
+              {/* 📜 Previous Fluid Records Archive at the bottom of the card */}
+              {allFluidBalances.length > 0 && (
+                <div className="p-3 rounded-xl bg-[#060d1d] border border-slate-800 space-y-2 mt-3 font-mono">
+                  <div className="flex items-center justify-between text-xs font-bold text-slate-300">
+                    <div className="flex items-center gap-1.5 text-teal-400">
+                      <History className="w-4 h-4" />
+                      <span>{lang === 'ar' ? 'سجلات ميزان السوائل السابقة:' : 'Previous Fluid Records Archive:'}</span>
+                    </div>
+                    <span className="text-[10px] text-slate-500">
+                      ({allFluidBalances.length} {lang === 'ar' ? 'سجلات' : 'records'})
+                    </span>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    {(showMoreBedsideFluids ? allFluidBalances : allFluidBalances.slice(0, 4)).map((rec, idx) => {
+                      const recDateStr = rec.periodEndTimestamp ? rec.periodEndTimestamp.split('T')[0] : (rec as any).date || `Record ${idx + 1}`;
+                      const isCurrent = fluidBalance?.id === rec.id;
+                      const netVal = rec.netCumulativeBalanceMl ?? (rec as any).netBalance24HMl ?? 0;
+                      const totalIn = rec.intakeBreakdown?.totalIntakeMl ?? (rec as any).totalIntakeMl ?? 0;
+                      const totalOut = rec.outputBreakdown?.totalOutputMl ?? (rec as any).outputBreakdown?.totalOutputMl ?? 0;
+                      const shiftLabel = rec.shiftType === 'NIGHT' 
+                        ? (lang === 'ar' ? 'مناوبة ليلية' : 'NIGHT') 
+                        : (lang === 'ar' ? 'مناوبة صباحية' : 'DAY');
+
+                      return (
+                        <button
+                          key={rec.id || idx}
+                          type="button"
+                          onClick={() => setFluidBalance(rec)}
+                          className={`w-full p-2.5 rounded-xl text-xs transition-all cursor-pointer border flex items-center justify-between gap-2.5 flex-wrap sm:flex-nowrap ${
+                            isCurrent
+                              ? 'bg-teal-950/90 text-teal-200 border-teal-500 font-bold shadow-md shadow-teal-500/10'
+                              : 'bg-[#050a17] text-slate-300 border-slate-800 hover:bg-slate-800/80'
+                          }`}
+                        >
+                          {/* Date & Shift */}
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-white text-[11px] sm:text-xs">{recDateStr}</span>
+                            <span className={`text-[10px] px-2 py-0.5 rounded font-semibold ${
+                              rec.shiftType === 'NIGHT' 
+                                ? 'bg-indigo-950 text-indigo-300 border border-indigo-800' 
+                                : 'bg-amber-950 text-amber-300 border border-amber-800'
+                            }`}>
+                              {shiftLabel}
+                            </span>
+                          </div>
+
+                          {/* Intake and Output */}
+                          <div className="flex items-center gap-3 text-[11px]">
+                            <span className="text-cyan-400 font-semibold">IN: {totalIn} mL</span>
+                            <span className="text-amber-400 font-semibold">OUT: {totalOut} mL</span>
+                          </div>
+
+                          {/* Net Balance Badge */}
+                          <div className={`px-2 py-0.5 rounded text-[11px] font-bold font-mono ${
+                            netVal >= 0 ? 'bg-amber-950/80 text-amber-300 border border-amber-800/80' : 'bg-teal-950/80 text-teal-300 border border-teal-800/80'
+                          }`}>
+                            NET: {netVal > 0 ? `+${netVal}` : netVal} mL
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {allFluidBalances.length > 4 && (
+                    <div className="pt-1 text-center">
+                      <button
+                        type="button"
+                        onClick={() => setShowMoreBedsideFluids(!showMoreBedsideFluids)}
+                        className="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-teal-300 border border-teal-500/30 text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                      >
+                        {showMoreBedsideFluids
+                          ? (lang === 'ar' ? 'عرض أقل' : 'Show Less')
+                          : (lang === 'ar' ? `إظهار المزيد (+${allFluidBalances.length - 4} سجلات أخرى)` : `Show More (+${allFluidBalances.length - 4} more)`)}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -3324,14 +3633,14 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
             <div className="flex items-center gap-2">
               <ShieldCheck className="w-5 h-5 text-teal-400" />
               <div>
-                <h3 className="text-base font-bold text-white">
-                  {lang === 'ar' ? 'سجلات تسليم واستلام المناوبات السريرية (SBAR Shift Handover)' : 'SBAR Shift Handover Reports'}
-                </h3>
-                <p className="text-[11px] text-slate-400 font-mono">
-                  {lang === 'ar' 
-                    ? 'توثيق وتشفير تسليم المناوبات بالبروتوكول السريري SBAR مع التعرف التلقائي على العلامات والمدخلات'
-                    : 'Standardized SBAR clinical handover protocol with live telemetry and ventilator auto-synthesis'}
-                </p>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-bold text-white">
+                    {lang === 'ar' ? 'سجلات تسليم واستلام المناوبات السريرية (SBAR Shift Handover)' : 'SBAR Shift Handover Reports'}
+                  </h3>
+                  <span className="px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 font-black text-xs font-mono shadow-md">
+                    {sbarList.length}
+                  </span>
+                </div>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -3352,10 +3661,11 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
           {!isPaperSbarCardCollapsed && (
             <div className="space-y-3 animate-in fade-in duration-300">
               {/* Action Toolbar inside expanded card: New Handover + Quick status */}
-              <div className="flex items-center justify-between bg-[#070c18] p-3 rounded-xl border border-slate-800/80 flex-wrap gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-teal-300 font-mono font-bold">
-                    {sbarList.length} {lang === 'ar' ? 'تقارير تسليم مسجلة' : 'Logged SBAR Reports'}
+              <div className="flex items-center justify-between bg-[#070c18] p-3 rounded-xl border border-slate-800/80 flex-wrap gap-3">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="px-2.5 py-1 rounded-xl bg-amber-400/20 text-amber-300 border border-amber-400/40 text-xs font-black font-mono shadow flex items-center gap-1.5">
+                    <span>{sbarList.length}</span>
+                    <span>{lang === 'ar' ? 'تقارير تسليم مسجلة' : 'Logged SBAR Reports'}</span>
                   </span>
                   {sbarList.length > 0 && (
                     <span className="text-[11px] text-slate-400 font-mono">
@@ -3364,77 +3674,49 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                   )}
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedTemplateSbar(null);
-                      setIsBedsideSbarModalOpen(true);
-                    }}
-                    className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-slate-950 font-black text-xs shadow-md shadow-teal-500/20 active:scale-95 cursor-pointer transition-all"
-                  >
-                    <Plus className="w-4 h-4 text-slate-950" />
-                    <span>{lang === 'ar' ? 'تسليم مناوبة جديد SBAR' : 'New SBAR Handover'}</span>
-                  </button>
+                <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+                  {(() => {
+                    const pendingSbar = sbarList.find(s => !s.incomingDoctor?.signedAt);
+                    return (
+                      <>
+                        {pendingSbar && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedTemplateSbar(pendingSbar);
+                              setIsBedsideSbarModalOpen(true);
+                            }}
+                            className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/20 active:scale-95 cursor-pointer transition-all animate-pulse border border-amber-300"
+                          >
+                            <CheckCircle2 className="w-4 h-4 text-slate-950 shrink-0" />
+                            <span>
+                              {lang === 'ar' 
+                                ? `استلام مناوبة ${pendingSbar.shiftType === 'NIGHT' ? 'ليلية' : 'صباحية'}` 
+                                : `Receive ${pendingSbar.shiftType === 'NIGHT' ? 'Night' : 'Day'} Shift`}
+                            </span>
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedTemplateSbar(null);
+                            setIsBedsideSbarModalOpen(true);
+                          }}
+                          className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-slate-950 font-black text-xs shadow-md shadow-teal-500/20 active:scale-95 cursor-pointer transition-all"
+                        >
+                          <Plus className="w-4 h-4 text-slate-950 shrink-0" />
+                          <span>{lang === 'ar' ? 'تسليم مناوبة جديد SBAR' : 'New SBAR Handover'}</span>
+                        </button>
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
 
-              {/* Historical SBAR Timeline Selector: Show previous records by Name, Date, Time and Shift Type */}
-              {sbarList.length > 0 && (
-                <div className="bg-[#070d1c] p-2.5 rounded-xl border border-slate-800/90 space-y-1.5">
-                  <div className="flex items-center justify-between text-[11px] text-slate-400 font-semibold px-1">
-                    <span>{lang === 'ar' ? 'السجلات القديمة والسابقة (بالاسم والتاريخ والوقت):' : 'Previous Handover Archive (By Name, Date & Time):'}</span>
-                    <span className="text-teal-400 font-mono text-[10px]">{lang === 'ar' ? 'اضغط لعرض التقرير أو استخدامه كقالب' : 'Click to view or clone'}</span>
-                  </div>
-
-                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedSbarIdForView('ALL')}
-                      className={`px-3 py-1 rounded-lg text-xs font-mono transition-all cursor-pointer flex-shrink-0 ${
-                        selectedSbarIdForView === 'ALL'
-                          ? 'bg-teal-500 text-slate-950 font-black shadow'
-                          : 'bg-slate-900 text-slate-300 border border-slate-800 hover:bg-slate-800'
-                      }`}
-                    >
-                      {lang === 'ar' ? 'عرض جميع التقارير (All)' : 'All Reports'} ({sbarList.length})
-                    </button>
-
-                    {sbarList.map((sbar, idx) => {
-                      const isSelected = selectedSbarIdForView === sbar.id;
-                      return (
-                        <button
-                          key={sbar.id || idx}
-                          type="button"
-                          onClick={() => setSelectedSbarIdForView(sbar.id)}
-                          className={`px-3 py-1 rounded-lg text-xs font-mono transition-all cursor-pointer flex-shrink-0 flex items-center gap-1.5 ${
-                            isSelected
-                              ? 'bg-teal-950 text-teal-300 border border-teal-500 font-bold shadow-md'
-                              : 'bg-slate-900 text-slate-300 border border-slate-800 hover:bg-slate-800'
-                          }`}
-                        >
-                          <span className={`px-1 py-0.2 text-[9px] font-bold rounded ${
-                            sbar.shiftType === 'NIGHT' ? 'bg-indigo-900/80 text-indigo-200' : 'bg-amber-900/80 text-amber-200'
-                          }`}>
-                            {sbar.shiftType}
-                          </span>
-                          <span className="font-bold text-white">{sbar.shiftDate}</span>
-                          <span className="text-slate-400">({sbar.shiftStartTime} - {sbar.shiftEndTime})</span>
-                          <span className="text-slate-500">•</span>
-                          <span className="text-teal-300 font-sans font-medium">{sbar.outgoingDoctor.name}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
               {/* Handover Cards Display */}
               {sbarList.length > 0 ? (
-                (selectedSbarIdForView === 'ALL' 
-                  ? sbarList 
-                  : sbarList.filter(s => s.id === selectedSbarIdForView)
-                ).map((sbar) => (
+                <>
+                  {(showMoreSbars ? sbarList : sbarList.slice(0, 2)).map((sbar) => (
                   <div 
                     key={sbar.id}
                     className="bg-[#070c18] border border-slate-800 p-4 rounded-xl space-y-3 shadow-md"
@@ -3478,11 +3760,6 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                           <Sparkles className="w-3 h-3 text-teal-400" />
                           <span>{lang === 'ar' ? 'استخدام كقالب لمناوبة جديدة' : 'Use as Template'}</span>
                         </button>
-
-                        <div className="flex items-center gap-1 text-[11px] text-emerald-400 font-mono bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-900/60">
-                          <Lock className="w-3 h-3" />
-                          <span>{sbar.cryptographicHash ? sbar.cryptographicHash.slice(0, 12) : 'HASH'}...</span>
-                        </div>
                       </div>
                     </div>
 
@@ -3512,13 +3789,13 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                           <span>Assessment (التقييم السريري):</span>
                         </div>
                         <div className="text-slate-200 mt-1.5 space-y-1">
-                          <div className="text-[11px]"><strong className="text-red-300">• الدورة والضغط:</strong> {sbar.assessment.hemodynamics}</div>
-                          <div className="text-[11px]"><strong className="text-cyan-300">• الرئة والتنفس:</strong> {sbar.assessment.pulmonaryAndAirway}</div>
-                          <div className="text-[11px]"><strong className="text-amber-300">• الكلى والسوائل:</strong> {sbar.assessment.metabolicAndRenal}</div>
-                          {sbar.assessment.neurologyAndSedation && (
+                          <div className="text-[11px]"><strong className="text-red-300">• الدورة والضغط:</strong> {sbar.assessment?.hemodynamics || '—'}</div>
+                          <div className="text-[11px]"><strong className="text-cyan-300">• الرئة والتنفس:</strong> {sbar.assessment?.pulmonaryAndAirway || '—'}</div>
+                          <div className="text-[11px]"><strong className="text-amber-300">• الكلى والسوائل:</strong> {sbar.assessment?.metabolicAndRenal || '—'}</div>
+                          {sbar.assessment?.neurologyAndSedation && (
                             <div className="text-[11px]"><strong className="text-indigo-300">• الأعصاب والمهدئات:</strong> {sbar.assessment.neurologyAndSedation}</div>
                           )}
-                          {sbar.assessment.infectiousDiseaseAndAntibiotics && (
+                          {sbar.assessment?.infectiousDiseaseAndAntibiotics && (
                             <div className="text-[11px]"><strong className="text-emerald-300">• الحرارة والمضادات:</strong> {sbar.assessment.infectiousDiseaseAndAntibiotics}</div>
                           )}
                         </div>
@@ -3531,7 +3808,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                           <span>Recommendation (الخطة والأوامر):</span>
                         </div>
                         <ul className="text-slate-200 mt-1.5 space-y-1">
-                          {sbar.recommendationAndOrders.map((rec, idx) => (
+                          {(sbar.recommendationAndOrders || []).map((rec, idx) => (
                             <li key={idx} className="text-[11px] flex items-start gap-1.5">
                               <span className="text-emerald-400 font-bold">•</span>
                               <span>{rec}</span>
@@ -3541,7 +3818,26 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                       </div>
                     </div>
                   </div>
-                ))
+                  ))}
+
+                  {/* Show More Button after 2nd record */}
+                  {sbarList.length > 2 && (
+                    <div className="pt-2 text-center">
+                      <button
+                        type="button"
+                        onClick={() => setShowMoreSbars(!showMoreSbars)}
+                        className="px-5 py-2 rounded-xl bg-teal-500/20 hover:bg-teal-500/30 border border-teal-500/40 text-teal-300 font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-2 mx-auto active:scale-95 shadow-md"
+                      >
+                        <span>
+                          {showMoreSbars
+                            ? (lang === 'ar' ? 'عرض أقل' : 'Show Less')
+                            : (lang === 'ar' ? `إظهار المزيد (${sbarList.length - 2} تقارير متبقية)` : `Show More (${sbarList.length - 2} remaining)`)}
+                        </span>
+                        {showMoreSbars ? <ChevronUp className="w-4 h-4 text-teal-400" /> : <ChevronDown className="w-4 h-4 text-teal-400" />}
+                      </button>
+                    </div>
+                  )}
+                </>
               ) : (
                 <div className="p-6 text-center text-slate-400 bg-slate-950/40 rounded-xl border border-slate-800 space-y-3">
                   <div>{lang === 'ar' ? 'لا توجد تقارير تسليم مناوبة مسجلة لهذا المريض بعد.' : 'No shift handover reports recorded yet for this patient.'}</div>
@@ -3967,6 +4263,68 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
             setSelectedTemplateSbar(null);
           }}
         />
+      )}
+
+      {/* Edit Vitals Reading Modal */}
+      <AddVitalsModal
+        isOpen={isEditVitalsModalOpen}
+        onClose={() => {
+          setIsEditVitalsModalOpen(false);
+          setSelectedVitalForEdit(null);
+        }}
+        bedNumber={bed.bedNumber}
+        patientId={patient.id}
+        patientName={patient.fullNameAr || patient.fullNameEn}
+        vitalsToEdit={selectedVitalForEdit}
+        onVitalsAdded={() => {
+          setIsEditVitalsModalOpen(false);
+          setSelectedVitalForEdit(null);
+          loadBedsideData();
+          onDataUpdated();
+        }}
+      />
+
+      {/* Full Patient Demographics & Admission Edit Modal */}
+      {isEditPatientModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md overflow-y-auto p-4 md:p-6 flex flex-col justify-start">
+          <div className="max-w-5xl mx-auto w-full space-y-4 my-auto">
+            <div className="flex items-center justify-between bg-[#0b1224] p-4 rounded-2xl border border-slate-700/80 shadow-2xl">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-teal-500/20 text-teal-400 border border-teal-500/30">
+                  <User className="w-6 h-6" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-black text-white">
+                    {lang === 'ar' ? 'تعديل كافة بيانات الملف الطبي والمريض' : 'Edit Full Patient Demographics & Profile'}
+                  </h2>
+                  <p className="text-xs text-slate-400">
+                    {lang === 'ar' ? `السرير ${bed.bedNumber} - الملف: ${patient.mrn || patient.nationalId}` : `Bed ${bed.bedNumber} - MRN: ${patient.mrn}`}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditPatientModalOpen(false)}
+                className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-bold transition-all cursor-pointer border border-slate-700 active:scale-95"
+              >
+                {lang === 'ar' ? 'إغلاق (X)' : 'Close (X)'}
+              </button>
+            </div>
+
+            <FullPageAdmission
+              bedNumber={bed.bedNumber}
+              allBeds={allBeds}
+              allPatients={allPatients}
+              initialPatient={patient}
+              onCancel={() => setIsEditPatientModalOpen(false)}
+              onAdmissionSuccess={() => {
+                setIsEditPatientModalOpen(false);
+                loadBedsideData();
+                onDataUpdated();
+              }}
+            />
+          </div>
+        </div>
       )}
     </div>
   );

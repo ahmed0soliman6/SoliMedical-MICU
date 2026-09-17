@@ -561,7 +561,7 @@ export interface SignSbarInput {
 
 export async function signSbarHandover(input: SignSbarInput): Promise<SbarHandoverReport> {
   const nowIso = new Date().toISOString();
-  const handoverId = `sbar-${input.bedId}-${input.shiftDate}-${input.shiftType}`;
+  const handoverId = `sbar-${input.bedId}-${input.patientId || 'patient'}-${Date.now()}`;
 
   const rawPayload = `${handoverId}|${input.situation}|${input.background}|${JSON.stringify(input.assessment)}|${input.outgoingDoctor.staffId}|${nowIso}`;
   const hash = await computeSha256(rawPayload);
@@ -616,6 +616,45 @@ export async function signSbarHandover(input: SignSbarInput): Promise<SbarHandov
   syncSbarToCloud(report);
 
   return report;
+}
+
+export async function acknowledgeSbarHandover(
+  sbarId: string,
+  incomingDoctor: { staffId: string; name: string; role: StaffRole }
+): Promise<SbarHandoverReport | null> {
+  const sbar = await db.sbarHandovers.get(sbarId);
+  if (!sbar) return null;
+
+  const nowIso = new Date().toISOString();
+  const updated: SbarHandoverReport = {
+    ...sbar,
+    incomingDoctor: {
+      staffId: incomingDoctor.staffId,
+      name: incomingDoctor.name,
+      role: incomingDoctor.role,
+      signedAt: nowIso,
+      digitalSignatureToken: `TOKEN:#ICU-ACK-${incomingDoctor.staffId}-${Date.now().toString(16)}`,
+    },
+  };
+
+  await db.transaction('rw', [db.sbarHandovers, db.auditLogs], async () => {
+    await db.sbarHandovers.put(updated);
+
+    const auditLog: WardAuditLog = {
+      id: `audit-ack-${Date.now()}`,
+      timestamp: nowIso,
+      eventType: 'SBAR_ACKNOWLEDGED' as any,
+      performedBy: incomingDoctor,
+      targetBedId: sbar.bedId,
+      targetPatientMrn: sbar.patientId,
+      description: `Shift Handover (SBAR) acknowledged and received for Bed ${sbar.bedId} by ${incomingDoctor.name}.`,
+      immutableHash: sbar.cryptographicHash || 'ACK_HASH',
+    };
+    await db.auditLogs.put(auditLog);
+  });
+
+  syncSbarToCloud(updated);
+  return updated;
 }
 
 // -------------------------------------------------------------

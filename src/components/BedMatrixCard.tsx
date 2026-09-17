@@ -62,7 +62,7 @@ export const BedMatrixCard: React.FC<BedMatrixCardProps> = ({
             isUnavailable
               ? 'bg-red-950 text-red-400 border border-red-800'
               : isIsolation
-              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+              ? 'bg-red-950 text-red-500 border border-red-800/80 animate-pulse'
               : isOccupied 
               ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40'
               : 'bg-slate-800 text-slate-400 border border-slate-700'

@@ -140,7 +140,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 }`}
               >
                 <div className="flex items-center gap-2 truncate">
-                  <span className="font-mono text-[11px] font-bold text-teal-400">{b.bedNumber}</span>
+                  <span className={`font-mono text-[11px] font-bold ${b.status === 'ISOLATION' ? 'text-red-500' : 'text-teal-400'}`}>{b.bedNumber}</span>
                   <span className="truncate text-[11px] font-medium">
                     {displayName}
                   </span>

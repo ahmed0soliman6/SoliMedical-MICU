@@ -15,6 +15,20 @@ interface ArchiveSearchModalProps {
   onSelectPatientBed: (bedNumber: BedNumber) => void;
 }
 
+const formatNumericDate = (dateVal?: string | Date | number): string => {
+  if (!dateVal) return '—';
+  try {
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return String(dateVal);
+    const day = d.getDate();
+    const month = d.getMonth() + 1;
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  } catch {
+    return '—';
+  }
+};
+
 export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
   isOpen,
   onClose,
@@ -206,7 +220,7 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
                       <span>•</span>
                       <span>{lang === 'ar' ? `كود الإنعاش: ${patient.codeStatus}` : `Code: ${patient.codeStatus}`}</span>
                       <span>•</span>
-                      <span>{lang === 'ar' ? `تاريخ الدخول: ${new Date(patient.admissionDate).toLocaleDateString('ar-EG')}` : `Admitted: ${new Date(patient.admissionDate).toLocaleDateString('en-US')}`}</span>
+                      <span>{lang === 'ar' ? `تاريخ الدخول: ${formatNumericDate(patient.admissionDate)}` : `Admitted: ${formatNumericDate(patient.admissionDate)}`}</span>
                     </div>
                   </div>
 

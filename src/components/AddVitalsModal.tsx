@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
-import { X, Activity, Heart, Wind, Thermometer, ShieldCheck } from 'lucide-react';
-import { BedNumber, StaffRole } from '../types/schema.ts';
+import React, { useState, useEffect } from 'react';
+import { X, Activity, Heart, Wind, Thermometer, ShieldCheck, Pencil } from 'lucide-react';
+import { BedNumber, StaffRole, TelemetryVitals } from '../types/schema.ts';
 import { addTimestampedVitals } from '../services/dataModel.ts';
 import { useTranslation } from '../services/i18n.ts';
 import { parseEnglishFloat, parseEnglishInt } from '../services/numberUtils.ts';
 import { useAuth } from '../services/AuthContext.tsx';
+import { db } from '../db/icuSyncDb.ts';
 
 interface AddVitalsModalProps {
   isOpen: boolean;
@@ -13,6 +14,7 @@ interface AddVitalsModalProps {
   patientId: string;
   patientName: string;
   onVitalsAdded: () => void;
+  vitalsToEdit?: TelemetryVitals | null;
 }
 
 export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
@@ -22,6 +24,7 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
   patientId,
   patientName,
   onVitalsAdded,
+  vitalsToEdit,
 }) => {
   const { t, lang, isRTL } = useTranslation();
   const { currentUser } = useAuth();
@@ -42,6 +45,42 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
   const [clinicalNotes, setClinicalNotes] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
+  useEffect(() => {
+    if (vitalsToEdit) {
+      setHeartRate(vitalsToEdit.heartRateBpm ?? 110);
+      setHeartRhythm(vitalsToEdit.heartRhythm || 'Sinus Tachycardia');
+      setSystolicBp(vitalsToEdit.systolicBpMmHg ?? 95);
+      setDiastolicBp(vitalsToEdit.diastolicBpMmHg ?? 60);
+      setIsArterialLine(vitalsToEdit.isArterialLine ?? true);
+      setSpo2(vitalsToEdit.spo2Percent ?? 94);
+      setFio2(vitalsToEdit.fio2SuppliedPercent ?? 60);
+      setRespiratoryRate(vitalsToEdit.respiratoryRateCpm ?? 22);
+      setCoreTemp(vitalsToEdit.coreTemperatureCelsius ?? 38.2);
+      if (vitalsToEdit.temperatureSite) setTempSite(vitalsToEdit.temperatureSite as any);
+      setGcsTotal(vitalsToEdit.gcsTotalScore ?? 10);
+      if (vitalsToEdit.sedationRassScore !== undefined) setSedationRass(vitalsToEdit.sedationRassScore);
+      if (vitalsToEdit.lactateMmolPerL !== undefined) setLactate(vitalsToEdit.lactateMmolPerL);
+      if (vitalsToEdit.bloodGlucoseMgDl !== undefined) setBloodGlucose(vitalsToEdit.bloodGlucoseMgDl);
+      setClinicalNotes(vitalsToEdit.clinicalNotes || '');
+    } else {
+      setHeartRate(110);
+      setHeartRhythm('Sinus Tachycardia');
+      setSystolicBp(95);
+      setDiastolicBp(60);
+      setIsArterialLine(true);
+      setSpo2(94);
+      setFio2(60);
+      setRespiratoryRate(22);
+      setCoreTemp(38.2);
+      setTempSite('FOLEY_CORE');
+      setGcsTotal(10);
+      setSedationRass(-2);
+      setLactate(3.2);
+      setBloodGlucose(165);
+      setClinicalNotes('');
+    }
+  }, [vitalsToEdit, isOpen]);
+
   if (!isOpen) return null;
 
   const map = Math.round(diastolicBp + (systolicBp - diastolicBp) / 3);
@@ -50,34 +89,62 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      const userDisplay = currentUser?.nameAr || currentUser?.nameEn || currentUser?.displayName || (lang === 'ar' ? 'تمريض العناية المركزة' : 'ICU Staff RN');
+      const userDisplay = currentUser?.nameAr || currentUser?.nameEn || currentUser?.displayName || currentUser?.email || (lang === 'ar' ? 'تمريض العناية المركزة' : 'ICU Staff RN');
       const staffId = currentUser?.badgeId || currentUser?.id || currentUser?.uid || '7721';
       const userRole = (currentUser?.role as StaffRole) || StaffRole.LEAD_RN;
 
-      await addTimestampedVitals({
-        bedId: bedNumber,
-        patientId,
-        heartRateBpm: parseEnglishInt(heartRate) || 110,
-        heartRhythm,
-        systolicBpMmHg: parseEnglishInt(systolicBp) || 95,
-        diastolicBpMmHg: parseEnglishInt(diastolicBp) || 60,
-        isArterialLine,
-        spo2Percent: parseEnglishInt(spo2) || 94,
-        fio2SuppliedPercent: parseEnglishInt(fio2) || 60,
-        respiratoryRateCpm: parseEnglishInt(respiratoryRate) || 22,
-        coreTemperatureCelsius: parseEnglishFloat(coreTemp) || 38.2,
-        temperatureSite: tempSite,
-        gcsTotalScore: parseEnglishInt(gcsTotal) || 10,
-        sedationRassScore: parseEnglishInt(sedationRass) || -2,
-        lactateMmolPerL: lactate ? parseEnglishFloat(lactate) : undefined,
-        bloodGlucoseMgDl: bloodGlucose ? parseEnglishFloat(bloodGlucose) : undefined,
-        recordedBy: {
-          staffId,
-          name: userDisplay,
-          role: userRole,
-        },
-        clinicalNotes: clinicalNotes.trim() || undefined,
-      });
+      if (vitalsToEdit) {
+        const updatedVitals: TelemetryVitals = {
+          ...vitalsToEdit,
+          heartRateBpm: parseEnglishInt(heartRate) || 110,
+          heartRhythm,
+          systolicBpMmHg: parseEnglishInt(systolicBp) || 95,
+          diastolicBpMmHg: parseEnglishInt(diastolicBp) || 60,
+          meanArterialPressureMmHg: map,
+          isArterialLine,
+          spo2Percent: parseEnglishInt(spo2) || 94,
+          fio2SuppliedPercent: parseEnglishInt(fio2) || 60,
+          respiratoryRateCpm: parseEnglishInt(respiratoryRate) || 22,
+          coreTemperatureCelsius: parseEnglishFloat(coreTemp) || 38.2,
+          temperatureSite: tempSite,
+          gcsTotalScore: parseEnglishInt(gcsTotal) || 10,
+          sedationRassScore: parseEnglishInt(sedationRass) || -2,
+          lactateMmolPerL: lactate ? parseEnglishFloat(lactate) : undefined,
+          bloodGlucoseMgDl: bloodGlucose ? parseEnglishFloat(bloodGlucose) : undefined,
+          clinicalNotes: clinicalNotes.trim() || undefined,
+          recordedBy: {
+            staffId,
+            name: userDisplay,
+            role: userRole,
+          },
+        };
+        await db.vitals.put(updatedVitals);
+      } else {
+        await addTimestampedVitals({
+          bedId: bedNumber,
+          patientId,
+          heartRateBpm: parseEnglishInt(heartRate) || 110,
+          heartRhythm,
+          systolicBpMmHg: parseEnglishInt(systolicBp) || 95,
+          diastolicBpMmHg: parseEnglishInt(diastolicBp) || 60,
+          isArterialLine,
+          spo2Percent: parseEnglishInt(spo2) || 94,
+          fio2SuppliedPercent: parseEnglishInt(fio2) || 60,
+          respiratoryRateCpm: parseEnglishInt(respiratoryRate) || 22,
+          coreTemperatureCelsius: parseEnglishFloat(coreTemp) || 38.2,
+          temperatureSite: tempSite,
+          gcsTotalScore: parseEnglishInt(gcsTotal) || 10,
+          sedationRassScore: parseEnglishInt(sedationRass) || -2,
+          lactateMmolPerL: lactate ? parseEnglishFloat(lactate) : undefined,
+          bloodGlucoseMgDl: bloodGlucose ? parseEnglishFloat(bloodGlucose) : undefined,
+          recordedBy: {
+            staffId,
+            name: userDisplay,
+            role: userRole,
+          },
+          clinicalNotes: clinicalNotes.trim() || undefined,
+        });
+      }
 
       onVitalsAdded();
       onClose();
@@ -95,11 +162,13 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
         <div className="px-5 py-3.5 bg-[#090f1d] border-b border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-teal-500/10 border border-teal-500/30 flex items-center justify-center text-teal-400">
-              <Activity className="w-5 h-5" />
+              {vitalsToEdit ? <Pencil className="w-5 h-5" /> : <Activity className="w-5 h-5" />}
             </div>
             <div>
               <h3 className="text-sm font-bold text-white">
-                {lang === 'ar' ? 'تسجيل علامات حيوية (Bedside Telemetry)' : 'Bedside Telemetry & Vital Entry'}
+                {vitalsToEdit
+                  ? (lang === 'ar' ? 'تعديل القراءة الحيوية' : 'Edit Vital Signs Reading')
+                  : (lang === 'ar' ? 'تسجيل علامات حيوية (Bedside Telemetry)' : 'Bedside Telemetry & Vital Entry')}
               </h3>
               <p className="text-[11px] text-slate-400 font-mono">
                 {lang === 'ar' 
@@ -110,7 +179,7 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors"
+            className="w-8 h-8 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>

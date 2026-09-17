@@ -390,7 +390,7 @@ export const Header: React.FC<HeaderProps> = ({
               }`}
               title={lang === 'ar' ? `صفحة السرير ${b.bedNumber}` : `Bed ${b.bedNumber} Dedicated Page`}
             >
-              <span className="font-mono font-extrabold text-teal-400">{b.bedNumber}</span>
+              <span className={`font-mono font-extrabold ${b.status === 'ISOLATION' ? 'text-red-500 font-black' : 'text-teal-400'}`}>{b.bedNumber}</span>
               <span className="truncate max-w-[110px] text-[11px]">
                 {isOccupied 
                   ? (patient?.fullNameAr?.split(' ')[0] || patient?.fullNameEn?.split(' ')[0] || (lang === 'ar' ? 'مشغول' : 'Occupied')) 

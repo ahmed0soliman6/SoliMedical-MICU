@@ -219,7 +219,7 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
   currentUser,
 }) => {
   const { lang, isRTL } = useTranslation();
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(true);
   const [activeFilter, setActiveFilter] = useState<'ALL' | 'ACTIVE' | 'COMPLETED_DISCONTINUED'>('ACTIVE');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingAbx, setEditingAbx] = useState<PatientAntibiotic | null>(null);
@@ -231,6 +231,7 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
   const [dose, setDose] = useState('');
   const [route, setRoute] = useState<string>('IV');
   const [frequency, setFrequency] = useState<string>('Q8H');
+  const [isCustomFrequency, setIsCustomFrequency] = useState<boolean>(false);
   const [indication, setIndication] = useState('');
   const [category, setCategory] = useState('Beta-Lactam / Carbapenem');
   const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10));
@@ -267,6 +268,7 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
 
   const handleOpenAddModal = (preset?: AntibioticPreset) => {
     setEditingAbx(null);
+    setIsCustomFrequency(false);
     if (preset) {
       setSelectedPresetId(preset.id);
       setDrugNameEn(preset.nameEn);
@@ -310,6 +312,7 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
     setDose(abx.dose);
     setRoute(abx.route);
     setFrequency(abx.frequency);
+    setIsCustomFrequency(!['Q6H', 'Q8H', 'Q12H', 'Q24H', 'Q48H', 'Q36H', 'Q72H', 'Continuous', 'Once / STAT', 'Post-HD'].includes(abx.frequency));
     setIndication(abx.indication);
     setCategory(abx.category || 'Beta-Lactam / Carbapenem');
     setStartDate(abx.startDate ? abx.startDate.slice(0, 10) : new Date().toISOString().slice(0, 10));
@@ -334,6 +337,7 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
       setDose(p.defaultDose);
       setRoute(p.defaultRoute);
       setFrequency(p.defaultFrequency);
+      setIsCustomFrequency(!['Q6H', 'Q8H', 'Q12H', 'Q24H', 'Q48H', 'Q36H', 'Q72H', 'Continuous', 'Once / STAT', 'Post-HD'].includes(p.defaultFrequency));
       setIndication(p.standardIndication || '');
       setCategory(p.category);
       setPlannedDurationDays(p.defaultDurationDays);
@@ -451,73 +455,25 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
           <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400">
             <Pill className="w-5 h-5" />
           </div>
-          <div className="flex items-center gap-2">
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <span>{lang === 'ar' ? 'المضادات الحيوية' : 'Antibiotics'}</span>
+          <div className="flex items-center gap-2 whitespace-nowrap">
+            <h3 className="text-base font-bold text-white whitespace-nowrap">
+              {lang === 'ar' ? 'المضادات الحيوية' : 'Antibiotics'}
             </h3>
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold font-mono bg-amber-950/80 text-amber-300 border border-amber-700/60 shadow-sm">
+            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold font-mono bg-amber-950/80 text-amber-300 border border-amber-700/60 shadow-sm whitespace-nowrap">
               {activeCount} {lang === 'ar' ? 'نشط' : 'Active'}
             </span>
-            {antibiotics.length > 0 && (
-              <span className="text-[11px] font-mono text-slate-400">
-                ({antibiotics.length} {lang === 'ar' ? 'إجمالي' : 'Total'})
-              </span>
-            )}
           </div>
         </div>
 
         {/* Header Action Buttons */}
-        <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
-          {!isCollapsed && (
-            <>
-              {/* Quick Filter Buttons */}
-              <div className="hidden sm:flex items-center bg-slate-900 border border-slate-700/80 rounded-lg p-0.5 text-[11px] font-medium">
-                <button
-                  onClick={() => setActiveFilter('ACTIVE')}
-                  className={`px-2 py-0.5 rounded-md transition-all ${
-                    activeFilter === 'ACTIVE'
-                      ? 'bg-amber-500 text-slate-950 font-bold shadow-sm'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  {lang === 'ar' ? `النشطة (${activeCount})` : `Active (${activeCount})`}
-                </button>
-                <button
-                  onClick={() => setActiveFilter('ALL')}
-                  className={`px-2 py-0.5 rounded-md transition-all ${
-                    activeFilter === 'ALL'
-                      ? 'bg-amber-500 text-slate-950 font-bold shadow-sm'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  {lang === 'ar' ? 'الكل' : 'All'}
-                </button>
-                <button
-                  onClick={() => setActiveFilter('COMPLETED_DISCONTINUED')}
-                  className={`px-2 py-0.5 rounded-md transition-all ${
-                    activeFilter === 'COMPLETED_DISCONTINUED'
-                      ? 'bg-amber-500 text-slate-950 font-bold shadow-sm'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  {lang === 'ar' ? 'السابقة' : 'Ended'}
-                </button>
-              </div>
-
-              <button
-                onClick={() => handleOpenAddModal()}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-[11px] shadow-md shadow-amber-500/20 transition-all cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>{lang === 'ar' ? 'إضافة مضاد حيوي' : 'Add Antibiotic'}</span>
-              </button>
-            </>
-          )}
-
+        <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
           <button
             onClick={() => setIsCollapsed(!isCollapsed)}
-            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all cursor-pointer"
+            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all cursor-pointer flex items-center gap-1 text-xs"
           >
+            <span className="text-[11px] text-slate-400 hidden sm:inline">
+              {isCollapsed ? (lang === 'ar' ? 'عرض السجل' : 'Expand') : (lang === 'ar' ? 'طي' : 'Collapse')}
+            </span>
             {isCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
           </button>
         </div>
@@ -525,6 +481,63 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
 
       {!isCollapsed && (
         <div className="space-y-4">
+          {/* Card Action Bar: Add Antibiotic Button & Responsive Filters */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 bg-[#070c18] border border-slate-800/80 p-2.5 rounded-xl">
+            {/* Add Antibiotic Button positioned cleanly below header */}
+            <button
+              onClick={() => handleOpenAddModal()}
+              className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-md shadow-amber-500/20 transition-all cursor-pointer w-full sm:w-auto"
+            >
+              <Plus className="w-4 h-4" />
+              <span>{lang === 'ar' ? 'إضافة مضاد حيوي' : 'Add Antibiotic'}</span>
+            </button>
+
+            {/* Quick Filter Tabs for Mobile & Desktop */}
+            <div className="flex items-center bg-slate-900 border border-slate-700/80 rounded-xl p-1 text-xs font-medium w-full sm:w-auto">
+              <button
+                type="button"
+                onClick={() => setActiveFilter('ACTIVE')}
+                className={`flex-1 sm:flex-none px-3 py-1.5 rounded-lg transition-all text-center flex items-center justify-center gap-1.5 ${
+                  activeFilter === 'ACTIVE'
+                    ? 'bg-amber-500 text-slate-950 font-bold shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <span>{lang === 'ar' ? 'النشطة' : 'Active'}</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${activeFilter === 'ACTIVE' ? 'bg-slate-950/25 text-slate-950' : 'bg-slate-800 text-slate-300'}`}>
+                  {activeCount}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveFilter('ALL')}
+                className={`flex-1 sm:flex-none px-3 py-1.5 rounded-lg transition-all text-center flex items-center justify-center gap-1.5 ${
+                  activeFilter === 'ALL'
+                    ? 'bg-amber-500 text-slate-950 font-bold shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <span>{lang === 'ar' ? 'الكل' : 'All'}</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${activeFilter === 'ALL' ? 'bg-slate-950/25 text-slate-950' : 'bg-slate-800 text-slate-300'}`}>
+                  {antibiotics.length}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveFilter('COMPLETED_DISCONTINUED')}
+                className={`flex-1 sm:flex-none px-3 py-1.5 rounded-lg transition-all text-center flex items-center justify-center gap-1.5 ${
+                  activeFilter === 'COMPLETED_DISCONTINUED'
+                    ? 'bg-amber-500 text-slate-950 font-bold shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <span>{lang === 'ar' ? 'السابقة' : 'Ended'}</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${activeFilter === 'COMPLETED_DISCONTINUED' ? 'bg-slate-950/25 text-slate-950' : 'bg-slate-800 text-slate-300'}`}>
+                  {antibiotics.filter(a => a.status === 'COMPLETED' || a.status === 'DISCONTINUED').length}
+                </span>
+              </button>
+            </div>
+          </div>
           {/* Quick Presets Bar (Fast 1-click prescribing from unit library) */}
           {presetsList.length > 0 && (
             <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-2.5 flex items-center gap-2 overflow-x-auto text-xs">
@@ -986,28 +999,62 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
-                    {lang === 'ar' ? 'التكرار / الجدول' : 'Frequency / Interval'}
-                  </label>
-                  <select
-                    value={frequency}
-                    onChange={(e) => setFrequency(e.target.value)}
-                    className="w-full bg-[#070c18] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400 font-mono"
-                  >
-                    <option value="Q6H">{lang === 'ar' ? 'كل 6 س (Q6H)' : 'Every 6 hrs (Q6H)'}</option>
-                    <option value="Q8H">{lang === 'ar' ? 'كل 8 س (Q8H)' : 'Every 8 hrs (Q8H)'}</option>
-                    <option value="Q12H">{lang === 'ar' ? 'كل 12 س (Q12H)' : 'Every 12 hrs (Q12H)'}</option>
-                    <option value="Q24H">{lang === 'ar' ? 'كل 24 س (Q24H / Daily)' : 'Every 24 hrs (Q24H / Daily)'}</option>
-                    <option value="Q48H">{lang === 'ar' ? 'كل 48 س (Q48H)' : 'Every 48 hrs (Q48H)'}</option>
-                    <option value="Q36H">{lang === 'ar' ? 'كل 36 س (Q36H)' : 'Every 36 hrs (Q36H)'}</option>
-                    <option value="Q72H">{lang === 'ar' ? 'كل 72 س (Q72H)' : 'Every 72 hrs (Q72H)'}</option>
-                    <option value="Continuous">{lang === 'ar' ? 'تسريب مستمر (Continuous Infusion)' : 'Continuous Infusion'}</option>
-                    <option value="Once / STAT">{lang === 'ar' ? 'جرعة واحدة (Stat / Single Dose)' : 'Once / STAT'}</option>
-                    <option value="Post-HD">{lang === 'ar' ? 'بعد الغسيل الكلوي (Post-HD)' : 'Post-Hemodialysis (Post-HD)'}</option>
-                    {frequency && !['Q6H', 'Q8H', 'Q12H', 'Q24H', 'Q48H', 'Q36H', 'Q72H', 'Continuous', 'Once / STAT', 'Post-HD'].includes(frequency) && (
-                      <option value={frequency}>{frequency}</option>
-                    )}
-                  </select>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-semibold text-slate-300">
+                      {lang === 'ar' ? 'التكرار / الجدول' : 'Frequency / Interval'}
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsCustomFrequency(!isCustomFrequency);
+                        if (!isCustomFrequency && ['Q6H', 'Q8H', 'Q12H', 'Q24H', 'Q48H', 'Q36H', 'Q72H', 'Continuous', 'Once / STAT', 'Post-HD'].includes(frequency)) {
+                          setFrequency('');
+                        }
+                      }}
+                      className="text-[11px] text-amber-400 hover:text-amber-300 font-bold cursor-pointer hover:underline flex items-center gap-1"
+                    >
+                      {isCustomFrequency ? (lang === 'ar' ? '📋 قائمة جاهزة' : '📋 Presets') : (lang === 'ar' ? '✏️ مخصص' : '✏️ Custom')}
+                    </button>
+                  </div>
+
+                  {!isCustomFrequency ? (
+                    <select
+                      value={['Q6H', 'Q8H', 'Q12H', 'Q24H', 'Q48H', 'Q36H', 'Q72H', 'Continuous', 'Once / STAT', 'Post-HD'].includes(frequency) ? frequency : 'CUSTOM'}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === 'CUSTOM') {
+                          setIsCustomFrequency(true);
+                          setFrequency('');
+                        } else {
+                          setFrequency(val);
+                        }
+                      }}
+                      className="w-full bg-[#070c18] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400 font-mono cursor-pointer"
+                    >
+                      <option value="Q6H">{lang === 'ar' ? 'كل 6 س (Q6H)' : 'Every 6 hrs (Q6H)'}</option>
+                      <option value="Q8H">{lang === 'ar' ? 'كل 8 س (Q8H)' : 'Every 8 hrs (Q8H)'}</option>
+                      <option value="Q12H">{lang === 'ar' ? 'كل 12 س (Q12H)' : 'Every 12 hrs (Q12H)'}</option>
+                      <option value="Q24H">{lang === 'ar' ? 'كل 24 س (Q24H / Daily)' : 'Every 24 hrs (Q24H / Daily)'}</option>
+                      <option value="Q48H">{lang === 'ar' ? 'كل 48 س (Q48H)' : 'Every 48 hrs (Q48H)'}</option>
+                      <option value="Q36H">{lang === 'ar' ? 'كل 36 س (Q36H)' : 'Every 36 hrs (Q36H)'}</option>
+                      <option value="Q72H">{lang === 'ar' ? 'كل 72 س (Q72H)' : 'Every 72 hrs (Q72H)'}</option>
+                      <option value="Continuous">{lang === 'ar' ? 'تسريب مستمر (Continuous Infusion)' : 'Continuous Infusion'}</option>
+                      <option value="Once / STAT">{lang === 'ar' ? 'جرعة واحدة (Stat / Single Dose)' : 'Once / STAT'}</option>
+                      <option value="Post-HD">{lang === 'ar' ? 'بعد الغسيل الكلوي (Post-HD)' : 'Post-Hemodialysis (Post-HD)'}</option>
+                      <option value="CUSTOM">{lang === 'ar' ? '✏️ توقيت مخصص آخر...' : '✏️ Custom Interval...'}</option>
+                    </select>
+                  ) : (
+                    <div className="animate-in fade-in duration-200">
+                      <input
+                        type="text"
+                        required
+                        value={frequency}
+                        onChange={(e) => setFrequency(e.target.value)}
+                        placeholder={lang === 'ar' ? 'اكتب التكرار المخصص (مثال: كل 4 س أو كل 18 س أو يوم بعد يوم)' : 'Enter custom frequency (e.g. Q4H, Q18H, or Alternate days)'}
+                        className="w-full bg-[#070c18] border border-amber-500/60 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 font-mono"
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
 

@@ -59,63 +59,75 @@ export const FluidBalanceModal: React.FC<FluidBalanceModalProps> = ({
 
   const [values, setValues] = useState<Record<string, string>>({});
   const [recordDate, setRecordDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [shiftType, setShiftType] = useState<'DAY' | 'NIGHT'>(() => {
+    const hour = new Date().getHours();
+    return (hour >= 7 && hour < 19) ? 'DAY' : 'NIGHT';
+  });
   const [previousDayRecord, setPreviousDayRecord] = useState<FluidBalance24H | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [showMoreHistory, setShowMoreHistory] = useState(false);
 
   // Blood Products & Plasma Specific States
   const [bloodPrbcUnits, setBloodPrbcUnits] = useState<number>(0);
-  const [bloodPrbcMl, setBloodPrbcMl] = useState<string>('0');
+  const [bloodPrbcMl, setBloodPrbcMl] = useState<string>('');
   const [bloodFfpUnits, setBloodFfpUnits] = useState<number>(0);
-  const [bloodFfpMl, setBloodFfpMl] = useState<string>('0');
+  const [bloodFfpMl, setBloodFfpMl] = useState<string>('');
   const [bloodPltUnits, setBloodPltUnits] = useState<number>(0);
-  const [bloodPltMl, setBloodPltMl] = useState<string>('0');
-  const [bloodCryoMl, setBloodCryoMl] = useState<string>('0');
-  const [isBloodExpanded, setIsBloodExpanded] = useState<boolean>(true);
+  const [bloodPltMl, setBloodPltMl] = useState<string>('');
+  const [bloodCryoMl, setBloodCryoMl] = useState<string>('');
+  const [isBloodExpanded, setIsBloodExpanded] = useState<boolean>(false);
 
   // Load / initialize record values
   useEffect(() => {
     const initialMap: Record<string, string> = {};
     activeCategories.forEach(cat => {
-      initialMap[cat.id] = String(cat.defaultMl ?? 0);
+      initialMap[cat.id] = '';
     });
 
     if (initialFluidBalance) {
       if (initialFluidBalance.periodEndTimestamp) {
         setRecordDate(initialFluidBalance.periodEndTimestamp.split('T')[0]);
       }
+      if (initialFluidBalance.shiftType) {
+        setShiftType(initialFluidBalance.shiftType);
+      } else {
+        const hour = new Date().getHours();
+        setShiftType((hour >= 7 && hour < 19) ? 'DAY' : 'NIGHT');
+      }
+
       if (initialFluidBalance.intakeBreakdown) {
-        if (initialFluidBalance.intakeBreakdown.ivMaintenanceFluidMl !== undefined) {
+        if (initialFluidBalance.intakeBreakdown.ivMaintenanceFluidMl) {
           initialMap['ivMaintenance'] = String(initialFluidBalance.intakeBreakdown.ivMaintenanceFluidMl);
         }
-        if (initialFluidBalance.intakeBreakdown.ivMedicationInfusionsMl !== undefined) {
+        if (initialFluidBalance.intakeBreakdown.ivMedicationInfusionsMl) {
           initialMap['ivMedications'] = String(initialFluidBalance.intakeBreakdown.ivMedicationInfusionsMl);
         }
-        if (initialFluidBalance.intakeBreakdown.enteralFeedingMl !== undefined) {
+        if (initialFluidBalance.intakeBreakdown.enteralFeedingMl) {
           initialMap['enteralFeed'] = String(initialFluidBalance.intakeBreakdown.enteralFeedingMl);
         }
-        if (initialFluidBalance.intakeBreakdown.bloodProductsMl !== undefined) {
+        if (initialFluidBalance.intakeBreakdown.bloodProductsMl) {
           initialMap['bloodProducts'] = String(initialFluidBalance.intakeBreakdown.bloodProductsMl);
         }
-        if (initialFluidBalance.intakeBreakdown.oralFluidsMl !== undefined) {
+        if (initialFluidBalance.intakeBreakdown.oralFluidsMl) {
           initialMap['oralFluids'] = String(initialFluidBalance.intakeBreakdown.oralFluidsMl);
         }
       }
 
       if (initialFluidBalance.outputBreakdown) {
-        if (initialFluidBalance.outputBreakdown.urineOutputMl !== undefined) {
+        if (initialFluidBalance.outputBreakdown.urineOutputMl) {
           initialMap['urineOutput'] = String(initialFluidBalance.outputBreakdown.urineOutputMl);
         }
-        if (initialFluidBalance.outputBreakdown.nasogastricDrainageMl !== undefined) {
+        if (initialFluidBalance.outputBreakdown.nasogastricDrainageMl) {
           initialMap['ngDrainage'] = String(initialFluidBalance.outputBreakdown.nasogastricDrainageMl);
         }
-        if (initialFluidBalance.outputBreakdown.chestTubeDrainageMl !== undefined) {
+        if (initialFluidBalance.outputBreakdown.chestTubeDrainageMl) {
           initialMap['chestTube'] = String(initialFluidBalance.outputBreakdown.chestTubeDrainageMl);
         }
-        if (initialFluidBalance.outputBreakdown.surgicalDrainageMl !== undefined) {
+        if (initialFluidBalance.outputBreakdown.surgicalDrainageMl) {
           initialMap['surgicalDrain'] = String(initialFluidBalance.outputBreakdown.surgicalDrainageMl);
         }
-        if (initialFluidBalance.outputBreakdown.insensibleLossMl !== undefined) {
+        if (initialFluidBalance.outputBreakdown.insensibleLossMl) {
           initialMap['insensibleLoss'] = String(initialFluidBalance.outputBreakdown.insensibleLossMl);
         }
       }
@@ -135,22 +147,24 @@ export const FluidBalanceModal: React.FC<FluidBalanceModalProps> = ({
       const totalBlood = initialFluidBalance.intakeBreakdown?.bloodProductsMl ?? (prbcVol + ffpVol + pltVol + cryoVol);
 
       setBloodPrbcUnits(prbcU);
-      setBloodPrbcMl(String(prbcVol));
+      setBloodPrbcMl(prbcVol > 0 ? String(prbcVol) : '');
       setBloodFfpUnits(ffpU);
-      setBloodFfpMl(String(ffpVol));
+      setBloodFfpMl(ffpVol > 0 ? String(ffpVol) : '');
       setBloodPltUnits(pltU);
-      setBloodPltMl(String(pltVol));
-      setBloodCryoMl(String(cryoVol));
-      initialMap['bloodProducts'] = String(totalBlood);
+      setBloodPltMl(pltVol > 0 ? String(pltVol) : '');
+      setBloodCryoMl(cryoVol > 0 ? String(cryoVol) : '');
+      if (totalBlood > 0) initialMap['bloodProducts'] = String(totalBlood);
     } else {
       setRecordDate(new Date().toISOString().split('T')[0]);
+      const hour = new Date().getHours();
+      setShiftType((hour >= 7 && hour < 19) ? 'DAY' : 'NIGHT');
       setBloodPrbcUnits(0);
-      setBloodPrbcMl('0');
+      setBloodPrbcMl('');
       setBloodFfpUnits(0);
-      setBloodFfpMl('0');
+      setBloodFfpMl('');
       setBloodPltUnits(0);
-      setBloodPltMl('0');
-      setBloodCryoMl('0');
+      setBloodPltMl('');
+      setBloodCryoMl('');
     }
 
     setValues(initialMap);
@@ -194,8 +208,10 @@ export const FluidBalanceModal: React.FC<FluidBalanceModalProps> = ({
 
   if (!isOpen) return null;
 
-  const getValue = (id: string, defaultVal?: number): string => {
-    return values[id] !== undefined ? values[id] : String(defaultVal ?? 0);
+  const getValue = (id: string): string => {
+    const raw = values[id];
+    if (!raw || raw === '0') return '';
+    return raw;
   };
 
   const updateValue = (id: string, val: string) => {
@@ -220,7 +236,7 @@ export const FluidBalanceModal: React.FC<FluidBalanceModalProps> = ({
     const nextUnits = Math.max(0, bloodPrbcUnits + delta);
     const nextMl = nextUnits * 250;
     setBloodPrbcUnits(nextUnits);
-    setBloodPrbcMl(String(nextMl));
+    setBloodPrbcMl(nextMl > 0 ? String(nextMl) : '');
     syncBloodTotal(
       nextMl,
       parseEnglishFloat(bloodFfpMl) || 0,
@@ -233,7 +249,7 @@ export const FluidBalanceModal: React.FC<FluidBalanceModalProps> = ({
     const nextUnits = Math.max(0, bloodFfpUnits + delta);
     const nextMl = nextUnits * 200;
     setBloodFfpUnits(nextUnits);
-    setBloodFfpMl(String(nextMl));
+    setBloodFfpMl(nextMl > 0 ? String(nextMl) : '');
     syncBloodTotal(
       parseEnglishFloat(bloodPrbcMl) || 0,
       nextMl,
@@ -246,7 +262,7 @@ export const FluidBalanceModal: React.FC<FluidBalanceModalProps> = ({
     const nextUnits = Math.max(0, bloodPltUnits + delta);
     const nextMl = nextUnits * 50;
     setBloodPltUnits(nextUnits);
-    setBloodPltMl(String(nextMl));
+    setBloodPltMl(nextMl > 0 ? String(nextMl) : '');
     syncBloodTotal(
       parseEnglishFloat(bloodPrbcMl) || 0,
       parseEnglishFloat(bloodFfpMl) || 0,
@@ -257,18 +273,18 @@ export const FluidBalanceModal: React.FC<FluidBalanceModalProps> = ({
 
   // Live Calculations
   const totalIntake = intakeCategories.reduce((sum, cat) => {
-    const val = parseEnglishFloat(getValue(cat.id, cat.defaultMl)) || 0;
+    const val = parseEnglishFloat(getValue(cat.id)) || 0;
     return sum + val;
   }, 0);
 
   const totalOutput = outputCategories.reduce((sum, cat) => {
-    const val = parseEnglishFloat(getValue(cat.id, cat.defaultMl)) || 0;
+    const val = parseEnglishFloat(getValue(cat.id)) || 0;
     return sum + val;
   }, 0);
 
-  const numUrine = parseEnglishFloat(getValue('urineOutput', 1200)) || 0;
+  const numUrine = parseEnglishFloat(getValue('urineOutput')) || 0;
   const netBalance = totalIntake - totalOutput;
-  const hourlyUop = Math.round(numUrine / 24);
+  const hourlyUop = Math.round(numUrine / 12);
   const ibw = patient?.idealBodyWeightKg || (patient?.gender === 'MALE' ? 70 : 60) || 70;
   const uopMlKgHr = ibw > 0 ? (hourlyUop / ibw).toFixed(2) : null;
   const isOliguric = uopMlKgHr !== null && Number(uopMlKgHr) < 0.5;
@@ -286,20 +302,22 @@ export const FluidBalanceModal: React.FC<FluidBalanceModalProps> = ({
       const ffpM = parseEnglishFloat(bloodFfpMl) || (bloodFfpUnits > 0 ? bloodFfpUnits * 200 : 0);
       const pltM = parseEnglishFloat(bloodPltMl) || (bloodPltUnits > 0 ? bloodPltUnits * 50 : 0);
       const cryoM = parseEnglishFloat(bloodCryoMl) || 0;
-      const bldTotal = prbcM + ffpM + pltM + cryoM > 0 ? (prbcM + ffpM + pltM + cryoM) : (parseEnglishFloat(getValue('bloodProducts', 0)) || 0);
+      const bldTotal = prbcM + ffpM + pltM + cryoM > 0 ? (prbcM + ffpM + pltM + cryoM) : (parseEnglishFloat(getValue('bloodProducts')) || 0);
 
       const balanceRecord: FluidBalance24H = {
-        id: initialFluidBalance?.id || `fluid_${patientId}_${recordDate}`,
+        id: initialFluidBalance?.id || `fluid_${patientId}_${recordDate}_${shiftType}`,
         bedId: bedNumber,
         patientId: patientId,
-        periodStartTimestamp: new Date(selectedDateTime.getTime() - 24 * 3600 * 1000).toISOString(),
+        periodStartTimestamp: new Date(selectedDateTime.getTime() - 12 * 3600 * 1000).toISOString(),
         periodEndTimestamp: selectedDateTime.toISOString(),
+        shiftType: shiftType,
+        shiftNameAr: shiftType === 'DAY' ? 'المناوبة الصباحية (07:00-19:00)' : 'المناوبة الليلية (19:00-07:00)',
         intakeBreakdown: {
-          ivMaintenanceFluidMl: parseEnglishFloat(getValue('ivMaintenance', 1500)) || 0,
-          ivMedicationInfusionsMl: parseEnglishFloat(getValue('ivMedications', 350)) || 0,
-          enteralFeedingMl: parseEnglishFloat(getValue('enteralFeed', 0)) || 0,
+          ivMaintenanceFluidMl: parseEnglishFloat(getValue('ivMaintenance')) || 0,
+          ivMedicationInfusionsMl: parseEnglishFloat(getValue('ivMedications')) || 0,
+          enteralFeedingMl: parseEnglishFloat(getValue('enteralFeed')) || 0,
           bloodProductsMl: bldTotal,
-          oralFluidsMl: parseEnglishFloat(getValue('oralFluids', 0)) || 0,
+          oralFluidsMl: parseEnglishFloat(getValue('oralFluids')) || 0,
           totalIntakeMl: totalIntake,
           ...({
             prbcMl: prbcM,
@@ -311,10 +329,10 @@ export const FluidBalanceModal: React.FC<FluidBalanceModalProps> = ({
         outputBreakdown: {
           urineOutputMl: numUrine,
           hourlyUrineAverageMlPerHour: hourlyUop,
-          nasogastricDrainageMl: parseEnglishFloat(getValue('ngDrainage', 100)) || 0,
-          chestTubeDrainageMl: parseEnglishFloat(getValue('chestTube', 0)) || 0,
-          surgicalDrainageMl: parseEnglishFloat(getValue('surgicalDrain', 0)) || 0,
-          insensibleLossMl: parseEnglishFloat(getValue('insensibleLoss', 500)) || 0,
+          nasogastricDrainageMl: parseEnglishFloat(getValue('ngDrainage')) || 0,
+          chestTubeDrainageMl: parseEnglishFloat(getValue('chestTube')) || 0,
+          surgicalDrainageMl: parseEnglishFloat(getValue('surgicalDrain')) || 0,
+          insensibleLossMl: parseEnglishFloat(getValue('insensibleLoss')) || 0,
           totalOutputMl: totalOutput,
         },
         transfusionProductsGiven: {
@@ -385,14 +403,11 @@ export const FluidBalanceModal: React.FC<FluidBalanceModalProps> = ({
             </div>
             <div>
               <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
-                <span>{lang === 'ar' ? `ميزان السوائل والبول 24 ساعة - سرير ${bedNumber}` : `24h Fluid Balance Tracker - Bed ${bedNumber}`}</span>
+                <span>{lang === 'ar' ? `ميزان السوائل والبول 12 ساعة - سرير ${bedNumber}` : `12h Fluid Balance Tracker - Bed ${bedNumber}`}</span>
                 <span className="text-xs px-2 py-0.5 rounded-full bg-teal-950 text-teal-300 border border-teal-800 font-mono">
                   {patient?.fullNameAr || patient?.fullNameEn || `Bed ${bedNumber}`}
                 </span>
               </h2>
-              <p className="text-xs text-slate-400">
-                {lang === 'ar' ? 'تسجيل وحساب الوارد والصادر الإجمالي ومشتقات الدم ومعدل إدرار البول بالساعة' : 'Calculate 24-hour intake, output, blood products & UOP rate'}
-              </p>
             </div>
           </div>
           <button
@@ -404,7 +419,7 @@ export const FluidBalanceModal: React.FC<FluidBalanceModalProps> = ({
         </div>
 
         {/* Real-time Current Balance Summary KPI */}
-        <div className="p-3.5 bg-[#060b17] border-b border-slate-800 grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-center font-mono">
+        <div className="p-3.5 bg-[#060b17] border-b border-slate-800 grid grid-cols-2 gap-2.5 text-center font-mono">
           <div className="p-2 rounded-xl bg-cyan-950/40 border border-cyan-800/60">
             <div className="text-[10px] text-cyan-400 font-bold uppercase">{lang === 'ar' ? 'الوارد الكلي (IN)' : 'Total Intake (IN)'}</div>
             <div className="text-base sm:text-lg font-black text-cyan-300 mt-0.5">{totalIntake} <span className="text-[10px] font-normal text-slate-400">mL</span></div>
@@ -413,20 +428,6 @@ export const FluidBalanceModal: React.FC<FluidBalanceModalProps> = ({
           <div className="p-2 rounded-xl bg-amber-950/40 border border-amber-800/60">
             <div className="text-[10px] text-amber-400 font-bold uppercase">{lang === 'ar' ? 'الصادر الكلي (OUT)' : 'Total Output (OUT)'}</div>
             <div className="text-base sm:text-lg font-black text-amber-300 mt-0.5">{totalOutput} <span className="text-[10px] font-normal text-slate-400">mL</span></div>
-          </div>
-
-          <div className={`p-2 rounded-xl border ${netBalance >= 0 ? 'bg-indigo-950/40 border-indigo-800/60' : 'bg-emerald-950/40 border-emerald-800/60'}`}>
-            <div className="text-[10px] text-slate-300 font-bold uppercase">{lang === 'ar' ? 'صافي الميزان (NET)' : 'Net Balance (NET)'}</div>
-            <div className={`text-base sm:text-lg font-black mt-0.5 ${netBalance >= 0 ? 'text-indigo-300' : 'text-emerald-300'}`}>
-              {netBalance > 0 ? `+${netBalance}` : netBalance} <span className="text-[10px] font-normal text-slate-400">mL</span>
-            </div>
-          </div>
-
-          <div className={`p-2 rounded-xl border ${isOliguric ? 'bg-red-950/50 border-red-800/80 animate-pulse' : 'bg-slate-900/60 border-slate-800'}`}>
-            <div className="text-[10px] text-slate-400 font-bold uppercase">{lang === 'ar' ? 'إدرار البول (UOP)' : 'UOP Rate'}</div>
-            <div className={`text-base sm:text-lg font-black mt-0.5 ${isOliguric ? 'text-red-400' : 'text-emerald-400'}`}>
-              {uopMlKgHr ?? '—'} <span className="text-[10px] font-normal text-slate-400">mL/kg/h</span>
-            </div>
           </div>
         </div>
 
@@ -439,96 +440,51 @@ export const FluidBalanceModal: React.FC<FluidBalanceModalProps> = ({
             </div>
           )}
 
-          {/* 🌟 Top Feature: PREVIOUS DAY'S BALANCE BANNER (ميزان اليوم السابق) */}
-          <div className="p-3 rounded-xl bg-[#081226] border border-blue-900/50 space-y-2">
-            <div className="flex items-center justify-between gap-2 border-b border-blue-900/40 pb-1.5 flex-wrap">
-              <div className="flex items-center gap-1.5 text-xs font-bold text-blue-300">
-                <History className="w-4 h-4 text-blue-400" />
-                <span>{lang === 'ar' ? 'ميزان اليوم السابق (Previous Day Balance):' : 'Previous Day Balance Reference:'}</span>
-                {previousDayRecord && (
-                  <span className="text-[11px] font-mono font-normal text-blue-200 bg-blue-950/80 px-2 py-0.5 rounded border border-blue-800">
-                    {previousDayRecord.periodEndTimestamp ? previousDayRecord.periodEndTimestamp.split('T')[0] : (previousDayRecord as any).date}
-                  </span>
-                )}
-              </div>
-
-              {!previousDayRecord && (
-                <span className="text-[10px] text-slate-500 font-mono">
-                  {lang === 'ar' ? 'لا يوجد ميزان مسجل ليوم سابق' : 'No prior balance recorded'}
-                </span>
-              )}
-            </div>
-
-            {previousDayRecord ? (() => {
-              const prevIn = previousDayRecord.intakeBreakdown?.totalIntakeMl ?? 0;
-              const prevOut = previousDayRecord.outputBreakdown?.totalOutputMl ?? 0;
-              const prevNet = previousDayRecord.netCumulativeBalanceMl ?? (prevIn - prevOut);
-              const prevUrine = previousDayRecord.outputBreakdown?.urineOutputMl ?? 0;
-              const prevUopRate = previousDayRecord.outputBreakdown?.hourlyUrineAverageMlPerHour ?? Math.round(prevUrine / 24);
-              const prevPrbc = (previousDayRecord as any).transfusionProductsGiven?.prbcUnits ?? 0;
-              const prevFfp = (previousDayRecord as any).transfusionProductsGiven?.ffpUnits ?? 0;
-              const prevPlt = (previousDayRecord as any).transfusionProductsGiven?.plateletsUnits ?? 0;
-
-              return (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono">
-                  <div className="bg-[#050b18] p-2 rounded-lg border border-slate-800">
-                    <div className="text-[9px] text-cyan-400 font-semibold">{lang === 'ar' ? 'الوارد السابق (IN)' : 'Prev Intake (IN)'}</div>
-                    <div className="text-sm font-bold text-cyan-200 mt-0.5">{prevIn} <span className="text-[9px] text-slate-500">mL</span></div>
-                  </div>
-
-                  <div className="bg-[#050b18] p-2 rounded-lg border border-slate-800">
-                    <div className="text-[9px] text-amber-400 font-semibold">{lang === 'ar' ? 'الصادر السابق (OUT)' : 'Prev Output (OUT)'}</div>
-                    <div className="text-sm font-bold text-amber-200 mt-0.5">{prevOut} <span className="text-[9px] text-slate-500">mL</span></div>
-                  </div>
-
-                  <div className="bg-[#050b18] p-2 rounded-lg border border-slate-800">
-                    <div className="text-[9px] text-indigo-400 font-semibold">{lang === 'ar' ? 'صافي السابق (NET)' : 'Prev Net (NET)'}</div>
-                    <div className={`text-sm font-bold mt-0.5 ${prevNet >= 0 ? 'text-indigo-300' : 'text-emerald-300'}`}>
-                      {prevNet > 0 ? `+${prevNet}` : prevNet} <span className="text-[9px] text-slate-500">mL</span>
-                    </div>
-                  </div>
-
-                  <div className="bg-[#050b18] p-2 rounded-lg border border-slate-800">
-                    <div className="text-[9px] text-slate-400 font-semibold">{lang === 'ar' ? 'البول ونقل الدم' : 'Urine & MTP'}</div>
-                    <div className="text-xs text-slate-200 mt-0.5 truncate">
-                      {prevUrine} mL ({prevUopRate} mL/h)
-                    </div>
-                    {(prevPrbc > 0 || prevFfp > 0 || prevPlt > 0) && (
-                      <div className="text-[9px] text-red-300 mt-0.5 font-bold">
-                        PRBC: {prevPrbc} • FFP: {prevFfp} • PLT: {prevPlt}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })() : (
-              <div className="text-[11px] text-slate-400 py-1 italic">
-                {lang === 'ar'
-                  ? 'هذا هو الميزان الأول أو لم يتم العثور على سجل سابق قبل هذا التاريخ المحدد.'
-                  : 'This is the initial record or no previous fluid balance was logged before this date.'}
-              </div>
-            )}
-          </div>
-
-          {/* Date Selector Row for multi-day logging */}
-          <div className="p-3.5 rounded-xl bg-[#070d1d] border border-slate-800 flex items-center justify-between gap-3 flex-wrap">
-            <div className="flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-teal-400" />
-              <div>
+          {/* Date & 12H Shift Selector Row */}
+          <div className="p-3.5 rounded-xl bg-[#070d1d] border border-slate-800 space-y-3">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-teal-400" />
                 <div className="text-xs font-bold text-white">
-                  {lang === 'ar' ? 'تاريخ يوم الميزان (ICU Day Date):' : 'Fluid Balance Record Date:'}
-                </div>
-                <div className="text-[10px] text-slate-400">
-                  {lang === 'ar' ? 'تحديد اليوم لتسجيل أو تعديل ميزان السوائل' : 'Select date to record or edit fluid balance for subsequent days'}
+                  {lang === 'ar' ? 'تاريخ الميزان والنوبتجية (12 ساعة):' : 'Fluid Balance Date & Shift (12H):'}
                 </div>
               </div>
+              <input
+                type="date"
+                value={recordDate}
+                onChange={(e) => setRecordDate(e.target.value)}
+                className="bg-[#060b17] border border-slate-700 rounded-xl px-3 py-1.5 text-teal-300 font-mono text-xs focus:border-teal-400 focus:outline-none"
+              />
             </div>
-            <input
-              type="date"
-              value={recordDate}
-              onChange={(e) => setRecordDate(e.target.value)}
-              className="bg-[#060b17] border border-slate-700 rounded-xl px-3 py-1.5 text-teal-300 font-mono text-xs focus:border-teal-400 focus:outline-none"
-            />
+
+            {/* Shift Toggle Buttons (DAY vs NIGHT) */}
+            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setShiftType('DAY')}
+                className={`p-2 rounded-xl text-xs font-bold transition-all cursor-pointer border flex items-center justify-center gap-1.5 ${
+                  shiftType === 'DAY'
+                    ? 'bg-amber-950/80 text-amber-300 border-amber-500 shadow-md shadow-amber-500/10'
+                    : 'bg-[#060b17] text-slate-400 border-slate-800 hover:text-white'
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                <span>{lang === 'ar' ? 'مناوبة صباحية (07:00 - 19:00)' : 'DAY Shift (07:00 - 19:00)'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShiftType('NIGHT')}
+                className={`p-2 rounded-xl text-xs font-bold transition-all cursor-pointer border flex items-center justify-center gap-1.5 ${
+                  shiftType === 'NIGHT'
+                    ? 'bg-indigo-950/80 text-indigo-300 border-indigo-500 shadow-md shadow-indigo-500/10'
+                    : 'bg-[#060b17] text-slate-400 border-slate-800 hover:text-white'
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full bg-indigo-400"></span>
+                <span>{lang === 'ar' ? 'مناوبة ليلية (19:00 - 07:00)' : 'NIGHT Shift (19:00 - 07:00)'}</span>
+              </button>
+            </div>
           </div>
 
           {/* Section 1: INTAKE (وارد السوائل) */}
@@ -554,9 +510,10 @@ export const FluidBalanceModal: React.FC<FluidBalanceModalProps> = ({
                   <input
                     type="text"
                     inputMode="decimal"
-                    value={getValue(cat.id, cat.defaultMl)}
+                    value={getValue(cat.id)}
                     onChange={(e) => updateValue(cat.id, e.target.value)}
-                    placeholder={String(cat.defaultMl ?? 0)}
+                    onFocus={(e) => e.target.select()}
+                    placeholder="0"
                     className="w-full bg-[#060b17] border border-slate-700 rounded-xl px-3 py-2 text-cyan-300 font-mono text-xs focus:border-cyan-400 focus:outline-none"
                   />
                 </div>
@@ -574,7 +531,7 @@ export const FluidBalanceModal: React.FC<FluidBalanceModalProps> = ({
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-mono font-bold text-red-300 bg-red-950/80 px-2 py-0.5 rounded border border-red-800">
-                    {getValue('bloodProducts', 0)} mL
+                    {getValue('bloodProducts') || '0'} mL
                   </span>
                   <button
                     type="button"
@@ -588,32 +545,6 @@ export const FluidBalanceModal: React.FC<FluidBalanceModalProps> = ({
 
               {isBloodExpanded && (
                 <div className="space-y-3 pt-1 border-t border-red-900/40">
-                  {/* Quick Preset Buttons */}
-                  <div className="flex items-center gap-1.5 flex-wrap text-[10px]">
-                    <span className="text-slate-400">{lang === 'ar' ? 'إضافة سريعة:' : 'Quick Add:'}</span>
-                    <button
-                      type="button"
-                      onClick={() => handlePrbcUnitChange(1)}
-                      className="px-2 py-1 rounded-lg bg-red-950 hover:bg-red-900 text-red-300 border border-red-800 font-bold active:scale-95 cursor-pointer"
-                    >
-                      +1 {lang === 'ar' ? 'كيس دم PRBC (250mL)' : 'PRBC Bag (250mL)'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleFfpUnitChange(1)}
-                      className="px-2 py-1 rounded-lg bg-amber-950/80 hover:bg-amber-900 text-amber-300 border border-amber-800 font-bold active:scale-95 cursor-pointer"
-                    >
-                      +1 {lang === 'ar' ? 'كيس بلازما FFP (200mL)' : 'FFP Plasma (200mL)'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handlePltUnitChange(1)}
-                      className="px-2 py-1 rounded-lg bg-yellow-950/80 hover:bg-yellow-900 text-yellow-300 border border-yellow-800 font-bold active:scale-95 cursor-pointer"
-                    >
-                      +1 {lang === 'ar' ? 'كيس صفائح PLT (50mL)' : 'Platelets PLT (50mL)'}
-                    </button>
-                  </div>
-
                   {/* 4 Distinct Products Grid */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
                     {/* 1. PRBC (دم مركز) */}
@@ -714,6 +645,7 @@ export const FluidBalanceModal: React.FC<FluidBalanceModalProps> = ({
                             parseEnglishFloat(val) || 0
                           );
                         }}
+                        onFocus={(e) => e.target.select()}
                         placeholder="0"
                         className="w-20 bg-[#060b17] border border-slate-700 rounded-lg px-2.5 py-1 text-slate-200 font-mono text-xs text-right focus:border-red-400 focus:outline-none"
                       />
@@ -746,9 +678,10 @@ export const FluidBalanceModal: React.FC<FluidBalanceModalProps> = ({
                   <input
                     type="text"
                     inputMode="decimal"
-                    value={getValue(cat.id, cat.defaultMl)}
+                    value={getValue(cat.id)}
                     onChange={(e) => updateValue(cat.id, e.target.value)}
-                    placeholder={String(cat.defaultMl ?? 0)}
+                    onFocus={(e) => e.target.select()}
+                    placeholder="0"
                     required={cat.id === 'urineOutput'}
                     className={`w-full bg-[#060b17] border border-slate-700 rounded-xl px-3 py-2 font-mono text-xs focus:outline-none ${
                       cat.id === 'urineOutput'
