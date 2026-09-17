@@ -49,13 +49,82 @@ export interface LabCategoryTemplate {
   parameters: LabParameterTemplate[];
 }
 
+export interface InfusionDrugPreset {
+  id: string;
+  nameEn: string;
+  nameAr: string;
+  defaultCarrier: string;
+  defaultUnit: 'mcg/kg/min' | 'mcg/h' | 'mg/h' | 'Units/hr' | 'ml/h';
+  defaultRate: number;
+  defaultFlowRate: number;
+  defaultTarget: string;
+}
+
+export interface VentilatorModePreset {
+  id: string; // e.g. "SIMV_PC", "PRVC", "APRV"
+  labelEn: string;
+  labelAr: string;
+  type: 'invasive' | 'non-invasive' | 'weaning';
+}
+
+export interface FluidCategoryPreset {
+  id: string;
+  type: 'intake' | 'output';
+  labelEn: string;
+  labelAr: string;
+  defaultMl?: number;
+}
+
 export interface SystemSettings {
   language: 'en' | 'ar';
   features: SystemFeatureFlags;
   unit: UnitCustomization;
   labCategories?: LabCategoryTemplate[];
+  infusionDrugs?: InfusionDrugPreset[];
+  ventilatorModes?: VentilatorModePreset[];
+  fluidCategories?: FluidCategoryPreset[];
   lastUpdated: string;
 }
+
+export const DEFAULT_INFUSION_DRUGS: InfusionDrugPreset[] = [
+  { id: 'noradrenaline', nameEn: 'Noradrenaline (Norepinephrine)', nameAr: 'نورأدرينالين', defaultCarrier: '4 mg in 50 mL D5W (80 mcg/mL)', defaultUnit: 'mcg/kg/min', defaultRate: 0.1, defaultFlowRate: 3.8, defaultTarget: 'Target MAP ≥ 65 mmHg' },
+  { id: 'adrenaline', nameEn: 'Adrenaline (Epinephrine)', nameAr: 'أدرينالين', defaultCarrier: '4 mg in 50 mL D5W (80 mcg/mL)', defaultUnit: 'mcg/kg/min', defaultRate: 0.05, defaultFlowRate: 2.0, defaultTarget: 'Inotropic support & SBP > 90' },
+  { id: 'dopamine', nameEn: 'Dopamine', nameAr: 'دوبامين', defaultCarrier: '200 mg in 50 mL D5W (4 mg/mL)', defaultUnit: 'mcg/kg/min', defaultRate: 5.0, defaultFlowRate: 5.2, defaultTarget: 'Renal/Inotropic Support' },
+  { id: 'dobutamine', nameEn: 'Dobutamine', nameAr: 'دوبيوتامين', defaultCarrier: '250 mg in 50 mL D5W (5 mg/mL)', defaultUnit: 'mcg/kg/min', defaultRate: 5.0, defaultFlowRate: 4.2, defaultTarget: 'Cardiac Index > 2.5 L/min' },
+  { id: 'vasopressin', nameEn: 'Vasopressin', nameAr: 'فازوبريسين', defaultCarrier: '20 Units in 50 mL NS (0.4 U/mL)', defaultUnit: 'Units/hr', defaultRate: 0.03, defaultFlowRate: 4.5, defaultTarget: 'Refractory Septic Shock' },
+  { id: 'insulin', nameEn: 'Regular Insulin (Actrapid)', nameAr: 'إنسولين عادي', defaultCarrier: '50 Units in 50 mL NS (1 U/mL)', defaultUnit: 'Units/hr', defaultRate: 3.0, defaultFlowRate: 3.0, defaultTarget: 'Target BG: 140-180 mg/dL' },
+  { id: 'propofol', nameEn: 'Propofol 1%', nameAr: 'بروبوفول', defaultCarrier: '1000 mg in 100 mL Neat (10 mg/mL)', defaultUnit: 'mg/h', defaultRate: 100, defaultFlowRate: 10.0, defaultTarget: 'Target RASS: -2 to -3' },
+  { id: 'fentanyl', nameEn: 'Fentanyl', nameAr: 'فنتانيل', defaultCarrier: '1000 mcg in 50 mL NS (20 mcg/mL)', defaultUnit: 'mcg/h', defaultRate: 50, defaultFlowRate: 2.5, defaultTarget: 'Analgesia (CPOT score < 2)' },
+  { id: 'midazolam', nameEn: 'Midazolam (Dormicum)', nameAr: 'ميدازولام', defaultCarrier: '50 mg in 50 mL NS (1 mg/mL)', defaultUnit: 'mg/h', defaultRate: 3.0, defaultFlowRate: 3.0, defaultTarget: 'Sedation / Anxiolysis' },
+  { id: 'furosemide', nameEn: 'Furosemide (Lasix)', nameAr: 'لازيكس', defaultCarrier: '200 mg in 50 mL NS (4 mg/mL)', defaultUnit: 'mg/h', defaultRate: 10.0, defaultFlowRate: 2.5, defaultTarget: 'Target Urine Output > 0.5 mL/kg/h' },
+  { id: 'heparin', nameEn: 'Heparin Infusion', nameAr: 'هيبارين وريدي', defaultCarrier: '25,000 Units in 250 mL D5W (100 U/mL)', defaultUnit: 'Units/hr', defaultRate: 1000, defaultFlowRate: 10.0, defaultTarget: 'Target aPTT: 60-85 sec' },
+  { id: 'kcl', nameEn: 'Potassium Chloride (KCl)', nameAr: 'بوتاسيوم وريدي', defaultCarrier: '40 mmol in 500 mL NS (Central)', defaultUnit: 'ml/h', defaultRate: 50, defaultFlowRate: 50.0, defaultTarget: 'Correction of Hypokalemia' },
+  { id: 'saline', nameEn: 'Normal Saline 0.9%', nameAr: 'محلول ملحي عادي', defaultCarrier: '500 mL IV Bag', defaultUnit: 'ml/h', defaultRate: 80, defaultFlowRate: 80.0, defaultTarget: 'Hydration & Maintenance' },
+];
+
+export const DEFAULT_VENTILATOR_MODES: VentilatorModePreset[] = [
+  { id: 'SIMV_PC', labelEn: 'SIMV-PC (Pressure Control)', labelAr: 'SIMV بالتحكم بالضغط', type: 'invasive' },
+  { id: 'SIMV_VC', labelEn: 'SIMV-VC (Volume Control)', labelAr: 'SIMV بالتحكم بالحجم', type: 'invasive' },
+  { id: 'PRVC', labelEn: 'PRVC (Pressure Regulated Vol)', labelAr: 'PRVC الحجم المنظم بالضغط', type: 'invasive' },
+  { id: 'PSV_CPAP', labelEn: 'PSV / CPAP (Spontaneous)', labelAr: 'PSV / CPAP دعم الضغط العفوي', type: 'weaning' },
+  { id: 'BIPAP', labelEn: 'BiPAP (Non-Invasive Mask)', labelAr: 'BiPAP قناع غير جائر', type: 'non-invasive' },
+  { id: 'HIGH_FLOW_NC', labelEn: 'High-Flow Nasal Cannula (HFNC)', labelAr: 'قنية أنفية عالية التدفق HFNC', type: 'non-invasive' },
+  { id: 'T_PIECE', labelEn: 'T-Piece Weaning Trial', labelAr: 'اختبار فطام T-Piece', type: 'weaning' },
+  { id: 'APRV', labelEn: 'APRV (Airway Pressure Release)', labelAr: 'APRV تحرير ضغط مجرى الهواء', type: 'invasive' },
+];
+
+export const DEFAULT_FLUID_CATEGORIES: FluidCategoryPreset[] = [
+  { id: 'ivMaintenance', type: 'intake', labelEn: 'IV Maintenance Crystalloids', labelAr: 'المحاليل الوريدية الرئيسية', defaultMl: 1500 },
+  { id: 'ivMedications', type: 'intake', labelEn: 'IV Medications & Infusions', labelAr: 'المضخات والأدوية الوريدية', defaultMl: 350 },
+  { id: 'enteralFeed', type: 'intake', labelEn: 'Enteral Tube Feeding (NG/PEG)', labelAr: 'التغذية الأنبوبية المعوية', defaultMl: 0 },
+  { id: 'bloodProducts', type: 'intake', labelEn: 'Blood Products (PRBC/FFP/Plt)', labelAr: 'مشتقات ونقل الدم والبلازما', defaultMl: 0 },
+  { id: 'oralFluids', type: 'intake', labelEn: 'Oral / Sips Fluid Intake', labelAr: 'السوائل الفموية', defaultMl: 0 },
+  { id: 'urineOutput', type: 'output', labelEn: 'Urine Output (Foley Catheter)', labelAr: 'كمية البول (قسطرة بولية)', defaultMl: 1200 },
+  { id: 'ngDrainage', type: 'output', labelEn: 'Nasogastric (NG) Tube Drainage', labelAr: 'تصريف الأنبوب المعدي NG', defaultMl: 100 },
+  { id: 'chestTube', type: 'output', labelEn: 'Chest Tube Drainage', labelAr: 'تصريف أنبوب الصدر', defaultMl: 0 },
+  { id: 'surgicalDrain', type: 'output', labelEn: 'Surgical Drains (Jackson-Pratt/Hemovac)', labelAr: 'الدرانق الجراحية', defaultMl: 0 },
+  { id: 'insensibleLoss', type: 'output', labelEn: 'Insensible Loss (Perspiration/Resp)', labelAr: 'الفقدان غير المحسوس (تنفس وعرق)', defaultMl: 500 },
+];
 
 export const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
   language: 'en',
@@ -175,5 +244,8 @@ export const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
       ],
     }
   ],
+  infusionDrugs: DEFAULT_INFUSION_DRUGS,
+  ventilatorModes: DEFAULT_VENTILATOR_MODES,
+  fluidCategories: DEFAULT_FLUID_CATEGORIES,
   lastUpdated: new Date().toISOString(),
 };

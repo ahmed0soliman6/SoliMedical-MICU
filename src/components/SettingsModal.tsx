@@ -39,6 +39,7 @@ import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
 import { SystemFeatureFlags } from '../types/settings.ts';
 import { LabsTemplateManager } from './LabsTemplateManager.tsx';
+import { ClinicalOptionsManager } from './ClinicalOptionsManager.tsx';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -56,9 +57,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
     bedside: false,
     alerts: false,
     rbac: false,
+    clinicalCatalogs: false,
+    labsConfig: false,
     language: false,
     unit: false,
-    labsConfig: false,
   });
 
   const [unitForm, setUnitForm] = useState(settings.unit);
@@ -79,9 +81,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
       bedside: true,
       alerts: true,
       rbac: true,
+      clinicalCatalogs: true,
+      labsConfig: true,
       language: true,
       unit: true,
-      labsConfig: true,
     });
   };
 
@@ -91,9 +94,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
       bedside: false,
       alerts: false,
       rbac: false,
+      clinicalCatalogs: false,
+      labsConfig: false,
       language: false,
       unit: false,
-      labsConfig: false,
     });
   };
 
@@ -325,6 +329,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
       items: featureItems.filter(f => f.category === 'alerts')
     },
     {
+      id: 'clinicalCatalogs',
+      labelAr: 'إدارة خيارات المضخات والتنفس وميزان السوائل (إضافة وحذف الخيارات)',
+      labelEn: 'Infusion Pumps, Ventilator & Fluid Balance Catalogs (Add & Delete)',
+      badgeAr: 'خيارات سريرية',
+      badgeEn: 'Equipment & Drugs',
+      icon: Droplet,
+      isCustom: true
+    },
+    {
       id: 'labsConfig',
       labelAr: 'إعداد وتخصيص صناديق التحاليل الطبية (صورة الدم، كيمياء، غازات الدم...)',
       labelEn: 'Customize Lab Panel Categories & Parameters',
@@ -506,6 +519,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                                 </div>
                                 <span className="text-xs opacity-75 mt-1 block">واجهة معربة مع الحفاظ على الاختصارات الطبية (RTL)</span>
                               </button>
+                            </div>
+                          ) : section.id === 'clinicalCatalogs' ? (
+                            <div className="mt-2">
+                              <ClinicalOptionsManager />
                             </div>
                           ) : section.id === 'labsConfig' ? (
                             <div className="mt-2">

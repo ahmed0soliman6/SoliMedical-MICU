@@ -18,6 +18,7 @@ import { firestore } from '../services/firebase.ts';
 import { COLLECTIONS } from '../types/contracts.ts';
 import { useAuth } from '../services/AuthContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
+import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { toEnglishDigits, parseEnglishFloat } from '../services/numberUtils.ts';
 
 interface VentilatorModalProps {
@@ -49,8 +50,15 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
 }) => {
   const { lang, isRTL } = useTranslation();
   const { currentUser } = useAuth();
+  const { settings } = useSystemSettings();
 
-  const [mode, setMode] = useState<VentilatorMode>(initialVentilator?.mode || VentilatorMode.PRVC);
+  const availableModes = settings.ventilatorModes && settings.ventilatorModes.length > 0
+    ? settings.ventilatorModes
+    : VENTILATOR_MODES;
+
+  const [mode, setMode] = useState<VentilatorMode | string>(
+    initialVentilator?.mode || (availableModes[0]?.id as any) || VentilatorMode.PRVC
+  );
   const [deviceModel, setDeviceModel] = useState<string>(initialVentilator?.deviceModel || 'Hamilton-C6 / Dräger V800');
   const [fio2, setFio2] = useState<string>(String(initialVentilator?.fio2Percent || '40'));
   const [peep, setPeep] = useState<string>(String(initialVentilator?.peepCmH2O || '8'));
@@ -219,11 +227,11 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
               {lang === 'ar' ? 'وضعية التهوية (Ventilator Mode):' : 'Ventilator Mode:'}
             </label>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {VENTILATOR_MODES.map((m) => (
+              {availableModes.map((m) => (
                 <button
                   key={m.id}
                   type="button"
-                  onClick={() => setMode(m.id)}
+                  onClick={() => setMode(m.id as any)}
                   className={`p-2.5 rounded-xl text-xs font-bold transition-all text-left border cursor-pointer ${
                     mode === m.id
                       ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-md shadow-cyan-500/10'

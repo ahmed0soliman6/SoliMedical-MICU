@@ -17,6 +17,8 @@ import { firestore } from '../services/firebase.ts';
 import { COLLECTIONS } from '../types/contracts.ts';
 import { useAuth } from '../services/AuthContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
+import { useSystemSettings } from '../services/SettingsContext.tsx';
+import { DEFAULT_FLUID_CATEGORIES, FluidCategoryPreset } from '../types/settings.ts';
 import { toEnglishDigits, parseEnglishFloat } from '../services/numberUtils.ts';
 
 interface FluidBalanceModalProps {
@@ -38,57 +40,91 @@ export const FluidBalanceModal: React.FC<FluidBalanceModalProps> = ({
 }) => {
   const { lang, isRTL } = useTranslation();
   const { currentUser } = useAuth();
+  const { settings } = useSystemSettings();
 
-  // Intake states
-  const [ivMaintenance, setIvMaintenance] = useState('1500');
-  const [ivMedications, setIvMedications] = useState('350');
-  const [enteralFeed, setEnteralFeed] = useState('0');
-  const [bloodProducts, setBloodProducts] = useState('0');
-  const [oralFluids, setOralFluids] = useState('0');
+  const activeCategories = settings.fluidCategories && settings.fluidCategories.length > 0
+    ? settings.fluidCategories
+    : DEFAULT_FLUID_CATEGORIES;
 
-  // Output states
-  const [urineOutput, setUrineOutput] = useState('1200');
-  const [ngDrainage, setNgDrainage] = useState('100');
-  const [chestTube, setChestTube] = useState('0');
-  const [surgicalDrain, setSurgicalDrain] = useState('0');
-  const [insensibleLoss, setInsensibleLoss] = useState('500');
+  const intakeCategories = activeCategories.filter(c => c.type === 'intake');
+  const outputCategories = activeCategories.filter(c => c.type === 'output');
 
+  const [values, setValues] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    if (initialFluidBalance) {
-      setIvMaintenance(String(initialFluidBalance.intakeBreakdown?.ivMaintenanceFluidMl || 0));
-      setIvMedications(String(initialFluidBalance.intakeBreakdown?.ivMedicationInfusionsMl || 0));
-      setEnteralFeed(String(initialFluidBalance.intakeBreakdown?.enteralFeedingMl || 0));
-      setBloodProducts(String(initialFluidBalance.intakeBreakdown?.bloodProductsMl || 0));
-      setOralFluids(String(initialFluidBalance.intakeBreakdown?.oralFluidsMl || 0));
+    const initialMap: Record<string, string> = {};
+    activeCategories.forEach(cat => {
+      initialMap[cat.id] = String(cat.defaultMl ?? 0);
+    });
 
-      setUrineOutput(String(initialFluidBalance.outputBreakdown?.urineOutputMl || 0));
-      setNgDrainage(String(initialFluidBalance.outputBreakdown?.nasogastricDrainageMl || 0));
-      setChestTube(String(initialFluidBalance.outputBreakdown?.chestTubeDrainageMl || 0));
-      setSurgicalDrain(String(initialFluidBalance.outputBreakdown?.surgicalDrainageMl || 0));
-      setInsensibleLoss(String(initialFluidBalance.outputBreakdown?.insensibleLossMl || 0));
+    if (initialFluidBalance) {
+      if (initialFluidBalance.intakeBreakdown) {
+        if (initialFluidBalance.intakeBreakdown.ivMaintenanceFluidMl !== undefined) {
+          initialMap['ivMaintenance'] = String(initialFluidBalance.intakeBreakdown.ivMaintenanceFluidMl);
+        }
+        if (initialFluidBalance.intakeBreakdown.ivMedicationInfusionsMl !== undefined) {
+          initialMap['ivMedications'] = String(initialFluidBalance.intakeBreakdown.ivMedicationInfusionsMl);
+        }
+        if (initialFluidBalance.intakeBreakdown.enteralFeedingMl !== undefined) {
+          initialMap['enteralFeed'] = String(initialFluidBalance.intakeBreakdown.enteralFeedingMl);
+        }
+        if (initialFluidBalance.intakeBreakdown.bloodProductsMl !== undefined) {
+          initialMap['bloodProducts'] = String(initialFluidBalance.intakeBreakdown.bloodProductsMl);
+        }
+        if (initialFluidBalance.intakeBreakdown.oralFluidsMl !== undefined) {
+          initialMap['oralFluids'] = String(initialFluidBalance.intakeBreakdown.oralFluidsMl);
+        }
+      }
+
+      if (initialFluidBalance.outputBreakdown) {
+        if (initialFluidBalance.outputBreakdown.urineOutputMl !== undefined) {
+          initialMap['urineOutput'] = String(initialFluidBalance.outputBreakdown.urineOutputMl);
+        }
+        if (initialFluidBalance.outputBreakdown.nasogastricDrainageMl !== undefined) {
+          initialMap['ngDrainage'] = String(initialFluidBalance.outputBreakdown.nasogastricDrainageMl);
+        }
+        if (initialFluidBalance.outputBreakdown.chestTubeDrainageMl !== undefined) {
+          initialMap['chestTube'] = String(initialFluidBalance.outputBreakdown.chestTubeDrainageMl);
+        }
+        if (initialFluidBalance.outputBreakdown.surgicalDrainageMl !== undefined) {
+          initialMap['surgicalDrain'] = String(initialFluidBalance.outputBreakdown.surgicalDrainageMl);
+        }
+        if (initialFluidBalance.outputBreakdown.insensibleLossMl !== undefined) {
+          initialMap['insensibleLoss'] = String(initialFluidBalance.outputBreakdown.insensibleLossMl);
+        }
+      }
     }
-  }, [initialFluidBalance, isOpen]);
+
+    setValues(initialMap);
+  }, [initialFluidBalance, isOpen, activeCategories]);
 
   if (!isOpen) return null;
 
+  const getValue = (id: string, defaultVal?: number): string => {
+    return values[id] !== undefined ? values[id] : String(defaultVal ?? 0);
+  };
+
+  const updateValue = (id: string, val: string) => {
+    setValues(prev => ({
+      ...prev,
+      [id]: toEnglishDigits(val)
+    }));
+  };
+
   // Live Calculations
-  const numIvMaint = parseEnglishFloat(ivMaintenance) || 0;
-  const numIvMeds = parseEnglishFloat(ivMedications) || 0;
-  const numEnteral = parseEnglishFloat(enteralFeed) || 0;
-  const numBlood = parseEnglishFloat(bloodProducts) || 0;
-  const numOral = parseEnglishFloat(oralFluids) || 0;
-  const totalIntake = numIvMaint + numIvMeds + numEnteral + numBlood + numOral;
+  const totalIntake = intakeCategories.reduce((sum, cat) => {
+    const val = parseEnglishFloat(getValue(cat.id, cat.defaultMl)) || 0;
+    return sum + val;
+  }, 0);
 
-  const numUrine = parseEnglishFloat(urineOutput) || 0;
-  const numNg = parseEnglishFloat(ngDrainage) || 0;
-  const numChest = parseEnglishFloat(chestTube) || 0;
-  const numSurg = parseEnglishFloat(surgicalDrain) || 0;
-  const numInsensible = parseEnglishFloat(insensibleLoss) || 0;
-  const totalOutput = numUrine + numNg + numChest + numSurg + numInsensible;
+  const totalOutput = outputCategories.reduce((sum, cat) => {
+    const val = parseEnglishFloat(getValue(cat.id, cat.defaultMl)) || 0;
+    return sum + val;
+  }, 0);
 
+  const numUrine = parseEnglishFloat(getValue('urineOutput', 1200)) || 0;
   const netBalance = totalIntake - totalOutput;
   const hourlyUop = Math.round(numUrine / 24);
   const ibw = patient?.idealBodyWeightKg || (patient?.gender === 'MALE' ? 70 : 60) || 70;
@@ -111,20 +147,20 @@ export const FluidBalanceModal: React.FC<FluidBalanceModalProps> = ({
         periodStartTimestamp: new Date(now.getTime() - 24 * 3600 * 1000).toISOString(),
         periodEndTimestamp: now.toISOString(),
         intakeBreakdown: {
-          ivMaintenanceFluidMl: numIvMaint,
-          ivMedicationInfusionsMl: numIvMeds,
-          enteralFeedingMl: numEnteral,
-          bloodProductsMl: numBlood,
-          oralFluidsMl: numOral,
+          ivMaintenanceFluidMl: parseEnglishFloat(getValue('ivMaintenance', 1500)) || 0,
+          ivMedicationInfusionsMl: parseEnglishFloat(getValue('ivMedications', 350)) || 0,
+          enteralFeedingMl: parseEnglishFloat(getValue('enteralFeed', 0)) || 0,
+          bloodProductsMl: parseEnglishFloat(getValue('bloodProducts', 0)) || 0,
+          oralFluidsMl: parseEnglishFloat(getValue('oralFluids', 0)) || 0,
           totalIntakeMl: totalIntake,
         },
         outputBreakdown: {
           urineOutputMl: numUrine,
           hourlyUrineAverageMlPerHour: hourlyUop,
-          nasogastricDrainageMl: numNg,
-          chestTubeDrainageMl: numChest,
-          surgicalDrainageMl: numSurg,
-          insensibleLossMl: numInsensible,
+          nasogastricDrainageMl: parseEnglishFloat(getValue('ngDrainage', 100)) || 0,
+          chestTubeDrainageMl: parseEnglishFloat(getValue('chestTube', 0)) || 0,
+          surgicalDrainageMl: parseEnglishFloat(getValue('surgicalDrain', 0)) || 0,
+          insensibleLossMl: parseEnglishFloat(getValue('insensibleLoss', 500)) || 0,
           totalOutputMl: totalOutput,
         },
         netCumulativeBalanceMl: netBalance,
@@ -236,75 +272,22 @@ export const FluidBalanceModal: React.FC<FluidBalanceModalProps> = ({
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                  {lang === 'ar' ? 'محاليل وريدية رئيسية (IV Maint):' : 'IV Maintenance (mL):'}
-                </label>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={ivMaintenance}
-                  onChange={(e) => setIvMaintenance(toEnglishDigits(e.target.value))}
-                  placeholder="0"
-                  className="w-full bg-[#060b17] border border-slate-700 rounded-xl px-3 py-2 text-cyan-300 font-mono text-xs focus:border-cyan-400 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                  {lang === 'ar' ? 'أدوية ومضخات حقن (IV Meds):' : 'IV Meds & Boluses (mL):'}
-                </label>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={ivMedications}
-                  onChange={(e) => setIvMedications(toEnglishDigits(e.target.value))}
-                  placeholder="0"
-                  className="w-full bg-[#060b17] border border-slate-700 rounded-xl px-3 py-2 text-cyan-300 font-mono text-xs focus:border-cyan-400 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                  {lang === 'ar' ? 'تغذية أنبوبية (NG Feeds):' : 'Enteral / NG Tube (mL):'}
-                </label>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={enteralFeed}
-                  onChange={(e) => setEnteralFeed(toEnglishDigits(e.target.value))}
-                  placeholder="0"
-                  className="w-full bg-[#060b17] border border-slate-700 rounded-xl px-3 py-2 text-slate-200 font-mono text-xs focus:border-cyan-400 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                  {lang === 'ar' ? 'مشتقات دم (Blood Products):' : 'Blood Transfusions (mL):'}
-                </label>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={bloodProducts}
-                  onChange={(e) => setBloodProducts(toEnglishDigits(e.target.value))}
-                  placeholder="0"
-                  className="w-full bg-[#060b17] border border-slate-700 rounded-xl px-3 py-2 text-slate-200 font-mono text-xs focus:border-cyan-400 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                  {lang === 'ar' ? 'سوائل فموية (Oral Fluids):' : 'Oral Fluids (mL):'}
-                </label>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={oralFluids}
-                  onChange={(e) => setOralFluids(toEnglishDigits(e.target.value))}
-                  placeholder="0"
-                  className="w-full bg-[#060b17] border border-slate-700 rounded-xl px-3 py-2 text-slate-200 font-mono text-xs focus:border-cyan-400 focus:outline-none"
-                />
-              </div>
+              {intakeCategories.map((cat) => (
+                <div key={cat.id}>
+                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                    {lang === 'ar' ? cat.labelAr : cat.labelEn}
+                    <span className="text-[10px] text-slate-500 font-mono ml-1 font-normal">(mL)</span>:
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={getValue(cat.id, cat.defaultMl)}
+                    onChange={(e) => updateValue(cat.id, e.target.value)}
+                    placeholder={String(cat.defaultMl ?? 0)}
+                    className="w-full bg-[#060b17] border border-slate-700 rounded-xl px-3 py-2 text-cyan-300 font-mono text-xs focus:border-cyan-400 focus:outline-none"
+                  />
+                </div>
+              ))}
             </div>
           </div>
 
@@ -321,76 +304,27 @@ export const FluidBalanceModal: React.FC<FluidBalanceModalProps> = ({
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                  {lang === 'ar' ? 'كمية البول الإجمالية (Urine):' : 'Urine Output (mL):'}
-                </label>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={urineOutput}
-                  onChange={(e) => setUrineOutput(toEnglishDigits(e.target.value))}
-                  placeholder="0"
-                  required
-                  className="w-full bg-[#060b17] border border-slate-700 rounded-xl px-3 py-2 text-amber-300 font-mono font-bold text-sm focus:border-amber-400 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                  {lang === 'ar' ? 'نزح أنبوب المعدة (NG Suction):' : 'NG Tube Drainage (mL):'}
-                </label>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={ngDrainage}
-                  onChange={(e) => setNgDrainage(toEnglishDigits(e.target.value))}
-                  placeholder="0"
-                  className="w-full bg-[#060b17] border border-slate-700 rounded-xl px-3 py-2 text-slate-200 font-mono text-xs focus:border-amber-400 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                  {lang === 'ar' ? 'درنقة الصدر (Chest Tube):' : 'Chest Tube Drain (mL):'}
-                </label>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={chestTube}
-                  onChange={(e) => setChestTube(toEnglishDigits(e.target.value))}
-                  placeholder="0"
-                  className="w-full bg-[#060b17] border border-slate-700 rounded-xl px-3 py-2 text-slate-200 font-mono text-xs focus:border-amber-400 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                  {lang === 'ar' ? 'درانق جراحية (Surgical Drain):' : 'Surgical Drains (mL):'}
-                </label>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={surgicalDrain}
-                  onChange={(e) => setSurgicalDrain(toEnglishDigits(e.target.value))}
-                  placeholder="0"
-                  className="w-full bg-[#060b17] border border-slate-700 rounded-xl px-3 py-2 text-slate-200 font-mono text-xs focus:border-amber-400 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                  {lang === 'ar' ? 'فقد غير محسوس (Insensible):' : 'Insensible Loss (mL):'}
-                </label>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={insensibleLoss}
-                  onChange={(e) => setInsensibleLoss(toEnglishDigits(e.target.value))}
-                  placeholder="500"
-                  className="w-full bg-[#060b17] border border-slate-700 rounded-xl px-3 py-2 text-slate-200 font-mono text-xs focus:border-amber-400 focus:outline-none"
-                />
-              </div>
+              {outputCategories.map((cat) => (
+                <div key={cat.id}>
+                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                    {lang === 'ar' ? cat.labelAr : cat.labelEn}
+                    <span className="text-[10px] text-slate-500 font-mono ml-1 font-normal">(mL)</span>:
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={getValue(cat.id, cat.defaultMl)}
+                    onChange={(e) => updateValue(cat.id, e.target.value)}
+                    placeholder={String(cat.defaultMl ?? 0)}
+                    required={cat.id === 'urineOutput'}
+                    className={`w-full bg-[#060b17] border border-slate-700 rounded-xl px-3 py-2 font-mono text-xs focus:outline-none ${
+                      cat.id === 'urineOutput'
+                        ? 'text-amber-300 font-bold focus:border-amber-400'
+                        : 'text-slate-200 focus:border-amber-400'
+                    }`}
+                  />
+                </div>
+              ))}
             </div>
           </div>
 

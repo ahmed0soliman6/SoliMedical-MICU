@@ -20,6 +20,8 @@ import { firestore } from '../services/firebase.ts';
 import { COLLECTIONS } from '../types/contracts.ts';
 import { useAuth } from '../services/AuthContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
+import { useSystemSettings } from '../services/SettingsContext.tsx';
+import { InfusionDrugPreset, DEFAULT_INFUSION_DRUGS } from '../types/settings.ts';
 import { toEnglishDigits, parseEnglishFloat } from '../services/numberUtils.ts';
 
 interface InfusionPumpModalProps {
@@ -65,6 +67,11 @@ export const InfusionPumpModal: React.FC<InfusionPumpModalProps> = ({
 }) => {
   const { lang, isRTL } = useTranslation();
   const { currentUser } = useAuth();
+  const { settings } = useSystemSettings();
+
+  const availableDrugs = settings.infusionDrugs && settings.infusionDrugs.length > 0
+    ? settings.infusionDrugs
+    : DEFAULT_INFUSION_DRUGS;
 
   const [drugNameEn, setDrugNameEn] = useState('');
   const [drugNameAr, setDrugNameAr] = useState('');
@@ -82,7 +89,7 @@ export const InfusionPumpModal: React.FC<InfusionPumpModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const applyDrugTemplate = (tpl: typeof COMMON_ICU_DRUGS[0]) => {
+  const applyDrugTemplate = (tpl: InfusionDrugPreset) => {
     setDrugNameEn(tpl.nameEn);
     setDrugNameAr(tpl.nameAr);
     setSolutionCarrier(tpl.defaultCarrier);
@@ -111,11 +118,11 @@ export const InfusionPumpModal: React.FC<InfusionPumpModalProps> = ({
       setTotalVolumeMl(String(editingPump.totalVolumeMl || '50'));
       setStatus(editingPump.status || PumpStatus.RUNNING);
       setClinicalTargetDescription(editingPump.clinicalTargetDescription || '');
-    } else {
-      // Default to Noradrenaline template
-      applyDrugTemplate(COMMON_ICU_DRUGS[0]);
+    } else if (availableDrugs.length > 0) {
+      // Default to first available drug
+      applyDrugTemplate(availableDrugs[0]);
     }
-  }, [editingPump, isOpen]);
+  }, [editingPump, isOpen, availableDrugs]);
 
   if (!isOpen) return null;
 
@@ -240,9 +247,9 @@ export const InfusionPumpModal: React.FC<InfusionPumpModalProps> = ({
               <span>{lang === 'ar' ? 'أدوية ومحاليل العناية المركزة الشائعة (قوالب سريعة):' : 'Common ICU Infusions (Quick Select):'}</span>
             </div>
             <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
-              {COMMON_ICU_DRUGS.map((tpl) => (
+              {availableDrugs.map((tpl) => (
                 <button
-                  key={tpl.nameEn}
+                  key={tpl.id || tpl.nameEn}
                   type="button"
                   onClick={() => applyDrugTemplate(tpl)}
                   className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap border transition-all cursor-pointer ${

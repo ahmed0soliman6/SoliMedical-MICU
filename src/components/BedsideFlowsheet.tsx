@@ -33,7 +33,11 @@ import {
   Sliders,
   ChevronDown,
   ChevronUp,
-  Scan
+  Scan,
+  Minus,
+  Play,
+  Pause,
+  PowerOff
 } from 'lucide-react';
 import { 
   BedRecord, 
@@ -52,14 +56,16 @@ import {
   InvestigationItem,
   BedStatus,
   AcuityLevel,
-  BedNumber
+  BedNumber,
+  PumpStatus
 } from '../types/schema.ts';
 import { db } from '../db/icuSyncDb.ts';
 import { dischargeOrTransferPatient, getPatientForBed } from '../services/dataModel.ts';
 import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
 import { useAuth } from '../services/AuthContext.tsx';
-import { syncStatLabsToCloud, syncPatientToCloud } from '../services/firebase.ts';
+import { syncStatLabsToCloud, syncPatientToCloud, syncPumpToCloud, firestore } from '../services/firebase.ts';
+import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { LabFlowsheetSection } from './LabFlowsheetSection.tsx';
 import { InvestigationsSection } from './InvestigationsSection.tsx';
 import { PatientTransferModal } from './PatientTransferModal.tsx';
@@ -624,6 +630,92 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
     } catch (err) {
       console.error(err);
       alert(lang === 'ar' ? 'حدث خطأ أثناء حفظ التاريخ الطبي.' : 'Error saving patient details.');
+    }
+  };
+
+  const getStepForUnit = (unit: string): number => {
+    switch (unit) {
+      case 'mcg/kg/min': return 0.02;
+      case 'mcg/h': return 10;
+      case 'mg/h': return 1;
+      case 'Units/hr': return 0.5;
+      case 'ml/h': return 5;
+      default: return 1;
+    }
+  };
+
+  const handleTitratePump = async (pump: InfusionPumpLine, direction: 'UP' | 'DOWN', customStep?: number) => {
+    try {
+      const step = customStep ?? getStepForUnit(pump.rateUnit);
+      const delta = direction === 'UP' ? step : -step;
+      const newRate = Math.max(0, Math.round((pump.currentRate + delta) * 100) / 100);
+
+      let newFlowRate = pump.flowRateMlPerHour;
+      if (pump.currentRate > 0 && pump.flowRateMlPerHour > 0) {
+        newFlowRate = Math.max(0, Math.round((pump.flowRateMlPerHour * (newRate / pump.currentRate)) * 10) / 10);
+      } else if (pump.rateUnit === 'ml/h') {
+        newFlowRate = newRate;
+      }
+
+      const updated: InfusionPumpLine = {
+        ...pump,
+        currentRate: newRate,
+        flowRateMlPerHour: newFlowRate,
+        status: newRate === 0 ? PumpStatus.STOPPED : (pump.status === PumpStatus.STOPPED ? PumpStatus.RUNNING : pump.status),
+      };
+
+      await db.infusionPumps.put(updated);
+      try {
+        await syncPumpToCloud(updated);
+      } catch (e) {
+        console.warn('Firestore offline sync for pump titration:', e);
+      }
+      await loadBedsideData();
+      onDataUpdated();
+    } catch (err) {
+      console.error('Error titrating infusion pump:', err);
+    }
+  };
+
+  const handleTogglePumpStatus = async (pump: InfusionPumpLine) => {
+    try {
+      const nextStatus = pump.status === PumpStatus.RUNNING ? PumpStatus.STANDBY : PumpStatus.RUNNING;
+      const updated: InfusionPumpLine = {
+        ...pump,
+        status: nextStatus,
+      };
+      await db.infusionPumps.put(updated);
+      try {
+        await syncPumpToCloud(updated);
+      } catch (e) {
+        console.warn('Firestore offline sync for pump status:', e);
+      }
+      await loadBedsideData();
+      onDataUpdated();
+    } catch (err) {
+      console.error('Error toggling pump status:', err);
+    }
+  };
+
+  const handleDeletePumpLine = async (pump: InfusionPumpLine) => {
+    try {
+      const drugLabel = lang === 'ar' ? (pump.drugNameAr || pump.drugNameEn) : pump.drugNameEn;
+      const confirmMsg = lang === 'ar'
+        ? `هل أنت متأكد من إيقاف والاستغناء عن محلول [${drugLabel}] وحذف قناة المضخة؟`
+        : `Are you sure you want to stop, discontinue, and remove pump line [${drugLabel}]?`;
+      if (!window.confirm(confirmMsg)) return;
+
+      await db.infusionPumps.delete(pump.id);
+      try {
+        const pumpRef = doc(firestore, 'infusionPumps', pump.id);
+        await deleteDoc(pumpRef);
+      } catch (e) {
+        console.warn('Firestore delete pump offline sync:', e);
+      }
+      await loadBedsideData();
+      onDataUpdated();
+    } catch (err) {
+      console.error('Error deleting pump line:', err);
     }
   };
 
@@ -1219,14 +1311,22 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                   </h3>
                 </div>
 
-                <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center gap-2">
                   <span className="font-mono text-[11px] text-teal-400 bg-teal-950/80 px-2 py-0.5 rounded border border-teal-800 font-bold">
                     {bed.bedNumber}
                   </span>
 
-                  <div className="p-1 rounded-lg bg-slate-800 text-slate-400">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsDemographicsCardCollapsed(!isDemographicsCardCollapsed);
+                    }}
+                    className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all cursor-pointer"
+                    title={isDemographicsCardCollapsed ? (lang === 'ar' ? 'فتح البطاقة' : 'Expand') : (lang === 'ar' ? 'طي البطاقة' : 'Collapse')}
+                  >
                     {isDemographicsCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
-                  </div>
+                  </button>
                 </div>
               </div>
 
@@ -1301,29 +1401,35 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                   </h3>
                 </div>
 
-                <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                  {!isHistoryEditing && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setIsHistoryEditing(true);
-                        setIsHistoryCardCollapsed(false);
-                      }}
-                      className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-teal-300 text-xs font-bold transition-all cursor-pointer"
-                    >
-                      {lang === 'ar' ? 'تعديل البيانات' : 'Edit Info'}
-                    </button>
-                  )}
-
-                  <div className="p-1 rounded-lg bg-slate-800 text-slate-400">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsHistoryCardCollapsed(!isHistoryCardCollapsed);
+                    }}
+                    className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all cursor-pointer"
+                    title={isHistoryCardCollapsed ? (lang === 'ar' ? 'فتح البطاقة' : 'Expand') : (lang === 'ar' ? 'طي البطاقة' : 'Collapse')}
+                  >
                     {isHistoryCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
-                  </div>
+                  </button>
                 </div>
               </div>
 
               {!isHistoryCardCollapsed && (
                 <>
+                  {!isHistoryEditing && (
+                    <div className="flex justify-end pb-1">
+                      <button
+                        type="button"
+                        onClick={() => setIsHistoryEditing(true)}
+                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-teal-300 text-xs font-bold transition-all cursor-pointer flex items-center gap-1 border border-slate-700"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                        <span>{lang === 'ar' ? 'تعديل البيانات' : 'Edit Info'}</span>
+                      </button>
+                    </div>
+                  )}
                   {isHistoryEditing ? (
                 <div className="space-y-4 text-xs">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1456,13 +1562,38 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                 {lang === 'ar' ? 'العلامات الحيوية والمراقبة المستمرة (Vitals & Telemetry)' : 'Continuous Vitals & Telemetry'}
               </h3>
             </div>
-            <div className="p-1 rounded-lg bg-slate-800 text-slate-400">
-              {isPaperVitalsCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsPaperVitalsCardCollapsed(!isPaperVitalsCardCollapsed);
+                }}
+                className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all cursor-pointer"
+                title={isPaperVitalsCardCollapsed ? (lang === 'ar' ? 'فتح البطاقة' : 'Expand') : (lang === 'ar' ? 'طي البطاقة' : 'Collapse')}
+              >
+                {isPaperVitalsCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+              </button>
             </div>
           </div>
 
           {!isPaperVitalsCardCollapsed && (
             <div className="space-y-4 animate-in fade-in duration-300">
+              <div className="flex items-center justify-between pb-1">
+                <span className="text-xs text-slate-400 font-mono">
+                  {vitalsHistory.length} {lang === 'ar' ? 'قراءات مسجلة' : 'Readings Recorded'}
+                </span>
+                <button
+                  type="button"
+                  onClick={onOpenAddVitals}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shadow-md active:scale-95 cursor-pointer"
+                  title={lang === 'ar' ? 'إضافة قراءة علامات حيوية جديدة' : 'Add New Vitals Reading'}
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>{lang === 'ar' ? 'إضافة قراءة حيوية' : 'Add Vitals Reading'}</span>
+                </button>
+              </div>
+
               {latestVitals && (
                 <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
                   {/* MAP */}
@@ -1627,84 +1758,90 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2 flex-wrap" onClick={(e) => e.stopPropagation()}>
-                {settings.enableAiLabScanner && (
-                  <div className="flex items-center gap-1 bg-slate-900/80 p-1 rounded-xl border border-slate-800">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setAiScannerPreset('ALL');
-                        setIsAiLabScannerOpen(true);
-                        setIsPaperLabsCardCollapsed(false);
-                      }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-fuchsia-600 to-indigo-600 hover:from-fuchsia-500 hover:to-indigo-500 text-white text-xs font-bold transition-all shadow-md active:scale-95 flex-shrink-0 cursor-pointer"
-                    >
-                      <Camera className="w-4 h-4" />
-                      <span className="hidden sm:inline">{lang === 'ar' ? 'تصوير تحليل' : 'AI Scan'}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setAiScannerPreset('ABG');
-                        setIsAiLabScannerOpen(true);
-                        setIsPaperLabsCardCollapsed(false);
-                      }}
-                      className="px-2 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 text-[11px] font-bold transition-all border border-emerald-500/30 cursor-pointer"
-                    >
-                      🫁 {lang === 'ar' ? 'غازات ABG' : 'ABG'}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setAiScannerPreset('CBC');
-                        setIsAiLabScannerOpen(true);
-                        setIsPaperLabsCardCollapsed(false);
-                      }}
-                      className="px-2 py-1 rounded-lg bg-teal-500/15 hover:bg-teal-500/25 text-teal-300 text-[11px] font-bold transition-all border border-teal-500/30 cursor-pointer"
-                    >
-                      🩸 {lang === 'ar' ? 'صورة CBC' : 'CBC'}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setAiScannerPreset('CHEMISTRY');
-                        setIsAiLabScannerOpen(true);
-                        setIsPaperLabsCardCollapsed(false);
-                      }}
-                      className="px-2 py-1 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 text-[11px] font-bold transition-all border border-cyan-500/30 cursor-pointer"
-                    >
-                      🧪 {lang === 'ar' ? 'كيمياء وأملاح' : 'Chemistry'}
-                    </button>
-                  </div>
-                )}
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    handleOpenAddLabColumn();
-                    setIsPaperLabsCardCollapsed(false);
+                    setIsPaperLabsCardCollapsed(!isPaperLabsCardCollapsed);
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition-all shadow-md active:scale-95 flex-shrink-0 cursor-pointer"
+                  className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all cursor-pointer"
+                  title={isPaperLabsCardCollapsed ? (lang === 'ar' ? 'فتح البطاقة' : 'Expand') : (lang === 'ar' ? 'طي البطاقة' : 'Collapse')}
                 >
-                  <Plus className="w-4 h-4" />
-                  <span>{lang === 'ar' ? 'إضافة عمود تحاليل' : 'Add Column'}</span>
-                </button>
-
-                <div className="p-1 rounded-lg bg-slate-800 text-slate-400">
                   {isPaperLabsCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
-                </div>
+                </button>
               </div>
             </div>
 
             {!isPaperLabsCardCollapsed && (
               <>
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 pb-2 border-b border-slate-800/80">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-400 font-mono">
+                      {labsList.length} {lang === 'ar' ? 'أعمدة مسجلة' : 'Recorded Columns'}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-wrap justify-end">
+                    {settings.enableAiLabScanner && (
+                      <div className="flex items-center gap-1 bg-slate-900/90 p-1 rounded-xl border border-slate-800">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAiScannerPreset('ALL');
+                            setIsAiLabScannerOpen(true);
+                          }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-fuchsia-600 to-indigo-600 hover:from-fuchsia-500 hover:to-indigo-500 text-white text-xs font-bold transition-all shadow-md active:scale-95 flex-shrink-0 cursor-pointer"
+                        >
+                          <Camera className="w-4 h-4" />
+                          <span className="hidden sm:inline">{lang === 'ar' ? 'تصوير تحليل' : 'AI Scan'}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAiScannerPreset('ABG');
+                            setIsAiLabScannerOpen(true);
+                          }}
+                          className="px-2 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 text-[11px] font-bold transition-all border border-emerald-500/30 cursor-pointer"
+                        >
+                          🫁 {lang === 'ar' ? 'غازات ABG' : 'ABG'}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAiScannerPreset('CBC');
+                            setIsAiLabScannerOpen(true);
+                          }}
+                          className="px-2 py-1 rounded-lg bg-teal-500/15 hover:bg-teal-500/25 text-teal-300 text-[11px] font-bold transition-all border border-teal-500/30 cursor-pointer"
+                        >
+                          🩸 {lang === 'ar' ? 'صورة CBC' : 'CBC'}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAiScannerPreset('CHEMISTRY');
+                            setIsAiLabScannerOpen(true);
+                          }}
+                          className="px-2 py-1 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 text-[11px] font-bold transition-all border border-cyan-500/30 cursor-pointer"
+                        >
+                          🧪 {lang === 'ar' ? 'كيمياء وأملاح' : 'Chemistry'}
+                        </button>
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={handleOpenAddLabColumn}
+                      className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition-all shadow-md active:scale-95 flex-shrink-0 cursor-pointer"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>{lang === 'ar' ? 'إضافة عمود تحاليل' : 'Add Column'}</span>
+                    </button>
+                  </div>
+                </div>
 
             {labsList.length === 0 ? (
               <div className="bg-[#070c18] border border-dashed border-slate-800 rounded-xl p-8 text-center text-slate-400 space-y-3">
@@ -1974,48 +2111,55 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                           {ventilator.mode}
                         </span>
                       )}
+
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          setIsVentilatorModalOpen(true);
-                          setIsPaperVentCardCollapsed(false);
+                          setIsPaperVentCardCollapsed(!isPaperVentCardCollapsed);
                         }}
-                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer"
-                        title={lang === 'ar' ? 'إضافة أو تعديل إعدادات جهاز التنفس' : 'Add / Edit Ventilator Parameters'}
+                        className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all cursor-pointer"
+                        title={isPaperVentCardCollapsed ? (lang === 'ar' ? 'فتح البطاقة' : 'Expand') : (lang === 'ar' ? 'طي البطاقة' : 'Collapse')}
                       >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>{ventilator ? (lang === 'ar' ? 'تعديل' : 'Edit') : (lang === 'ar' ? 'إضافة' : 'Add')}</span>
-                      </button>
-
-                      <div className="p-1 rounded-lg bg-slate-800 text-slate-400">
                         {isPaperVentCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
-                      </div>
+                      </button>
                     </div>
                   </div>
 
                   {!isPaperVentCardCollapsed && (
                     <>
                       {ventilator ? (
-                        <div 
-                          onClick={() => setIsVentilatorModalOpen(true)}
-                          className="grid grid-cols-2 gap-2.5 text-xs font-mono mt-3 cursor-pointer hover:opacity-90 transition-opacity"
-                        >
-                          <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
-                            <div className="text-[10px] text-slate-500">FiO₂ Provided</div>
-                            <div className="text-teal-300 font-bold text-sm mt-0.5">{ventilator.fio2Percent}%</div>
+                        <div className="mt-3 space-y-2.5">
+                          <div className="flex justify-end">
+                            <button
+                              type="button"
+                              onClick={() => setIsVentilatorModalOpen(true)}
+                              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 text-xs font-bold transition-all cursor-pointer"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                              <span>{lang === 'ar' ? 'تعديل إعدادات التنفس' : 'Edit Parameters'}</span>
+                            </button>
                           </div>
-                          <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
-                            <div className="text-[10px] text-slate-500">PEEP</div>
-                            <div className="text-cyan-300 font-bold text-sm mt-0.5">{ventilator.peepCmH2O} cmH2O</div>
-                          </div>
-                          <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
-                            <div className="text-[10px] text-slate-500">Tidal Vol (Vt)</div>
-                            <div className="text-white font-bold text-sm mt-0.5">{ventilator.setTidalVolumeMl} mL</div>
-                          </div>
-                          <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
-                            <div className="text-[10px] text-slate-500">Set Rate (RR)</div>
-                            <div className="text-slate-200 font-bold text-sm mt-0.5">{ventilator.setRespiratoryRateCpm} bpm</div>
+                          <div 
+                            onClick={() => setIsVentilatorModalOpen(true)}
+                            className="grid grid-cols-2 gap-2.5 text-xs font-mono cursor-pointer hover:opacity-90 transition-opacity"
+                          >
+                            <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
+                              <div className="text-[10px] text-slate-500">FiO₂ Provided</div>
+                              <div className="text-teal-300 font-bold text-sm mt-0.5">{ventilator.fio2Percent}%</div>
+                            </div>
+                            <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
+                              <div className="text-[10px] text-slate-500">PEEP</div>
+                              <div className="text-cyan-300 font-bold text-sm mt-0.5">{ventilator.peepCmH2O} cmH2O</div>
+                            </div>
+                            <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
+                              <div className="text-[10px] text-slate-500">Tidal Vol (Vt)</div>
+                              <div className="text-white font-bold text-sm mt-0.5">{ventilator.setTidalVolumeMl} mL</div>
+                            </div>
+                            <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
+                              <div className="text-[10px] text-slate-500">Set Rate (RR)</div>
+                              <div className="text-slate-200 font-bold text-sm mt-0.5">{ventilator.setRespiratoryRateCpm} bpm</div>
+                            </div>
                           </div>
                         </div>
                       ) : (
@@ -2056,72 +2200,130 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                       <span className="text-[10px] font-mono text-slate-400 bg-slate-900/60 px-2 py-0.5 rounded border border-slate-800 font-bold">
                         {pumps.length} {lang === 'ar' ? 'نشط' : 'active'}
                       </span>
+
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          setSelectedPumpForEdit(null);
-                          setIsPumpModalOpen(true);
-                          setIsPaperPumpsCardCollapsed(false);
+                          setIsPaperPumpsCardCollapsed(!isPaperPumpsCardCollapsed);
                         }}
-                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer"
-                        title={lang === 'ar' ? 'إضافة مضخة أو خط تنقيط وريدي جديد' : 'Add Infusion Pump Line'}
+                        className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all cursor-pointer"
+                        title={isPaperPumpsCardCollapsed ? (lang === 'ar' ? 'فتح البطاقة' : 'Expand') : (lang === 'ar' ? 'طي البطاقة' : 'Collapse')}
                       >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>{lang === 'ar' ? 'إضافة' : 'Add'}</span>
-                      </button>
-
-                      <div className="p-1 rounded-lg bg-slate-800 text-slate-400">
                         {isPaperPumpsCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
-                      </div>
+                      </button>
                     </div>
                   </div>
 
                   {!isPaperPumpsCardCollapsed && (
                     <>
+                      <div className="flex items-center justify-between mt-2.5 mb-2 pb-1 border-b border-slate-800/60">
+                        <span className="text-[11px] text-slate-400 font-mono">
+                          {pumps.length} {lang === 'ar' ? 'مضخات مضافة' : 'Infusion lines'}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedPumpForEdit(null);
+                            setIsPumpModalOpen(true);
+                          }}
+                          className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer"
+                          title={lang === 'ar' ? 'إضافة مضخة أو خط تنقيط وريدي جديد' : 'Add Infusion Pump Line'}
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>{lang === 'ar' ? 'إضافة مضخة' : 'Add Pump'}</span>
+                        </button>
+                      </div>
+
                       {pumps.length > 0 ? (
-                        <div className="space-y-2 max-h-[140px] overflow-y-auto mt-3">
+                        <div className="space-y-2.5 max-h-[220px] overflow-y-auto">
                           {pumps.map(p => (
                             <div 
                               key={p.id} 
-                              className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800 flex items-center justify-between gap-2 text-xs hover:border-amber-500/40 transition-colors"
+                              className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800 space-y-2 hover:border-amber-500/40 transition-colors"
                             >
-                              <div 
-                                className="cursor-pointer flex-1 min-w-0"
-                                onClick={() => {
-                                  setSelectedPumpForEdit(p);
-                                  setIsPumpModalOpen(true);
-                                }}
-                              >
-                                <div className="font-bold text-white font-mono truncate max-w-[150px]">{p.drugNameEn}</div>
-                                <div className="text-[9px] text-slate-500">{p.diluentFluid} (Conc: {p.concentrationMgPerMl}mg/mL)</div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <div 
-                                  className="text-right font-mono cursor-pointer"
-                                  onClick={() => {
-                                    setSelectedPumpForEdit(p);
-                                    setIsPumpModalOpen(true);
-                                  }}
-                                >
-                                  <div className="text-amber-400 font-bold">{p.currentRate} {p.rateUnit}</div>
-                                  <div className="text-[9px] text-slate-500">Rem: {p.volumeRemainingMl}mL</div>
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-700 font-bold">
+                                      {p.pumpChannel}
+                                    </span>
+                                    <span className="font-bold text-white text-xs font-mono truncate">{p.drugNameEn}</span>
+                                  </div>
+                                  <div className="text-[9px] text-slate-400 mt-0.5">
+                                    {p.diluentFluid || p.solutionCarrier} {p.concentrationMgPerMl ? `(${p.concentrationMgPerMl}mg/mL)` : ''}
+                                  </div>
                                 </div>
-                                <button
-                                  type="button"
-                                  onClick={async (e) => {
-                                    e.stopPropagation();
-                                    if (confirm(lang === 'ar' ? `هل أنت متأكد من حذف مضخة [${p.drugNameEn}]؟` : `Delete infusion pump [${p.drugNameEn}]?`)) {
-                                      await db.infusionPumps.delete(p.id);
-                                      await loadBedsideData();
-                                      onDataUpdated();
-                                    }
-                                  }}
-                                  className="p-1 rounded text-slate-500 hover:text-red-400 hover:bg-red-950/40 transition-colors cursor-pointer"
-                                  title={lang === 'ar' ? 'حذف المضخة' : 'Delete line'}
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
+
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleTogglePumpStatus(p)}
+                                    className={`p-1 rounded text-xs transition-colors cursor-pointer ${
+                                      p.status === PumpStatus.RUNNING 
+                                        ? 'text-emerald-400 bg-emerald-950/60 hover:bg-emerald-900/60' 
+                                        : 'text-amber-400 bg-amber-950/60 hover:bg-amber-900/60'
+                                    }`}
+                                    title={p.status === PumpStatus.RUNNING ? (lang === 'ar' ? 'إيقاف مؤقت' : 'Pause') : (lang === 'ar' ? 'استئناف' : 'Resume')}
+                                  >
+                                    {p.status === PumpStatus.RUNNING ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedPumpForEdit(p);
+                                      setIsPumpModalOpen(true);
+                                    }}
+                                    className="p-1 rounded text-slate-400 hover:text-cyan-300 hover:bg-slate-800 transition-colors cursor-pointer"
+                                    title={lang === 'ar' ? 'تعديل كامل البيانات' : 'Edit Details'}
+                                  >
+                                    <Edit3 className="w-3 h-3" />
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeletePumpLine(p)}
+                                    className="p-1 rounded text-slate-500 hover:text-red-400 hover:bg-red-950/40 transition-colors cursor-pointer"
+                                    title={lang === 'ar' ? 'إيقاف وحذف المحلول' : 'Discontinue & Delete'}
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Rate titration row */}
+                              <div className="bg-[#0a101f] p-2 rounded-lg flex items-center justify-between font-mono text-xs">
+                                <div className="flex items-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleTitratePump(p, 'DOWN')}
+                                    className="p-1 rounded bg-slate-800 hover:bg-red-950 text-slate-300 hover:text-red-300 border border-slate-700 cursor-pointer active:scale-95"
+                                    title={lang === 'ar' ? 'إنقاص الجرعة' : 'Decrease rate'}
+                                  >
+                                    <Minus className="w-3 h-3" />
+                                  </button>
+
+                                  <div className="text-center min-w-[65px]">
+                                    <span className="text-amber-300 font-black text-sm">{p.currentRate}</span>
+                                    <span className="text-[9px] text-slate-400 ml-1">{p.rateUnit}</span>
+                                  </div>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleTitratePump(p, 'UP')}
+                                    className="p-1 rounded bg-slate-800 hover:bg-emerald-950 text-slate-300 hover:text-emerald-300 border border-slate-700 cursor-pointer active:scale-95"
+                                    title={lang === 'ar' ? 'زيادة الجرعة' : 'Increase rate'}
+                                  >
+                                    <Plus className="w-3 h-3" />
+                                  </button>
+                                </div>
+
+                                <div className="text-right text-[10px] text-slate-400">
+                                  <span>{p.flowRateMlPerHour} mL/h</span>
+                                  <span className="text-slate-600 mx-1">•</span>
+                                  <span>Rem: {p.volumeRemainingMl ?? (p as any).remainingVolumeMl ?? 0}mL</span>
+                                </div>
                               </div>
                             </div>
                           ))}
@@ -2170,23 +2372,18 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                           </span>
                         );
                       })()}
+
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          setIsFluidModalOpen(true);
-                          setIsPaperFluidsCardCollapsed(false);
+                          setIsPaperFluidsCardCollapsed(!isPaperFluidsCardCollapsed);
                         }}
-                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 border border-teal-500/40 text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer"
-                        title={lang === 'ar' ? 'تسجيل أو تعديل ميزان السوائل والبول' : 'Record / Edit Fluid Balance'}
+                        className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all cursor-pointer"
+                        title={isPaperFluidsCardCollapsed ? (lang === 'ar' ? 'فتح البطاقة' : 'Expand') : (lang === 'ar' ? 'طي البطاقة' : 'Collapse')}
                       >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>{fluidBalance ? (lang === 'ar' ? 'تعديل' : 'Edit') : (lang === 'ar' ? 'تسجيل' : 'Record')}</span>
-                      </button>
-
-                      <div className="p-1 rounded-lg bg-slate-800 text-slate-400">
                         {isPaperFluidsCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
-                      </div>
+                      </button>
                     </div>
                   </div>
 
@@ -2196,17 +2393,29 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                         const totalIntake = fluidBalance.intakeBreakdown?.totalIntakeMl ?? (fluidBalance as any).totalIntakeMl ?? 0;
                         const urineVal = fluidBalance.outputBreakdown?.urineOutputMl ?? (fluidBalance as any).outputBreakdown?.urineMl ?? 0;
                         return (
-                          <div 
-                            onClick={() => setIsFluidModalOpen(true)}
-                            className="grid grid-cols-2 gap-2 text-xs font-mono mt-3 cursor-pointer hover:opacity-90 transition-opacity"
-                          >
-                            <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
-                              <div className="text-[10px] text-slate-500">Intake Total</div>
-                              <div className="text-cyan-300 font-bold mt-0.5">{totalIntake} mL</div>
+                          <div className="mt-3 space-y-2.5">
+                            <div className="flex justify-end">
+                              <button
+                                type="button"
+                                onClick={() => setIsFluidModalOpen(true)}
+                                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 border border-teal-500/40 text-xs font-bold transition-all cursor-pointer"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                                <span>{lang === 'ar' ? 'تعديل ميزان السوائل' : 'Edit Balance'}</span>
+                              </button>
                             </div>
-                            <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
-                              <div className="text-[10px] text-slate-500">Output Urine (UOP)</div>
-                              <div className="text-amber-400 font-bold mt-0.5">{urineVal} mL</div>
+                            <div 
+                              onClick={() => setIsFluidModalOpen(true)}
+                              className="grid grid-cols-2 gap-2 text-xs font-mono cursor-pointer hover:opacity-90 transition-opacity"
+                            >
+                              <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
+                                <div className="text-[10px] text-slate-500">Intake Total</div>
+                                <div className="text-cyan-300 font-bold mt-0.5">{totalIntake} mL</div>
+                              </div>
+                              <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
+                                <div className="text-[10px] text-slate-500">Output Urine (UOP)</div>
+                                <div className="text-amber-400 font-bold mt-0.5">{urineVal} mL</div>
+                              </div>
                             </div>
                           </div>
                         );
@@ -2429,10 +2638,18 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                 {lang === 'ar' ? 'سجل التحاليل' : 'Labs Record'}
               </h3>
             </div>
-            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-              <div className="p-1 rounded-lg bg-slate-800 text-slate-400">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsPaperLabsCardCollapsed(!isPaperLabsCardCollapsed);
+                }}
+                className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all cursor-pointer"
+                title={isPaperLabsCardCollapsed ? (lang === 'ar' ? 'فتح البطاقة' : 'Expand') : (lang === 'ar' ? 'طي البطاقة' : 'Collapse')}
+              >
                 {isPaperLabsCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
-              </div>
+              </button>
             </div>
           </div>
 
@@ -2465,10 +2682,18 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                 {lang === 'ar' ? 'الفحوصات والأشعة وموجات القلب الطارئة (Radiology & POCUS)' : 'Radiology, Investigations & POCUS'}
               </h3>
             </div>
-            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-              <div className="p-1 rounded-lg bg-slate-800 text-slate-400">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsPaperInvestigationsCardCollapsed(!isPaperInvestigationsCardCollapsed);
+                }}
+                className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all cursor-pointer"
+                title={isPaperInvestigationsCardCollapsed ? (lang === 'ar' ? 'فتح البطاقة' : 'Expand') : (lang === 'ar' ? 'طي البطاقة' : 'Collapse')}
+              >
                 {isPaperInvestigationsCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
-              </div>
+              </button>
             </div>
           </div>
 
@@ -2501,68 +2726,199 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                 {lang === 'ar' ? 'مضخات الحقن الوريدي المتواصل (Alaris Smart Pumps)' : 'Vasoactive Continuous Infusion Lines'}
               </h3>
             </div>
-            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-              <span className="text-xs text-slate-400 font-mono">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-400 font-mono hidden sm:inline">
                 {pumps.length} {lang === 'ar' ? 'قنوات نشطة' : 'Active Channels'}
               </span>
-              <div className="p-1 rounded-lg bg-slate-800 text-slate-400">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsPaperPumpsCardCollapsed(!isPaperPumpsCardCollapsed);
+                }}
+                className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all cursor-pointer"
+                title={isPaperPumpsCardCollapsed ? (lang === 'ar' ? 'فتح البطاقة' : 'Expand') : (lang === 'ar' ? 'طي البطاقة' : 'Collapse')}
+              >
                 {isPaperPumpsCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
-              </div>
+              </button>
             </div>
           </div>
 
           {!isPaperPumpsCardCollapsed && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 animate-in fade-in duration-300">
-              {pumps.length > 0 ? pumps.map((pump) => (
-                <div 
-                  key={pump.id}
-                  className="bg-[#070c18] border border-slate-800 p-4 rounded-xl space-y-3"
+            <div className="space-y-3 animate-in fade-in duration-300">
+              {/* Top Action Toolbar inside expanded card */}
+              <div className="flex items-center justify-between bg-[#070c18] p-2.5 rounded-xl border border-slate-800/80">
+                <span className="text-xs text-slate-300 font-mono">
+                  {pumps.length} {lang === 'ar' ? 'مضخات مسجلة' : 'Registered Infusion Pump Lines'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedPumpForEdit(null);
+                    setIsPumpModalOpen(true);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-md active:scale-95 cursor-pointer"
+                  title={lang === 'ar' ? 'إضافة مضخة أو خط تنقيط وريدي جديد' : 'Add Infusion Pump Line'}
                 >
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-700 font-bold">
-                        {pump.pumpChannel}
-                      </span>
-                      <h4 className="text-sm font-bold text-white mt-1">
-                        {lang === 'ar' ? `${pump.drugNameEn} (${pump.drugNameAr})` : pump.drugNameEn}
-                      </h4>
-                      <p className="text-xs text-slate-400">
-                        {lang === 'ar' 
-                          ? `التركيز: ${pump.concentrationMgPerMl} mg/mL • المحلول: ${pump.diluentFluid}` 
-                          : `Concentration: ${pump.concentrationMgPerMl} mg/mL • Diluent: ${pump.diluentFluid}`}
-                      </p>
-                    </div>
+                  <Plus className="w-4 h-4" />
+                  <span>{lang === 'ar' ? 'إضافة مضخة وريدية جديدة' : 'Add Infusion Pump Channel'}</span>
+                </button>
+              </div>
 
-                    <span className="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-emerald-950 text-emerald-300 border border-emerald-700">
-                      {pump.status}
-                    </span>
-                  </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {pumps.length > 0 ? pumps.map((pump) => (
+                  <div 
+                    key={pump.id}
+                    className="bg-[#070c18] border border-slate-800 p-4 rounded-xl space-y-3 hover:border-amber-500/40 transition-colors"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-700 font-bold">
+                            {pump.pumpChannel}
+                          </span>
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900 text-slate-300 border border-slate-700">
+                            {pump.vascularAccessLine || 'IV Line'}
+                          </span>
+                        </div>
+                        <h4 className="text-sm font-bold text-white mt-1">
+                          {lang === 'ar' ? `${pump.drugNameEn} (${pump.drugNameAr})` : pump.drugNameEn}
+                        </h4>
+                        <p className="text-xs text-slate-400">
+                          {lang === 'ar' 
+                            ? `التركيز: ${pump.concentrationMgPerMl} mg/mL • المحلول: ${pump.diluentFluid || pump.solutionCarrier}` 
+                            : `Concentration: ${pump.concentrationMgPerMl} mg/mL • Diluent: ${pump.diluentFluid || pump.solutionCarrier}`}
+                        </p>
+                      </div>
 
-                  <div className="bg-[#0a101f] p-3 rounded-lg flex items-center justify-between font-mono">
-                    <div>
-                      <div className="text-[10px] text-slate-400">{lang === 'ar' ? 'معدل التدفق (Current Rate)' : 'Current Rate'}</div>
-                      <div className="text-lg font-black text-amber-300">
-                        {pump.currentRate} <span className="text-xs text-slate-400">{pump.rateUnit}</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className={`px-2 py-0.5 rounded-lg text-xs font-mono font-bold ${
+                          pump.status === PumpStatus.RUNNING 
+                            ? 'bg-emerald-950 text-emerald-300 border border-emerald-700' 
+                            : 'bg-amber-950 text-amber-300 border border-amber-700'
+                        }`}>
+                          {pump.status}
+                        </span>
                       </div>
                     </div>
 
-                    <div className={isRTL ? 'text-right' : 'text-left'}>
-                      <div className="text-[10px] text-slate-400">{lang === 'ar' ? 'المتبقي (Remaining)' : 'Remaining Volume'}</div>
-                      <div className="text-sm font-bold text-slate-200">
-                        {pump.volumeRemainingMl} mL
+                    {/* Rate & Volume display */}
+                    <div className="bg-[#0a101f] p-3 rounded-lg flex items-center justify-between font-mono">
+                      <div>
+                        <div className="text-[10px] text-slate-400">{lang === 'ar' ? 'معدل التدفق (Current Rate)' : 'Current Rate'}</div>
+                        <div className="text-lg font-black text-amber-300">
+                          {pump.currentRate} <span className="text-xs text-slate-400">{pump.rateUnit}</span>
+                        </div>
+                      </div>
+
+                      <div className={isRTL ? 'text-right' : 'text-left'}>
+                        <div className="text-[10px] text-slate-400">{lang === 'ar' ? 'معدل الحجم المتبقي' : 'Flow & Remaining'}</div>
+                        <div className="text-sm font-bold text-slate-200">
+                          {pump.flowRateMlPerHour} mL/h • <span className="text-amber-300">{pump.volumeRemainingMl ?? (pump as any).remainingVolumeMl ?? 0} mL</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  <div className="text-[11px] text-slate-400">
-                    <span className="font-semibold text-slate-300">{lang === 'ar' ? 'هدف المعايرة:' : 'Titration Target:'}</span> {pump.targetParameter}
+                    {/* Rate Titration Controls: Increase / Decrease */}
+                    <div className="flex items-center justify-between bg-slate-900/60 p-2 rounded-lg border border-slate-800">
+                      <div className="text-[11px] font-semibold text-slate-300">
+                        {lang === 'ar' ? 'معايرة الجرعة السريعة:' : 'Quick Titration:'}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleTitratePump(pump, 'DOWN')}
+                          className="flex items-center gap-1 px-2.5 py-1 rounded bg-slate-800 hover:bg-red-950 text-slate-200 hover:text-red-300 border border-slate-700 text-xs font-bold transition-all cursor-pointer active:scale-95"
+                          title={lang === 'ar' ? 'إنقاص معدل الضخ' : 'Titrate Down'}
+                        >
+                          <Minus className="w-3.5 h-3.5" />
+                          <span>{lang === 'ar' ? 'إنقاص' : 'Down'}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleTitratePump(pump, 'UP')}
+                          className="flex items-center gap-1 px-2.5 py-1 rounded bg-slate-800 hover:bg-emerald-950 text-slate-200 hover:text-emerald-300 border border-slate-700 text-xs font-bold transition-all cursor-pointer active:scale-95"
+                          title={lang === 'ar' ? 'زيادة معدل الضخ' : 'Titrate Up'}
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>{lang === 'ar' ? 'رفع الجرعة' : 'Up'}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Target Parameter */}
+                    <div className="text-[11px] text-slate-400">
+                      <span className="font-semibold text-slate-300">{lang === 'ar' ? 'هدف المعايرة:' : 'Titration Target:'}</span> {pump.targetParameter || 'Maintain MAP ≥ 65 mmHg'}
+                    </div>
+
+                    {/* Action Bar for Pump: Pause/Resume, Full Edit, Discontinue & Delete */}
+                    <div className="pt-2 border-t border-slate-800 flex items-center justify-between gap-2 flex-wrap">
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleTogglePumpStatus(pump)}
+                          className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                            pump.status === PumpStatus.RUNNING 
+                              ? 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40' 
+                              : 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40'
+                          }`}
+                        >
+                          {pump.status === PumpStatus.RUNNING ? (
+                            <>
+                              <Pause className="w-3 h-3" />
+                              <span>{lang === 'ar' ? 'إيقاف مؤقت' : 'Pause'}</span>
+                            </>
+                          ) : (
+                            <>
+                              <Play className="w-3 h-3" />
+                              <span>{lang === 'ar' ? 'استئناف' : 'Resume'}</span>
+                            </>
+                          )}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedPumpForEdit(pump);
+                            setIsPumpModalOpen(true);
+                          }}
+                          className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 text-xs font-bold transition-colors cursor-pointer"
+                        >
+                          <Edit3 className="w-3 h-3" />
+                          <span>{lang === 'ar' ? 'تعديل المعايير' : 'Edit Rate'}</span>
+                        </button>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDeletePumpLine(pump)}
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-bold transition-colors cursor-pointer"
+                        title={lang === 'ar' ? 'إيقاف وحذف المحلول الوريدي' : 'Discontinue and remove line'}
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span>{lang === 'ar' ? 'إيقاف واستغناء' : 'Discontinue'}</span>
+                      </button>
+                    </div>
                   </div>
-                </div>
-              )) : (
-                <div className="col-span-2 p-6 text-center text-slate-400 bg-slate-950/40 rounded-xl border border-slate-800">
-                  {lang === 'ar' ? 'لا توجد قنوات حقن وريدي نشطة حالياً.' : 'No active continuous infusion channels currently.'}
-                </div>
-              )}
+                )) : (
+                  <div className="col-span-2 p-6 text-center text-slate-400 bg-slate-950/40 rounded-xl border border-slate-800 space-y-3">
+                    <div>{lang === 'ar' ? 'لا توجد قنوات حقن وريدي نشطة حالياً.' : 'No active continuous infusion channels currently.'}</div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedPumpForEdit(null);
+                        setIsPumpModalOpen(true);
+                        setIsPaperPumpsCardCollapsed(false);
+                      }}
+                      className="px-4 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>{lang === 'ar' ? 'إضافة مضخة وريدية جديدة' : 'Add New Infusion Pump Channel'}</span>
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -2581,15 +2937,23 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                 {lang === 'ar' ? 'إعدادات جهاز التنفس الصناعي والغازات (Ventilator & ABG)' : 'Mechanical Ventilator & ABG Settings'}
               </h3>
             </div>
-            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2">
               {ventilator && (
-                <span className="px-3 py-1 rounded-lg bg-cyan-950 text-cyan-300 border border-cyan-700 font-mono font-bold text-xs">
+                <span className="px-3 py-1 rounded-lg bg-cyan-950 text-cyan-300 border border-cyan-700 font-mono font-bold text-xs hidden sm:inline">
                   MODE: {ventilator.mode}
                 </span>
               )}
-              <div className="p-1 rounded-lg bg-slate-800 text-slate-400">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsPaperVentCardCollapsed(!isPaperVentCardCollapsed);
+                }}
+                className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all cursor-pointer"
+                title={isPaperVentCardCollapsed ? (lang === 'ar' ? 'فتح البطاقة' : 'Expand') : (lang === 'ar' ? 'طي البطاقة' : 'Collapse')}
+              >
                 {isPaperVentCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
-              </div>
+              </button>
             </div>
           </div>
 
@@ -2597,6 +2961,22 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
             <div className="space-y-4 animate-in fade-in duration-300">
               {ventilator ? (
                 <div className="space-y-4">
+                  {/* Action Toolbar inside expanded card */}
+                  <div className="flex items-center justify-between bg-[#070c18] p-2.5 rounded-xl border border-slate-800/80">
+                    <span className="text-xs text-cyan-300 font-mono font-bold">
+                      MODE: {ventilator.mode}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsVentilatorModalOpen(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs shadow-md active:scale-95 cursor-pointer"
+                      title={lang === 'ar' ? 'تعديل أو ضبط إعدادات جهاز التنفس' : 'Adjust Ventilator Settings'}
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                      <span>{lang === 'ar' ? 'تعديل إعدادات التنفس' : 'Edit Ventilator Settings'}</span>
+                    </button>
+                  </div>
+
                   {/* Ventilator Matrix */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 font-mono">
                     <div className="bg-[#070c18] p-3 rounded-xl border border-slate-800">
@@ -2662,10 +3042,23 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                   </div>
                 </div>
               ) : (
-                <div className="p-6 text-center text-slate-400 bg-slate-950/40 rounded-xl border border-slate-800">
-                  {lang === 'ar' 
-                    ? 'المريض يتنفس تلقائياً بدون جهاز تنفس صناعي جائر (Spontaneous Breathing on Room Air / Venturi Mask).'
-                    : 'Patient is spontaneously breathing (Room Air / High-Flow Nasal Cannula / Mask).'}
+                <div className="p-6 text-center text-slate-400 bg-slate-950/40 rounded-xl border border-slate-800 space-y-3">
+                  <div>
+                    {lang === 'ar' 
+                      ? 'المريض يتنفس تلقائياً بدون جهاز تنفس صناعي جائر (Spontaneous Breathing).'
+                      : 'Patient is spontaneously breathing (Room Air / High-Flow Nasal Cannula / Mask).'}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsVentilatorModalOpen(true);
+                      setIsPaperVentCardCollapsed(false);
+                    }}
+                    className="px-4 py-2 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>{lang === 'ar' ? 'ربط / تسجيل جهاز تنفس صناعي' : 'Connect / Record Ventilator Settings'}</span>
+                  </button>
                 </div>
               )}
             </div>
@@ -2688,12 +3081,12 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                   : '24-Hour Fluid Balance & Massive Transfusion (MTP)'}
               </h3>
             </div>
-            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2">
               {fluidBalance && (
                 (() => {
                   const netVal = fluidBalance.netCumulativeBalanceMl ?? (fluidBalance as any).netBalance24HMl ?? 0;
                   return (
-                    <span className={`px-3 py-1 rounded-lg text-xs font-mono font-black ${
+                    <span className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold hidden sm:inline ${
                       netVal >= 0 
                         ? 'bg-amber-950 text-amber-300 border border-amber-700' 
                         : 'bg-teal-950 text-teal-300 border border-teal-700'
@@ -2703,14 +3096,38 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                   );
                 })()
               )}
-              <div className="p-1 rounded-lg bg-slate-800 text-slate-400">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsPaperFluidsCardCollapsed(!isPaperFluidsCardCollapsed);
+                }}
+                className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all cursor-pointer"
+                title={isPaperFluidsCardCollapsed ? (lang === 'ar' ? 'فتح البطاقة' : 'Expand') : (lang === 'ar' ? 'طي البطاقة' : 'Collapse')}
+              >
                 {isPaperFluidsCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
-              </div>
+              </button>
             </div>
           </div>
 
           {!isPaperFluidsCardCollapsed && (
             <div className="space-y-4 animate-in fade-in duration-300">
+              {/* Action Toolbar inside expanded card */}
+              <div className="flex items-center justify-between bg-[#070c18] p-2.5 rounded-xl border border-slate-800/80">
+                <span className="text-xs text-teal-300 font-mono">
+                  {fluidBalance ? (lang === 'ar' ? 'ميزان السوائل اليومي مسجل' : '24H Fluid Balance Logged') : (lang === 'ar' ? 'لا يوجد ميزان مسجل اليوم' : 'No balance logged yet')}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsFluidModalOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shadow-md active:scale-95 cursor-pointer"
+                  title={lang === 'ar' ? 'تسجيل أو تعديل ميزان السوائل والبول' : 'Log / Edit Fluid Balance'}
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>{fluidBalance ? (lang === 'ar' ? 'تعديل ميزان السوائل' : 'Edit Balance') : (lang === 'ar' ? 'تسجيل ميزان جديد' : 'Log Balance')}</span>
+                </button>
+              </div>
+
               {fluidBalance ? (() => {
                 const netVal = fluidBalance.netCumulativeBalanceMl ?? (fluidBalance as any).netBalance24HMl ?? 0;
                 const totalIntake = fluidBalance.intakeBreakdown?.totalIntakeMl ?? (fluidBalance as any).totalIntakeMl ?? 0;
@@ -2759,8 +3176,19 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                   </div>
                 );
               })() : (
-                <div className="p-6 text-center text-slate-400 bg-slate-950/40 rounded-xl border border-slate-800">
-                  {lang === 'ar' ? 'لا توجد بيانات مسجلة لميزان السوائل اليوم.' : 'No fluid balance logs recorded for today.'}
+                <div className="p-6 text-center text-slate-400 bg-slate-950/40 rounded-xl border border-slate-800 space-y-3">
+                  <div>{lang === 'ar' ? 'لا توجد بيانات مسجلة لميزان السوائل اليوم.' : 'No fluid balance logs recorded for today.'}</div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsFluidModalOpen(true);
+                      setIsPaperFluidsCardCollapsed(false);
+                    }}
+                    className="px-4 py-2 rounded-xl bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 border border-teal-500/40 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>{lang === 'ar' ? 'تسجيل ميزان سوائل اليوم' : 'Log Today Fluid Balance'}</span>
+                  </button>
                 </div>
               )}
             </div>
@@ -2781,22 +3209,37 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                 {lang === 'ar' ? 'سجلات تسليم واستلام المناوبات السريرية (SBAR Archive)' : 'SBAR Shift Handover Reports'}
               </h3>
             </div>
-            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2">
               <button
-                onClick={onOpenSbarSign}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shadow-md active:scale-95"
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsPaperSbarCardCollapsed(!isPaperSbarCardCollapsed);
+                }}
+                className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all cursor-pointer"
+                title={isPaperSbarCardCollapsed ? (lang === 'ar' ? 'فتح البطاقة' : 'Expand') : (lang === 'ar' ? 'طي البطاقة' : 'Collapse')}
               >
-                <Plus className="w-4 h-4 text-slate-950" />
-                <span>{lang === 'ar' ? 'تسليم جديد' : 'New Handover'}</span>
-              </button>
-              <div className="p-1 rounded-lg bg-slate-800 text-slate-400">
                 {isPaperSbarCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
-              </div>
+              </button>
             </div>
           </div>
 
           {!isPaperSbarCardCollapsed && (
             <div className="space-y-3 animate-in fade-in duration-300">
+              {/* Action Toolbar inside expanded card */}
+              <div className="flex items-center justify-between bg-[#070c18] p-2.5 rounded-xl border border-slate-800/80">
+                <span className="text-xs text-teal-300 font-mono">
+                  {sbarList.length} {lang === 'ar' ? 'تقارير تسليم مسجلة وموثقة' : 'Recorded SBAR Handover Reports'}
+                </span>
+                <button
+                  type="button"
+                  onClick={onOpenSbarSign}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shadow-md active:scale-95 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>{lang === 'ar' ? 'تسليم مناوبة جديد' : 'New Handover'}</span>
+                </button>
+              </div>
               {sbarList.length > 0 ? sbarList.map((sbar) => (
                 <div 
                   key={sbar.id}
@@ -2885,10 +3328,18 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-              <div className="p-1 rounded-lg bg-slate-800 text-slate-400">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsPaperNotesCardCollapsed(!isPaperNotesCardCollapsed);
+                }}
+                className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all cursor-pointer"
+                title={isPaperNotesCardCollapsed ? (lang === 'ar' ? 'فتح البطاقة' : 'Expand') : (lang === 'ar' ? 'طي البطاقة' : 'Collapse')}
+              >
                 {isPaperNotesCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
-              </div>
+              </button>
             </div>
           </div>
 
@@ -2985,10 +3436,18 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-              <div className="p-1 rounded-lg bg-slate-800 text-slate-400">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsPaperDispCardCollapsed(!isPaperDispCardCollapsed);
+                }}
+                className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all cursor-pointer"
+                title={isPaperDispCardCollapsed ? (lang === 'ar' ? 'فتح البطاقة' : 'Expand') : (lang === 'ar' ? 'طي البطاقة' : 'Collapse')}
+              >
                 {isPaperDispCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
-              </div>
+              </button>
             </div>
           </div>
 
