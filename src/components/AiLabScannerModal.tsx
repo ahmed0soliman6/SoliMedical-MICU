@@ -87,8 +87,9 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
-  // File input ref
+  // File input refs
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const nativeCameraInputRef = useRef<HTMLInputElement | null>(null);
 
   // Clean up camera on unmount or close
   useEffect(() => {
@@ -97,6 +98,16 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
       resetState();
     }
   }, [isOpen]);
+
+  // Connect stream to video element whenever stream and video element are both present
+  useEffect(() => {
+    if (isCameraActive && cameraStream && videoRef.current) {
+      videoRef.current.srcObject = cameraStream;
+      videoRef.current.play().catch((err) => {
+        console.warn('Video auto-play interrupted:', err);
+      });
+    }
+  }, [isCameraActive, cameraStream]);
 
   const resetState = () => {
     stopCamera();
@@ -111,26 +122,67 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
   const startCamera = async () => {
     setCameraError(null);
     try {
-      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        const stream = await navigator.mediaDevices.getUserMedia({
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setCameraError(
+          lang === 'ar'
+            ? 'واجهة الكاميرا المباشرة غير مدعومة في هذا المتصفح. يمكنك النقر على "التقاط بكاميرا الجوال" أو رفع صورة.'
+            : 'Live camera is not supported in this browser. Please use native mobile capture or upload an image.'
+        );
+        return;
+      }
+
+      let stream: MediaStream | null = null;
+      try {
+        // Attempt 1: Rear environment camera with standard 720p HD
+        stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: { ideal: 'environment' },
-            width: { ideal: 1920 },
-            height: { ideal: 1080 }
-          }
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: false,
         });
+      } catch (err1) {
+        console.warn('Environment camera constraint failed, falling back to any available video stream:', err1);
+        try {
+          // Attempt 2: Fallback to any available video input (webcam / front camera)
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: false,
+          });
+        } catch (err2) {
+          throw err2;
+        }
+      }
+
+      if (stream) {
         setCameraStream(stream);
         setIsCameraActive(true);
         setActiveInputMode('camera');
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
-      } else {
-        setCameraError(lang === 'ar' ? 'الكاميرا غير مدعومة في هذا المتصفح' : 'Camera API is not supported in this browser.');
       }
     } catch (err: any) {
       console.warn('Could not start camera:', err);
-      setCameraError(lang === 'ar' ? 'تعذر تشغيل الكاميرا. يرجى التحقق من إذن الكاميرا أو رفع صورة.' : 'Could not access camera. Please allow camera permissions or upload an image.');
+      const isDenied = err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError';
+      const isNotFound = err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError';
+
+      let errorMsg =
+        lang === 'ar'
+          ? 'تعذر الوصول إلى الكاميرا. يرجى التأكد من السماح بصلاحية الكاميرا أو استخدام زر "التقاط بكاميرا الجوال".'
+          : 'Could not access camera. Please allow camera permissions or use mobile camera capture.';
+
+      if (isDenied) {
+        errorMsg =
+          lang === 'ar'
+            ? 'تم رفض إذن الكاميرا من المتصفح. يرجى منح إذن الكاميرا من إعدادات المتصفح، أو النقر على "التقاط بكاميرا الجوال" مباشرة.'
+            : 'Camera permission was denied. Please allow camera access in browser settings or use native mobile capture.';
+      } else if (isNotFound) {
+        errorMsg =
+          lang === 'ar'
+            ? 'لم يتم العثور على جهاز كاميرا متصل. يمكنك رفع صورة التحليل مباشرة.'
+            : 'No camera hardware found. You can upload an image of the lab report.';
+      }
+
+      setCameraError(errorMsg);
     }
   };
 
@@ -392,20 +444,48 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
 
               {/* ACTION BUTTONS & DEMO SAMPLES */}
               <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-slate-900/60 border border-slate-800/80 rounded-xl text-xs">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {/* 1. Live Camera Viewfinder Button */}
                   <button
                     type="button"
-                    onClick={startCamera}
+                    onClick={isCameraActive ? stopCamera : startCamera}
                     className={`px-3.5 py-2 rounded-xl font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
                       isCameraActive
-                        ? 'bg-fuchsia-600 text-white shadow-md'
-                        : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
+                        ? 'bg-fuchsia-600 text-white shadow-md shadow-fuchsia-600/30 ring-2 ring-fuchsia-400/50'
+                        : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 hover:border-fuchsia-500/50'
                     }`}
                   >
-                    <Camera className="w-4 h-4 text-fuchsia-400" />
-                    <span>{lang === 'ar' ? 'تشغيل الكاميرا والتصوير' : 'Live Camera Capture'}</span>
+                    <Camera className={`w-4 h-4 ${isCameraActive ? 'text-white animate-pulse' : 'text-fuchsia-400'}`} />
+                    <span>
+                      {isCameraActive 
+                        ? (lang === 'ar' ? 'إيقاف الكاميرا الحية' : 'Stop Live View') 
+                        : (lang === 'ar' ? 'تشغيل الكاميرا والتصوير' : 'Live Camera Capture')}
+                    </span>
                   </button>
 
+                  {/* 2. Direct Mobile Camera Capture (Native Mobile Camera App) */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      stopCamera();
+                      nativeCameraInputRef.current?.click();
+                    }}
+                    className="px-3.5 py-2 rounded-xl font-bold bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-600/40 hover:border-emerald-500 flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                    title={lang === 'ar' ? 'فتح كاميرا الجوال مباشرة لالتقاط صورة عالية الدقة' : 'Open device camera directly'}
+                  >
+                    <Camera className="w-4 h-4 text-emerald-400" />
+                    <span>{lang === 'ar' ? 'كاميرا الجوال المباشرة' : 'Device Camera Snap'}</span>
+                  </button>
+                  <input
+                    ref={nativeCameraInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+
+                  {/* 3. Upload file from device */}
                   <button
                     type="button"
                     onClick={() => {
@@ -467,6 +547,7 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
                 ref={videoRef}
                 autoPlay
                 playsInline
+                muted
                 className="w-full h-full object-cover max-h-[460px]"
               />
               
@@ -489,14 +570,14 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
                 <button
                   type="button"
                   onClick={stopCamera}
-                  className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold"
+                  className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold cursor-pointer"
                 >
                   {lang === 'ar' ? 'إلغاء' : 'Close Camera'}
                 </button>
                 <button
                   type="button"
                   onClick={capturePhoto}
-                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-fuchsia-600 to-indigo-600 hover:from-fuchsia-500 hover:to-indigo-500 text-white font-bold text-xs flex items-center gap-2 shadow-lg shadow-fuchsia-500/30"
+                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-fuchsia-600 to-indigo-600 hover:from-fuchsia-500 hover:to-indigo-500 text-white font-bold text-xs flex items-center gap-2 shadow-lg shadow-fuchsia-500/30 cursor-pointer active:scale-95 transition-all"
                 >
                   <Camera className="w-4 h-4" />
                   <span>{lang === 'ar' ? 'التقاط الصورة وتحليلها الآن' : 'Capture & Analyze Now'}</span>
@@ -506,9 +587,29 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
           )}
 
           {cameraError && (
-            <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center gap-2 text-xs text-amber-300">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>{cameraError}</span>
+            <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-300">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-amber-400" />
+                <span>{cameraError}</span>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => nativeCameraInputRef.current?.click()}
+                  className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center gap-1 cursor-pointer transition-all"
+                >
+                  <Camera className="w-3.5 h-3.5" />
+                  <span>{lang === 'ar' ? 'التقاط بكاميرا الجوال' : 'Snap Photo'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold flex items-center gap-1 cursor-pointer transition-all"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>{lang === 'ar' ? 'رفع ملف' : 'Upload'}</span>
+                </button>
+              </div>
             </div>
           )}
 
@@ -569,17 +670,33 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
               <div className="space-y-2 flex-1">
                 <p className="font-bold">{lang === 'ar' ? 'خطأ في معالجة التحليل' : 'Analysis Processing Error'}</p>
                 <p className="text-red-200/80">{analysisError}</p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAnalysisError(null);
-                    setSelectedImage(null);
-                    setScannedResult(null);
-                  }}
-                  className="px-3 py-1 rounded-lg bg-red-900/50 hover:bg-red-800 text-white font-bold"
-                >
-                  {lang === 'ar' ? 'المحاولة مرة أخرى' : 'Retry Scanning'}
-                </button>
+                <div className="flex items-center gap-2 pt-1 flex-wrap">
+                  {selectedImage && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (selectedImage) {
+                          processImageWithAI(selectedImage, 'image/jpeg');
+                        }
+                      }}
+                      className="px-3.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold flex items-center gap-1.5 cursor-pointer shadow-sm transition-all active:scale-95"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      <span>{lang === 'ar' ? 'المحاولة مرة أخرى' : 'Retry Scanning Now'}</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAnalysisError(null);
+                      setSelectedImage(null);
+                      setScannedResult(null);
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold cursor-pointer transition-all"
+                  >
+                    {lang === 'ar' ? 'التقاط صورة جديدة' : 'Capture New Image'}
+                  </button>
+                </div>
               </div>
             </div>
           )}

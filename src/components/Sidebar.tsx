@@ -66,7 +66,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const handleSelectBed = (bNum: BedNumber | null) => {
     onSelectBed(bNum);
-    onTabChange('beds');
     onClose();
   };
 
@@ -133,10 +132,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <button
                 key={b.bedNumber}
                 onClick={() => handleSelectBed(b.bedNumber as BedNumber)}
-                className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-sm transition-all cursor-pointer ${
+                className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-sm transition-all active:scale-[0.98] cursor-pointer ${
                   isSelected 
-                    ? 'bg-teal-500/20 text-teal-300 border border-teal-500/30 font-bold' 
-                    : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'
+                    ? 'bg-teal-500/25 text-teal-200 border border-teal-500/40 font-bold shadow-sm' 
+                    : 'text-slate-300 hover:bg-slate-800/70 hover:text-white border border-transparent'
                 }`}
               >
                 <div className="flex items-center gap-2 truncate">

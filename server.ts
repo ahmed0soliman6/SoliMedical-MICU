@@ -90,130 +90,162 @@ Specific mappings:
   - inr, pt, ptt, fib, troponin, ck, ckMb, crp, procalc, amylase, lipase, esr
 `;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
-      contents: {
-        parts: [
-          {
-            inlineData: {
-              data: cleanBase64,
-              mimeType: mimeType || 'image/jpeg',
-            },
-          },
-          {
-            text: promptText,
-          },
-        ],
-      },
-      config: {
-        systemInstruction: `You are an expert ICU Clinical Laboratory Information System OCR engine.
+    const modelsToTry = ['gemini-3.8-flash', 'gemini-3.1-flash-lite'];
+    let response: any = null;
+    let lastError: any = null;
+
+    const generationConfig = {
+      systemInstruction: `You are an expert ICU Clinical Laboratory Information System OCR engine.
 Extract values with high medical precision from photos of laboratory printouts, thermal paper strips (like Radiometer/GEM ABG machines), or hematology analyzer reports.
 Always respond in strictly valid JSON format.`,
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            detectedType: {
-              type: Type.STRING,
-              description: "Primary detected test type: 'ABG', 'CBC', 'CHEMISTRY_ELECTROLYTES', 'COAGULATION', 'CARDIAC', or 'COMPREHENSIVE'",
-            },
-            confidence: {
-              type: Type.NUMBER,
-              description: 'Confidence score from 0.0 to 1.0 based on image legibility and recognition certainty',
-            },
-            summaryEn: {
-              type: Type.STRING,
-              description: 'Concise clinical summary of findings in English',
-            },
-            summaryAr: {
-              type: Type.STRING,
-              description: 'Concise clinical summary of findings in Arabic',
-            },
-            sampleDate: {
-              type: Type.STRING,
-              description: 'Date and time of sample extraction if printed on report, else empty string',
-            },
-            patientName: {
-              type: Type.STRING,
-              description: 'Patient name if printed on report, else empty string',
-            },
-            mrn: {
-              type: Type.STRING,
-              description: 'MRN or sample ID if printed on report, else empty string',
-            },
-            statFields: {
-              type: Type.OBJECT,
-              description: 'Key-value map of normalized stat lab fields matching flowsheet slots',
-              properties: {
-                // CBC
-                wbc: { type: Type.STRING },
-                hb: { type: Type.STRING },
-                hct: { type: Type.STRING },
-                plt: { type: Type.STRING },
-                diff: { type: Type.STRING },
-                typeAnemia: { type: Type.STRING },
-                // ABG
-                ph: { type: Type.STRING },
-                pco2: { type: Type.STRING },
-                po2: { type: Type.STRING },
-                hco3: { type: Type.STRING },
-                be: { type: Type.STRING },
-                lactate: { type: Type.STRING },
-                pf: { type: Type.STRING },
-                so2: { type: Type.STRING },
-                // Renal & Electrolytes
-                urea: { type: Type.STRING },
-                creat: { type: Type.STRING },
-                uricAcid: { type: Type.STRING },
-                bun: { type: Type.STRING },
-                na: { type: Type.STRING },
-                k: { type: Type.STRING },
-                ca: { type: Type.STRING },
-                phos: { type: Type.STRING },
-                mg: { type: Type.STRING },
-                // Liver
-                totalBili: { type: Type.STRING },
-                alb: { type: Type.STRING },
-                alt: { type: Type.STRING },
-                ast: { type: Type.STRING },
-                alp: { type: Type.STRING },
-                ggt: { type: Type.STRING },
-                // Coag & Cardiac
-                inr: { type: Type.STRING },
-                pt: { type: Type.STRING },
-                ptt: { type: Type.STRING },
-                fib: { type: Type.STRING },
-                troponin: { type: Type.STRING },
-                ck: { type: Type.STRING },
-                ckMb: { type: Type.STRING },
-                crp: { type: Type.STRING },
-                procalc: { type: Type.STRING },
-                amylase: { type: Type.STRING },
-                lipase: { type: Type.STRING },
-                esr: { type: Type.STRING },
-              },
-            },
-            items: {
-              type: Type.ARRAY,
-              description: 'List of all detected individual test parameters with units and flags',
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  testName: { type: Type.STRING },
-                  category: { type: Type.STRING },
-                  value: { type: Type.STRING },
-                  unit: { type: Type.STRING },
-                  normalRange: { type: Type.STRING },
-                  flag: { type: Type.STRING },
-                },
-                required: ['testName', 'value'],
-              },
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          detectedType: {
+            type: Type.STRING,
+            description: "Primary detected test type: 'ABG', 'CBC', 'CHEMISTRY_ELECTROLYTES', 'COAGULATION', 'CARDIAC', or 'COMPREHENSIVE'",
+          },
+          confidence: {
+            type: Type.NUMBER,
+            description: 'Confidence score from 0.0 to 1.0 based on image legibility and recognition certainty',
+          },
+          summaryEn: {
+            type: Type.STRING,
+            description: 'Concise clinical summary of findings in English',
+          },
+          summaryAr: {
+            type: Type.STRING,
+            description: 'Concise clinical summary of findings in Arabic',
+          },
+          sampleDate: {
+            type: Type.STRING,
+            description: 'Date and time of sample extraction if printed on report, else empty string',
+          },
+          patientName: {
+            type: Type.STRING,
+            description: 'Patient name if printed on report, else empty string',
+          },
+          mrn: {
+            type: Type.STRING,
+            description: 'MRN or sample ID if printed on report, else empty string',
+          },
+          statFields: {
+            type: Type.OBJECT,
+            description: 'Key-value map of normalized stat lab fields matching flowsheet slots',
+            properties: {
+              // CBC
+              wbc: { type: Type.STRING },
+              hb: { type: Type.STRING },
+              hct: { type: Type.STRING },
+              plt: { type: Type.STRING },
+              diff: { type: Type.STRING },
+              typeAnemia: { type: Type.STRING },
+              // ABG
+              ph: { type: Type.STRING },
+              pco2: { type: Type.STRING },
+              po2: { type: Type.STRING },
+              hco3: { type: Type.STRING },
+              be: { type: Type.STRING },
+              lactate: { type: Type.STRING },
+              pf: { type: Type.STRING },
+              so2: { type: Type.STRING },
+              // Renal & Electrolytes
+              urea: { type: Type.STRING },
+              creat: { type: Type.STRING },
+              uricAcid: { type: Type.STRING },
+              bun: { type: Type.STRING },
+              na: { type: Type.STRING },
+              k: { type: Type.STRING },
+              ca: { type: Type.STRING },
+              phos: { type: Type.STRING },
+              mg: { type: Type.STRING },
+              // Liver
+              totalBili: { type: Type.STRING },
+              alb: { type: Type.STRING },
+              alt: { type: Type.STRING },
+              ast: { type: Type.STRING },
+              alp: { type: Type.STRING },
+              ggt: { type: Type.STRING },
+              // Coag & Cardiac
+              inr: { type: Type.STRING },
+              pt: { type: Type.STRING },
+              ptt: { type: Type.STRING },
+              fib: { type: Type.STRING },
+              troponin: { type: Type.STRING },
+              ck: { type: Type.STRING },
+              ckMb: { type: Type.STRING },
+              crp: { type: Type.STRING },
+              procalc: { type: Type.STRING },
+              amylase: { type: Type.STRING },
+              lipase: { type: Type.STRING },
+              esr: { type: Type.STRING },
             },
           },
-          required: ['detectedType', 'confidence', 'summaryEn', 'summaryAr', 'statFields', 'items'],
+          items: {
+            type: Type.ARRAY,
+            description: 'List of all detected individual test parameters with units and flags',
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                testName: { type: Type.STRING },
+                category: { type: Type.STRING },
+                value: { type: Type.STRING },
+                unit: { type: Type.STRING },
+                normalRange: { type: Type.STRING },
+                flag: { type: Type.STRING },
+              },
+              required: ['testName', 'value'],
+            },
+          },
         },
+        required: ['detectedType', 'confidence', 'summaryEn', 'summaryAr', 'statFields', 'items'],
       },
-    });
+    };
+
+    for (const modelName of modelsToTry) {
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          response = await ai.models.generateContent({
+            model: modelName,
+            contents: {
+              parts: [
+                {
+                  inlineData: {
+                    data: cleanBase64,
+                    mimeType: mimeType || 'image/jpeg',
+                  },
+                },
+                {
+                  text: promptText,
+                },
+              ],
+            },
+            config: generationConfig,
+          });
+          if (response && response.text) {
+            break;
+          }
+        } catch (err: any) {
+          lastError = err;
+          const isOverload = err?.message?.includes('503') || err?.message?.includes('UNAVAILABLE');
+          if (isOverload && attempt < 2) {
+            console.log(`[API /api/ai/scan-lab] Model ${modelName} 503 attempt ${attempt}, retrying in 1s...`);
+            await new Promise(r => setTimeout(r, 1000));
+            continue;
+          }
+          console.warn(`[API /api/ai/scan-lab] Model ${modelName} failed, trying next option:`, err?.message || err);
+          break;
+        }
+      }
+      if (response && response.text) {
+        break;
+      }
+    }
+
+    if (!response || !response.text) {
+      throw lastError || new Error('Failed to analyze lab image with Gemini AI after retries.');
+    }
 
     const rawText = response.text || '{}';
     const parsedData = JSON.parse(rawText);
