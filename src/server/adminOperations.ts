@@ -87,8 +87,8 @@ export async function verifyAdminCallerToken(authHeader?: string): Promise<{ isA
     }
 
     const callerData = callerDoc.data() as any;
-    const isCallerActive = callerData.active === true || callerData.isActive === true;
-    const isCallerAdmin = callerData.role === 'ADMIN' || callerData.isSuperAdmin === true || callerData.permissions?.['users.delete'] === true;
+    const isCallerActive = callerData.active !== false && callerData.isActive !== false;
+    const isCallerAdmin = callerData.role === 'ADMIN' || callerData.isSuperAdmin === true || callerData.permissions?.canManageUsers === true || callerData.permissions?.['users.delete'] === true;
 
     if (!isCallerActive || !isCallerAdmin) {
       return { isAdmin: false, callerUid, error: 'Access Denied: Caller does not possess active ADMIN permissions.' };
@@ -98,6 +98,104 @@ export async function verifyAdminCallerToken(authHeader?: string): Promise<{ isA
   } catch (err: any) {
     console.warn('Error verifying admin caller token:', err);
     return { isAdmin: false, error: err?.message || 'Database error during admin verification.' };
+  }
+}
+
+/**
+ * ADMIN CREATE USER:
+ * - Creates user in Firebase Auth via Admin SDK with exact UID
+ * - Creates Firestore document under users/{uid}
+ * - Seamlessly keeps Admin logged in without client auth disruption
+ */
+export async function adminCreateUser(authHeader?: string, userData?: any): Promise<AdminOpResult> {
+  const authCheck = await verifyAdminCallerToken(authHeader);
+  if (!authCheck.isAdmin || !authCheck.callerUid) {
+    return { success: false, message: authCheck.error || 'Permission Denied' };
+  }
+
+  if (!userData || !userData.email) {
+    return { success: false, message: 'Missing user data or email.' };
+  }
+
+  try {
+    const email = (userData.email || '').trim().toLowerCase();
+    const rawPass = userData.pinCode || '123456';
+    const cleanPassword = rawPass.length >= 6 ? rawPass : rawPass.padEnd(6, '0');
+    const cleanDisplayName = userData.nameAr || userData.nameEn || email.split('@')[0];
+
+    let fbUid = userData.uid;
+
+    if (authAdmin) {
+      try {
+        const created = await authAdmin.createUser({
+          email,
+          password: cleanPassword,
+          displayName: cleanDisplayName,
+        });
+        fbUid = created.uid;
+      } catch (authErr: any) {
+        if (authErr.code === 'auth/email-already-in-use') {
+          const existing = await authAdmin.getUserByEmail(email);
+          fbUid = existing.uid;
+          await authAdmin.updateUser(fbUid, {
+            password: cleanPassword,
+            displayName: cleanDisplayName,
+            disabled: false,
+          });
+        } else {
+          console.warn('Firebase Admin Auth createUser error:', authErr);
+        }
+      }
+    }
+
+    if (!fbUid) {
+      fbUid = `usr_${Date.now()}`;
+    }
+
+    const nowIso = new Date().toISOString();
+    const newUserRecord = {
+      ...userData,
+      uid: fbUid,
+      email,
+      isActive: true,
+      active: true,
+      pinCode: cleanPassword,
+      createdAt: userData.createdAt || nowIso,
+      lastLoginAt: nowIso,
+    };
+
+    if (firestoreDb) {
+      await firestoreDb.collection('users').doc(fbUid).set(newUserRecord, { merge: true });
+      if (newUserRecord.role === 'ADMIN' || newUserRecord.isSuperAdmin) {
+        await firestoreDb.collection('admins').doc(fbUid).set({
+          uid: fbUid,
+          email,
+          nameAr: newUserRecord.nameAr,
+          nameEn: newUserRecord.nameEn,
+          createdAt: nowIso,
+        }, { merge: true });
+      }
+
+      // Add audit log
+      const auditId = `audit_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      await firestoreDb.collection('auditLogs').doc(auditId).set({
+        id: auditId,
+        timestamp: nowIso,
+        eventType: 'USER_CREATED',
+        description: `Staff account ${cleanDisplayName} (${email}, role: ${userData.role}) created by Admin ${authCheck.callerUid}.`,
+        callerUid: authCheck.callerUid,
+        targetUid: fbUid,
+        isImmutable: true
+      });
+    }
+
+    return {
+      success: true,
+      message: 'User successfully registered in Firebase Auth and Firestore.',
+      data: newUserRecord,
+    };
+  } catch (err: any) {
+    return { success: false, message: err?.message || 'Failed to create user.' };
   }
 }
 

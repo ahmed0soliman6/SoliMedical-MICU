@@ -298,6 +298,7 @@ Always respond in strictly valid JSON format.`,
 // Admin User Management Operations (Server-Side SSOT & Firebase Admin)
 // ----------------------------------------------------------------------------
 import { 
+  adminCreateUser,
   disableUserWithToken, 
   deleteUserWithToken, 
   adminChangeUserPassword, 
@@ -305,6 +306,17 @@ import {
   adminArchivePatient,
   adminArchiveSweep
 } from './src/server/adminOperations';
+
+app.post('/api/admin/users/create', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const userData = req.body;
+    const result = await adminCreateUser(authHeader, userData);
+    return res.status(result.success ? 200 : 403).json(result);
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err?.message || 'Internal server error.' });
+  }
+});
 
 app.post('/api/admin/users/disable', async (req, res) => {
   try {

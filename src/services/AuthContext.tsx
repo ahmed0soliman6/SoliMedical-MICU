@@ -111,7 +111,52 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const snap = await getDocs(q);
             if (!snap.empty) {
               resolvedUser = snap.docs[0].data() as IcuUser;
+              if (resolvedUser) {
+                resolvedUser.uid = fbUser.uid;
+                await setDoc(doc(firestore, 'users', fbUser.uid), resolvedUser, { merge: true });
+              }
             }
+          }
+
+          // Fallback 2: Check local Dexie DB
+          if (!resolvedUser) {
+            try {
+              const localUsers = await db.users.toArray();
+              const localMatched = localUsers.find(u => 
+                (u.email && u.email.toLowerCase() === (fbUser.email || '').toLowerCase()) ||
+                (u.uid && u.uid.toLowerCase() === fbUser.uid.toLowerCase())
+              );
+              if (localMatched) {
+                resolvedUser = { ...localMatched, uid: fbUser.uid };
+                await setDoc(doc(firestore, 'users', fbUser.uid), resolvedUser, { merge: true });
+              }
+            } catch (localErr) {
+              console.warn('Local users lookup warning:', localErr);
+            }
+          }
+
+          // Fallback 3: Auto-provision profile if user is authenticated in Firebase Auth
+          if (!resolvedUser && fbUser.email) {
+            const rawPrefix = fbUser.email.split('@')[0];
+            const autoUser: IcuUser = {
+              uid: fbUser.uid,
+              email: fbUser.email.toLowerCase(),
+              nameAr: fbUser.displayName || rawPrefix,
+              nameEn: fbUser.displayName || rawPrefix,
+              role: StaffRole.BEDSIDE_RN,
+              department: 'MICU',
+              badgeId: rawPrefix.toUpperCase(),
+              licenseNumber: `LIC-${Math.floor(100000 + Math.random() * 900000)}`,
+              isActive: true,
+              active: true,
+              isSuperAdmin: false,
+              createdAt: new Date().toISOString(),
+              lastLoginAt: new Date().toISOString(),
+              permissions: getDefaultPermissionsForRole(StaffRole.BEDSIDE_RN),
+            };
+            await setDoc(doc(firestore, 'users', fbUser.uid), autoUser, { merge: true });
+            await db.users.put(autoUser);
+            resolvedUser = autoUser;
           }
 
           if (resolvedUser && resolvedUser.isActive !== false && resolvedUser.active !== false) {
@@ -311,16 +356,68 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.warn('Firestore user fetch error:', e);
     }
 
-    // Fallback: search by email in Firestore if doc ID differed
+    // Fallback 1: search by email in Firestore if doc ID differed
     if (!user && fbUser.email) {
       try {
         const q = query(collection(firestore, 'users'), where('email', '==', fbUser.email.toLowerCase()));
         const snap = await getDocs(q);
         if (!snap.empty) {
           user = snap.docs[0].data() as IcuUser;
+          if (user) {
+            user.uid = fbUser.uid;
+            await setDoc(doc(firestore, 'users', fbUser.uid), user, { merge: true });
+          }
         }
       } catch (e) {
         console.warn('Firestore email lookup error:', e);
+      }
+    }
+
+    // Fallback 2: search local Dexie database
+    if (!user) {
+      try {
+        const localUsers = await db.users.toArray();
+        const localMatched = localUsers.find(u => 
+          (u.email && u.email.toLowerCase() === (fbUser.email || '').toLowerCase()) ||
+          (u.badgeId && u.badgeId.toLowerCase() === rawInput.toLowerCase()) ||
+          (u.uid && u.uid.toLowerCase() === fbUser.uid.toLowerCase())
+        );
+        if (localMatched) {
+          user = { ...localMatched, uid: fbUser.uid };
+          await setDoc(doc(firestore, 'users', fbUser.uid), user, { merge: true });
+        }
+      } catch (e) {
+        console.warn('Local users fallback lookup error:', e);
+      }
+    }
+
+    // Fallback 3: Auto-provision Firestore document if user is verified in Firebase Auth
+    if (!user) {
+      try {
+        const rawPrefix = (fbUser.email || rawInput).split('@')[0];
+        const defaultRole = StaffRole.BEDSIDE_RN;
+        const autoUser: IcuUser = {
+          uid: fbUser.uid,
+          email: fbUser.email || targetEmail,
+          nameAr: fbUser.displayName || rawPrefix,
+          nameEn: fbUser.displayName || rawPrefix,
+          role: defaultRole,
+          department: 'MICU',
+          badgeId: rawPrefix.toUpperCase(),
+          licenseNumber: `LIC-${Math.floor(100000 + Math.random() * 900000)}`,
+          isActive: true,
+          active: true,
+          isSuperAdmin: false,
+          pinCode: rawPass,
+          createdAt: new Date().toISOString(),
+          lastLoginAt: new Date().toISOString(),
+          permissions: getDefaultPermissionsForRole(defaultRole),
+        };
+        await setDoc(doc(firestore, 'users', fbUser.uid), autoUser, { merge: true });
+        await db.users.put(autoUser);
+        user = autoUser;
+      } catch (e) {
+        console.warn('Auto provision fallback notice:', e);
       }
     }
 
@@ -371,10 +468,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const snap = await getDocs(q);
           if (!snap.empty) {
             matchedUser = snap.docs[0].data() as IcuUser;
+            if (matchedUser) {
+              matchedUser.uid = fbUser.uid;
+              await setDoc(doc(firestore, 'users', fbUser.uid), matchedUser, { merge: true });
+            }
           }
         }
       } catch (e) {
         console.warn('Google login Firestore error:', e);
+      }
+
+      if (!matchedUser && fbUser.email) {
+        const rawPrefix = fbUser.email.split('@')[0];
+        const defaultRole = StaffRole.BEDSIDE_RN;
+        const autoUser: IcuUser = {
+          uid: fbUser.uid,
+          email: fbUser.email.toLowerCase(),
+          nameAr: fbUser.displayName || rawPrefix,
+          nameEn: fbUser.displayName || rawPrefix,
+          role: defaultRole,
+          department: 'MICU',
+          badgeId: rawPrefix.toUpperCase(),
+          licenseNumber: `LIC-${Math.floor(100000 + Math.random() * 900000)}`,
+          isActive: true,
+          active: true,
+          isSuperAdmin: false,
+          createdAt: new Date().toISOString(),
+          lastLoginAt: new Date().toISOString(),
+          permissions: getDefaultPermissionsForRole(defaultRole),
+        };
+        await setDoc(doc(firestore, 'users', fbUser.uid), autoUser, { merge: true });
+        await db.users.put(autoUser);
+        matchedUser = autoUser;
       }
 
       if (!matchedUser) {
@@ -420,12 +545,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       licenseNumber: userData.licenseNumber || `LIC-${Math.floor(100000 + Math.random() * 900000)}`,
       isActive: userData.isActive ?? true,
       isSuperAdmin: role === StaffRole.ADMIN,
-      pinCode: userData.pinCode,
+      pinCode: userData.pinCode || '123456',
       createdAt: now,
       lastLoginAt: now,
       permissions: userData.permissions || getDefaultPermissionsForRole(role as StaffRole),
     };
 
+    // 1. Attempt server-side admin user creation via Firebase Admin SDK
+    try {
+      const idToken = await auth.currentUser?.getIdToken();
+      if (idToken) {
+        const resp = await fetch('/api/admin/users/create', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${idToken}`,
+          },
+          body: JSON.stringify(newUser),
+        });
+        const data = await resp.json();
+        if (resp.ok && data.success && data.data) {
+          const createdUser = data.data as IcuUser;
+          await db.users.put(createdUser);
+          await refreshUsers();
+          return { success: true };
+        }
+      }
+    } catch (apiErr) {
+      console.warn('Server admin create user warning:', apiErr);
+    }
+
+    // 2. Fallback client-side save
     await saveUserAccount(newUser);
     syncUserToFirebaseConsole(newUser).catch(err => console.warn('Background sync user error:', err));
     await refreshUsers();

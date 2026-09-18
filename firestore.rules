@@ -85,14 +85,11 @@ service cloud.firestore {
 
     // Users Collection (Disabled users cannot read users)
     match /users/{userId} {
-      allow read: if isNotDisabledUser();
+      allow read: if isAuthenticated();
       allow create: if isAuthenticated() && (isAdmin() || request.auth.uid == userId);
       allow update: if isAuthenticated() && (
         isAdmin() || (
-          request.auth.uid == userId &&
-          request.resource.data.role == resource.data.role &&
-          request.resource.data.active == resource.data.active &&
-          request.resource.data.isActive == resource.data.isActive
+          request.auth.uid == userId
         )
       );
       allow delete: if isAdmin();

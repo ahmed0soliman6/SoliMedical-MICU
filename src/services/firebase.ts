@@ -429,26 +429,29 @@ export async function syncUserToFirebaseConsole(user: IcuUser): Promise<void> {
 
     let finalUid = user.uid;
 
-    try {
-      const cred = await createUserWithEmailAndPassword(auth, email, authPassword);
-      finalUid = cred.user.uid;
-      console.log('Successfully created user in Firebase Auth Users list:', email, finalUid);
-    } catch (authErr: any) {
-      if (authErr.code === 'auth/email-already-in-use') {
-        try {
-          const signCred = await signInWithEmailAndPassword(auth, email, authPassword);
-          finalUid = signCred.user.uid;
-          console.log('Successfully signed in existing user in Firebase Auth Users list:', email, finalUid);
-        } catch (e) {
-          console.warn('Sign-in fallback during sync:', e);
+    // Only attempt client auth creation if no active user session or if same user
+    if (!auth.currentUser || auth.currentUser.uid === user.uid) {
+      try {
+        const cred = await createUserWithEmailAndPassword(auth, email, authPassword);
+        finalUid = cred.user.uid;
+      } catch (authErr: any) {
+        if (authErr.code === 'auth/email-already-in-use') {
+          try {
+            if (!auth.currentUser) {
+              const signCred = await signInWithEmailAndPassword(auth, email, authPassword);
+              finalUid = signCred.user.uid;
+            }
+          } catch (e) {
+            console.warn('Sign-in fallback during sync:', e);
+          }
+        } else {
+          console.warn('Firebase Auth create notice during sync:', authErr?.code || authErr);
         }
-      } else {
-        console.warn('Firebase Auth create error during sync:', authErr?.code || authErr);
       }
     }
 
     if (user.uid && user.uid !== finalUid) {
-      deleteUserAccount(user.uid).catch(e => console.warn('Old user cleanup error:', e));
+      deleteUserAccount(user.uid).catch(e => console.warn('Old user cleanup notice:', e));
     }
 
     const updatedUser = { ...user, uid: finalUid, email };
@@ -469,9 +472,8 @@ export async function syncUserToFirebaseConsole(user: IcuUser): Promise<void> {
 
     // Save to local IndexedDB
     await db.users.put(updatedUser);
-    console.log('Successfully synced User to solimedical-micu Firebase Auth & Firestore (default) database.');
   } catch (err) {
-    console.warn('Error during syncUserToFirebaseConsole:', err);
+    console.warn('Notice during syncUserToFirebaseConsole:', err);
   }
 }
 
