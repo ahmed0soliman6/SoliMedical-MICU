@@ -93,8 +93,8 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
   const [codeStatus, setCodeStatus] = useState<CodeStatus>(CodeStatus.FULL_CODE);
   const [acuityLevel, setAcuityLevel] = useState<AcuityLevel>(AcuityLevel.CRITICAL_STAT);
   const [intakePathway, setIntakePathway] = useState<IntakePathway>(IntakePathway.STAT_CRITICAL);
-  const [primaryDiagnosisAr, setPrimaryDiagnosisAr] = useState<string>('فشل تنفسي حاد مع التهاب رئوي حاد');
-  const [primaryDiagnosisEn, setPrimaryDiagnosisEn] = useState<string>('Acute Respiratory Failure secondary to Severe Community-Acquired Pneumonia');
+  const [primaryDiagnosisAr, setPrimaryDiagnosisAr] = useState<string>('');
+  const [primaryDiagnosisEn, setPrimaryDiagnosisEn] = useState<string>('');
   const [allergiesInput, setAllergiesInput] = useState<string>('None Known');
   const [isolation, setIsolation] = useState<string>('Standard Precautions');
   const [candidateMatches, setCandidateMatches] = useState<PatientCandidateMatch[]>([]);
@@ -211,14 +211,70 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
       return;
     }
 
-    // Rule 2: Validate Card ID (رقم البطاقة) is mandatory
-    if (!nationalId.trim()) {
+    // Rule 2: Validate National ID is strictly 14 numeric digits
+    const cleanNatId = toEnglishDigits(nationalId.trim());
+    if (!/^\d{14}$/.test(cleanNatId)) {
       setAdmissionError(
         lang === 'ar'
-          ? 'يرجى إدخال رقم البطاقة (آخر 4 أرقام على الأقل).'
-          : 'Please enter Card ID (last 4 digits at least).'
+          ? 'يرجى إدخال رقم البطاقة الشخصية / الرقم القومي كاملاً (مكون من 14 رقم بالضبط بدون أسطر أو مسافات).'
+          : 'Please enter a valid 14-digit National ID.'
       );
       return;
+    }
+
+    // Rule 3: Validate Age
+    const parsedAge = parseEnglishInt(age);
+    if (!parsedAge || parsedAge < 1 || parsedAge > 120) {
+      setAdmissionError(
+        lang === 'ar'
+          ? 'يرجى إدخال عمر المريض بشكل صحيح (بين 1 و 120 سنة).'
+          : 'Please enter a valid patient age (1 - 120 years).'
+      );
+      return;
+    }
+
+    // Rule 4: Validate Height & Weight
+    const parsedHeight = parseEnglishFloat(heightCm);
+    if (!parsedHeight || parsedHeight < 30 || parsedHeight > 250) {
+      setAdmissionError(
+        lang === 'ar'
+          ? 'يرجى إدخال طول المريض بالسنتيمتر بشكل صحيح (مثال: 170).'
+          : 'Please enter a valid height in cm (e.g., 170).'
+      );
+      return;
+    }
+
+    const parsedWeight = parseEnglishFloat(weightKg);
+    if (!parsedWeight || parsedWeight < 1 || parsedWeight > 350) {
+      setAdmissionError(
+        lang === 'ar'
+          ? 'يرجى إدخال وزن المريض بالكيلوجرام بشكل صحيح (مثال: 75).'
+          : 'Please enter a valid weight in kg (e.g., 75).'
+      );
+      return;
+    }
+
+    // Rule 5: Validate Primary Diagnosis
+    if (!primaryDiagnosisAr.trim()) {
+      setAdmissionError(
+        lang === 'ar'
+          ? 'يرجى كتابة التشخيص الطبي الأولي للمريض.'
+          : 'Please enter the primary medical diagnosis.'
+      );
+      return;
+    }
+
+    // Rule 6: Fresh check for bed occupancy
+    if (!initialPatient) {
+      const freshBed = await db.beds.get(targetBed);
+      if (freshBed && (freshBed.status === BedStatus.OCCUPIED || freshBed.currentPatientId)) {
+        setAdmissionError(
+          lang === 'ar'
+            ? `السرير رقم ${targetBed} تم إشغاله حالياً بواسطة مريض آخر. يرجى اختيار سرير شاغر آخر.`
+            : `Bed ${targetBed} was just occupied by another patient. Please select a vacant bed.`
+        );
+        return;
+      }
     }
 
     setIsSubmitting(true);
@@ -233,17 +289,17 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
 
       // EDIT MODE
       if (initialPatient) {
-        const updatedHeight = parseEnglishFloat(heightCm) || initialPatient.heightCm || 170;
-        const updatedWeight = parseEnglishFloat(weightKg) || initialPatient.weightKg || 75;
+        const updatedHeight = parsedHeight;
+        const updatedWeight = parsedWeight;
         const updatedIbw = calculateIdealBodyWeight(updatedHeight, gender);
 
         const updatedPatient: PatientDossier = {
           ...initialPatient,
           fullNameAr: fullNameAr.trim(),
           fullNameEn: fullNameAr.trim(),
-          nationalId: toEnglishDigits(nationalId.trim()),
+          nationalId: cleanNatId,
           mrn: toEnglishDigits(mrn.trim() || initialPatient.mrn),
-          age: parseEnglishInt(age) || initialPatient.age,
+          age: parsedAge,
           gender: gender || Gender.UNSPECIFIED,
           bloodType: bloodType || initialPatient.bloodType,
           heightCm: updatedHeight,
@@ -290,14 +346,14 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
         targetBed,
         existingPatientId: selectedExistingPatient?.patientId,
         mrn: toEnglishDigits(mrn.trim() || `MRN-${Math.floor(10000 + Math.random() * 90000)}`),
-        nationalId: toEnglishDigits(nationalId.trim()),
+        nationalId: cleanNatId,
         fullNameAr: fullNameAr.trim(),
-        fullNameEn: fullNameAr.trim(), // Automatically mirrored for system compatibility
-        age: parseEnglishInt(age) || 65,
+        fullNameEn: fullNameAr.trim(),
+        age: parsedAge,
         gender: gender || Gender.UNSPECIFIED,
         bloodType: bloodType || undefined,
-        heightCm: parseEnglishFloat(heightCm) || 170,
-        weightKg: parseEnglishFloat(weightKg) || 75,
+        heightCm: parsedHeight,
+        weightKg: parsedWeight,
         codeStatus,
         acuityLevel,
         intakePathway,

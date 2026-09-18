@@ -32,6 +32,8 @@ import {
 import firebaseConfig from '../../firebase-applet-config.json';
 import { 
   BedRecord, 
+  BedNumber,
+  BedStatus,
   PatientDossier, 
   TelemetryVitals, 
   VentilatorParameters, 
@@ -1524,12 +1526,17 @@ export async function clearLocalBrowserDataAndSyncFromCloud(): Promise<{ success
     const pulled = await pullCloudDataToLocalDb();
     if (!pulled) {
       await initializeDatabaseSeed();
-      await seedInitialDataToFirestore();
     }
+
+    try {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('icu-data-updated'));
+      }
+    } catch {}
 
     return {
       success: true,
-      message: 'تم مسح بيانات المتصفح بنجاح وتم استعادتها من السحابة'
+      message: 'تم مسح بيانات المتصفح بنجاح واستعادتها من السحابة'
     };
   } catch (err: any) {
     console.error('Error clearing local browser data:', err);
@@ -1564,7 +1571,7 @@ export async function clearAllCloudAndLocalDataAndReset(): Promise<{ success: bo
       db.patientAntibiotics.clear(),
     ]);
 
-    // 2. Clear Firestore Cloud Collections
+    // 2. Clear Firestore Cloud Collections completely
     const collectionsToClear = [
       'beds',
       'patients',
@@ -1576,6 +1583,7 @@ export async function clearAllCloudAndLocalDataAndReset(): Promise<{ success: bo
       'infusionPumps',
       'infusion_pumps',
       'fluidBalances',
+      'fluid_balances',
       'statLabs',
       'patientAntibiotics',
       'medical_records',
@@ -1598,13 +1606,34 @@ export async function clearAllCloudAndLocalDataAndReset(): Promise<{ success: bo
       }
     }
 
-    // 3. Re-seed clean, realistic clinical ICU patient data into local DB & Firestore
-    await initializeDatabaseSeed();
-    await seedInitialDataToFirestore();
+    // 3. Reset 6 clean, vacant beds into local IndexedDB & Firestore
+    const cleanBeds: BedRecord[] = ['01', '02', '03', '04', '05', '06'].map((num, idx) => ({
+      id: num,
+      unitId: 'MICU-MAIN',
+      bedNumber: num as BedNumber,
+      bayName: `Critical Care Bay ${num}`,
+      isActive: true,
+      displayOrder: idx,
+      status: idx === 5 ? BedStatus.UNAVAILABLE : BedStatus.VACANT,
+      currentPatientId: null,
+      activePatientId: null,
+      lastCleanedAt: new Date().toISOString()
+    }));
+
+    await db.beds.bulkPut(cleanBeds);
+    for (const b of cleanBeds) {
+      await syncBedToCloud(b);
+    }
+
+    try {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('icu-data-updated'));
+      }
+    } catch {}
 
     return {
       success: true,
-      message: 'تم تصفير السحابة والمتصفح وتطبيق البيانات السريرية الحقيقية بنجاح'
+      message: 'تم تصفير جميع بيانات المرضى والسجلات من السحابة والمتصفح بنجاح وتجهيز الأسرة الشاغرة'
     };
   } catch (err: any) {
     console.error('Error resetting cloud and local database:', err);
