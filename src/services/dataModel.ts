@@ -13,7 +13,10 @@ import {
   syncVitalsToCloud,
   syncSbarToCloud,
   syncClinicalNoteToCloud,
+  firestore,
+  sanitizeForFirestore,
 } from './firebase.ts';
+import { runTransaction, doc } from 'firebase/firestore';
 import {
   BedNumber,
   BedStatus,
@@ -262,36 +265,61 @@ export async function admitPatient(input: DirectAdmissionInput): Promise<{ patie
     immutableHash: auditHash,
   };
 
-  const result = await db.transaction('rw', [
+  // --- SOURCE OF TRUTH #1: FIRESTORE TRANSACTION FIRST (IF ONLINE) ---
+  const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+  if (isOnline) {
+    await runTransaction(firestore, async (transaction) => {
+      const bedRef = doc(firestore, 'beds', input.targetBed);
+      const bedSnap = await transaction.get(bedRef);
+
+      if (bedSnap.exists()) {
+        const bedData = bedSnap.data();
+        if (bedData && bedData.activePatientId) {
+          throw new Error(`السرير رقم ${input.targetBed} مشغول حالياً بمريض آخر في السحابة.`);
+        }
+      }
+
+      const patientRef = doc(firestore, 'patients', patientId);
+      transaction.set(patientRef, sanitizeForFirestore(newPatient), { merge: true });
+
+      const cleanBedUpdate = {
+        activePatientId: patientId,
+        status: 'OCCUPIED',
+        lastTelemetryPingUtc: nowIso,
+      };
+      transaction.set(bedRef, sanitizeForFirestore(cleanBedUpdate), { merge: true });
+
+      if (vitalsRecord) {
+        const vitRef = doc(firestore, 'vitals', vitalsRecord.id);
+        transaction.set(vitRef, sanitizeForFirestore(vitalsRecord));
+      }
+
+      if (admissionNote) {
+        const noteRef = doc(firestore, 'clinicalNotes', admissionNote.id);
+        transaction.set(noteRef, sanitizeForFirestore(admissionNote));
+      }
+
+      const auditRef = doc(firestore, 'auditLogs', auditLog.id);
+      transaction.set(auditRef, sanitizeForFirestore(auditLog));
+    });
+  }
+
+  // --- SOURCE OF TRUTH #2: DEXIE SYNC LOCAL AFTER SUCCESSFUL TRANSACTION ---
+  await db.transaction('rw', [
     db.beds,
     db.patients,
     db.vitals,
     db.clinicalNotes,
     db.auditLogs,
   ], async () => {
-    const existingBed = await db.beds.get(input.targetBed);
-    if (!existingBed) {
-      throw new Error(`Target Bed ${input.targetBed} does not exist.`);
-    }
-
-    if (existingBed.status === BedStatus.OCCUPIED && existingBed.currentPatientId) {
-      const activePatient = await db.patients.get(existingBed.currentPatientId);
-      if (activePatient && activePatient.patientStatus === 'ACTIVE_ICU') {
-        throw new Error(`Bed ${input.targetBed} is already occupied by ${activePatient.fullNameAr || activePatient.fullNameEn} (${activePatient.mrn}). Please transfer or discharge current patient first.`);
-      }
-      // Self-heal: the patient previously assigned was missing or discharged
-      existingBed.status = BedStatus.VACANT;
-      existingBed.currentPatientId = null;
-      existingBed.activePatientId = null;
-    }
-
+    // Put patient
     await db.patients.put(newPatient);
 
-    // Update Bed
+    // Update Bed in Dexie
     await db.beds.update(input.targetBed, {
       status: BedStatus.OCCUPIED,
-      currentPatientId: patientId,
       activePatientId: patientId,
+      currentPatientId: patientId, // For local Dexie compatibility
       lastTelemetryPingUtc: nowIso,
     });
 
@@ -304,26 +332,9 @@ export async function admitPatient(input: DirectAdmissionInput): Promise<{ patie
     }
 
     await db.auditLogs.put(auditLog);
-
-    return { patientId, noteId: createdNoteId };
   });
 
-  // Confirm the two source-of-truth records before reporting admission success.
-  const savedPatient = await db.patients.get(result.patientId);
-  const savedBed = await db.beds.get(input.targetBed);
-  if (!savedPatient || !savedBed) throw new Error('تم حفظ الدخول محلياً بشكل غير مكتمل؛ لم يتم إرسال السجل إلى السحابة.');
-  
-  // Perform cloud syncing outside and after the transaction commits successfully
-  await syncPatientToCloud(savedPatient);
-  await syncBedToCloud(savedBed);
-  if (vitalsRecord) {
-    syncVitalsToCloud(vitalsRecord);
-  }
-  if (admissionNote) {
-    syncClinicalNoteToCloud(admissionNote);
-  }
-
-  return result;
+  return { patientId, noteId: createdNoteId };
 }
 
 // -------------------------------------------------------------
@@ -724,120 +735,139 @@ export interface DispositionInput {
 }
 
 export async function dischargeOrTransferPatient(input: DispositionInput): Promise<void> {
+  const nowIso = new Date().toISOString();
+  const patient = await db.patients.get(input.patientId);
+  if (!patient) {
+    throw new Error(`Patient ${input.patientId} not found.`);
+  }
+
+  let nextPatientStatus: PatientDossier['patientStatus'] = 'DISCHARGED_STEPDOWN';
+  let nextBedStatus: BedStatus = BedStatus.DECONTAMINATING;
+  let nextMortalityRecord: PatientDossier['mortalityRecord'] | undefined;
+
+  if (input.dispositionType === DispositionType.CLINICAL_MORTALITY) {
+    nextPatientStatus = 'EXPIRED_MORTALITY';
+    nextMortalityRecord = {
+      patientId: patient.id,
+      dateOfDeath: nowIso.split('T')[0],
+      timeOfDeath: input.mortalityDetails?.timeOfDeath || new Date().toLocaleTimeString(),
+      primaryCauseOfDeath: input.mortalityDetails?.primaryCause || 'Cardiorespiratory Failure',
+      secondaryCauses: input.mortalityDetails?.secondaryCauses || [],
+      supervisingConsultant: input.mortalityDetails?.supervisingConsultant || input.authorStaff.name,
+      deathSummaryNoteId: `note-death-${Date.now()}`,
+      burialReportGenerated: true,
+      isArchived: true,
+      isReadOnly: true,
+    };
+  } else if (input.dispositionType === DispositionType.DISCHARGE_HOME) {
+    nextPatientStatus = 'DISCHARGED_HOME';
+  } else if (input.dispositionType === DispositionType.TRANSFER_EXTERNAL_HOSPITAL) {
+    nextPatientStatus = 'TRANSFERRED_EXTERNAL';
+  }
+
+  const updatedPatientFields = {
+    patientStatus: nextPatientStatus,
+    archiveStatus: input.dispositionType === DispositionType.CLINICAL_MORTALITY ? ('ARCHIVED' as const) : patient.archiveStatus,
+    currentBedId: undefined,
+    mortalityRecord: nextMortalityRecord || null,
+    updatedAt: nowIso,
+  };
+
+  const updatedBedFields = {
+    status: nextBedStatus,
+    activePatientId: null,
+    currentPatientId: null,
+    hardwareReadiness: {
+      ventilatorCalibrated: false,
+      ventilatorModel: 'Standby / Decontamination Required',
+      telemetryZeroed: false,
+      telemetryLead: 'Offline',
+      wallSuctionTested: true,
+      centralOxygenPsi: 50,
+      alarisPumpsPurged: false,
+      disposableKitsPrepped: false,
+      terminalDecontaminationCompletedAt: undefined,
+    },
+  };
+
+  const isMortality = input.dispositionType === DispositionType.CLINICAL_MORTALITY;
+  const noteType = isMortality ? NoteType.DEATH_SUMMARY : NoteType.DISCHARGE_SUMMARY;
+  const noteTitle = isMortality
+    ? `Clinical Mortality Summary & Audit Record - ${patient.fullNameEn}`
+    : `MICU Transfer / Discharge Summary - ${patient.fullNameEn}`;
+
+  const rawPayload = `${patient.id}|${input.dispositionType}|${input.summaryText}|${input.authorStaff.staffId}|${nowIso}`;
+  const hash = await computeSha256(rawPayload);
+
+  const summaryNote: ClinicalNote = {
+    id: `note-dispo-${Date.now()}`,
+    bedId: input.bedNumber,
+    patientId: patient.id,
+    noteType: noteType,
+    title: noteTitle,
+    content: input.summaryText,
+    authorId: `staff-${input.authorStaff.staffId}`,
+    authorName: input.authorStaff.name,
+    authorRole: input.authorStaff.role,
+    authorStaffId: input.authorStaff.staffId,
+    timestamp: nowIso,
+    isImmutable: true,
+    cryptographicHash: hash,
+    digitalSignatureToken: `SIGN-DISPO-${input.authorStaff.staffId}-${Date.now().toString(16)}`,
+    addendums: [],
+  };
+
+  const auditLog: WardAuditLog = {
+    id: `audit-${Date.now()}`,
+    timestamp: nowIso,
+    eventType: isMortality ? 'MORTALITY_LOGGED' : 'PATIENT_DISCHARGED',
+    performedBy: input.authorStaff,
+    targetBedId: input.bedNumber,
+    targetPatientMrn: patient.mrn,
+    description: `Patient ${patient.fullNameEn} (MRN: ${patient.mrn}) processed for ${input.dispositionType}. Bed ${input.bedNumber} transitioned to DECONTAMINATING.`,
+    immutableHash: hash,
+  };
+
+  // --- SOURCE OF TRUTH #1: FIRESTORE TRANSACTION FIRST (IF ONLINE) ---
+  const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+  if (isOnline) {
+    await runTransaction(firestore, async (transaction) => {
+      const bedRef = doc(firestore, 'beds', input.bedNumber);
+      const patientRef = doc(firestore, 'patients', input.patientId);
+
+      const bedSnap = await transaction.get(bedRef);
+      const patientSnap = await transaction.get(patientRef);
+
+      if (!bedSnap.exists() || !patientSnap.exists()) {
+        throw new Error('بيانات المريض أو السرير غير متطابقة على السحابة.');
+      }
+
+      transaction.set(patientRef, sanitizeForFirestore({
+        ...patient,
+        ...updatedPatientFields,
+      }), { merge: true });
+
+      transaction.set(bedRef, sanitizeForFirestore(updatedBedFields), { merge: true });
+
+      const noteRef = doc(firestore, 'clinicalNotes', summaryNote.id);
+      transaction.set(noteRef, sanitizeForFirestore(summaryNote));
+
+      const auditRef = doc(firestore, 'auditLogs', auditLog.id);
+      transaction.set(auditRef, sanitizeForFirestore(auditLog));
+    });
+  }
+
+  // --- SOURCE OF TRUTH #2: DEXIE SYNC LOCAL AFTER SUCCESSFUL TRANSACTION ---
   await db.transaction('rw', [
     db.beds,
     db.patients,
     db.clinicalNotes,
     db.auditLogs,
   ], async () => {
-    const nowIso = new Date().toISOString();
-    const patient = await db.patients.get(input.patientId);
-    if (!patient) {
-      throw new Error(`Patient ${input.patientId} not found.`);
-    }
-
-    let nextPatientStatus: PatientDossier['patientStatus'] = 'DISCHARGED_STEPDOWN';
-    let nextBedStatus: BedStatus = BedStatus.DECONTAMINATING;
-
-    if (input.dispositionType === DispositionType.CLINICAL_MORTALITY) {
-      nextPatientStatus = 'EXPIRED_MORTALITY';
-
-      patient.mortalityRecord = {
-        patientId: patient.id,
-        dateOfDeath: nowIso.split('T')[0],
-        timeOfDeath: input.mortalityDetails?.timeOfDeath || new Date().toLocaleTimeString(),
-        primaryCauseOfDeath: input.mortalityDetails?.primaryCause || 'Cardiorespiratory Failure',
-        secondaryCauses: input.mortalityDetails?.secondaryCauses || [],
-        supervisingConsultant: input.mortalityDetails?.supervisingConsultant || input.authorStaff.name,
-        deathSummaryNoteId: `note-death-${Date.now()}`,
-        burialReportGenerated: true,
-        isArchived: true,
-        isReadOnly: true,
-      };
-    } else if (input.dispositionType === DispositionType.DISCHARGE_HOME) {
-      nextPatientStatus = 'DISCHARGED_HOME';
-    } else if (input.dispositionType === DispositionType.TRANSFER_EXTERNAL_HOSPITAL) {
-      nextPatientStatus = 'TRANSFERRED_EXTERNAL';
-    }
-
-    // Update Patient
-    await db.patients.update(input.patientId, {
-      patientStatus: nextPatientStatus,
-      archiveStatus: input.dispositionType === DispositionType.CLINICAL_MORTALITY ? 'ARCHIVED' : patient.archiveStatus,
-      currentBedId: undefined,
-      mortalityRecord: patient.mortalityRecord,
-      updatedAt: nowIso,
-    });
-
-    // Vacate Bed and set to Decontaminating
-    await db.beds.update(input.bedNumber, {
-      status: nextBedStatus,
-      currentPatientId: undefined,
-      hardwareReadiness: {
-        ventilatorCalibrated: false,
-        ventilatorModel: 'Standby / Decontamination Required',
-        telemetryZeroed: false,
-        telemetryLead: 'Offline',
-        wallSuctionTested: true,
-        centralOxygenPsi: 50,
-        alarisPumpsPurged: false,
-        disposableKitsPrepped: false,
-        terminalDecontaminationCompletedAt: undefined,
-      },
-    });
-
-    // Create Discharge/Death Summary Note
-    const isMortality = input.dispositionType === DispositionType.CLINICAL_MORTALITY;
-    const noteType = isMortality ? NoteType.DEATH_SUMMARY : NoteType.DISCHARGE_SUMMARY;
-    const noteTitle = isMortality
-      ? `Clinical Mortality Summary & Audit Record - ${patient.fullNameEn}`
-      : `MICU Transfer / Discharge Summary - ${patient.fullNameEn}`;
-
-    const rawPayload = `${patient.id}|${input.dispositionType}|${input.summaryText}|${input.authorStaff.staffId}|${nowIso}`;
-    const hash = await computeSha256(rawPayload);
-
-    const summaryNote: ClinicalNote = {
-      id: `note-dispo-${Date.now()}`,
-      bedId: input.bedNumber,
-      patientId: patient.id,
-      noteType: noteType,
-      title: noteTitle,
-      content: input.summaryText,
-      authorId: `staff-${input.authorStaff.staffId}`,
-      authorName: input.authorStaff.name,
-      authorRole: input.authorStaff.role,
-      authorStaffId: input.authorStaff.staffId,
-      timestamp: nowIso,
-      isImmutable: true,
-      cryptographicHash: hash,
-      digitalSignatureToken: `SIGN-DISPO-${input.authorStaff.staffId}-${Date.now().toString(16)}`,
-      addendums: [],
-    };
+    await db.patients.update(input.patientId, updatedPatientFields);
+    await db.beds.update(input.bedNumber, updatedBedFields);
     await db.clinicalNotes.put(summaryNote);
-
-    // Audit Log
-    const auditLog: WardAuditLog = {
-      id: `audit-${Date.now()}`,
-      timestamp: nowIso,
-      eventType: isMortality ? 'MORTALITY_LOGGED' : 'PATIENT_DISCHARGED',
-      performedBy: input.authorStaff,
-      targetBedId: input.bedNumber,
-      targetPatientMrn: patient.mrn,
-      description: `Patient ${patient.fullNameEn} (MRN: ${patient.mrn}) processed for ${input.dispositionType}. Bed ${input.bedNumber} transitioned to DECONTAMINATING.`,
-      immutableHash: hash,
-    };
     await db.auditLogs.put(auditLog);
-
-    // Sync all updated records to Firestore cloud immediately
-    const updatedPatient = await db.patients.get(input.patientId);
-    if (updatedPatient) {
-      syncPatientToCloud(updatedPatient);
-    }
-    const updatedBed = await db.beds.get(input.bedNumber);
-    if (updatedBed) {
-      syncBedToCloud(updatedBed);
-    }
-    syncClinicalNoteToCloud(summaryNote);
   });
 }
 

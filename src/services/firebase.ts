@@ -727,21 +727,25 @@ export function subscribeToRealtimeFirestore(
     // 1. Subscribe to Beds
     const bedsCol = collection(firestore, 'beds');
     const unsubBeds = onSnapshot(bedsCol, async (snapshot) => {
-      const remoteBeds: BedRecord[] = [];
-      snapshot.forEach((docSnap) => {
-        const data = docSnap.data() as BedRecord;
-        if (data && (data.bedNumber || (data as any).id)) {
-          remoteBeds.push({
-            ...data,
-            bedNumber: data.bedNumber || (data as any).id,
-            currentPatientId: data.currentPatientId || (data as any).activePatientId || undefined,
-            activePatientId: (data as any).activePatientId || data.currentPatientId || undefined,
-          });
+      for (const change of snapshot.docChanges()) {
+        if (change.type === 'added' || change.type === 'modified') {
+          const remoteBed = change.doc.data() as BedRecord;
+          const bedId = remoteBed.id || change.doc.id;
+          if (bedId) {
+            const localBed = await db.beds.get(bedId);
+            const mergedBed: BedRecord = {
+              ...localBed,
+              ...remoteBed,
+              id: bedId,
+              bedNumber: remoteBed.bedNumber || bedId,
+              currentPatientId: remoteBed.currentPatientId || (remoteBed as any).activePatientId || undefined,
+              activePatientId: (remoteBed as any).activePatientId || remoteBed.currentPatientId || undefined,
+            };
+            await db.beds.put(mergedBed);
+          }
+        } else if (change.type === 'removed') {
+          await db.beds.delete(change.doc.id);
         }
-      });
-      if (remoteBeds.length > 0) {
-        await db.beds.clear();
-        await db.beds.bulkPut(remoteBeds);
       }
       notifyUpdate();
     }, (err) => handleFirestoreError(err, OperationType.GET, 'beds'));
@@ -750,19 +754,23 @@ export function subscribeToRealtimeFirestore(
     // 2. Subscribe to Patients
     const patientsCol = collection(firestore, 'patients');
     const unsubPatients = onSnapshot(patientsCol, async (snapshot) => {
-      const remotePatients: PatientDossier[] = [];
-      snapshot.forEach((docSnap) => {
-        const data = docSnap.data() as PatientDossier;
-        if (data && (data.id || (data as any).patientId)) {
-          remotePatients.push({
-            ...data,
-            id: data.id || (data as any).patientId,
-          });
+      for (const change of snapshot.docChanges()) {
+        if (change.type === 'added' || change.type === 'modified') {
+          const remotePatient = change.doc.data() as PatientDossier;
+          const patientId = remotePatient.id || (remotePatient as any).patientId || change.doc.id;
+          if (patientId) {
+            const localPatient = await db.patients.get(patientId);
+            if (!localPatient || !localPatient.updatedAt || !remotePatient.updatedAt ||
+                new Date(remotePatient.updatedAt).getTime() >= new Date(localPatient.updatedAt).getTime()) {
+              await db.patients.put({
+                ...remotePatient,
+                id: patientId,
+              });
+            }
+          }
+        } else if (change.type === 'removed') {
+          await db.patients.delete(change.doc.id);
         }
-      });
-      if (remotePatients.length > 0) {
-        await db.patients.clear();
-        await db.patients.bulkPut(remotePatients);
       }
       notifyUpdate();
     }, (err) => handleFirestoreError(err, OperationType.GET, 'patients'));
@@ -1102,7 +1110,6 @@ export async function pullCloudDataToLocalDb(): Promise<boolean> {
       }
     });
     if (remoteBeds.length > 0) {
-      await db.beds.clear();
       await db.beds.bulkPut(remoteBeds);
     }
 
@@ -1121,7 +1128,6 @@ export async function pullCloudDataToLocalDb(): Promise<boolean> {
     // should be erased. Keep local records unless a verified remote snapshot
     // contains records.
     if (!patientsSnap.empty) {
-      await db.patients.clear();
       await db.patients.bulkPut(remotePatients);
     }
 

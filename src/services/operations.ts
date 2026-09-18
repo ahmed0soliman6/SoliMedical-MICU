@@ -403,12 +403,10 @@ export async function executeTransfer(
 
     transaction.update(fromBedRef, {
       activePatientId: null,
-      currentPatientId: null,
       status: 'VACANT',
     });
     transaction.update(toBedRef, {
       activePatientId: patientId,
-      currentPatientId: patientId,
       status: 'OCCUPIED',
       lastTransferId: transferId,
     });
@@ -548,14 +546,12 @@ export async function executeBedSwap(
 
     transaction.update(bedARef, {
       activePatientId: patientBId,
-      currentPatientId: patientBId,
       status: 'OCCUPIED',
       lastTransferId: transferBId,
     });
 
     transaction.update(bedBRef, {
       activePatientId: patientAId,
-      currentPatientId: patientAId,
       status: 'OCCUPIED',
       lastTransferId: transferAId,
     });
@@ -670,7 +666,6 @@ export async function executeDischarge(
 
     transaction.update(bedRef, {
       activePatientId: null,
-      currentPatientId: null,
       status: 'VACANT',
     });
 
