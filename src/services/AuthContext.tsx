@@ -15,7 +15,6 @@ import {
   getDefaultPermissionsForRole,
   testFirestoreConnection,
   syncAdminAccountToFirebaseConsole,
-  syncUserToFirebaseConsole,
   firestore
 } from './firebase.ts';
 import { 
@@ -30,6 +29,21 @@ import {
 } from 'firebase/auth';
 import { collection, onSnapshot, doc, getDoc, getDocs, query, where, setDoc } from 'firebase/firestore';
 import { db } from '../db/icuSyncDb.ts';
+
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+
+async function readApiResponse(response: Response): Promise<any> {
+  const body = await response.text();
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.includes('application/json') || body.trimStart().startsWith('<')) {
+    throw new Error(`خادم إدارة Firebase أعاد HTML بدل JSON (HTTP ${response.status}). تحقق من VITE_API_BASE_URL ونشر Cloud Run API.`);
+  }
+  try {
+    return JSON.parse(body);
+  } catch {
+    throw new Error(`استجابة خادم Firebase غير صالحة (HTTP ${response.status}).`);
+  }
+}
 
 interface AuthContextType {
   currentUser: IcuUser | null;
@@ -581,7 +595,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     await saveUserAccount(user);
-    syncUserToFirebaseConsole(user).catch(err => console.warn('Background sync user error:', err));
     if (currentUser?.uid === user.uid) {
       setCurrentUser(user);
       localStorage.setItem('soli_icu_active_user', JSON.stringify(user));
@@ -616,7 +629,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         const idToken = await auth.currentUser?.getIdToken();
         if (idToken) {
-          const resp = await fetch('/api/admin/users/change-password', {
+          const resp = await fetch(`${API_BASE_URL}/api/admin/users/change-password`, {
             method: 'POST',
             headers: { 
               'Content-Type': 'application/json',
@@ -627,7 +640,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               newPassword: cleanPass
             })
           });
-          const data = await resp.json();
+          const data = await readApiResponse(resp);
           if (!resp.ok || !data.success) {
             return { success: false, message: data.message || 'فشل تحديث كلمة المرور عبر الخادم' };
           }
@@ -662,7 +675,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const idToken = await auth.currentUser?.getIdToken();
       if (user.isActive) {
-        const resp = await fetch('/api/admin/users/disable', {
+        const resp = await fetch(`${API_BASE_URL}/api/admin/users/disable`, {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
@@ -673,11 +686,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             reason: 'Administrative deactivation'
           })
         });
-        const data = await resp.json();
+        const data = await readApiResponse(resp);
+        if (!resp.ok || !data.success) {
+          throw new Error(data.message || 'فشل تعطيل الحساب على Firebase.');
+        }
         if (resp.ok && data.success) {
           user.isActive = false;
           user.active = false;
-          await saveUserAccount(user);
         }
       } else {
         user.isActive = true;
@@ -685,7 +700,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         await saveUserAccount(user);
       }
     } catch (e) {
-      console.warn('Toggle status warning:', e);
+      console.error('Toggle status failed:', e);
     }
     await refreshUsers();
   };
@@ -709,7 +724,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     try {
       const idToken = await auth.currentUser?.getIdToken();
-      const resp = await fetch('/api/admin/users/delete', {
+      const resp = await fetch(`${API_BASE_URL}/api/admin/users/delete`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -720,7 +735,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           reason: 'Permanent administrative deletion'
         })
       });
-      const data = await resp.json();
+      const data = await readApiResponse(resp);
       if (!resp.ok || !data.success) {
         return { success: false, message: data.message || 'فشل حذف المستخدم' };
       }

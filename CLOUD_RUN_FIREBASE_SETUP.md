@@ -45,6 +45,20 @@ gcloud run deploy "$SERVICE" \
   --allow-unauthenticated
 ```
 
+انشر قواعد Firestore بعد إضافة قاعدة `episodes` المطلوبة لمعاملة الدخول:
+
+```bash
+firebase deploy --project "$PROJECT_ID" --only firestore:rules
+```
+
+إذا كانت الواجهة منشورة على نطاق مختلف عن Cloud Run، ابنِها مع:
+
+```bash
+VITE_API_BASE_URL="$SERVICE_URL" npm run build
+```
+
+أما إذا كانت الواجهة وواجهة API داخل نفس Cloud Run، اترك `VITE_API_BASE_URL` فارغًا.
+
 لا تجعل `FIREBASE_ADMIN_PRIVATE_KEY` أو أي مفتاح خدمة متغيرًا مطلوبًا؛ `src/server/adminOperations.ts` يستخدم `applicationDefault()` وهو النمط الصحيح على Cloud Run.
 
 ## 3. تحقق بعد النشر

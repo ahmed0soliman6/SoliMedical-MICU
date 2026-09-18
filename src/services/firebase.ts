@@ -541,20 +541,15 @@ export async function registerInitialSuperAdmin(adminData: {
  */
 export async function saveUserAccount(user: IcuUser): Promise<void> {
   await db.users.put(user);
-  // Asynchronous non-blocking Cloud Firestore write
-  setDoc(doc(firestore, 'users', user.uid), user, { merge: true }).catch((err) => {
-    console.warn('Background Firestore save user warning:', err);
-  });
+  await setDoc(doc(firestore, 'users', user.uid), user, { merge: true });
   if (user.role === StaffRole.ADMIN || user.isSuperAdmin) {
-    setDoc(doc(firestore, 'admins', user.uid), {
+    await setDoc(doc(firestore, 'admins', user.uid), {
       uid: user.uid,
       email: user.email,
       nameEn: user.nameEn,
       nameAr: user.nameAr,
       createdAt: user.createdAt,
-    }, { merge: true }).catch((err) => {
-      console.warn('Background Firestore save admin warning:', err);
-    });
+    }, { merge: true });
   }
 }
 
@@ -747,23 +742,9 @@ export function subscribeToRealtimeFirestore(
           });
         }
       });
-      await db.beds.clear();
       if (remoteBeds.length > 0) {
+        await db.beds.clear();
         await db.beds.bulkPut(remoteBeds);
-      } else {
-        const cleanBeds: BedRecord[] = ['01', '02', '03', '04', '05', '06'].map((num, idx) => ({
-          id: num,
-          unitId: 'MICU-MAIN',
-          bedNumber: num as BedNumber,
-          bayName: `Critical Care Bay ${num}`,
-          isActive: true,
-          displayOrder: idx,
-          status: idx === 5 ? BedStatus.UNAVAILABLE : BedStatus.VACANT,
-          currentPatientId: null,
-          activePatientId: null,
-          lastCleanedAt: new Date().toISOString()
-        }));
-        await db.beds.bulkPut(cleanBeds);
       }
       notifyUpdate();
     }, (err) => handleFirestoreError(err, OperationType.GET, 'beds'));
@@ -782,8 +763,8 @@ export function subscribeToRealtimeFirestore(
           });
         }
       });
-      await db.patients.clear();
       if (remotePatients.length > 0) {
+        await db.patients.clear();
         await db.patients.bulkPut(remotePatients);
       }
       notifyUpdate();
@@ -1107,9 +1088,7 @@ export async function pullCloudDataToLocalDb(): Promise<boolean> {
       }));
       await db.beds.clear();
       await db.beds.bulkPut(cleanBeds);
-      for (const b of cleanBeds) {
-        await syncBedToCloud(b);
-      }
+      for (const b of cleanBeds) await syncBedToCloud(b);
       return true;
     }
 
@@ -1125,8 +1104,8 @@ export async function pullCloudDataToLocalDb(): Promise<boolean> {
         });
       }
     });
-    await db.beds.clear();
     if (remoteBeds.length > 0) {
+      await db.beds.clear();
       await db.beds.bulkPut(remoteBeds);
     }
 
@@ -1141,8 +1120,11 @@ export async function pullCloudDataToLocalDb(): Promise<boolean> {
         });
       }
     });
-    await db.patients.clear();
-    if (remotePatients.length > 0) {
+    // An empty cloud result is not evidence that a non-empty local database
+    // should be erased. Keep local records unless a verified remote snapshot
+    // contains records.
+    if (!patientsSnap.empty) {
+      await db.patients.clear();
       await db.patients.bulkPut(remotePatients);
     }
 
@@ -1295,6 +1277,7 @@ export async function syncBedToCloud(bed: BedRecord): Promise<void> {
     await setDoc(bedRef, cleanBed);
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `beds/${bed.bedNumber}`);
+    throw err;
   }
 }
 
@@ -1304,6 +1287,7 @@ export async function syncPatientToCloud(patient: PatientDossier): Promise<void>
     await setDoc(patRef, patient, { merge: true });
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `patients/${patient.id}`);
+    throw err;
   }
 }
 
@@ -1679,4 +1663,3 @@ export async function clearAllCloudAndLocalDataAndReset(): Promise<{ success: bo
     };
   }
 }
-

@@ -140,7 +140,7 @@ export interface DirectAdmissionInput {
  * - Emits audit trail log
  */
 export async function admitPatient(input: DirectAdmissionInput): Promise<{ patientId: string; noteId?: string }> {
-  return await db.transaction('rw', [
+  const result = await db.transaction('rw', [
     db.beds,
     db.patients,
     db.vitals,
@@ -300,12 +300,18 @@ export async function admitPatient(input: DirectAdmissionInput): Promise<{ patie
     };
     await db.auditLogs.put(auditLog);
 
-    // Push directly to Firebase Firestore for real-time collaboration
-    syncPatientToCloud(newPatient);
-    db.beds.get(input.targetBed).then(b => b && syncBedToCloud(b));
-
     return { patientId, noteId: createdNoteId };
   });
+
+  // Confirm the two source-of-truth records before reporting admission success.
+  // Fire-and-forget writes allowed a later empty/old snapshot to erase the local view.
+  const savedPatient = await db.patients.get(result.patientId);
+  const savedBed = await db.beds.get(input.targetBed);
+  if (!savedPatient || !savedBed) throw new Error('تم حفظ الدخول محلياً بشكل غير مكتمل؛ لم يتم إرسال السجل إلى السحابة.');
+  await syncPatientToCloud(savedPatient);
+  await syncBedToCloud(savedBed);
+
+  return result;
 }
 
 // -------------------------------------------------------------

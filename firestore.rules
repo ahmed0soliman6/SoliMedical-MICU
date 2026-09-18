@@ -109,6 +109,14 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Admission episodes are written in the same transaction as patients and beds.
+    // Omitting this match rejects the entire transaction with Permission Denied.
+    match /episodes/{episodeId} {
+      allow read: if isClinician();
+      allow create, update: if isClinician();
+      allow delete: if isAdmin();
+    }
+
     // Transfers & Operations
     match /transfers/{transferId} {
       allow read: if isClinician();

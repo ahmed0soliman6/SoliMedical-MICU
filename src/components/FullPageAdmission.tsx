@@ -290,13 +290,9 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
         // Save locally to Dexie
         await db.patients.put(updatedPatient);
 
-        // Sync to cloud Firestore
-        try {
-          const patientRef = doc(firestore, 'patients', updatedPatient.id);
-          await setDoc(patientRef, updatedPatient, { merge: true });
-        } catch (e) {
-          console.warn('Firestore edit patient sync warning:', e);
-        }
+        // Sync to cloud Firestore before reporting success.
+        const patientRef = doc(firestore, 'patients', updatedPatient.id);
+        await setDoc(patientRef, updatedPatient, { merge: true });
 
         onAdmissionSuccess();
         return;

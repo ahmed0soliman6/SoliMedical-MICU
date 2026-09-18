@@ -26,8 +26,7 @@ import { getPatientForBed } from './services/dataModel.ts';
 import { 
   subscribeToRealtimeFirestore, 
   seedInitialDataToFirestore,
-  pullCloudDataToLocalDb,
-  ensureAuthenticated
+  pullCloudDataToLocalDb
 } from './services/firebase.ts';
 import { useTranslation } from './services/i18n.ts';
 import { useAuth } from './services/AuthContext.tsx';
@@ -130,10 +129,11 @@ export default function App() {
     let unsubscribeFirestore: (() => void) | null = null;
 
     async function initSystem() {
+      if (!currentUser) {
+        setIsReady(false);
+        return;
+      }
       try {
-        // Ensure anonymous/custom auth for Firebase security rules
-        await ensureAuthenticated();
-
         // 1. Try pulling fresh cloud data from Firestore first
         const hasCloudData = await pullCloudDataToLocalDb();
         if (!hasCloudData) {
@@ -178,7 +178,7 @@ export default function App() {
         unsubscribeFirestore();
       }
     };
-  }, [reloadData]);
+  }, [reloadData, currentUser?.uid]);
 
   // Periodic Telemetry MAP & Desaturation Safety Monitor
   useEffect(() => {
