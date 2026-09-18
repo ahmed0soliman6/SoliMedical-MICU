@@ -294,6 +294,37 @@ Always respond in strictly valid JSON format.`,
   }
 });
 
+// ----------------------------------------------------------------------------
+// Admin User Management Operations (Server-Side SSOT & Firebase Admin)
+// ----------------------------------------------------------------------------
+import { disableUser, deleteUser } from './src/server/adminOperations';
+
+app.post('/api/admin/users/disable', async (req, res) => {
+  try {
+    const { callerUid, targetUid, reason } = req.body;
+    if (!callerUid || !targetUid) {
+      return res.status(400).json({ success: false, message: 'Missing callerUid or targetUid.' });
+    }
+    const result = await disableUser(callerUid, targetUid, reason);
+    return res.status(result.success ? 200 : 403).json(result);
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err?.message || 'Internal server error.' });
+  }
+});
+
+app.post('/api/admin/users/delete', async (req, res) => {
+  try {
+    const { callerUid, targetUid, reason } = req.body;
+    if (!callerUid || !targetUid) {
+      return res.status(400).json({ success: false, message: 'Missing callerUid or targetUid.' });
+    }
+    const result = await deleteUser(callerUid, targetUid, reason);
+    return res.status(result.success ? 200 : 403).json(result);
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err?.message || 'Internal server error.' });
+  }
+});
+
 // Guard API routes so unknown /api/* requests return structured JSON 404 rather than falling into static HTML or returning 405
 app.all('/api/*', (req, res) => {
   res.status(404).json({ error: `API route not found: ${req.method} ${req.originalUrl}` });

@@ -33,12 +33,13 @@ import { useAuth } from './services/AuthContext.tsx';
 import { LoginScreen } from './components/LoginScreen.tsx';
 import { UserManagementModal } from './components/UserManagementModal.tsx';
 import { FullPageAdmission } from './components/FullPageAdmission.tsx';
+import { HospitalChatView } from './components/HospitalChatView.tsx';
 
 export default function App() {
   const { t, lang, isRTL } = useTranslation();
   const { currentUser, isAuthenticated, needsInitialAdminSetup, isLoading: isAuthLoading } = useAuth();
   const [isReady, setIsReady] = useState(false);
-  const [activeTab, setActiveTab] = useState<'beds' | 'sbar' | 'notes' | 'search' | 'users' | 'settings'>('beds');
+  const [activeTab, setActiveTab] = useState<'beds' | 'sbar' | 'notes' | 'search' | 'users' | 'settings' | 'chat'>('beds');
   const [selectedBedNumber, setSelectedBedNumber] = useState<BedNumber | null>(null);
   const [activeAlertMessage, setActiveAlertMessage] = useState<string | null>(null);
 
@@ -317,6 +318,8 @@ export default function App() {
               onClose={() => setActiveTab('beds')}
               onOpenUserManagement={() => setActiveTab('users')}
             />
+          ) : activeTab === 'chat' ? (
+            <HospitalChatView />
           ) : (
             /* activeTab === 'beds' */
             selectedBedNumber && selectedBed ? (

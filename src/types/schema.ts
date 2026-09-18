@@ -102,7 +102,8 @@ export interface BedRecord {
   isActive: boolean;
   displayOrder: number;
   status: BedStatus;
-  currentPatientId: string | null;
+  activePatientId?: string | null; // Canonical SSOT field for active patient in this bed
+  currentPatientId?: string | null; // Backwards-compatible alias for activePatientId
   isolation?: BedIsolationInfo;
   lastTelemetryPingUtc?: string;
   lastCleanedAt?: string;
@@ -117,9 +118,6 @@ export interface BedRecord {
     disposableKitsPrepped: boolean;
     terminalDecontaminationCompletedAt?: string;
   };
-  
-  // -- Legacy/Compatibility fields --
-  activePatientId?: string | null; 
   lastTransferId?: string | null; 
 }
 
@@ -600,7 +598,16 @@ export interface Addendum {
   isImmutable: boolean; // Always true
 }
 
-export interface ClinicalNote {
+export interface MedicalRecordOwnership {
+  createdByUid: string;
+  createdByName: string;
+  createdAt: number | string;
+  updatedByUid: string;
+  updatedAt: number | string;
+  originalRecordId?: string; // Links corrections to original immutable records
+}
+
+export interface ClinicalNote extends Partial<MedicalRecordOwnership> {
   id: string;
   bedId?: BedNumber;
   patientId: string;
@@ -616,6 +623,13 @@ export interface ClinicalNote {
   cryptographicHash: string; // SHA-256 hash of original content + author + timestamp
   digitalSignatureToken: string;
   addendums: Addendum[]; // Append-only chained array
+  
+  // Mandatory Ownership & Immutability fields
+  createdByUid?: string;
+  createdByName?: string;
+  updatedByUid?: string;
+  updatedAt?: number | string;
+  originalRecordId?: string;
 }
 
 // -------------------------------------------------------------
@@ -683,33 +697,146 @@ export interface PatientDossier {
 }
 
 export interface UserPermissions {
-  canAdmitPatient: boolean;
-  canDischargePatient: boolean;
-  canSignNotes: boolean;
-  canAddAddendum: boolean;
-  canSignSbar: boolean;
-  canTitrateMedications: boolean;
-  canManageUsers: boolean;
-  canManageSettings: boolean;
-  canViewAuditLogs: boolean;
-  canEditVitals: boolean;
+  // Canonical dot-notation permissions
+  'beds.view'?: boolean;
+  'patients.view'?: boolean;
+  'patients.create'?: boolean;
+  'patients.update'?: boolean;
+  'vitals.create'?: boolean;
+  'vitals.update'?: boolean;
+  'labs.create'?: boolean;
+  'labs.update'?: boolean;
+  'investigations.create'?: boolean;
+  'investigations.update'?: boolean;
+  'clinicalNotes.create'?: boolean;
+  'clinicalNotes.update'?: boolean;
+  'sbar.create'?: boolean;
+  'sbar.update'?: boolean;
+  'transfer.create'?: boolean;
+  'bedSwap.create'?: boolean;
+  'discharge.create'?: boolean;
+  'users.view'?: boolean;
+  'users.create'?: boolean;
+  'users.update'?: boolean;
+  'users.disable'?: boolean;
+  'users.delete'?: boolean;
+  'users.manage'?: boolean;
+  'sections.create'?: boolean;
+  'sections.update'?: boolean;
+  'sections.delete'?: boolean;
+  'sections.manage'?: boolean;
+  'cards.create'?: boolean;
+  'cards.update'?: boolean;
+  'cards.delete'?: boolean;
+  'cards.manage'?: boolean;
+  'settings.view'?: boolean;
+  'settings.update'?: boolean;
+  'settings.manage'?: boolean;
+  'chat.view'?: boolean;
+  'chat.create'?: boolean;
+  'chat.delete'?: boolean;
+  'audit.view'?: boolean;
+
+  // Legacy boolean flags for backwards compatibility
+  canAdmitPatient?: boolean;
+  canDischargePatient?: boolean;
+  canSignNotes?: boolean;
+  canAddAddendum?: boolean;
+  canSignSbar?: boolean;
+  canTitrateMedications?: boolean;
+  canManageUsers?: boolean;
+  canManageSettings?: boolean;
+  canViewAuditLogs?: boolean;
+  canEditVitals?: boolean;
+  [key: string]: boolean | undefined;
 }
+
+export type CanonicalRole = 'ADMIN' | 'CONSULTANT' | 'DOCTOR' | 'NURSE';
 
 export interface IcuUser {
   uid: string;
+  displayName?: string;
+  username?: string;
   email: string;
-  nameEn: string;
-  nameAr: string;
-  role: StaffRole;
-  department: string;
-  badgeId: string;
-  licenseNumber: string;
-  isActive: boolean;
+  role: 'ADMIN' | 'CONSULTANT' | 'DOCTOR' | 'NURSE' | StaffRole | string;
+  permissions?: UserPermissions;
+  active?: boolean;
+  specialty?: string;
+  phone?: string;
+  createdAt: string | number;
+  createdByUid?: string;
+  updatedAt?: string | number;
+  updatedByUid?: string;
+
+  // Backwards compatibility fields
+  nameEn?: string;
+  nameAr?: string;
+  department?: string;
+  badgeId?: string;
+  licenseNumber?: string;
+  isActive?: boolean;
   isSuperAdmin?: boolean;
   pinCode?: string;
-  createdAt: string;
   lastLoginAt?: string;
-  permissions: UserPermissions;
+}
+
+export interface DynamicSection {
+  id: string;
+  key: string;
+  titleEn: string;
+  titleAr: string;
+  descriptionEn?: string;
+  descriptionAr?: string;
+  active: boolean;
+  displayOrder: number;
+  requiredRole?: string;
+  icon?: string;
+  createdAt: string | number;
+  createdByUid: string;
+  updatedAt: string | number;
+  updatedByUid: string;
+}
+
+export interface DynamicBedsideCard {
+  id: string;
+  key: string;
+  titleEn: string;
+  titleAr: string;
+  active: boolean;
+  displayOrder: number;
+  sectionKey?: string;
+  requiredRole?: string;
+  icon?: string;
+  createdAt: string | number;
+  createdByUid: string;
+  updatedAt: string | number;
+  updatedByUid: string;
+}
+
+export interface ChatConversation {
+  id: string;
+  type: 'DIRECT' | 'DEPARTMENT';
+  name: string;
+  participantUids: string[];
+  department?: string;
+  lastMessage?: string;
+  lastMessageAt?: string;
+  lastMessageSenderName?: string;
+  unreadCounts?: Record<string, number>;
+  createdAt: string | number;
+  createdByUid: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  chatId: string;
+  senderUid: string;
+  senderName: string;
+  senderRole?: string;
+  message: string;
+  createdAt: string | number;
+  readAt?: string;
+  readBy?: string[];
 }
 
 export interface StaffMember {

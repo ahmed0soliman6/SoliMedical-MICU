@@ -16,8 +16,16 @@ export const COLLECTIONS = {
   BEDS: 'beds',
   TRANSFERS: 'transfers',
   MEDICAL_RECORDS: 'medical_records',
+  CLINICAL_NOTES: 'clinicalNotes',
+  SBAR_HANDOVERS: 'sbarHandovers',
   HANDOVERS: 'handovers',
   OPERATIONS: 'operations',
+  SECTIONS: 'sections',
+  CARDS: 'cards',
+  CHATS: 'chats',
+  CHAT_MESSAGES: 'chatMessages',
+  AUDIT_LOGS: 'auditLogs',
+  SETTINGS: 'system_settings',
 } as const;
 
 // ----------------------------------------------------------------------------

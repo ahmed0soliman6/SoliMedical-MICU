@@ -484,7 +484,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       pinCode: userData.pinCode || '1234',
       createdAt: now,
       lastLoginAt: now,
-      permissions: userData.permissions || getDefaultPermissionsForRole(role),
+      permissions: userData.permissions || getDefaultPermissionsForRole(role as StaffRole),
     };
 
     await saveUserAccount(newUser);
@@ -536,21 +536,50 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { success: true, message: 'تم تغيير كلمة السر بنجاح في نظام المزامنة السحابية Firestore' };
   };
 
-  // Toggle user status (Activate/Deactivate)
+  // Toggle user status (Activate/Deactivate) with server-side token revocation
   const toggleUserStatus = async (uid: string) => {
     const user = allUsers.find(u => u.uid === uid);
     if (!user) return;
-    if (user.isSuperAdmin) return; // Cannot deactivate super admin
+    if (user.isSuperAdmin || user.role === StaffRole.ADMIN) return; // Cannot deactivate admin
 
-    user.isActive = !user.isActive;
-    await saveUserAccount(user);
+    if (user.isActive) {
+      try {
+        const resp = await fetch('/api/admin/users/disable', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            callerUid: currentUser?.uid,
+            targetUid: uid,
+            reason: 'Administrative deactivation'
+          })
+        });
+        if (!resp.ok) {
+          user.isActive = false;
+          user.active = false;
+          await saveUserAccount(user);
+        }
+      } catch (e) {
+        user.isActive = false;
+        user.active = false;
+        await saveUserAccount(user);
+      }
+    } else {
+      user.isActive = true;
+      user.active = true;
+      await saveUserAccount(user);
+    }
     await refreshUsers();
   };
 
-  // Delete User Account
+  // Delete User Account (Callable / Server HTTPS SSOT)
   const deleteUser = async (uid: string): Promise<{ success: boolean; message?: string }> => {
-    if (!currentUser?.permissions.canManageUsers && !currentUser?.isSuperAdmin) {
-      return { success: false, message: 'ليس لديك صلاحية لحذف المستخدمين (Permission Denied)' };
+    const canDelete = currentUser?.isSuperAdmin || 
+      currentUser?.role === StaffRole.ADMIN || 
+      (currentUser?.permissions as any)?.['users.delete'] || 
+      currentUser?.permissions?.canManageUsers;
+
+    if (!canDelete) {
+      return { success: false, message: 'ليس لديك صلاحية لحذف المستخدمين (Permission Denied: users.delete)' };
     }
     if (currentUser?.uid === uid) {
       return { success: false, message: 'لا يمكنك حذف حسابك الحالي أثناء تسجيل الدخول منه' };
@@ -559,27 +588,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const target = allUsers.find(u => u.uid === uid);
     if (!target) return { success: false, message: 'المستخدم غير موجود' };
 
-    if (target.isSuperAdmin && (allUsers || []).filter(u => u && (u.isSuperAdmin || u.role === StaffRole.ADMIN)).length <= 1) {
-      return { success: false, message: 'لا يمكن حذف مدير النظام الوحيد' };
-    }
-
-    await deleteUserAccount(uid);
-
-    // Clean up duplicate entries with same email if any
-    if (target.email) {
-      const dups = (allUsers || []).filter(u => u && u.email && u.email.toLowerCase() === target.email.toLowerCase());
-      for (const dup of dups) {
-        if (dup.uid !== uid) {
-          await deleteUserAccount(dup.uid).catch(() => {});
-        }
+    try {
+      const resp = await fetch('/api/admin/users/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          callerUid: currentUser?.uid,
+          targetUid: uid,
+          reason: 'Permanent administrative deletion'
+        })
+      });
+      const data = await resp.json();
+      if (!resp.ok || !data.success) {
+        return { success: false, message: data.message || 'فشل حذف المستخدم' };
       }
+      await refreshUsers();
+      return { 
+        success: true, 
+        message: data.message || 'تم حذف الحساب بنجاح. تظل جميع السجلات الطبية والملاحظات التاريخية محفوظة بالكامل.' 
+      };
+    } catch (e) {
+      // Local fallback if offline
+      await deleteUserAccount(uid);
+      await refreshUsers();
+      return { 
+        success: true, 
+        message: 'تم حذف الحساب بنجاح مع الاحتفاظ بكافة السجلات الطبية.' 
+      };
     }
-
-    await refreshUsers();
-    return { 
-      success: true, 
-      message: 'تم حذف الحساب بنجاح. تظل جميع السجلات والملفات المكتوبة باسم هذا الكادر محفوظة في ملفات المرضى.' 
-    };
   };
 
   // Logout
@@ -593,11 +629,57 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem('soli_icu_active_user');
   };
 
-  // Permission checking helper
-  const hasPermission = (permission: keyof UserPermissions): boolean => {
+  // Comprehensive Permission Checking Engine (Dot notation + Legacy backward compatibility)
+  const hasPermission = (permission: string | keyof UserPermissions): boolean => {
     if (!currentUser) return false;
-    if (currentUser.isSuperAdmin || currentUser.role === StaffRole.ADMIN) return true;
-    return !!currentUser.permissions?.[permission];
+    if (currentUser.isSuperAdmin || currentUser.role === StaffRole.ADMIN || (currentUser.role as any) === 'ADMIN') return true;
+    
+    // Direct dot-notation or object property check
+    if (currentUser.permissions && (currentUser.permissions as any)[permission] !== undefined) {
+      return !!(currentUser.permissions as any)[permission];
+    }
+
+    // Legacy fallback mapping
+    const legacyMap: Record<string, keyof UserPermissions> = {
+      'users.view': 'canManageUsers',
+      'users.create': 'canManageUsers',
+      'users.update': 'canManageUsers',
+      'users.disable': 'canManageUsers',
+      'users.delete': 'canManageUsers',
+      'patients.view': 'canAdmitPatient',
+      'patients.create': 'canAdmitPatient',
+      'patients.update': 'canAdmitPatient',
+      'clinicalNotes.create': 'canWriteNotes',
+      'clinicalNotes.update': 'canWriteNotes',
+      'sbar.create': 'canSignSbar',
+      'sbar.update': 'canSignSbar',
+      'vitals.create': 'canEditVitals',
+      'vitals.update': 'canEditVitals',
+      'labs.create': 'canManageLabs',
+      'labs.update': 'canManageLabs',
+      'investigations.create': 'canManageLabs',
+      'investigations.update': 'canManageLabs',
+      'transfer.create': 'canTransferPatient',
+      'bedSwap.create': 'canTransferPatient',
+      'discharge.create': 'canDischargePatient',
+      'settings.view': 'canConfigureSettings',
+      'settings.update': 'canConfigureSettings',
+      'sections.create': 'canConfigureSettings',
+      'sections.update': 'canConfigureSettings',
+      'sections.delete': 'canConfigureSettings',
+      'cards.create': 'canConfigureSettings',
+      'cards.update': 'canConfigureSettings',
+      'cards.delete': 'canConfigureSettings',
+      'chat.view': 'canWriteNotes',
+      'chat.create': 'canWriteNotes',
+    };
+
+    const mappedKey = legacyMap[permission as string];
+    if (mappedKey && currentUser.permissions) {
+      return !!currentUser.permissions[mappedKey];
+    }
+
+    return false;
   };
 
   return (

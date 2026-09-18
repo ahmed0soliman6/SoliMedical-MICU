@@ -2,169 +2,273 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Core helper functions
     function isAuthenticated() {
-      return request.auth != null;
+      return request.auth != null && request.auth.uid != null && request.auth.token.firebase.sign_in_provider != 'anonymous';
     }
 
     function getUserData() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
-    function isSuperAdmin() {
-      return isAuthenticated() && 
-        (
-          resource == null || 
-          getUserData().isSuperAdmin == true || 
-          getUserData().role == 'ADMIN'
-        );
+    function isExistingUser() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function isActiveUser() {
+      return isAuthenticated() && isExistingUser() && (
+        getUserData().active == true || 
+        getUserData().isActive == true
+      );
+    }
+
+    function isAdmin() {
+      return isActiveUser() && (
+        getUserData().role == 'ADMIN' || 
+        getUserData().isSuperAdmin == true
+      );
+    }
+
+    function isDoctor() {
+      return isActiveUser() && (
+        getUserData().role == 'DOCTOR' || 
+        getUserData().role == 'CONSULTANT' || 
+        getUserData().role == 'SPECIALIST' || 
+        getUserData().role == 'RESIDENT' || 
+        isAdmin()
+      );
+    }
+
+    function isNurse() {
+      return isActiveUser() && (
+        getUserData().role == 'NURSE' || 
+        getUserData().role == 'BEDSIDE_RN' || 
+        getUserData().role == 'LEAD_RN' || 
+        isAdmin()
+      );
     }
 
     function isClinician() {
-      return isAuthenticated();
+      return isActiveUser();
     }
 
-    // Connection testing endpoint
+    function isValidMedicalRecordCreate() {
+      return isActiveUser() && (
+        isAdmin() || 
+        request.resource.data.createdByUid == request.auth.uid
+      );
+    }
+
+    function isValidMedicalRecordUpdate() {
+      return isActiveUser() && (
+        isAdmin() || (
+          resource.data.createdByUid == request.auth.uid &&
+          request.resource.data.createdByUid == resource.data.createdByUid &&
+          request.resource.data.createdByName == resource.data.createdByName &&
+          request.resource.data.createdAt == resource.data.createdAt
+        )
+      );
+    }
+
+    // Connection testing
     match /test/{docId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if isAuthenticated();
     }
 
-    // Users Collection Security
+    // Users Collection
     match /users/{userId} {
-      // Any authenticated active clinician can read user directory
       allow read: if isAuthenticated();
-      // Only the user themselves or a Super Admin can create or update a user record
-      allow create, update: if isAuthenticated() && (request.auth.uid == userId || isSuperAdmin());
-      // Only Super Admins can delete user accounts
-      allow delete: if isSuperAdmin();
+      allow create: if isAuthenticated() && (isAdmin() || request.auth.uid == userId);
+      allow update: if isAuthenticated() && (
+        isAdmin() || (
+          request.auth.uid == userId &&
+          request.resource.data.role == resource.data.role &&
+          request.resource.data.active == resource.data.active &&
+          request.resource.data.isActive == resource.data.isActive
+        )
+      );
+      allow delete: if isAdmin();
     }
 
-    // Patients, Beds, Units, and Transfers Security
-    match /units/{unitId} {
-      allow read: if isClinician();
-      allow write: if isSuperAdmin();
-    }
-
+    // Patients Collection
     match /patients/{patientId} {
       allow read: if isClinician();
-      allow write: if isClinician();
+      allow create, update: if isClinician();
+      allow delete: if isAdmin();
     }
 
+    // Beds Collection (Direct patient ID tampering forbidden)
     match /beds/{bedId} {
       allow read: if isClinician();
-      allow write: if isClinician();
+      allow update: if isClinician() && (
+        isAdmin() ||
+        (
+          request.resource.data.activePatientId == resource.data.activePatientId &&
+          request.resource.data.currentPatientId == resource.data.currentPatientId
+        )
+      );
+      allow create, delete: if isAdmin();
     }
 
+    // Transfers & Operations
     match /transfers/{transferId} {
       allow read: if isClinician();
-      allow write: if isClinician();
-    }
-
-    // Medical Records, SBAR Handovers, and Operations
-    match /medical_records/{recordId} {
-      allow read: if isClinician();
-      allow create, update: if isClinician();
-      allow delete: if isSuperAdmin();
-    }
-
-    match /handovers/{handoverId} {
-      allow read: if isClinician();
-      allow create, update: if isClinician();
-      allow delete: if isSuperAdmin();
+      allow create: if isClinician();
+      allow update, delete: if isAdmin();
     }
 
     match /operations/{operationId} {
       allow read: if isClinician();
-      allow create, update: if isClinician();
-      allow delete: if isSuperAdmin();
+      allow create: if isClinician();
+      allow update, delete: if isAdmin();
     }
 
-    // Audit Logs (Strict security: immutable history logs)
-    match /auditLogs/{logId} {
-      allow read: if isClinician() && (getUserData().role == 'AUDITOR' || isSuperAdmin());
-      allow create: if isAuthenticated();
-      allow update, delete: if false; // Audit logs can never be modified or deleted!
+    match /units/{unitId} {
+      allow read: if isClinician();
+      allow write: if isAdmin();
     }
 
-    // System Settings and Configurations
-    match /system_settings/{settingId} {
-      allow read: if isAuthenticated();
-      allow write: if isSuperAdmin();
-    }
-
-    // Legacy and Compatibility collections support
-    match /admins/{userId} {
-      allow read: if isAuthenticated();
-      allow write: if isSuperAdmin();
-    }
-
+    // Clinical Notes (Doctor isolation: Doctors can only edit their own notes)
     match /clinicalNotes/{noteId} {
       allow read: if isClinician();
-      allow create, update: if isClinician();
-      allow delete: if isSuperAdmin();
+      allow create: if isDoctor() && isValidMedicalRecordCreate();
+      allow update: if isDoctor() && isValidMedicalRecordUpdate();
+      allow delete: if false;
     }
 
     match /addendums/{addendumId} {
       allow read: if isClinician();
-      allow create, update: if isClinician();
-      allow delete: if isSuperAdmin();
+      allow create: if isClinician() && isValidMedicalRecordCreate();
+      allow update: if isValidMedicalRecordUpdate();
+      allow delete: if false;
     }
 
+    // SBAR Handovers
     match /sbarHandovers/{sbarId} {
       allow read: if isClinician();
-      allow create, update: if isClinician();
-      allow delete: if isSuperAdmin();
+      allow create: if isClinician() && isValidMedicalRecordCreate();
+      allow update: if isClinician() && isValidMedicalRecordUpdate();
+      allow delete: if false;
     }
 
-    match /dispositionRecords/{dispoId} {
+    match /handovers/{handoverId} {
       allow read: if isClinician();
-      allow create, update: if isClinician();
-      allow delete: if isSuperAdmin();
+      allow create: if isClinician() && isValidMedicalRecordCreate();
+      allow update: if isClinician() && isValidMedicalRecordUpdate();
+      allow delete: if false;
     }
 
+    // Telemetry Vitals, Ventilator, Infusions & Labs
     match /vitals/{vitalId} {
       allow read: if isClinician();
-      allow write: if isClinician();
+      allow create: if isClinician();
+      allow update: if isClinician() && isValidMedicalRecordUpdate();
+      allow delete: if isAdmin();
     }
 
     match /ventilators/{id} {
       allow read: if isClinician();
-      allow write: if isClinician();
+      allow create, update: if isClinician() && isValidMedicalRecordUpdate();
+      allow delete: if isAdmin();
     }
 
     match /infusionPumps/{id} {
       allow read: if isClinician();
-      allow write: if isClinician();
+      allow create, update: if isClinician() && isValidMedicalRecordUpdate();
+      allow delete: if isAdmin();
     }
 
     match /fluidBalances/{id} {
       allow read: if isClinician();
-      allow write: if isClinician();
-    }
-
-    match /statLabs/{id} {
-      allow read: if isClinician();
-      allow write: if isClinician();
-    }
-
-    match /transfusions/{id} {
-      allow read: if isClinician();
-      allow write: if isClinician();
-    }
-
-    match /staff/{id} {
-      allow read: if isClinician();
-      allow write: if isClinician();
+      allow create, update: if isClinician() && isValidMedicalRecordUpdate();
+      allow delete: if isAdmin();
     }
 
     match /fluidBalances24H/{id} {
       allow read: if isClinician();
-      allow write: if isClinician();
+      allow create, update: if isClinician() && isValidMedicalRecordUpdate();
+      allow delete: if isAdmin();
     }
 
-    // Fallback catch-all (secure by default in production)
+    match /statLabs/{id} {
+      allow read: if isClinician();
+      allow create: if isClinician() && isValidMedicalRecordCreate();
+      allow update: if isClinician() && isValidMedicalRecordUpdate();
+      allow delete: if isAdmin();
+    }
+
+    match /investigations/{id} {
+      allow read: if isClinician();
+      allow create: if isClinician() && isValidMedicalRecordCreate();
+      allow update: if isClinician() && isValidMedicalRecordUpdate();
+      allow delete: if isAdmin();
+    }
+
+    match /transfusions/{id} {
+      allow read: if isClinician();
+      allow create, update: if isClinician() && isValidMedicalRecordUpdate();
+      allow delete: if isAdmin();
+    }
+
+    match /medical_records/{recordId} {
+      allow read: if isClinician();
+      allow create: if isClinician() && isValidMedicalRecordCreate();
+      allow update: if isClinician() && isValidMedicalRecordUpdate();
+      allow delete: if isAdmin();
+    }
+
+    match /dispositionRecords/{dispoId} {
+      allow read: if isClinician();
+      allow create, update: if isClinician() && isValidMedicalRecordUpdate();
+      allow delete: if isAdmin();
+    }
+
+    // Dynamic Sections & Cards Management
+    match /sections/{sectionId} {
+      allow read: if isClinician();
+      allow write: if isAdmin();
+    }
+
+    match /cards/{cardId} {
+      allow read: if isClinician();
+      allow write: if isAdmin();
+    }
+
+    // Hospital Chat (1-to-1 & Department Chat)
+    match /chats/{chatId} {
+      allow read: if isClinician();
+      allow create: if isClinician();
+      allow update: if isClinician();
+      allow delete: if isAdmin();
+    }
+
+    match /chatMessages/{messageId} {
+      allow read: if isClinician();
+      allow create: if isClinician() && request.resource.data.senderUid == request.auth.uid;
+      allow update: if isClinician() && request.auth.uid == resource.data.senderUid;
+      allow delete: if isAdmin();
+    }
+
+    // Audit Logs (Immutable ledger)
+    match /auditLogs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated();
+      allow update, delete: if false;
+    }
+
+    // System Settings
+    match /system_settings/{settingId} {
+      allow read: if isClinician();
+      allow write: if isAdmin();
+    }
+
+    match /admins/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
     match /{document=**} {
-      allow read, write: if isSuperAdmin();
+      allow read, write: if isAdmin();
     }
   }
 }

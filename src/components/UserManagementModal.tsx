@@ -88,8 +88,8 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
     setFormDisplayName(user.nameAr || user.nameEn);
     setFormPassword(user.pinCode || '12345678');
     setShowFormPassword(false);
-    setFormRole(user.role);
-    setFormPermissions(user.permissions || getDefaultPermissionsForRole(user.role));
+    setFormRole(user.role as StaffRole);
+    setFormPermissions(user.permissions || getDefaultPermissionsForRole(user.role as StaffRole));
     setIsAddMode(true);
     setStatusMsg(null);
   };

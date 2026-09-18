@@ -10,7 +10,8 @@ import {
   ChevronLeft,
   LogOut,
   ShieldCheck,
-  LayoutDashboard
+  LayoutDashboard,
+  MessageSquare
 } from 'lucide-react';
 import { BedRecord, PatientDossier, BedNumber } from '../types/schema.ts';
 import { useSystemSettings } from '../services/SettingsContext.tsx';
@@ -65,6 +66,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   const handleSelectBed = (bNum: BedNumber | null) => {
+    onTabChange('beds');
     onSelectBed(bNum);
     onClose();
   };
@@ -217,7 +219,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </button>
         )}
 
-        {/* 5. System Settings */}
+        {/* 5. Hospital Clinical Chat */}
+        <button
+          onClick={() => handleSelectTab('chat')}
+          className={`w-full flex items-center justify-between p-3 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+            activeTab === 'chat'
+              ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 shadow-sm font-bold'
+              : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
+          }`}
+        >
+          <div className="flex items-center gap-3 truncate">
+            <div className={`p-2 rounded-lg ${activeTab === 'chat' ? 'bg-teal-500/30 text-teal-200' : 'bg-slate-800 text-slate-400'}`}>
+              <MessageSquare className="w-4 h-4" />
+            </div>
+            <span className="truncate">{lang === 'ar' ? 'الدردشة السريرية (Chat)' : 'Hospital Clinical Chat'}</span>
+          </div>
+          {isRTL ? <ChevronLeft className="w-4 h-4 text-slate-500 shrink-0" /> : <ChevronRight className="w-4 h-4 text-slate-500 shrink-0" />}
+        </button>
+
+        {/* 6. System Settings */}
         <button
           onClick={() => handleSelectTab('settings')}
           className={`w-full flex items-center justify-between p-3 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
