@@ -416,13 +416,10 @@ export async function syncAdminAccountToFirebaseConsole(user: IcuUser): Promise<
 }
 
 export async function deleteUserAccount(uid: string): Promise<void> {
+  // Delete cloud profile first; only remove the local cache after confirmation.
+  await deleteDoc(doc(firestore, 'users', uid));
+  await deleteDoc(doc(firestore, 'admins', uid));
   await db.users.delete(uid);
-  try {
-    await deleteDoc(doc(firestore, 'users', uid));
-    await deleteDoc(doc(firestore, 'admins', uid));
-  } catch (err) {
-    console.warn('Firestore delete user warning:', err);
-  }
 }
 
 export async function syncUserToFirebaseConsole(user: IcuUser): Promise<void> {

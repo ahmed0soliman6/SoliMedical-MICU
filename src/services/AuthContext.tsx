@@ -30,21 +30,6 @@ import {
 import { collection, onSnapshot, doc, getDoc, getDocs, query, where, setDoc } from 'firebase/firestore';
 import { db } from '../db/icuSyncDb.ts';
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
-
-async function readApiResponse(response: Response): Promise<any> {
-  const body = await response.text();
-  const contentType = response.headers.get('content-type') || '';
-  if (!contentType.includes('application/json') || body.trimStart().startsWith('<')) {
-    throw new Error(`خادم إدارة Firebase أعاد HTML بدل JSON (HTTP ${response.status}). تحقق من VITE_API_BASE_URL ونشر Cloud Run API.`);
-  }
-  try {
-    return JSON.parse(body);
-  } catch {
-    throw new Error(`استجابة خادم Firebase غير صالحة (HTTP ${response.status}).`);
-  }
-}
-
 interface AuthContextType {
   currentUser: IcuUser | null;
   isAuthenticated: boolean;
@@ -565,26 +550,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       permissions: userData.permissions || getDefaultPermissionsForRole(role as StaffRole),
     };
 
-    // User creation is an Admin SDK operation. Never fall back to a client/local-only
-    // write: that creates an Auth/Firestore split-brain and then breaks RBAC.
     try {
-      const idToken = await auth.currentUser?.getIdToken(true);
-      if (!idToken) return { success: false, message: 'جلسة المدير غير صالحة. يرجى تسجيل الدخول مجدداً.' };
-      const resp = await fetch('/api/admin/users/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
-        body: JSON.stringify(newUser),
-      });
-      const data = await resp.json();
-      if (!resp.ok || !data.success || !data.data) {
-        return { success: false, message: data.message || 'فشل إنشاء الحساب على Firebase. لم يتم حفظ حساب محلي.' };
-      }
-      await db.users.put(data.data as IcuUser);
+      await saveUserAccount(newUser);
       await refreshUsers();
       return { success: true };
-    } catch (apiErr: any) {
-      console.error('Server admin create user failed:', apiErr);
-      return { success: false, message: apiErr?.message || 'تعذر الاتصال بخادم إدارة Firebase.' };
+    } catch (err: any) {
+      console.error('Firestore user create failed:', err);
+      return { success: false, message: err?.message || 'فشل حفظ ملف المستخدم في Firestore.' };
     }
   };
 
@@ -624,33 +596,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    // 2. If Admin changing another user, call Admin Server API with Bearer Token
-    if ((currentUser?.isSuperAdmin || currentUser?.role === StaffRole.ADMIN) && uid !== currentUser?.uid) {
-      try {
-        const idToken = await auth.currentUser?.getIdToken();
-        if (idToken) {
-          const resp = await fetch(`${API_BASE_URL}/api/admin/users/change-password`, {
-            method: 'POST',
-            headers: { 
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${idToken}`
-            },
-            body: JSON.stringify({
-              targetUid: uid,
-              newPassword: cleanPass
-            })
-          });
-          const data = await readApiResponse(resp);
-          if (!resp.ok || !data.success) {
-            return { success: false, message: data.message || 'فشل تحديث كلمة المرور عبر الخادم' };
-          }
-        }
-      } catch (err: any) {
-        console.warn('Admin change password API warning:', err);
-      }
-    }
-
-    // 3. Update Firestore User document
+    // Update the application user profile directly in Firestore.
     const targetUser = allUsers.find(u => u.uid === uid);
     if (targetUser) {
       targetUser.pinCode = cleanPass;
@@ -666,39 +612,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { success: true, message: 'تم تغيير كلمة المرور بنجاح' };
   };
 
-  // Toggle user status (Activate/Deactivate) with server-side token revocation
+  // Toggle user status directly in Firestore. Auth token revocation requires a backend.
   const toggleUserStatus = async (uid: string) => {
     const user = allUsers.find(u => u.uid === uid);
     if (!user) return;
     if (user.isSuperAdmin || user.role === StaffRole.ADMIN) return;
 
     try {
-      const idToken = await auth.currentUser?.getIdToken();
-      if (user.isActive) {
-        const resp = await fetch(`${API_BASE_URL}/api/admin/users/disable`, {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${idToken}`
-          },
-          body: JSON.stringify({
-            targetUid: uid,
-            reason: 'Administrative deactivation'
-          })
-        });
-        const data = await readApiResponse(resp);
-        if (!resp.ok || !data.success) {
-          throw new Error(data.message || 'فشل تعطيل الحساب على Firebase.');
-        }
-        if (resp.ok && data.success) {
-          user.isActive = false;
-          user.active = false;
-        }
-      } else {
-        user.isActive = true;
-        user.active = true;
-        await saveUserAccount(user);
-      }
+      user.isActive = !user.isActive;
+      user.active = user.isActive;
+      await saveUserAccount(user);
     } catch (e) {
       console.error('Toggle status failed:', e);
     }
@@ -723,26 +646,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!target) return { success: false, message: 'المستخدم غير موجود' };
 
     try {
-      const idToken = await auth.currentUser?.getIdToken();
-      const resp = await fetch(`${API_BASE_URL}/api/admin/users/delete`, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${idToken}`
-        },
-        body: JSON.stringify({
-          targetUid: uid,
-          reason: 'Permanent administrative deletion'
-        })
-      });
-      const data = await readApiResponse(resp);
-      if (!resp.ok || !data.success) {
-        return { success: false, message: data.message || 'فشل حذف المستخدم' };
-      }
+      await deleteUserAccount(uid);
       await refreshUsers();
       return { 
         success: true, 
-        message: data.message || 'تم حذف الحساب بنجاح. تظل جميع السجلات الطبية والملاحظات التاريخية محفوظة بالكامل.' 
+        message: 'تم حذف ملف المستخدم من Firestore. حذف حساب Firebase Authentication نهائياً يتطلب Backend موثوقاً.'
       };
     } catch (e: any) {
       return { 
