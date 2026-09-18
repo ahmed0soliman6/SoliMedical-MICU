@@ -26,7 +26,7 @@ import {
 import { useAuth } from '../services/AuthContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
 import { StaffRole, IcuUser, UserPermissions } from '../types/schema.ts';
-import { getDefaultPermissionsForRole } from '../services/firebase.ts';
+import { getDefaultPermissionsForRole, auth } from '../services/firebase.ts';
 
 interface UserManagementModalProps {
   isOpen: boolean;
@@ -47,8 +47,47 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
   // Change Password state
   const [userToChangePassword, setUserToChangePassword] = useState<IcuUser | null>(null);
   const [newPasswordInput, setNewPasswordInput] = useState('');
+  const [confirmPasswordInput, setConfirmPasswordInput] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [changePassStatus, setChangePassStatus] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Recovery Token state
+  const [showRecoveryModal, setShowRecoveryModal] = useState(false);
+  const [recoveryCodeInput, setRecoveryCodeInput] = useState('SOLI-MICU-RECOVERY-2026');
+  const [recoveryStatus, setRecoveryStatus] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [recoveryLoading, setRecoveryLoading] = useState(false);
+
+  const handleSaveRecoveryCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!recoveryCodeInput.trim() || recoveryCodeInput.trim().length < 6) {
+      setRecoveryStatus({ type: 'error', text: 'رمز التشفير يجب ألا يقل عن 6 خانات.' });
+      return;
+    }
+    setRecoveryLoading(true);
+    setRecoveryStatus(null);
+    try {
+      const idToken = await auth.currentUser?.getIdToken();
+      const response = await fetch('/api/admin/recovery/set', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken || 'legacy_admin'}`
+        },
+        body: JSON.stringify({ recoveryCode: recoveryCodeInput.trim() })
+      });
+      const data = await response.json();
+      if (data.success) {
+        setRecoveryStatus({ type: 'success', text: data.message || 'تم تحديث رمز التشفير بنجاح.' });
+      } else {
+        setRecoveryStatus({ type: 'error', text: data.message || 'فشل تحديث رمز التشفير.' });
+      }
+    } catch (err: any) {
+      setRecoveryStatus({ type: 'error', text: err?.message || 'حدث خطأ أثناء الاتصال بالخادم.' });
+    } finally {
+      setRecoveryLoading(false);
+    }
+  };
 
   // Form states for creating/editing user
   const [formUsername, setFormUsername] = useState('');
@@ -97,26 +136,37 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
   const handleOpenChangePassword = (user: IcuUser) => {
     setUserToChangePassword(user);
     setNewPasswordInput('');
+    setConfirmPasswordInput('');
     setShowNewPassword(false);
+    setShowConfirmPassword(false);
     setChangePassStatus(null);
   };
 
   const handleSaveNewPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userToChangePassword) return;
-    if (!newPasswordInput.trim() || newPasswordInput.trim().length < 4) {
+
+    if (!newPasswordInput.trim() || newPasswordInput.trim().length < 6) {
       setChangePassStatus({
         type: 'error',
-        text: lang === 'ar' ? 'كلمة المرور يجب أن تتكون من 4 أحرف/أرقام على الأقل' : 'Password must be at least 4 characters'
+        text: lang === 'ar' ? 'كلمة المرور يجب ألا تقل عن 6 أحرف أو أرقام (auth/weak-password).' : 'Password must be at least 6 characters (auth/weak-password).'
       });
       return;
     }
 
-    const res = await changeUserPassword(userToChangePassword.uid, newPasswordInput.trim());
+    if (newPasswordInput.trim() !== confirmPasswordInput.trim()) {
+      setChangePassStatus({
+        type: 'error',
+        text: lang === 'ar' ? 'كلمتا المرور غير متطابقتين.' : 'Passwords do not match.'
+      });
+      return;
+    }
+
+    const res = await changeUserPassword(userToChangePassword.uid, newPasswordInput.trim(), confirmPasswordInput.trim());
     if (res.success) {
       setChangePassStatus({
         type: 'success',
-        text: res.message || (lang === 'ar' ? 'تم تغيير كلمة السر بنجاح في قاعدة البيانات السحابية' : 'Password updated successfully')
+        text: res.message || (lang === 'ar' ? 'تم تغيير كلمة المرور بنجاح في Firebase Authentication.' : 'Password updated successfully')
       });
       setTimeout(() => {
         setUserToChangePassword(null);
@@ -124,7 +174,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
     } else {
       setChangePassStatus({
         type: 'error',
-        text: res.message || 'Error changing password'
+        text: res.message || (lang === 'ar' ? 'فشل تحديث كلمة المرور في Firebase.' : 'Error changing password')
       });
     }
   };
@@ -252,13 +302,28 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
 
           <div className="flex items-center gap-2">
             {!isAddMode && (
-              <button
-                onClick={handleOpenAdd}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-teal-600 to-teal-500 hover:from-teal-500 hover:to-teal-400 text-slate-950 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
-              >
-                <UserPlus className="w-3.5 h-3.5" />
-                <span>{lang === 'ar' ? 'إضافة كادر طبي' : 'Add Staff'}</span>
-              </button>
+              <>
+                <button
+                  onClick={() => {
+                    setRecoveryCodeInput('SOLI-MICU-RECOVERY-2026');
+                    setRecoveryStatus(null);
+                    setShowRecoveryModal(true);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-teal-300 text-xs font-bold transition-all cursor-pointer"
+                  title="إدارة وتوليد رمز استعادة كلمة سر المدير"
+                >
+                  <KeyRound className="w-3.5 h-3.5" />
+                  <span>{lang === 'ar' ? 'رمز استعادة المدير' : 'Recovery Token'}</span>
+                </button>
+
+                <button
+                  onClick={handleOpenAdd}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-teal-600 to-teal-500 hover:from-teal-500 hover:to-teal-400 text-slate-950 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
+                >
+                  <UserPlus className="w-3.5 h-3.5" />
+                  <span>{lang === 'ar' ? 'إضافة كادر طبي' : 'Add Staff'}</span>
+                </button>
+              </>
             )}
             <button
               onClick={onClose}
@@ -720,7 +785,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
             <form onSubmit={handleSaveNewPassword} className="space-y-4">
               <div>
                 <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                  {lang === 'ar' ? 'كلمة السر الجديدة *' : 'New Password *'}
+                  {lang === 'ar' ? 'كلمة المرور الجديدة (6 أحرف على الأقل) *' : 'New Password (min 6 chars) *'}
                 </label>
                 <div className="relative">
                   <input
@@ -728,9 +793,9 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
                     value={newPasswordInput}
                     onChange={(e) => setNewPasswordInput(e.target.value)}
                     required
-                    minLength={4}
+                    minLength={6}
                     className="w-full bg-[#070d1a] border border-slate-700 focus:border-teal-400 rounded-xl pl-3 pr-9 py-2.5 text-xs text-white focus:outline-none font-mono"
-                    placeholder={lang === 'ar' ? 'أدخل كلمة السر الجديدة' : 'Enter new password'}
+                    placeholder={lang === 'ar' ? 'أدخل كلمة المرور الجديدة' : 'Enter new password'}
                   />
                   <button
                     type="button"
@@ -740,8 +805,32 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
                     {showNewPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                   </button>
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                  {lang === 'ar' ? 'تأكيد كلمة المرور الجديدة *' : 'Confirm New Password *'}
+                </label>
+                <div className="relative">
+                  <input
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    value={confirmPasswordInput}
+                    onChange={(e) => setConfirmPasswordInput(e.target.value)}
+                    required
+                    minLength={6}
+                    className="w-full bg-[#070d1a] border border-slate-700 focus:border-teal-400 rounded-xl pl-3 pr-9 py-2.5 text-xs text-white focus:outline-none font-mono"
+                    placeholder={lang === 'ar' ? 'أعد إدخال كلمة المرور للتأكيد' : 'Confirm new password'}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-teal-300 p-1 rounded-md transition-colors cursor-pointer"
+                  >
+                    {showConfirmPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
                 <p className="text-[10px] text-slate-400 mt-1">
-                  {lang === 'ar' ? 'الرجاء اختيار كلمة سر قوية وسهلة الحفظ (مثال: رقم سري من 4 أرقام على الأقل).' : 'Please enter a secure password/pin (minimum 4 characters).'}
+                  {lang === 'ar' ? 'يجب أن تتطابق كلمة المرور وتكون 6 أحرف أو أرقام على الأقل.' : 'Passwords must match and be at least 6 characters.'}
                 </p>
               </div>
 
@@ -758,7 +847,90 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
                   className="px-4 py-2 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shadow-lg shadow-teal-500/20 transition-all flex items-center gap-1.5 cursor-pointer"
                 >
                   <KeyRound className="w-3.5 h-3.5" />
-                  <span>{lang === 'ar' ? 'تحديث كلمة السر' : 'Update Password'}</span>
+                  <span>{lang === 'ar' ? 'تحديث كلمة المرور' : 'Update Password'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Recovery Token Management Modal */}
+      {showRecoveryModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-[#0a1224] border border-teal-500/40 rounded-3xl p-6 text-slate-100 shadow-2xl space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-teal-500/10 border border-teal-500/30 flex items-center justify-center text-teal-400">
+                  <KeyRound className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">
+                    {lang === 'ar' ? 'إدارة رمز استعادة المدير (Recovery Token)' : 'Admin Recovery Token Management'}
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    {lang === 'ar' ? 'توليد أو تعديل رمز التشفير السري الخاص باستعادة حساب المدير عند النسيان' : 'Set or update the encryption recovery code for admin'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowRecoveryModal(false)}
+                className="w-8 h-8 rounded-lg bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {recoveryStatus && (
+              <div className={`p-3 rounded-xl text-xs flex items-center gap-2 ${
+                recoveryStatus.type === 'success' ? 'bg-teal-950/60 border border-teal-500/50 text-teal-200' : 'bg-red-950/60 border border-red-500/50 text-red-200'
+              }`}>
+                {recoveryStatus.type === 'success' ? <CheckCircle2 className="w-4 h-4 text-teal-400 shrink-0" /> : <XCircle className="w-4 h-4 text-red-400 shrink-0" />}
+                <span>{recoveryStatus.text}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveRecoveryCode} className="space-y-4">
+              <div>
+                <label className="block text-right text-xs font-semibold text-slate-300 mb-1.5">
+                  {lang === 'ar' ? 'رمز التشفير / كود الاستعادة السري *' : 'Secret Recovery Code *'}
+                </label>
+                <input
+                  type="text"
+                  value={recoveryCodeInput}
+                  onChange={(e) => setRecoveryCodeInput(e.target.value)}
+                  required
+                  minLength={6}
+                  className="w-full bg-[#070d1a] border border-slate-700 focus:border-teal-400 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none font-mono tracking-wider"
+                  placeholder="SOLI-MICU-RECOVERY-2026"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  {lang === 'ar' ? 'احتفظ بهذا الرمز في مكان آمن. سيحتاجه المدير في شاشة تسجيل الدخول عبر رابط "نسيت كلمة المرور؟".' : 'Keep this token secure. Admin will need it on the login screen if password is forgotten.'}
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowRecoveryModal(false)}
+                  className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 cursor-pointer"
+                >
+                  {lang === 'ar' ? 'إغلاق' : 'Cancel'}
+                </button>
+                <button
+                  type="submit"
+                  disabled={recoveryLoading}
+                  className="px-4 py-2 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shadow-lg shadow-teal-500/20 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {recoveryLoading ? (
+                    <div className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <KeyRound className="w-3.5 h-3.5" />
+                      <span>{lang === 'ar' ? 'حفظ رمز الاستعادة' : 'Save Recovery Token'}</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>

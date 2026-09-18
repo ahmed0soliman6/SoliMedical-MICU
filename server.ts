@@ -303,6 +303,7 @@ import {
   deleteUserWithToken, 
   adminChangeUserPassword, 
   adminPasswordRecovery,
+  adminSetRecoveryCode,
   adminArchivePatient,
   adminArchiveSweep
 } from './src/server/adminOperations';
@@ -364,6 +365,17 @@ app.post('/api/admin/recovery', async (req, res) => {
   try {
     const { username, recoveryCode, newPassword } = req.body;
     const result = await adminPasswordRecovery(username, recoveryCode, newPassword);
+    return res.status(200).json(result);
+  } catch (err: any) {
+    return res.status(200).json({ success: false, message: err?.message || 'Internal server error.' });
+  }
+});
+
+app.post('/api/admin/recovery/set', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const { recoveryCode } = req.body;
+    const result = await adminSetRecoveryCode(authHeader, recoveryCode);
     return res.status(200).json(result);
   } catch (err: any) {
     return res.status(200).json({ success: false, message: err?.message || 'Internal server error.' });

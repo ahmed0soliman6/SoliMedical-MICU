@@ -6,9 +6,14 @@ import {
   EyeOff, 
   LogIn, 
   ShieldCheck, 
-  AlertCircle
+  AlertCircle,
+  KeyRound,
+  CheckCircle2,
+  X
 } from 'lucide-react';
 import { useAuth } from '../services/AuthContext.tsx';
+import { sendPasswordResetEmail } from 'firebase/auth';
+import { auth } from '../services/firebase.ts';
 
 import { SoliLogo } from './SoliLogo.tsx';
 
@@ -20,6 +25,14 @@ export const LoginScreen: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Forgot password modal state
+  const [showForgotModal, setShowForgotModal] = useState(false);
+  const [forgotInput, setForgotInput] = useState('');
+  const [forgotToken, setForgotToken] = useState('');
+  const [forgotNewPass, setForgotNewPass] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotMsg, setForgotMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,6 +49,50 @@ export const LoginScreen: React.FC = () => {
 
     if (!res.success) {
       setErrorMsg(res.message || 'بيانات الدخول غير صحيحة');
+    }
+  };
+
+  const handleForgotPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!forgotInput.trim() || !forgotToken.trim() || !forgotNewPass.trim()) {
+      setForgotMsg({ type: 'error', text: 'يرجى إدخال اسم المستخدم، رمز التشفير (كود الاستعادة)، وكلمة المرور الجديدة.' });
+      return;
+    }
+    if (forgotNewPass.trim().length < 6) {
+      setForgotMsg({ type: 'error', text: 'كلمة المرور الجديدة يجب ألا تقل عن 6 أحرف أو أرقام.' });
+      return;
+    }
+
+    setForgotLoading(true);
+    setForgotMsg(null);
+
+    try {
+      const response = await fetch('/api/admin/recovery', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: forgotInput.trim(),
+          recoveryCode: forgotToken.trim(),
+          newPassword: forgotNewPass.trim()
+        })
+      });
+      const data = await response.json();
+      if (data.success) {
+        setForgotMsg({ type: 'success', text: data.message || 'تمت استعادة كلمة المرور بنجاح. يمكنك تسجيل الدخول الآن.' });
+        setTimeout(() => {
+          setShowForgotModal(false);
+          setForgotInput('');
+          setForgotToken('');
+          setForgotNewPass('');
+          setForgotMsg(null);
+        }, 2000);
+      } else {
+        setForgotMsg({ type: 'error', text: data.message || 'فشل عملية الاستعادة. تحقق من صحة رمز التشفير.' });
+      }
+    } catch (err: any) {
+      setForgotMsg({ type: 'error', text: err?.message || 'حدث خطأ أثناء الاتصال بالخادم.' });
+    } finally {
+      setForgotLoading(false);
     }
   };
 
@@ -122,9 +179,22 @@ export const LoginScreen: React.FC = () => {
 
           {/* Field: Password */}
           <div>
-            <label className="block text-right text-xs font-medium text-slate-300 mb-1.5" htmlFor="password">
-              كلمة المرور
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowForgotModal(true);
+                  setForgotInput(username);
+                  setForgotMsg(null);
+                }}
+                className="text-xs text-cyan-400 hover:text-cyan-300 transition-colors cursor-pointer"
+              >
+                نسيت كلمة المرور؟
+              </button>
+              <label className="block text-right text-xs font-medium text-slate-300" htmlFor="password">
+                كلمة المرور
+              </label>
+            </div>
             <div className="relative rounded-xl shadow-inner">
               <button 
                 type="button"
@@ -181,6 +251,132 @@ export const LoginScreen: React.FC = () => {
           <ShieldCheck className="w-3.5 h-3.5 text-cyan-500/60" />
         </p>
       </footer>
+
+      {/* Forgot Password Modal */}
+      {showForgotModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-[#0a1224] border border-cyan-500/40 rounded-3xl p-6 text-slate-100 shadow-2xl space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
+                  <KeyRound className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">
+                    استعادة كلمة المرور
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    أدخل اسم المستخدم أو البريد الإلكتروني لإرسال رابط الاستعادة
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowForgotModal(false)}
+                className="w-8 h-8 rounded-lg bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {forgotMsg && (
+              <div className={`p-3 rounded-xl text-xs flex items-center gap-2 ${
+                forgotMsg.type === 'success' ? 'bg-cyan-950/60 border border-cyan-500/50 text-cyan-200' : 'bg-red-950/60 border border-red-500/50 text-red-200'
+              }`}>
+                {forgotMsg.type === 'success' ? <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0" /> : <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />}
+                <span>{forgotMsg.text}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleForgotPasswordSubmit} className="space-y-3.5">
+              <div>
+                <label className="block text-right text-xs font-medium text-slate-300 mb-1" htmlFor="forgot-username">
+                  اسم المستخدم أو البريد الإلكتروني للمدير
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-slate-400">
+                    <User className="w-4 h-4 text-cyan-500/70" />
+                  </div>
+                  <input
+                    id="forgot-username"
+                    type="text"
+                    value={forgotInput}
+                    onChange={(e) => setForgotInput(e.target.value)}
+                    placeholder="admin"
+                    required
+                    className="w-full pr-10 pl-3 py-2.5 bg-[#050b17] border border-slate-700 rounded-xl text-white placeholder-slate-500 text-xs focus:outline-none focus:ring-1 focus:ring-cyan-400 text-right font-sans"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-right text-xs font-medium text-slate-300 mb-1" htmlFor="forgot-token">
+                  رمز التشفير / كود الاستعادة (Recovery Token)
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-slate-400">
+                    <KeyRound className="w-4 h-4 text-cyan-500/70" />
+                  </div>
+                  <input
+                    id="forgot-token"
+                    type="text"
+                    value={forgotToken}
+                    onChange={(e) => setForgotToken(e.target.value)}
+                    placeholder="SOLI-MICU-RECOVERY-2026"
+                    required
+                    className="w-full pr-10 pl-3 py-2.5 bg-[#050b17] border border-slate-700 rounded-xl text-white placeholder-slate-500 text-xs focus:outline-none focus:ring-1 focus:ring-cyan-400 text-right font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-right text-xs font-medium text-slate-300 mb-1" htmlFor="forgot-newpass">
+                  كلمة المرور الجديدة (6 أحرف على الأقل)
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-slate-400">
+                    <Lock className="w-4 h-4 text-cyan-500/70" />
+                  </div>
+                  <input
+                    id="forgot-newpass"
+                    type="password"
+                    value={forgotNewPass}
+                    onChange={(e) => setForgotNewPass(e.target.value)}
+                    placeholder="••••••••"
+                    required
+                    minLength={6}
+                    className="w-full pr-10 pl-3 py-2.5 bg-[#050b17] border border-slate-700 rounded-xl text-white placeholder-slate-500 text-xs focus:outline-none focus:ring-1 focus:ring-cyan-400 text-left font-mono tracking-widest"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowForgotModal(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 cursor-pointer"
+                >
+                  إغلاق
+                </button>
+                <button
+                  type="submit"
+                  disabled={forgotLoading}
+                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-teal-500 hover:opacity-95 text-slate-950 font-bold text-xs shadow-lg shadow-cyan-500/20 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {forgotLoading ? (
+                    <div className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <KeyRound className="w-3.5 h-3.5" />
+                      <span>تحديث كلمة المرور بالرمز</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

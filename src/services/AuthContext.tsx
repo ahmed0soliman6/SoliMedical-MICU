@@ -51,7 +51,8 @@ interface AuthContextType {
   logout: () => Promise<void>;
   createUser: (user: Partial<IcuUser>) => Promise<{ success: boolean; message?: string }>;
   updateUser: (user: IcuUser) => Promise<{ success: boolean; message?: string }>;
-  changeUserPassword: (uid: string, newPassword: string) => Promise<{ success: boolean; message?: string }>;
+  changeUserPassword: (uid: string, newPassword: string, confirmPassword?: string) => Promise<{ success: boolean; message?: string }>;
+  changeMyOwnPassword: (oldPassword: string, newPassword: string, confirmPassword?: string) => Promise<{ success: boolean; message?: string }>;
   toggleUserStatus: (uid: string) => Promise<void>;
   deleteUser: (uid: string) => Promise<{ success: boolean; message?: string }>;
   hasPermission: (permission: keyof UserPermissions) => boolean;
@@ -592,41 +593,78 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { success: true };
   };
 
-  // Change password for any user account directly in Firestore & Firebase Auth
-  const changeUserPassword = async (uid: string, newPassword: string, oldPasswordForSelf?: string): Promise<{ success: boolean; message?: string }> => {
+  // Change password for any user account via Firebase Admin SDK / Cloud Function endpoint (Admin only)
+  const changeUserPassword = async (uid: string, newPassword: string, confirmPassword?: string): Promise<{ success: boolean; message?: string }> => {
+    const isAdmin = currentUser?.isSuperAdmin || currentUser?.role === StaffRole.ADMIN;
+    if (!isAdmin) {
+      return { success: false, message: 'صلاحية تغيير كلمة المرور متاحة للمشرف (Admin) فقط (Permission Denied).' };
+    }
+
     if (!newPassword || newPassword.trim().length < 6) {
-      return { success: false, message: 'كلمة المرور يجب أن تتكون من 6 أحرف/أرقام على الأقل' };
+      return { success: false, message: 'كلمة المرور يجب ألا تقل عن 6 أحرف أو أرقام (auth/weak-password).' };
+    }
+
+    if (confirmPassword !== undefined && newPassword.trim() !== confirmPassword.trim()) {
+      return { success: false, message: 'كلمتا المرور غير متطابقتين.' };
     }
 
     const cleanPass = newPassword.trim();
 
-    // 1. If self change, attempt Firebase Auth updatePassword
-    if (auth.currentUser && auth.currentUser.uid === uid) {
-      try {
-        if (oldPasswordForSelf && auth.currentUser.email) {
-          const cred = EmailAuthProvider.credential(auth.currentUser.email, oldPasswordForSelf);
-          await reauthenticateWithCredential(auth.currentUser, cred);
-        }
-        await updatePassword(auth.currentUser, cleanPass);
-      } catch (authErr: any) {
-        console.warn('Self password update warning:', authErr);
+    try {
+      const idToken = await auth.currentUser?.getIdToken();
+      const response = await fetch('/api/admin/users/change-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken || 'legacy_' + (currentUser?.uid || 'admin')}`
+        },
+        body: JSON.stringify({ targetUid: uid, newPassword: cleanPass })
+      });
+
+      const data = await response.json();
+      if (!data.success) {
+        return { success: false, message: data.message || 'فشل تحديث كلمة المرور في Firebase Authentication.' };
       }
+
+      await refreshUsers();
+      return { success: true, message: 'تم تغيير كلمة المرور بنجاح في Firebase Authentication.' };
+    } catch (err: any) {
+      return { success: false, message: err?.message || 'حدث خطأ أثناء الاتصال بالخادم لتغيير كلمة المرور.' };
+    }
+  };
+
+  // Change own password for currently logged in user by reauthenticating with old password
+  const changeMyOwnPassword = async (oldPassword: string, newPassword: string, confirmPassword?: string): Promise<{ success: boolean; message?: string }> => {
+    if (!auth.currentUser || !auth.currentUser.email) {
+      return { success: false, message: 'لا يوجد مستخدم مسجل الدخول حالياً.' };
+    }
+    if (!oldPassword) {
+      return { success: false, message: 'يرجى إدخال كلمة المرور القديمة.' };
+    }
+    if (!newPassword || newPassword.trim().length < 6) {
+      return { success: false, message: 'كلمة المرور الجديدة يجب ألا تقل عن 6 أحرف أو أرقام (auth/weak-password).' };
+    }
+    if (confirmPassword !== undefined && newPassword.trim() !== confirmPassword.trim()) {
+      return { success: false, message: 'كلمتا المرور غير متطابقتين.' };
     }
 
-    // Update the application user profile directly in Firestore.
-    const targetUser = allUsers.find(u => u.uid === uid);
-    if (targetUser) {
-      targetUser.pinCode = cleanPass;
-      await saveUserAccount(targetUser);
-      if (currentUser?.uid === uid) {
-        const updatedCurrent = { ...currentUser, pinCode: cleanPass };
-        setCurrentUser(updatedCurrent);
-        localStorage.setItem('soli_icu_active_user', JSON.stringify(updatedCurrent));
-      }
-    }
+    try {
+      const credential = EmailAuthProvider.credential(auth.currentUser.email, oldPassword);
+      await reauthenticateWithCredential(auth.currentUser, credential);
+      await updatePassword(auth.currentUser, newPassword.trim());
 
-    await refreshUsers();
-    return { success: true, message: 'تم تغيير كلمة المرور بنجاح' };
+      if (currentUser) {
+        const updated = { ...currentUser, pinCode: newPassword.trim() };
+        setCurrentUser(updated);
+        localStorage.setItem('soli_icu_active_user', JSON.stringify(updated));
+        await saveUserAccount(updated);
+      }
+
+      await refreshUsers();
+      return { success: true, message: 'تم تغيير كلمة المرور بنجاح في النظام.' };
+    } catch (err: any) {
+      return { success: false, message: err?.message || 'كلمة المرور القديمة غير صحيحة أو فشل تحديث كلمة المرور.' };
+    }
   };
 
   // Toggle user status directly in Firestore. Auth token revocation requires a backend.

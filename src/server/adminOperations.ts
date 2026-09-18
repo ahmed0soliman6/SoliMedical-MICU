@@ -805,3 +805,37 @@ export async function disableUser(callerUid: string, targetUid: string, reason?:
 export async function deleteUser(callerUid: string, targetUid: string, reason?: string): Promise<AdminOpResult> {
   return deleteUserWithToken(`Bearer legacy_${callerUid}`, targetUid, reason);
 }
+
+/**
+ * Sets or updates the admin recovery token (codeHash & salt) in _system/recovery
+ */
+export async function adminSetRecoveryCode(authHeader: string | undefined, recoveryCode: string): Promise<AdminOpResult> {
+  const authCheck = await verifyAdminCallerToken(authHeader);
+  if (!authCheck.isAdmin) {
+    return { success: false, message: authCheck.error || 'غير مصرح لك بتنفيذ هذه العملية.' };
+  }
+
+  const code = (recoveryCode || '').trim();
+  if (!code || code.length < 6) {
+    return { success: false, message: 'رمز التشفير يجب ألا يقل عن 6 خانات.' };
+  }
+
+  try {
+    const { db } = requireAdminServices();
+    const recoveryDocRef = db.collection('_system').doc('recovery');
+    const salt = crypto.randomBytes(16).toString('hex');
+    const codeHash = hashRecoveryCode(code, salt);
+
+    await recoveryDocRef.set({
+      salt,
+      codeHash,
+      updatedAt: new Date().toISOString(),
+      updatedByUid: authCheck.callerUid || 'system',
+      isImmutable: true
+    }, { merge: true });
+
+    return { success: true, message: 'تم تحديث رمز التشفير بنجاح في النظام.' };
+  } catch (err: any) {
+    return { success: false, message: err?.message || 'فشل تحديث رمز التشفير.' };
+  }
+}
