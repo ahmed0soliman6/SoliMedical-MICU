@@ -747,10 +747,25 @@ export function subscribeToRealtimeFirestore(
           });
         }
       });
+      await db.beds.clear();
       if (remoteBeds.length > 0) {
         await db.beds.bulkPut(remoteBeds);
-        notifyUpdate();
+      } else {
+        const cleanBeds: BedRecord[] = ['01', '02', '03', '04', '05', '06'].map((num, idx) => ({
+          id: num,
+          unitId: 'MICU-MAIN',
+          bedNumber: num as BedNumber,
+          bayName: `Critical Care Bay ${num}`,
+          isActive: true,
+          displayOrder: idx,
+          status: idx === 5 ? BedStatus.UNAVAILABLE : BedStatus.VACANT,
+          currentPatientId: null,
+          activePatientId: null,
+          lastCleanedAt: new Date().toISOString()
+        }));
+        await db.beds.bulkPut(cleanBeds);
       }
+      notifyUpdate();
     }, (err) => handleFirestoreError(err, OperationType.GET, 'beds'));
     unsubscribers.push(unsubBeds);
 
@@ -767,10 +782,11 @@ export function subscribeToRealtimeFirestore(
           });
         }
       });
+      await db.patients.clear();
       if (remotePatients.length > 0) {
         await db.patients.bulkPut(remotePatients);
-        notifyUpdate();
       }
+      notifyUpdate();
     }, (err) => handleFirestoreError(err, OperationType.GET, 'patients'));
     unsubscribers.push(unsubPatients);
 
@@ -1076,7 +1092,25 @@ export async function pullCloudDataToLocalDb(): Promise<boolean> {
   try {
     const bedsSnap = await getDocs(collection(firestore, 'beds'));
     if (bedsSnap.empty) {
-      return false;
+      // Initialize 6 vacant beds if empty on cloud
+      const cleanBeds: BedRecord[] = ['01', '02', '03', '04', '05', '06'].map((num, idx) => ({
+        id: num,
+        unitId: 'MICU-MAIN',
+        bedNumber: num as BedNumber,
+        bayName: `Critical Care Bay ${num}`,
+        isActive: true,
+        displayOrder: idx,
+        status: idx === 5 ? BedStatus.UNAVAILABLE : BedStatus.VACANT,
+        currentPatientId: null,
+        activePatientId: null,
+        lastCleanedAt: new Date().toISOString()
+      }));
+      await db.beds.clear();
+      await db.beds.bulkPut(cleanBeds);
+      for (const b of cleanBeds) {
+        await syncBedToCloud(b);
+      }
+      return true;
     }
 
     const remoteBeds: BedRecord[] = [];
@@ -1091,6 +1125,7 @@ export async function pullCloudDataToLocalDb(): Promise<boolean> {
         });
       }
     });
+    await db.beds.clear();
     if (remoteBeds.length > 0) {
       await db.beds.bulkPut(remoteBeds);
     }
@@ -1106,6 +1141,7 @@ export async function pullCloudDataToLocalDb(): Promise<boolean> {
         });
       }
     });
+    await db.patients.clear();
     if (remotePatients.length > 0) {
       await db.patients.bulkPut(remotePatients);
     }

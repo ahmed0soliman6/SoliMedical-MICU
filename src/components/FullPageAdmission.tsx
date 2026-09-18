@@ -200,71 +200,44 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
       return;
     }
 
-    // Rule 1: Validate full name is at least 3 parts (ثلاثي أو رباعي)
+    // Rule 1: Validate full name is provided (at least 2 or 3 parts)
     const nameParts = fullNameAr.trim().split(/\s+/).filter(Boolean);
-    if (nameParts.length < 3) {
+    if (nameParts.length < 2) {
       setAdmissionError(
         lang === 'ar'
-          ? 'يرجى كتابة اسم المريض ثلاثي أو رباعي على الأقل (مثال: يحيى ممدوح السيد).'
-          : 'Please enter at least a 3-part full name (e.g., John David Smith).'
+          ? 'يرجى كتابة اسم المريض (الاسم الأول واسم العائلة على الأقل).'
+          : 'Please enter at least first name and last name.'
       );
       return;
     }
 
-    // Rule 2: Validate National ID is strictly 14 numeric digits
+    // Rule 2: Validate National ID / Card ID is strictly 4 numeric digits
     const cleanNatId = toEnglishDigits(nationalId.trim());
-    if (!/^\d{14}$/.test(cleanNatId)) {
+    if (!/^\d{4}$/.test(cleanNatId)) {
       setAdmissionError(
         lang === 'ar'
-          ? 'يرجى إدخال رقم البطاقة الشخصية / الرقم القومي كاملاً (مكون من 14 رقم بالضبط بدون أسطر أو مسافات).'
-          : 'Please enter a valid 14-digit National ID.'
+          ? 'يرجى إدخال آخر 4 أرقام من بطاقة الهوية / الرقم القومي (تتكون من 4 أرقام فقط).'
+          : 'Please enter the last 4 digits of Card ID (strictly 4 digits).'
       );
       return;
     }
 
-    // Rule 3: Validate Age
-    const parsedAge = parseEnglishInt(age);
-    if (!parsedAge || parsedAge < 1 || parsedAge > 120) {
-      setAdmissionError(
-        lang === 'ar'
-          ? 'يرجى إدخال عمر المريض بشكل صحيح (بين 1 و 120 سنة).'
-          : 'Please enter a valid patient age (1 - 120 years).'
-      );
-      return;
-    }
-
-    // Rule 4: Validate Height & Weight
-    const parsedHeight = parseEnglishFloat(heightCm);
-    if (!parsedHeight || parsedHeight < 30 || parsedHeight > 250) {
-      setAdmissionError(
-        lang === 'ar'
-          ? 'يرجى إدخال طول المريض بالسنتيمتر بشكل صحيح (مثال: 170).'
-          : 'Please enter a valid height in cm (e.g., 170).'
-      );
-      return;
-    }
-
-    const parsedWeight = parseEnglishFloat(weightKg);
-    if (!parsedWeight || parsedWeight < 1 || parsedWeight > 350) {
-      setAdmissionError(
-        lang === 'ar'
-          ? 'يرجى إدخال وزن المريض بالكيلوجرام بشكل صحيح (مثال: 75).'
-          : 'Please enter a valid weight in kg (e.g., 75).'
-      );
-      return;
-    }
-
-    // Rule 5: Validate Primary Diagnosis
+    // Rule 3: Validate Primary Diagnosis is provided
     if (!primaryDiagnosisAr.trim()) {
       setAdmissionError(
         lang === 'ar'
-          ? 'يرجى كتابة التشخيص الطبي الأولي للمريض.'
-          : 'Please enter the primary medical diagnosis.'
+          ? 'يرجى كتابة التشخيص الطبي الأولي للمريض (إجباري).'
+          : 'Please enter the primary medical diagnosis (mandatory).'
       );
       return;
     }
 
-    // Rule 6: Fresh check for bed occupancy
+    // Optional fields (Age, Height, Weight)
+    const parsedAge = age.trim() ? parseEnglishInt(age) : undefined;
+    const parsedHeight = heightCm.trim() ? parseEnglishFloat(heightCm) : undefined;
+    const parsedWeight = weightKg.trim() ? parseEnglishFloat(weightKg) : undefined;
+
+    // Rule 4: Fresh check for bed occupancy
     if (!initialPatient) {
       const freshBed = await db.beds.get(targetBed);
       if (freshBed && (freshBed.status === BedStatus.OCCUPIED || freshBed.currentPatientId)) {
@@ -537,13 +510,14 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
               {/* Box 2: Card ID (Last 4 Digits) - Mandatory */}
               <div>
                 <label className="text-[11px] text-slate-300 font-semibold block mb-1">
-                  {lang === 'ar' ? 'رقم البطاقة (آخر 4 أرقام) *' : 'Card ID (Last 4 Digits) *'}
+                  {lang === 'ar' ? 'آخر 4 أرقام من بطاقة الهوية / الرقم القومي *' : 'Last 4 Digits of Card ID *'}
                 </label>
                 <input
                   type="text"
                   value={nationalId}
-                  onChange={(e) => setNationalId(toEnglishDigits(e.target.value))}
-                  placeholder={lang === 'ar' ? 'مثال: 5044 أو 1089283741' : 'e.g. 5044'}
+                  onChange={(e) => setNationalId(toEnglishDigits(e.target.value).slice(0, 4))}
+                  placeholder={lang === 'ar' ? 'مثال: 5044' : 'e.g. 5044'}
+                  maxLength={4}
                   className="w-full bg-[#070c18] border border-slate-700 rounded-lg px-3 py-2 text-white font-mono font-bold focus:border-teal-500 focus:outline-none text-xs"
                   required
                 />
@@ -553,13 +527,13 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
               <div>
                 <label className="text-[11px] text-slate-300 font-semibold block mb-1 flex items-center justify-between">
                   <span>{lang === 'ar' ? 'رقم الملف الطبي (MRN)' : 'Medical Record Number (MRN)'}</span>
-                  <span className="text-[10px] text-teal-400 font-normal">({lang === 'ar' ? 'غير إلزامي / اختياري' : 'Optional'})</span>
+                  <span className="text-[10px] text-teal-400 font-normal">({lang === 'ar' ? 'اختياري' : 'Optional'})</span>
                 </label>
                 <input
                   type="text"
                   value={mrn}
                   onChange={(e) => setMrn(toEnglishDigits(e.target.value))}
-                  placeholder={lang === 'ar' ? 'مثال: MRN-5044 (يمكن تركه فارغاً وسيتم توليده)' : 'e.g. MRN-5044 (Optional)'}
+                  placeholder={lang === 'ar' ? 'مثال: MRN-5044 (اختياري)' : 'e.g. MRN-5044 (Optional)'}
                   className="w-full bg-[#070c18] border border-slate-700 rounded-lg px-3 py-2 text-white font-mono font-bold focus:border-teal-500 focus:outline-none text-xs"
                 />
               </div>
@@ -568,7 +542,7 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
 
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3 bg-[#070c18] p-4 rounded-xl border border-slate-800/60">
             <div>
-              <label className="text-[11px] text-slate-400 block mb-1">{lang === 'ar' ? 'العمر (بالسنوات)' : 'Age (Years)'}</label>
+              <label className="text-[11px] text-slate-400 block mb-1">{lang === 'ar' ? 'العمر (اختياري)' : 'Age (Optional)'}</label>
               <input
                 type="text"
                 inputMode="numeric"

@@ -139,10 +139,20 @@ export default function App() {
         if (!hasCloudData) {
           const bedCount = await db.beds.count();
           if (bedCount === 0) {
-            console.log('Initializing local Dexie indexed database seed...');
-            await initializeDatabaseSeed();
-            // Also seed initial data to Firestore cloud if empty
-            await seedInitialDataToFirestore();
+            console.log('Initializing 6 vacant beds...');
+            const cleanBeds: BedRecord[] = ['01', '02', '03', '04', '05', '06'].map((num, idx) => ({
+              id: num,
+              unitId: 'MICU-MAIN',
+              bedNumber: num as BedNumber,
+              bayName: `Critical Care Bay ${num}`,
+              isActive: true,
+              displayOrder: idx,
+              status: idx === 5 ? BedStatus.UNAVAILABLE : BedStatus.VACANT,
+              currentPatientId: null,
+              activePatientId: null,
+              lastCleanedAt: new Date().toISOString()
+            }));
+            await db.beds.bulkPut(cleanBeds);
           }
         }
 
