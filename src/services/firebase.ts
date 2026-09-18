@@ -1099,16 +1099,34 @@ export async function pullCloudDataToLocalDb(): Promise<boolean> {
       await db.patients.bulkPut(remotePatients);
     }
 
-    const [vitalsSnap, sbarsSnap, notesSnap, ventsSnap, pumpsSnap, fluidsSnap, statLabsSnap, abxSnap, medRecordsSnap] = await Promise.all([
+    const [
+      vitalsSnap, 
+      sbarsSnap, 
+      notesSnap, 
+      ventsSnap, 
+      pumpsSnap, 
+      pumpsLegacySnap,
+      fluidsSnap, 
+      fluidsLegacySnap,
+      statLabsSnap, 
+      abxSnap, 
+      medRecordsSnap,
+      directLabsSnap,
+      directInvsSnap
+    ] = await Promise.all([
       getDocs(collection(firestore, 'vitals')).catch(() => null),
       getDocs(collection(firestore, 'sbarHandovers')).catch(() => null),
       getDocs(collection(firestore, 'clinicalNotes')).catch(() => null),
       getDocs(collection(firestore, 'ventilators')).catch(() => null),
       getDocs(collection(firestore, 'infusionPumps')).catch(() => null),
+      getDocs(collection(firestore, 'infusion_pumps')).catch(() => null),
       getDocs(collection(firestore, 'fluidBalances')).catch(() => null),
+      getDocs(collection(firestore, 'fluid_balances')).catch(() => null),
       getDocs(collection(firestore, 'statLabs')).catch(() => null),
       getDocs(collection(firestore, 'patientAntibiotics')).catch(() => null),
       getDocs(collection(firestore, 'medical_records')).catch(() => null),
+      getDocs(collection(firestore, 'labResults')).catch(() => null),
+      getDocs(collection(firestore, 'investigations')).catch(() => null),
     ]);
 
     if (vitalsSnap && !vitalsSnap.empty) {
@@ -1131,16 +1149,39 @@ export async function pullCloudDataToLocalDb(): Promise<boolean> {
       ventsSnap.forEach(d => list.push(d.data() as VentilatorParameters));
       await db.ventilators.bulkPut(list);
     }
+
+    const pumpList: InfusionPumpLine[] = [];
     if (pumpsSnap && !pumpsSnap.empty) {
-      const list: InfusionPumpLine[] = [];
-      pumpsSnap.forEach(d => list.push(d.data() as InfusionPumpLine));
-      await db.infusionPumps.bulkPut(list);
+      pumpsSnap.forEach(d => pumpList.push(d.data() as InfusionPumpLine));
     }
+    if (pumpsLegacySnap && !pumpsLegacySnap.empty) {
+      pumpsLegacySnap.forEach(d => {
+        const item = d.data() as InfusionPumpLine;
+        if (!pumpList.some(p => p.id === item.id)) {
+          pumpList.push(item);
+        }
+      });
+    }
+    if (pumpList.length > 0) {
+      await db.infusionPumps.bulkPut(pumpList);
+    }
+
+    const fluidList: FluidBalance24H[] = [];
     if (fluidsSnap && !fluidsSnap.empty) {
-      const list: FluidBalance24H[] = [];
-      fluidsSnap.forEach(d => list.push(d.data() as FluidBalance24H));
-      await db.fluidBalances.bulkPut(list);
+      fluidsSnap.forEach(d => fluidList.push(d.data() as FluidBalance24H));
     }
+    if (fluidsLegacySnap && !fluidsLegacySnap.empty) {
+      fluidsLegacySnap.forEach(d => {
+        const item = d.data() as FluidBalance24H;
+        if (!fluidList.some(f => f.id === item.id)) {
+          fluidList.push(item);
+        }
+      });
+    }
+    if (fluidList.length > 0) {
+      await db.fluidBalances.bulkPut(fluidList);
+    }
+
     if (statLabsSnap && !statLabsSnap.empty) {
       const list: StatLabPanel[] = [];
       statLabsSnap.forEach(d => list.push(d.data() as StatLabPanel));
@@ -1151,9 +1192,11 @@ export async function pullCloudDataToLocalDb(): Promise<boolean> {
       abxSnap.forEach(d => list.push(d.data() as PatientAntibiotic));
       await db.patientAntibiotics.bulkPut(list);
     }
+
+    const labs: LabResultItem[] = [];
+    const invs: InvestigationItem[] = [];
+
     if (medRecordsSnap && !medRecordsSnap.empty) {
-      const labs: LabResultItem[] = [];
-      const invs: InvestigationItem[] = [];
       medRecordsSnap.forEach(d => {
         const data = d.data();
         if (data.recordType === 'LAB' || data.category || data.unit) {
@@ -1162,9 +1205,26 @@ export async function pullCloudDataToLocalDb(): Promise<boolean> {
           invs.push(data as InvestigationItem);
         }
       });
-      if (labs.length > 0) await db.labResults.bulkPut(labs);
-      if (invs.length > 0) await db.investigations.bulkPut(invs);
     }
+    if (directLabsSnap && !directLabsSnap.empty) {
+      directLabsSnap.forEach(d => {
+        const item = d.data() as LabResultItem;
+        if (!labs.some(l => l.id === item.id)) {
+          labs.push(item);
+        }
+      });
+    }
+    if (directInvsSnap && !directInvsSnap.empty) {
+      directInvsSnap.forEach(d => {
+        const item = d.data() as InvestigationItem;
+        if (!invs.some(i => i.id === item.id)) {
+          invs.push(item);
+        }
+      });
+    }
+
+    if (labs.length > 0) await db.labResults.bulkPut(labs);
+    if (invs.length > 0) await db.investigations.bulkPut(invs);
 
     return true;
   } catch (err) {
@@ -1240,8 +1300,28 @@ export async function syncPumpToCloud(pump: InfusionPumpLine): Promise<void> {
   try {
     const pumpRef = doc(firestore, 'infusionPumps', pump.id);
     await setDoc(pumpRef, pump, { merge: true });
+    // Mirror to legacy collection name for cross-version compatibility
+    const pumpRefLegacy = doc(firestore, 'infusion_pumps', pump.id);
+    await setDoc(pumpRefLegacy, pump, { merge: true });
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `infusionPumps/${pump.id}`);
+  }
+}
+
+export async function deletePumpFromCloud(pumpId: string): Promise<void> {
+  try {
+    await deleteDoc(doc(firestore, 'infusionPumps', pumpId));
+    await deleteDoc(doc(firestore, 'infusion_pumps', pumpId)).catch(() => {});
+  } catch (err) {
+    console.warn('Delete pump from cloud notice:', err);
+  }
+}
+
+export async function deleteVentilatorFromCloud(ventId: string): Promise<void> {
+  try {
+    await deleteDoc(doc(firestore, 'ventilators', ventId));
+  } catch (err) {
+    console.warn('Delete ventilator from cloud notice:', err);
   }
 }
 
@@ -1249,8 +1329,95 @@ export async function syncFluidBalanceToCloud(fluid: FluidBalance24H): Promise<v
   try {
     const fluidRef = doc(firestore, 'fluidBalances', fluid.id);
     await setDoc(fluidRef, fluid, { merge: true });
+    const fluidRefLegacy = doc(firestore, 'fluid_balances', fluid.id);
+    await setDoc(fluidRefLegacy, fluid, { merge: true });
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `fluidBalances/${fluid.id}`);
+  }
+}
+
+export async function deleteFluidBalanceFromCloud(fluidId: string): Promise<void> {
+  try {
+    await deleteDoc(doc(firestore, 'fluidBalances', fluidId));
+    await deleteDoc(doc(firestore, 'fluid_balances', fluidId)).catch(() => {});
+  } catch (err) {
+    console.warn('Delete fluid balance from cloud notice:', err);
+  }
+}
+
+export async function syncStatLabsToCloud(labs: StatLabPanel): Promise<void> {
+  try {
+    const labsRef = doc(firestore, 'statLabs', labs.id);
+    await setDoc(labsRef, labs, { merge: true });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, `statLabs/${labs.id}`);
+  }
+}
+
+export async function deleteStatLabFromCloud(labId: string): Promise<void> {
+  try {
+    await deleteDoc(doc(firestore, 'statLabs', labId));
+  } catch (err) {
+    console.warn('Delete stat lab from cloud notice:', err);
+  }
+}
+
+export async function syncPatientAntibioticToCloud(abx: PatientAntibiotic): Promise<void> {
+  try {
+    const abxRef = doc(firestore, 'patientAntibiotics', abx.id);
+    await setDoc(abxRef, abx, { merge: true });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, `patientAntibiotics/${abx.id}`);
+  }
+}
+
+export async function deletePatientAntibioticFromCloud(abxId: string): Promise<void> {
+  try {
+    await deleteDoc(doc(firestore, 'patientAntibiotics', abxId));
+  } catch (err) {
+    console.warn('Delete antibiotic from cloud notice:', err);
+  }
+}
+
+export async function syncLabResultToCloud(labItem: LabResultItem): Promise<void> {
+  try {
+    const docRef = doc(firestore, 'medical_records', labItem.id);
+    await setDoc(docRef, {
+      ...labItem,
+      recordType: 'LAB',
+      updatedAt: Date.now(),
+    }, { merge: true });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, `medical_records/${labItem.id}`);
+  }
+}
+
+export async function deleteLabResultFromCloud(labId: string): Promise<void> {
+  try {
+    await deleteDoc(doc(firestore, 'medical_records', labId));
+  } catch (err) {
+    console.warn('Delete lab result from cloud notice:', err);
+  }
+}
+
+export async function syncInvestigationToCloud(invItem: InvestigationItem): Promise<void> {
+  try {
+    const docRef = doc(firestore, 'medical_records', invItem.id);
+    await setDoc(docRef, {
+      ...invItem,
+      recordType: 'INVESTIGATION',
+      updatedAt: Date.now(),
+    }, { merge: true });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, `medical_records/${invItem.id}`);
+  }
+}
+
+export async function deleteInvestigationFromCloud(invId: string): Promise<void> {
+  try {
+    await deleteDoc(doc(firestore, 'medical_records', invId));
+  } catch (err) {
+    console.warn('Delete investigation from cloud notice:', err);
   }
 }
 
@@ -1293,19 +1460,26 @@ export async function seedInitialDataToFirestore(): Promise<void> {
       for (const fl of localFluids) {
         await syncFluidBalanceToCloud(fl);
       }
+      const localStatLabs = await db.statLabs.toArray();
+      for (const sl of localStatLabs) {
+        await syncStatLabsToCloud(sl);
+      }
+      const localAbx = await db.patientAntibiotics.toArray();
+      for (const ab of localAbx) {
+        await syncPatientAntibioticToCloud(ab);
+      }
+      const localLabs = await db.labResults.toArray();
+      for (const lb of localLabs) {
+        await syncLabResultToCloud(lb);
+      }
+      const localInvs = await db.investigations.toArray();
+      for (const iv of localInvs) {
+        await syncInvestigationToCloud(iv);
+      }
       console.log('Firebase Cloud Data Seeded successfully!');
     }
   } catch (e) {
     console.warn('Could not complete initial Firestore cloud seed:', e);
-  }
-}
-
-export async function syncStatLabsToCloud(labs: StatLabPanel): Promise<void> {
-  try {
-    const labsRef = doc(firestore, 'statLabs', labs.id);
-    await setDoc(labsRef, labs, { merge: true });
-  } catch (err) {
-    handleFirestoreError(err, OperationType.WRITE, `statLabs/${labs.id}`);
   }
 }
 

@@ -68,7 +68,7 @@ import { dischargeOrTransferPatient, getPatientForBed } from '../services/dataMo
 import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
 import { useAuth } from '../services/AuthContext.tsx';
-import { syncStatLabsToCloud, syncPatientToCloud, syncPumpToCloud, firestore } from '../services/firebase.ts';
+import { syncStatLabsToCloud, deleteStatLabFromCloud, syncLabResultToCloud, syncPatientToCloud, syncPumpToCloud, deletePumpFromCloud, firestore } from '../services/firebase.ts';
 import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { FullPageAdmission } from './FullPageAdmission.tsx';
 import { LabFlowsheetSection } from './LabFlowsheetSection.tsx';
@@ -965,6 +965,9 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
         recordedByStaffId: currentUser?.id,
       }));
       await db.labResults.bulkPut(newItems);
+      for (const item of newItems) {
+        await syncLabResultToCloud(item);
+      }
     }
 
     await loadBedsideData();
@@ -1013,6 +1016,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
 
     try {
       await db.statLabs.delete(id);
+      await deleteStatLabFromCloud(id);
       const labs = await db.statLabs
         .where('patientId')
         .equals(patient.id)

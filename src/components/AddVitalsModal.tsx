@@ -6,6 +6,7 @@ import { useTranslation } from '../services/i18n.ts';
 import { parseEnglishFloat, parseEnglishInt, toEnglishDigits } from '../services/numberUtils.ts';
 import { useAuth } from '../services/AuthContext.tsx';
 import { db } from '../db/icuSyncDb.ts';
+import { syncVitalsToCloud } from '../services/firebase.ts';
 
 interface AddVitalsModalProps {
   isOpen: boolean;
@@ -125,6 +126,7 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
           },
         };
         await db.vitals.put(updatedVitals);
+        await syncVitalsToCloud(updatedVitals);
       } else {
         await addTimestampedVitals({
           bedId: bedNumber,

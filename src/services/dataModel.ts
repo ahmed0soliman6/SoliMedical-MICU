@@ -253,6 +253,7 @@ export async function admitPatient(input: DirectAdmissionInput): Promise<{ patie
         recordedBy: input.assignedNurse,
       };
       await db.vitals.put(vitalsRecord);
+      syncVitalsToCloud(vitalsRecord);
     }
 
     // Create Initial Admission Note if provided
@@ -281,6 +282,7 @@ export async function admitPatient(input: DirectAdmissionInput): Promise<{ patie
         addendums: [],
       };
       await db.clinicalNotes.put(admissionNote);
+      syncClinicalNoteToCloud(admissionNote);
     }
 
     // Audit Log
