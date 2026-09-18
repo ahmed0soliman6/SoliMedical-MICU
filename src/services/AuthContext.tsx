@@ -551,35 +551,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       permissions: userData.permissions || getDefaultPermissionsForRole(role as StaffRole),
     };
 
-    // 1. Attempt server-side admin user creation via Firebase Admin SDK
+    // User creation is an Admin SDK operation. Never fall back to a client/local-only
+    // write: that creates an Auth/Firestore split-brain and then breaks RBAC.
     try {
-      const idToken = await auth.currentUser?.getIdToken();
-      if (idToken) {
-        const resp = await fetch('/api/admin/users/create', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${idToken}`,
-          },
-          body: JSON.stringify(newUser),
-        });
-        const data = await resp.json();
-        if (resp.ok && data.success && data.data) {
-          const createdUser = data.data as IcuUser;
-          await db.users.put(createdUser);
-          await refreshUsers();
-          return { success: true };
-        }
+      const idToken = await auth.currentUser?.getIdToken(true);
+      if (!idToken) return { success: false, message: 'جلسة المدير غير صالحة. يرجى تسجيل الدخول مجدداً.' };
+      const resp = await fetch('/api/admin/users/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
+        body: JSON.stringify(newUser),
+      });
+      const data = await resp.json();
+      if (!resp.ok || !data.success || !data.data) {
+        return { success: false, message: data.message || 'فشل إنشاء الحساب على Firebase. لم يتم حفظ حساب محلي.' };
       }
-    } catch (apiErr) {
-      console.warn('Server admin create user warning:', apiErr);
+      await db.users.put(data.data as IcuUser);
+      await refreshUsers();
+      return { success: true };
+    } catch (apiErr: any) {
+      console.error('Server admin create user failed:', apiErr);
+      return { success: false, message: apiErr?.message || 'تعذر الاتصال بخادم إدارة Firebase.' };
     }
-
-    // 2. Fallback client-side save
-    await saveUserAccount(newUser);
-    syncUserToFirebaseConsole(newUser).catch(err => console.warn('Background sync user error:', err));
-    await refreshUsers();
-    return { success: true };
   };
 
   // Update User
