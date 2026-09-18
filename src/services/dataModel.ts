@@ -140,6 +140,128 @@ export interface DirectAdmissionInput {
  * - Emits audit trail log
  */
 export async function admitPatient(input: DirectAdmissionInput): Promise<{ patientId: string; noteId?: string }> {
+  // Compute everything that uses SubtleCrypto or other non-Dexie promises OUTSIDE the transaction
+  const nowIso = new Date().toISOString();
+  const patientId = input.existingPatientId || `pat-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+  const idealWeight = calculateIdealBodyWeight(input.heightCm, input.gender);
+
+  const formattedAllergies: AllergyRecord[] = (input.allergies || []).map((a, idx) => ({
+    id: `all-${patientId}-${idx}`,
+    allergen: a.allergen,
+    reaction: a.reaction,
+    severity: a.severity,
+    confirmedYear: a.confirmedYear,
+    isLocked: true,
+    verifiedBy: input.attendingDoctor.name,
+    clinicalNote: a.clinicalNote,
+  }));
+
+  const last4 = extractLast4(input.nationalId);
+  const normalizedName = normalizeArabicName(input.fullNameAr || input.fullNameEn);
+  const idHash = input.nationalId ? await computeSha256Hash(input.nationalId) : undefined;
+
+  const newPatient: PatientDossier = {
+    id: patientId,
+    mrn: toEnglishDigits(input.mrn),
+    nationalId: input.nationalId ? toEnglishDigits(input.nationalId) : undefined,
+    nationalIdLast4: last4,
+    nationalIdHash: idHash,
+    normalizedFullName: normalizedName,
+    fullNameEn: input.fullNameEn,
+    fullNameAr: input.fullNameAr,
+    age: input.age,
+    gender: input.gender,
+    bloodType: input.bloodType,
+    weightKg: input.weightKg,
+    heightCm: input.heightCm,
+    idealBodyWeightKg: idealWeight,
+    codeStatus: input.codeStatus,
+    primaryDiagnosisEn: input.primaryDiagnosisEn,
+    primaryDiagnosisAr: input.primaryDiagnosisAr,
+    intakePathway: input.intakePathway,
+    admissionDate: nowIso,
+    currentBedId: input.targetBed,
+    acuityLevel: input.acuityLevel,
+    patientStatus: 'ACTIVE_ICU',
+    archiveStatus: 'HOT',
+    allergies: formattedAllergies,
+    microbiologyHistory: [],
+    pastVisits: [],
+    attendingPhysician: input.attendingDoctor,
+    primaryNurse: input.assignedNurse,
+    isolationPrecautions: input.isolationPrecautions || [],
+    history: input.history || '',
+    presentingComplaint: input.presentingComplaint || '',
+    chronicDiseases: input.chronicDiseases || '',
+    createdAt: nowIso,
+    updatedAt: nowIso,
+  };
+
+  let vitalsRecord: TelemetryVitals | undefined;
+  if (input.initialVitals) {
+    const map = Math.round(input.initialVitals.diastolicBpMmHg + (input.initialVitals.systolicBpMmHg - input.initialVitals.diastolicBpMmHg) / 3);
+    vitalsRecord = {
+      id: `vit-${Date.now()}`,
+      bedId: input.targetBed,
+      patientId: patientId,
+      timestamp: nowIso,
+      heartRateBpm: input.initialVitals.heartRateBpm,
+      heartRhythm: 'Sinus Tachycardia',
+      systolicBpMmHg: input.initialVitals.systolicBpMmHg,
+      diastolicBpMmHg: input.initialVitals.diastolicBpMmHg,
+      meanArterialPressureMmHg: map,
+      isArterialLine: input.initialVitals.isArterialLine,
+      spo2Percent: input.initialVitals.spo2Percent,
+      fio2SuppliedPercent: input.initialVitals.fio2SuppliedPercent,
+      respiratoryRateCpm: input.initialVitals.respiratoryRateCpm,
+      coreTemperatureCelsius: input.initialVitals.coreTemperatureCelsius,
+      temperatureSite: 'FOLEY_CORE',
+      gcsTotalScore: input.initialVitals.gcsTotalScore,
+      gcsBreakdown: { eyeOpening: 4, verbalResponse: 4, motorResponse: 6 },
+      recordedBy: input.assignedNurse,
+    };
+  }
+
+  let admissionNote: ClinicalNote | undefined;
+  let createdNoteId: string | undefined;
+  if (input.initialAdmissionNote) {
+    const rawPayload = `${patientId}|${input.initialAdmissionNote}|${input.attendingDoctor.staffId}|${nowIso}`;
+    const hash = await computeSha256(rawPayload);
+    const noteId = `note-${Date.now()}`;
+    createdNoteId = noteId;
+
+    admissionNote = {
+      id: noteId,
+      bedId: input.targetBed,
+      patientId: patientId,
+      noteType: NoteType.ADMISSION_NOTE,
+      title: `MICU Direct Admission Note - Bed ${input.targetBed}`,
+      content: input.initialAdmissionNote,
+      authorId: `staff-${input.attendingDoctor.staffId}`,
+      authorName: input.attendingDoctor.name,
+      authorRole: input.attendingDoctor.role,
+      authorStaffId: input.attendingDoctor.staffId,
+      timestamp: nowIso,
+      isImmutable: true,
+      cryptographicHash: hash,
+      digitalSignatureToken: `SIGN-${input.attendingDoctor.staffId}-${Date.now()}`,
+      addendums: [],
+    };
+  }
+
+  const auditPayload = `ADMIT|${patientId}|${input.targetBed}|${input.attendingDoctor.staffId}|${nowIso}`;
+  const auditHash = await computeSha256(auditPayload);
+  const auditLog: WardAuditLog = {
+    id: `audit-${Date.now()}`,
+    timestamp: nowIso,
+    eventType: 'PATIENT_ADMITTED',
+    performedBy: input.attendingDoctor,
+    targetBedId: input.targetBed,
+    targetPatientMrn: input.mrn,
+    description: `Patient ${input.fullNameEn} (MRN: ${input.mrn}) admitted to Bed ${input.targetBed} under ${input.attendingDoctor.name}.`,
+    immutableHash: auditHash,
+  };
+
   const result = await db.transaction('rw', [
     db.beds,
     db.patients,
@@ -163,62 +285,6 @@ export async function admitPatient(input: DirectAdmissionInput): Promise<{ patie
       existingBed.activePatientId = null;
     }
 
-    const nowIso = new Date().toISOString();
-    const patientId = input.existingPatientId || `pat-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
-    const idealWeight = calculateIdealBodyWeight(input.heightCm, input.gender);
-
-    const formattedAllergies: AllergyRecord[] = (input.allergies || []).map((a, idx) => ({
-      id: `all-${patientId}-${idx}`,
-      allergen: a.allergen,
-      reaction: a.reaction,
-      severity: a.severity,
-      confirmedYear: a.confirmedYear,
-      isLocked: true,
-      verifiedBy: input.attendingDoctor.name,
-      clinicalNote: a.clinicalNote,
-    }));
-
-    const last4 = extractLast4(input.nationalId);
-    const normalizedName = normalizeArabicName(input.fullNameAr || input.fullNameEn);
-    const idHash = input.nationalId ? await computeSha256Hash(input.nationalId) : undefined;
-
-    const newPatient: PatientDossier = {
-      id: patientId,
-      mrn: toEnglishDigits(input.mrn),
-      nationalId: input.nationalId ? toEnglishDigits(input.nationalId) : undefined,
-      nationalIdLast4: last4,
-      nationalIdHash: idHash,
-      normalizedFullName: normalizedName,
-      fullNameEn: input.fullNameEn,
-      fullNameAr: input.fullNameAr,
-      age: input.age,
-      gender: input.gender,
-      bloodType: input.bloodType,
-      weightKg: input.weightKg,
-      heightCm: input.heightCm,
-      idealBodyWeightKg: idealWeight,
-      codeStatus: input.codeStatus,
-      primaryDiagnosisEn: input.primaryDiagnosisEn,
-      primaryDiagnosisAr: input.primaryDiagnosisAr,
-      intakePathway: input.intakePathway,
-      admissionDate: nowIso,
-      currentBedId: input.targetBed,
-      acuityLevel: input.acuityLevel,
-      patientStatus: 'ACTIVE_ICU',
-      archiveStatus: 'HOT',
-      allergies: formattedAllergies,
-      microbiologyHistory: [],
-      pastVisits: [],
-      attendingPhysician: input.attendingDoctor,
-      primaryNurse: input.assignedNurse,
-      isolationPrecautions: input.isolationPrecautions || [],
-      history: input.history || '',
-      presentingComplaint: input.presentingComplaint || '',
-      chronicDiseases: input.chronicDiseases || '',
-      createdAt: nowIso,
-      updatedAt: nowIso,
-    };
-
     await db.patients.put(newPatient);
 
     // Update Bed
@@ -229,87 +295,33 @@ export async function admitPatient(input: DirectAdmissionInput): Promise<{ patie
       lastTelemetryPingUtc: nowIso,
     });
 
-    // Record initial vitals if provided
-    if (input.initialVitals) {
-      const map = Math.round(input.initialVitals.diastolicBpMmHg + (input.initialVitals.systolicBpMmHg - input.initialVitals.diastolicBpMmHg) / 3);
-      const vitalsRecord: TelemetryVitals = {
-        id: `vit-${Date.now()}`,
-        bedId: input.targetBed,
-        patientId: patientId,
-        timestamp: nowIso,
-        heartRateBpm: input.initialVitals.heartRateBpm,
-        heartRhythm: 'Sinus Tachycardia',
-        systolicBpMmHg: input.initialVitals.systolicBpMmHg,
-        diastolicBpMmHg: input.initialVitals.diastolicBpMmHg,
-        meanArterialPressureMmHg: map,
-        isArterialLine: input.initialVitals.isArterialLine,
-        spo2Percent: input.initialVitals.spo2Percent,
-        fio2SuppliedPercent: input.initialVitals.fio2SuppliedPercent,
-        respiratoryRateCpm: input.initialVitals.respiratoryRateCpm,
-        coreTemperatureCelsius: input.initialVitals.coreTemperatureCelsius,
-        temperatureSite: 'FOLEY_CORE',
-        gcsTotalScore: input.initialVitals.gcsTotalScore,
-        gcsBreakdown: { eyeOpening: 4, verbalResponse: 4, motorResponse: 6 },
-        recordedBy: input.assignedNurse,
-      };
+    if (vitalsRecord) {
       await db.vitals.put(vitalsRecord);
-      syncVitalsToCloud(vitalsRecord);
     }
 
-    // Create Initial Admission Note if provided
-    let createdNoteId: string | undefined;
-    if (input.initialAdmissionNote) {
-      const rawPayload = `${patientId}|${input.initialAdmissionNote}|${input.attendingDoctor.staffId}|${nowIso}`;
-      const hash = await computeSha256(rawPayload);
-      const noteId = `note-${Date.now()}`;
-      createdNoteId = noteId;
-
-      const admissionNote: ClinicalNote = {
-        id: noteId,
-        bedId: input.targetBed,
-        patientId: patientId,
-        noteType: NoteType.ADMISSION_NOTE,
-        title: `MICU Direct Admission Note - Bed ${input.targetBed}`,
-        content: input.initialAdmissionNote,
-        authorId: `staff-${input.attendingDoctor.staffId}`,
-        authorName: input.attendingDoctor.name,
-        authorRole: input.attendingDoctor.role,
-        authorStaffId: input.attendingDoctor.staffId,
-        timestamp: nowIso,
-        isImmutable: true,
-        cryptographicHash: hash,
-        digitalSignatureToken: `SIGN-${input.attendingDoctor.staffId}-${Date.now()}`,
-        addendums: [],
-      };
+    if (admissionNote) {
       await db.clinicalNotes.put(admissionNote);
-      syncClinicalNoteToCloud(admissionNote);
     }
 
-    // Audit Log
-    const auditPayload = `ADMIT|${patientId}|${input.targetBed}|${input.attendingDoctor.staffId}|${nowIso}`;
-    const auditHash = await computeSha256(auditPayload);
-    const auditLog: WardAuditLog = {
-      id: `audit-${Date.now()}`,
-      timestamp: nowIso,
-      eventType: 'PATIENT_ADMITTED',
-      performedBy: input.attendingDoctor,
-      targetBedId: input.targetBed,
-      targetPatientMrn: input.mrn,
-      description: `Patient ${input.fullNameEn} (MRN: ${input.mrn}) admitted to Bed ${input.targetBed} under ${input.attendingDoctor.name}.`,
-      immutableHash: auditHash,
-    };
     await db.auditLogs.put(auditLog);
 
     return { patientId, noteId: createdNoteId };
   });
 
   // Confirm the two source-of-truth records before reporting admission success.
-  // Fire-and-forget writes allowed a later empty/old snapshot to erase the local view.
   const savedPatient = await db.patients.get(result.patientId);
   const savedBed = await db.beds.get(input.targetBed);
   if (!savedPatient || !savedBed) throw new Error('تم حفظ الدخول محلياً بشكل غير مكتمل؛ لم يتم إرسال السجل إلى السحابة.');
+  
+  // Perform cloud syncing outside and after the transaction commits successfully
   await syncPatientToCloud(savedPatient);
   await syncBedToCloud(savedBed);
+  if (vitalsRecord) {
+    syncVitalsToCloud(vitalsRecord);
+  }
+  if (admissionNote) {
+    syncClinicalNoteToCloud(admissionNote);
+  }
 
   return result;
 }
@@ -411,42 +423,49 @@ export interface AppendAddendumInput {
  * Original note content is NEVER modified; addendum is chained via SHA-256 hashes.
  */
 export async function appendImmutableAddendum(input: AppendAddendumInput): Promise<Addendum> {
-  return await db.transaction('rw', [db.clinicalNotes, db.addendums, db.auditLogs], async () => {
-    const originalNote = await db.clinicalNotes.get(input.noteId);
-    if (!originalNote) {
-      throw new Error(`Clinical Note with ID "${input.noteId}" was not found.`);
+  const originalNote = await db.clinicalNotes.get(input.noteId);
+  if (!originalNote) {
+    throw new Error(`Clinical Note with ID "${input.noteId}" was not found.`);
+  }
+
+  const nowIso = new Date().toISOString();
+  const addendumId = `add-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
+
+  // Determine parent hash (from last addendum or the original note hash)
+  const previousHash = originalNote.addendums && originalNote.addendums.length > 0
+    ? originalNote.addendums[originalNote.addendums.length - 1].cryptographicSignature
+    : originalNote.cryptographicHash;
+
+  // Cryptographic signature for this addendum (computed OUTSIDE transaction)
+  const addendumPayload = `${input.noteId}|${previousHash}|${input.content}|${input.authorStaffId}|${nowIso}`;
+  const cryptographicSignature = await computeSha256(addendumPayload);
+
+  const newAddendum: Addendum = {
+    id: addendumId,
+    noteId: input.noteId,
+    patientId: input.patientId,
+    authorId: input.authorId,
+    authorName: input.authorName,
+    authorRole: input.authorRole,
+    authorStaffId: input.authorStaffId,
+    timestamp: nowIso,
+    content: input.content,
+    reasonForAddendum: input.reasonForAddendum,
+    previousHash: previousHash,
+    cryptographicSignature: cryptographicSignature,
+    isImmutable: true,
+  };
+
+  const updatedAddendums = [...(originalNote.addendums || []), newAddendum];
+
+  await db.transaction('rw', [db.clinicalNotes, db.addendums, db.auditLogs], async () => {
+    // Re-verify inside transaction to ensure consistency
+    const txNote = await db.clinicalNotes.get(input.noteId);
+    if (!txNote) {
+      throw new Error(`Clinical Note with ID "${input.noteId}" was not found during transaction.`);
     }
 
-    const nowIso = new Date().toISOString();
-    const addendumId = `add-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
-
-    // Determine parent hash (from last addendum or the original note hash)
-    const previousHash = originalNote.addendums && originalNote.addendums.length > 0
-      ? originalNote.addendums[originalNote.addendums.length - 1].cryptographicSignature
-      : originalNote.cryptographicHash;
-
-    // Cryptographic signature for this addendum
-    const addendumPayload = `${input.noteId}|${previousHash}|${input.content}|${input.authorStaffId}|${nowIso}`;
-    const cryptographicSignature = await computeSha256(addendumPayload);
-
-    const newAddendum: Addendum = {
-      id: addendumId,
-      noteId: input.noteId,
-      patientId: input.patientId,
-      authorId: input.authorId,
-      authorName: input.authorName,
-      authorRole: input.authorRole,
-      authorStaffId: input.authorStaffId,
-      timestamp: nowIso,
-      content: input.content,
-      reasonForAddendum: input.reasonForAddendum,
-      previousHash: previousHash,
-      cryptographicSignature: cryptographicSignature,
-      isImmutable: true,
-    };
-
     // Update note's addendum array (append-only)
-    const updatedAddendums = [...(originalNote.addendums || []), newAddendum];
     await db.clinicalNotes.update(input.noteId, {
       addendums: updatedAddendums,
     });
@@ -465,19 +484,19 @@ export async function appendImmutableAddendum(input: AppendAddendumInput): Promi
         role: input.authorRole,
       },
       targetPatientMrn: input.patientId,
-      description: `Addendum appended to Note "${originalNote.title}" by ${input.authorName} (${input.authorRole}). SHA-256: ${cryptographicSignature.substr(0, 12)}...`,
+      description: `Addendum appended to Note "${txNote.title}" by ${input.authorName} (${input.authorRole}). SHA-256: ${cryptographicSignature.substr(0, 12)}...`,
       immutableHash: cryptographicSignature,
     };
     await db.auditLogs.put(auditLog);
-
-    // Push updated note to Firebase Firestore
-    syncClinicalNoteToCloud({
-      ...originalNote,
-      addendums: updatedAddendums,
-    });
-
-    return newAddendum;
   });
+
+  // Push updated note to Firebase Firestore (outside the transaction)
+  syncClinicalNoteToCloud({
+    ...originalNote,
+    addendums: updatedAddendums,
+  });
+
+  return newAddendum;
 }
 
 // -------------------------------------------------------------

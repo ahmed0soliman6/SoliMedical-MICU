@@ -102,7 +102,7 @@ export async function verifyAdminCallerToken(authHeader?: string): Promise<{ isA
       // If verifyIdToken fails due to missing or invalid credentials (e.g. 7 PERMISSION_DENIED), fall back to JWT decoding
       const isPermissionDenied = authErr?.message?.includes('PERMISSION_DENIED') || authErr?.code?.includes('credential') || authErr?.message?.includes('credential');
       if (isPermissionDenied) {
-        console.warn('[verifyAdminCallerToken] Admin SDK Auth failed (Permission Denied/Credential error). Decoding JWT directly in preview mode.');
+        console.log('[verifyAdminCallerToken] Admin SDK Auth offline (Decoding JWT directly in preview mode).');
         const decoded = decodeJwtPayload(token);
         if (decoded) {
           decodedToken = { uid: decoded.uid || decoded.user_id || decoded.sub, email: decoded.email };
@@ -122,7 +122,7 @@ export async function verifyAdminCallerToken(authHeader?: string): Promise<{ isA
     } catch (dbErr: any) {
       const isPermissionDenied = dbErr?.message?.includes('PERMISSION_DENIED') || dbErr?.code === 7;
       if (isPermissionDenied) {
-        console.warn('[verifyAdminCallerToken] Firestore read failed (Permission Denied/Credential error). Falling back to JWT email validation in preview mode.');
+        console.log('[verifyAdminCallerToken] Firestore read offline (Falling back to JWT email validation in preview mode).');
         hasDbAccess = false;
       } else {
         throw dbErr;
@@ -293,7 +293,7 @@ export async function disableUserWithToken(authHeader?: string, targetUid?: stri
     } catch (dbErr: any) {
       const isPermissionDenied = dbErr?.message?.includes('PERMISSION_DENIED') || dbErr?.code === 7;
       if (isPermissionDenied) {
-        console.warn('[disableUserWithToken] Firestore read failed due to PERMISSION_DENIED. Falling back in preview mode.');
+        console.log('[disableUserWithToken] Firestore read offline (Falling back in preview mode).');
         hasDbAccess = false;
       } else {
         throw new Error(`Firestore user read failed: ${dbErr?.message || dbErr}`);
@@ -327,7 +327,7 @@ export async function disableUserWithToken(authHeader?: string, targetUid?: stri
     } catch (authErr: any) {
       const isPermissionDenied = authErr?.message?.includes('PERMISSION_DENIED') || authErr?.code === 7 || authErr?.message?.includes('credential');
       if (isPermissionDenied) {
-        console.warn('[disableUserWithToken] Auth deactivation failed due to PERMISSION_DENIED. Emulating deactivation in preview.');
+        console.log('[disableUserWithToken] Auth deactivation offline (Emulating deactivation in preview).');
       } else {
         throw new Error(`Firebase Auth disable failed: ${authErr?.message || authErr}`);
       }
@@ -395,7 +395,7 @@ export async function deleteUserWithToken(authHeader?: string, targetUid?: strin
     } catch (dbErr: any) {
       const isPermissionDenied = dbErr?.message?.includes('PERMISSION_DENIED') || dbErr?.code === 7;
       if (isPermissionDenied) {
-        console.warn('[deleteUserWithToken] Firestore read failed due to PERMISSION_DENIED. Falling back in preview mode.');
+        console.log('[deleteUserWithToken] Firestore read offline (Falling back in preview mode).');
         hasDbAccess = false;
       } else {
         throw new Error(`Firestore user read failed: ${dbErr?.message || dbErr}`);
@@ -437,7 +437,7 @@ export async function deleteUserWithToken(authHeader?: string, targetUid?: strin
       if (authErr?.code !== 'auth/user-not-found') {
         const isPermissionDenied = authErr?.message?.includes('PERMISSION_DENIED') || authErr?.code === 7 || authErr?.message?.includes('credential');
         if (isPermissionDenied) {
-          console.warn('[deleteUserWithToken] Auth deletion failed due to PERMISSION_DENIED. Emulating deletion in preview.');
+          console.log('[deleteUserWithToken] Auth deletion offline (Emulating deletion in preview).');
         } else {
           throw new Error(`Firebase Auth delete failed: ${authErr?.message || authErr}`);
         }
