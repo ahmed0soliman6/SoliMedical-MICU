@@ -800,6 +800,17 @@ export async function dischargeOrTransferPatient(input: DispositionInput): Promi
       immutableHash: hash,
     };
     await db.auditLogs.put(auditLog);
+
+    // Sync all updated records to Firestore cloud immediately
+    const updatedPatient = await db.patients.get(input.patientId);
+    if (updatedPatient) {
+      syncPatientToCloud(updatedPatient);
+    }
+    const updatedBed = await db.beds.get(input.bedNumber);
+    if (updatedBed) {
+      syncBedToCloud(updatedBed);
+    }
+    syncClinicalNoteToCloud(summaryNote);
   });
 }
 
@@ -875,17 +886,27 @@ export function getPatientForBed(
 ): PatientDossier | null {
   if (!bed || !patients || patients.length === 0) return null;
 
-  // 1. Direct match by bed's currentPatientId
-  if (bed.currentPatientId) {
-    const directMatch = patients.find(
-      p => p.id === bed.currentPatientId && p.patientStatus === 'ACTIVE_ICU'
+  const targetPatientId = bed.currentPatientId || bed.activePatientId;
+
+  // 1. Direct match by bed's currentPatientId or activePatientId
+  if (targetPatientId) {
+    const directActiveMatch = patients.find(
+      p => (p.id === targetPatientId || p.mrn === targetPatientId) && p.patientStatus === 'ACTIVE_ICU'
     );
-    if (directMatch) return directMatch;
+    if (directActiveMatch) return directActiveMatch;
+
+    const directAnyMatch = patients.find(
+      p => (p.id === targetPatientId || p.mrn === targetPatientId) &&
+           p.patientStatus !== 'EXPIRED_MORTALITY' &&
+           p.patientStatus !== 'DISCHARGED_HOME' &&
+           p.patientStatus !== 'TRANSFERRED_EXTERNAL'
+    );
+    if (directAnyMatch) return directAnyMatch;
   }
 
   // 2. Secondary match by patient's currentBedId === bed.bedNumber
   const bedMatch = patients.find(
-    p => p.currentBedId === bed.bedNumber && p.patientStatus === 'ACTIVE_ICU'
+    p => (p.currentBedId === bed.bedNumber || (p.currentBedId as any) === bed.id) && p.patientStatus === 'ACTIVE_ICU'
   );
   if (bedMatch) return bedMatch;
 

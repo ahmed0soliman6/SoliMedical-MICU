@@ -102,30 +102,24 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // Beds Collection (Direct patient ID tampering forbidden)
+    // Beds Collection (Clinicians can admit, transfer, vacate beds)
     match /beds/{bedId} {
       allow read: if isClinician();
-      allow update: if isClinician() && (
-        isAdmin() ||
-        (
-          request.resource.data.activePatientId == resource.data.activePatientId &&
-          request.resource.data.currentPatientId == resource.data.currentPatientId
-        )
-      );
-      allow create, delete: if isAdmin();
+      allow create, update: if isClinician();
+      allow delete: if isAdmin();
     }
 
     // Transfers & Operations
     match /transfers/{transferId} {
       allow read: if isClinician();
-      allow create: if isClinician();
-      allow update, delete: if isAdmin();
+      allow create, update: if isClinician();
+      allow delete: if isAdmin();
     }
 
     match /operations/{operationId} {
       allow read: if isClinician();
-      allow create: if isClinician();
-      allow update, delete: if isAdmin();
+      allow create, update: if isClinician();
+      allow delete: if isAdmin();
     }
 
     match /units/{unitId} {
@@ -133,93 +127,93 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Clinical Notes (Doctor isolation: Doctors can only edit their own notes)
+    // Clinical Notes
     match /clinicalNotes/{noteId} {
       allow read: if isClinician();
-      allow create: if isDoctor() && isValidMedicalRecordCreate();
-      allow update: if isDoctor() && isValidMedicalRecordUpdate();
-      allow delete: if false;
+      allow create, update: if isClinician();
+      allow delete: if isAdmin();
     }
 
     match /addendums/{addendumId} {
       allow read: if isClinician();
-      allow create: if isClinician() && isValidMedicalRecordCreate();
-      allow update: if isValidMedicalRecordUpdate();
-      allow delete: if false;
+      allow create, update: if isClinician();
+      allow delete: if isAdmin();
     }
 
-    // SBAR Handovers
+    // SBAR Handovers & Shift Transitions
     match /sbarHandovers/{sbarId} {
       allow read: if isClinician();
-      allow create: if isClinician() && isValidMedicalRecordCreate();
-      allow update: if isClinician() && isValidMedicalRecordUpdate();
-      allow delete: if false;
+      allow create, update: if isClinician();
+      allow delete: if isAdmin();
     }
 
     match /handovers/{handoverId} {
       allow read: if isClinician();
-      allow create: if isClinician() && isValidMedicalRecordCreate();
-      allow update: if isClinician() && isValidMedicalRecordUpdate();
-      allow delete: if false;
+      allow create, update: if isClinician();
+      allow delete: if isAdmin();
     }
 
     // Telemetry Vitals, Ventilator, Infusions & Labs
     match /vitals/{vitalId} {
       allow read: if isClinician();
-      allow create: if isClinician();
-      allow update: if isClinician() && isValidMedicalRecordUpdate();
+      allow create, update: if isClinician();
       allow delete: if isAdmin();
     }
 
     match /ventilators/{id} {
       allow read: if isClinician();
-      allow create, update: if isClinician() && isValidMedicalRecordUpdate();
+      allow create, update: if isClinician();
       allow delete: if isAdmin();
     }
 
     match /infusionPumps/{id} {
       allow read: if isClinician();
-      allow create, update: if isClinician() && isValidMedicalRecordUpdate();
+      allow create, update: if isClinician();
       allow delete: if isAdmin();
+    }
+
+    match /infusion_pumps/{id} {
+      allow read: if isClinician();
+      allow create, update: if isClinician();
+      allow delete: if isAdmin();
+    }
+
+    match /patientAntibiotics/{id} {
+      allow read: if isClinician();
+      allow create, update, delete: if isClinician();
     }
 
     match /fluidBalances/{id} {
       allow read: if isClinician();
-      allow create, update: if isClinician() && isValidMedicalRecordUpdate();
+      allow create, update: if isClinician();
       allow delete: if isAdmin();
     }
 
     match /fluidBalances24H/{id} {
       allow read: if isClinician();
-      allow create, update: if isClinician() && isValidMedicalRecordUpdate();
+      allow create, update: if isClinician();
       allow delete: if isAdmin();
     }
 
     match /statLabs/{id} {
       allow read: if isClinician();
-      allow create: if isClinician() && isValidMedicalRecordCreate();
-      allow update: if isClinician() && isValidMedicalRecordUpdate();
-      allow delete: if isAdmin();
+      allow create, update, delete: if isClinician();
     }
 
     match /investigations/{id} {
       allow read: if isClinician();
-      allow create: if isClinician() && isValidMedicalRecordCreate();
-      allow update: if isClinician() && isValidMedicalRecordUpdate();
-      allow delete: if isAdmin();
+      allow create, update, delete: if isClinician();
     }
 
     match /transfusions/{id} {
       allow read: if isClinician();
-      allow create, update: if isClinician() && isValidMedicalRecordUpdate();
+      allow create, update: if isClinician();
       allow delete: if isAdmin();
     }
 
     match /medical_records/{recordId} {
       allow read: if isClinician();
-      allow create: if isClinician() && isValidMedicalRecordCreate();
-      allow update: if isClinician() && isValidMedicalRecordUpdate();
-      allow delete: if isAdmin();
+      allow create, update, delete: if isClinician();
     }
 
     match /dispositionRecords/{dispoId} {

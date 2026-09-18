@@ -26,6 +26,7 @@ import { getPatientForBed } from './services/dataModel.ts';
 import { 
   subscribeToRealtimeFirestore, 
   seedInitialDataToFirestore,
+  pullCloudDataToLocalDb,
   ensureAuthenticated
 } from './services/firebase.ts';
 import { useTranslation } from './services/i18n.ts';
@@ -133,13 +134,16 @@ export default function App() {
         // Ensure anonymous/custom auth for Firebase security rules
         await ensureAuthenticated();
 
-        // Check if local DB is initialized
-        const bedCount = await db.beds.count();
-        if (bedCount === 0) {
-          console.log('Initializing local Dexie indexed database seed...');
-          await initializeDatabaseSeed();
-          // Also seed initial data to Firestore cloud if empty
-          await seedInitialDataToFirestore();
+        // 1. Try pulling fresh cloud data from Firestore first
+        const hasCloudData = await pullCloudDataToLocalDb();
+        if (!hasCloudData) {
+          const bedCount = await db.beds.count();
+          if (bedCount === 0) {
+            console.log('Initializing local Dexie indexed database seed...');
+            await initializeDatabaseSeed();
+            // Also seed initial data to Firestore cloud if empty
+            await seedInitialDataToFirestore();
+          }
         }
 
         await reloadData();

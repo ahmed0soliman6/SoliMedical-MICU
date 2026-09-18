@@ -45,7 +45,10 @@ import {
   StatLabPanel,
   TransfusionTracker,
   Addendum,
-  WardAuditLog
+  WardAuditLog,
+  LabResultItem,
+  InvestigationItem,
+  PatientAntibiotic
 } from '../types/schema.ts';
 import { db } from '../db/icuSyncDb.ts';
 
@@ -723,7 +726,15 @@ export function subscribeToRealtimeFirestore(
     const unsubBeds = onSnapshot(bedsCol, async (snapshot) => {
       const remoteBeds: BedRecord[] = [];
       snapshot.forEach((docSnap) => {
-        remoteBeds.push(docSnap.data() as BedRecord);
+        const data = docSnap.data() as BedRecord;
+        if (data && (data.bedNumber || (data as any).id)) {
+          remoteBeds.push({
+            ...data,
+            bedNumber: data.bedNumber || (data as any).id,
+            currentPatientId: data.currentPatientId || (data as any).activePatientId || undefined,
+            activePatientId: (data as any).activePatientId || data.currentPatientId || undefined,
+          });
+        }
       });
       if (remoteBeds.length > 0) {
         await db.beds.bulkPut(remoteBeds);
@@ -737,7 +748,13 @@ export function subscribeToRealtimeFirestore(
     const unsubPatients = onSnapshot(patientsCol, async (snapshot) => {
       const remotePatients: PatientDossier[] = [];
       snapshot.forEach((docSnap) => {
-        remotePatients.push(docSnap.data() as PatientDossier);
+        const data = docSnap.data() as PatientDossier;
+        if (data && (data.id || (data as any).patientId)) {
+          remotePatients.push({
+            ...data,
+            id: data.id || (data as any).patientId,
+          });
+        }
       });
       if (remotePatients.length > 0) {
         await db.patients.bulkPut(remotePatients);
@@ -748,11 +765,11 @@ export function subscribeToRealtimeFirestore(
 
     // 3. Subscribe to Real-Time Vitals with Alarm Checks
     const vitalsCol = collection(firestore, 'vitals');
-    const vitalsQuery = query(vitalsCol, limit(50));
+    const vitalsQuery = query(vitalsCol, limit(100));
     const unsubVitals = onSnapshot(vitalsQuery, async (snapshot) => {
       const remoteVitals: TelemetryVitals[] = [];
       snapshot.docChanges().forEach((change) => {
-        if (change.type === 'added') {
+        if (change.type === 'added' || change.type === 'modified') {
           const v = change.doc.data() as TelemetryVitals;
           remoteVitals.push(v);
           
@@ -842,19 +859,40 @@ export function subscribeToRealtimeFirestore(
     }, (err) => handleFirestoreError(err, OperationType.GET, 'ventilators'));
     unsubscribers.push(unsubVentilators);
 
-    // 8. Subscribe to Infusion Pumps
+    // 8. Subscribe to Infusion Pumps (both infusionPumps and infusion_pumps)
     const infusionPumpsCol = collection(firestore, 'infusionPumps');
     const unsubInfusionPumps = onSnapshot(infusionPumpsCol, async (snapshot) => {
       const remotePumps: InfusionPumpLine[] = [];
-      snapshot.forEach((docSnap) => {
-        remotePumps.push(docSnap.data() as InfusionPumpLine);
-      });
+      for (const change of snapshot.docChanges()) {
+        if (change.type === 'removed') {
+          await db.infusionPumps.delete(change.doc.id);
+        } else {
+          remotePumps.push(change.doc.data() as InfusionPumpLine);
+        }
+      }
       if (remotePumps.length > 0) {
         await db.infusionPumps.bulkPut(remotePumps);
-        onDataUpdate();
       }
+      onDataUpdate();
     }, (err) => handleFirestoreError(err, OperationType.GET, 'infusionPumps'));
     unsubscribers.push(unsubInfusionPumps);
+
+    const infusionPumpsAltCol = collection(firestore, 'infusion_pumps');
+    const unsubInfusionPumpsAlt = onSnapshot(infusionPumpsAltCol, async (snapshot) => {
+      const remotePumps: InfusionPumpLine[] = [];
+      for (const change of snapshot.docChanges()) {
+        if (change.type === 'removed') {
+          await db.infusionPumps.delete(change.doc.id);
+        } else {
+          remotePumps.push(change.doc.data() as InfusionPumpLine);
+        }
+      }
+      if (remotePumps.length > 0) {
+        await db.infusionPumps.bulkPut(remotePumps);
+      }
+      onDataUpdate();
+    }, (err) => handleFirestoreError(err, OperationType.GET, 'infusion_pumps'));
+    unsubscribers.push(unsubInfusionPumpsAlt);
 
     // 9. Subscribe to Fluid Balances
     const fluidBalancesCol = collection(firestore, 'fluidBalances');
@@ -884,7 +922,91 @@ export function subscribeToRealtimeFirestore(
     }, (err) => handleFirestoreError(err, OperationType.GET, 'statLabs'));
     unsubscribers.push(unsubStatLabs);
 
-    // 11. Subscribe to Transfusions
+    // 11. Subscribe to Patient Antibiotics
+    const antibioticsCol = collection(firestore, 'patientAntibiotics');
+    const unsubAntibiotics = onSnapshot(antibioticsCol, async (snapshot) => {
+      const remoteAbx: PatientAntibiotic[] = [];
+      for (const change of snapshot.docChanges()) {
+        if (change.type === 'removed') {
+          await db.patientAntibiotics.delete(change.doc.id);
+        } else {
+          remoteAbx.push(change.doc.data() as PatientAntibiotic);
+        }
+      }
+      if (remoteAbx.length > 0) {
+        await db.patientAntibiotics.bulkPut(remoteAbx);
+      }
+      onDataUpdate();
+    }, (err) => handleFirestoreError(err, OperationType.GET, 'patientAntibiotics'));
+    unsubscribers.push(unsubAntibiotics);
+
+    // 12. Subscribe to Medical Records (Unified Lab Results & Investigations)
+    const medRecordsCol = collection(firestore, 'medical_records');
+    const unsubMedRecords = onSnapshot(medRecordsCol, async (snapshot) => {
+      const labsToPut: LabResultItem[] = [];
+      const invsToPut: InvestigationItem[] = [];
+
+      for (const change of snapshot.docChanges()) {
+        const data = change.doc.data();
+        if (change.type === 'removed') {
+          await db.labResults.delete(change.doc.id);
+          await db.investigations.delete(change.doc.id);
+        } else {
+          if (data.recordType === 'LAB' || data.category || data.unit) {
+            labsToPut.push(data as LabResultItem);
+          } else if (data.recordType === 'INVESTIGATION' || data.modality) {
+            invsToPut.push(data as InvestigationItem);
+          }
+        }
+      }
+
+      if (labsToPut.length > 0) {
+        await db.labResults.bulkPut(labsToPut);
+      }
+      if (invsToPut.length > 0) {
+        await db.investigations.bulkPut(invsToPut);
+      }
+      onDataUpdate();
+    }, (err) => handleFirestoreError(err, OperationType.GET, 'medical_records'));
+    unsubscribers.push(unsubMedRecords);
+
+    // 13. Subscribe to Direct Investigations collection
+    const directInvsCol = collection(firestore, 'investigations');
+    const unsubDirectInvs = onSnapshot(directInvsCol, async (snapshot) => {
+      const invs: InvestigationItem[] = [];
+      for (const change of snapshot.docChanges()) {
+        if (change.type === 'removed') {
+          await db.investigations.delete(change.doc.id);
+        } else {
+          invs.push(change.doc.data() as InvestigationItem);
+        }
+      }
+      if (invs.length > 0) {
+        await db.investigations.bulkPut(invs);
+        onDataUpdate();
+      }
+    }, (err) => handleFirestoreError(err, OperationType.GET, 'investigations'));
+    unsubscribers.push(unsubDirectInvs);
+
+    // 14. Subscribe to Direct Lab Results collection
+    const directLabsCol = collection(firestore, 'labResults');
+    const unsubDirectLabs = onSnapshot(directLabsCol, async (snapshot) => {
+      const labs: LabResultItem[] = [];
+      for (const change of snapshot.docChanges()) {
+        if (change.type === 'removed') {
+          await db.labResults.delete(change.doc.id);
+        } else {
+          labs.push(change.doc.data() as LabResultItem);
+        }
+      }
+      if (labs.length > 0) {
+        await db.labResults.bulkPut(labs);
+        onDataUpdate();
+      }
+    }, (err) => handleFirestoreError(err, OperationType.GET, 'labResults'));
+    unsubscribers.push(unsubDirectLabs);
+
+    // 15. Subscribe to Transfusions
     const transfusionsCol = collection(firestore, 'transfusions');
     const unsubTransfusions = onSnapshot(transfusionsCol, async (snapshot) => {
       const remoteTransfusions: TransfusionTracker[] = [];
@@ -898,7 +1020,7 @@ export function subscribeToRealtimeFirestore(
     }, (err) => handleFirestoreError(err, OperationType.GET, 'transfusions'));
     unsubscribers.push(unsubTransfusions);
 
-    // 12. Subscribe to Addendums
+    // 16. Subscribe to Addendums
     const addendumsCol = collection(firestore, 'addendums');
     const unsubAddendums = onSnapshot(addendumsCol, async (snapshot) => {
       const remoteAddendums: Addendum[] = [];
@@ -912,7 +1034,7 @@ export function subscribeToRealtimeFirestore(
     }, (err) => handleFirestoreError(err, OperationType.GET, 'addendums'));
     unsubscribers.push(unsubAddendums);
 
-    // 13. Subscribe to Audit Logs
+    // 17. Subscribe to Audit Logs
     const auditLogsCol = collection(firestore, 'auditLogs');
     const unsubAuditLogs = onSnapshot(auditLogsCol, async (snapshot) => {
       const remoteLogs: WardAuditLog[] = [];
@@ -936,13 +1058,134 @@ export function subscribeToRealtimeFirestore(
 }
 
 // -------------------------------------------------------------
+// Cloud Data Pull on Initial Boot
+// -------------------------------------------------------------
+
+export async function pullCloudDataToLocalDb(): Promise<boolean> {
+  try {
+    const bedsSnap = await getDocs(collection(firestore, 'beds'));
+    if (bedsSnap.empty) {
+      return false;
+    }
+
+    const remoteBeds: BedRecord[] = [];
+    bedsSnap.forEach((d) => {
+      const data = d.data() as BedRecord;
+      if (data && (data.bedNumber || (data as any).id)) {
+        remoteBeds.push({
+          ...data,
+          bedNumber: data.bedNumber || (data as any).id,
+          currentPatientId: data.currentPatientId || (data as any).activePatientId || undefined,
+          activePatientId: (data as any).activePatientId || data.currentPatientId || undefined,
+        });
+      }
+    });
+    if (remoteBeds.length > 0) {
+      await db.beds.bulkPut(remoteBeds);
+    }
+
+    const patientsSnap = await getDocs(collection(firestore, 'patients'));
+    const remotePatients: PatientDossier[] = [];
+    patientsSnap.forEach((d) => {
+      const data = d.data() as PatientDossier;
+      if (data && (data.id || (data as any).patientId)) {
+        remotePatients.push({
+          ...data,
+          id: data.id || (data as any).patientId,
+        });
+      }
+    });
+    if (remotePatients.length > 0) {
+      await db.patients.bulkPut(remotePatients);
+    }
+
+    const [vitalsSnap, sbarsSnap, notesSnap, ventsSnap, pumpsSnap, fluidsSnap, statLabsSnap, abxSnap, medRecordsSnap] = await Promise.all([
+      getDocs(collection(firestore, 'vitals')).catch(() => null),
+      getDocs(collection(firestore, 'sbarHandovers')).catch(() => null),
+      getDocs(collection(firestore, 'clinicalNotes')).catch(() => null),
+      getDocs(collection(firestore, 'ventilators')).catch(() => null),
+      getDocs(collection(firestore, 'infusionPumps')).catch(() => null),
+      getDocs(collection(firestore, 'fluidBalances')).catch(() => null),
+      getDocs(collection(firestore, 'statLabs')).catch(() => null),
+      getDocs(collection(firestore, 'patientAntibiotics')).catch(() => null),
+      getDocs(collection(firestore, 'medical_records')).catch(() => null),
+    ]);
+
+    if (vitalsSnap && !vitalsSnap.empty) {
+      const list: TelemetryVitals[] = [];
+      vitalsSnap.forEach(d => list.push(d.data() as TelemetryVitals));
+      await db.vitals.bulkPut(list);
+    }
+    if (sbarsSnap && !sbarsSnap.empty) {
+      const list: SbarHandoverReport[] = [];
+      sbarsSnap.forEach(d => list.push(d.data() as SbarHandoverReport));
+      await db.sbarHandovers.bulkPut(list);
+    }
+    if (notesSnap && !notesSnap.empty) {
+      const list: ClinicalNote[] = [];
+      notesSnap.forEach(d => list.push(d.data() as ClinicalNote));
+      await db.clinicalNotes.bulkPut(list);
+    }
+    if (ventsSnap && !ventsSnap.empty) {
+      const list: VentilatorParameters[] = [];
+      ventsSnap.forEach(d => list.push(d.data() as VentilatorParameters));
+      await db.ventilators.bulkPut(list);
+    }
+    if (pumpsSnap && !pumpsSnap.empty) {
+      const list: InfusionPumpLine[] = [];
+      pumpsSnap.forEach(d => list.push(d.data() as InfusionPumpLine));
+      await db.infusionPumps.bulkPut(list);
+    }
+    if (fluidsSnap && !fluidsSnap.empty) {
+      const list: FluidBalance24H[] = [];
+      fluidsSnap.forEach(d => list.push(d.data() as FluidBalance24H));
+      await db.fluidBalances.bulkPut(list);
+    }
+    if (statLabsSnap && !statLabsSnap.empty) {
+      const list: StatLabPanel[] = [];
+      statLabsSnap.forEach(d => list.push(d.data() as StatLabPanel));
+      await db.statLabs.bulkPut(list);
+    }
+    if (abxSnap && !abxSnap.empty) {
+      const list: PatientAntibiotic[] = [];
+      abxSnap.forEach(d => list.push(d.data() as PatientAntibiotic));
+      await db.patientAntibiotics.bulkPut(list);
+    }
+    if (medRecordsSnap && !medRecordsSnap.empty) {
+      const labs: LabResultItem[] = [];
+      const invs: InvestigationItem[] = [];
+      medRecordsSnap.forEach(d => {
+        const data = d.data();
+        if (data.recordType === 'LAB' || data.category || data.unit) {
+          labs.push(data as LabResultItem);
+        } else if (data.recordType === 'INVESTIGATION' || data.modality) {
+          invs.push(data as InvestigationItem);
+        }
+      });
+      if (labs.length > 0) await db.labResults.bulkPut(labs);
+      if (invs.length > 0) await db.investigations.bulkPut(invs);
+    }
+
+    return true;
+  } catch (err) {
+    console.warn('Pull cloud data failed or offline:', err);
+    return false;
+  }
+}
+
+// -------------------------------------------------------------
 // Cloud Push Operations (Firestore Broadcast)
 // -------------------------------------------------------------
 
 export async function syncBedToCloud(bed: BedRecord): Promise<void> {
   try {
     const bedRef = doc(firestore, 'beds', bed.bedNumber);
-    await setDoc(bedRef, bed, { merge: true });
+    const cleanBed = {
+      ...bed,
+      currentPatientId: bed.currentPatientId || null,
+      activePatientId: bed.activePatientId || bed.currentPatientId || null,
+    };
+    await setDoc(bedRef, cleanBed);
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `beds/${bed.bedNumber}`);
   }
