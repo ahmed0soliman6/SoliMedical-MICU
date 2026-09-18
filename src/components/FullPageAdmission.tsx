@@ -109,7 +109,7 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
   const [admissionNoteInput, setAdmissionNoteInput] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
-  // Populate form if editing an existing patient
+  // Populate form if editing an existing patient - runs only when patient ID changes (mount or switching patients)
   useEffect(() => {
     if (initialPatient) {
       setFullNameAr(initialPatient.fullNameAr || initialPatient.fullNameEn || '');
@@ -136,7 +136,7 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
         setIsolation('Standard Precautions');
       }
     }
-  }, [initialPatient]);
+  }, [initialPatient?.id]);
 
   // Deterministic Candidate Search (Normalized Name + National ID Last 4 + MRN) with User Confirmation
   useEffect(() => {
@@ -286,6 +286,7 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
           primaryDiagnosisEn: primaryDiagnosisEn.trim() || primaryDiagnosisAr.trim(),
           allergies: allergiesList,
           isolationPrecautions: isolation ? [isolation] : [],
+          updatedAt: new Date().toISOString(),
         };
 
         // Save locally to Dexie
