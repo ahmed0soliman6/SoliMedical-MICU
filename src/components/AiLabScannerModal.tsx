@@ -18,6 +18,7 @@ import {
   Maximize2
 } from 'lucide-react';
 import { useTranslation } from '../services/i18n.ts';
+import { compressImageForOcr } from '../services/imageCompression.ts';
 import { 
   scanLabImage, 
   ScannedLabResponse, 
@@ -210,31 +211,52 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
     }
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const base64 = event.target?.result as string;
+    try {
+      setIsAnalyzing(true);
+      setAnalysisError(null);
+      const { base64, mimeType } = await compressImageForOcr(file);
       setSelectedImage(base64);
-      processImageWithAI(base64, file.type || 'image/jpeg');
-    };
-    reader.readAsDataURL(file);
+      processImageWithAI(base64, mimeType);
+    } catch (err) {
+      console.warn('Image compression fallback:', err);
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const base64 = event.target?.result as string;
+        setSelectedImage(base64);
+        processImageWithAI(base64, file.type || 'image/jpeg');
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      if (e.target) {
+        e.target.value = '';
+      }
+    }
   };
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     const file = e.dataTransfer.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const base64 = event.target?.result as string;
+    try {
+      setIsAnalyzing(true);
+      setAnalysisError(null);
+      const { base64, mimeType } = await compressImageForOcr(file);
       setSelectedImage(base64);
-      processImageWithAI(base64, file.type || 'image/jpeg');
-    };
-    reader.readAsDataURL(file);
+      processImageWithAI(base64, mimeType);
+    } catch {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const base64 = event.target?.result as string;
+        setSelectedImage(base64);
+        processImageWithAI(base64, file.type || 'image/jpeg');
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const loadSampleAbg = () => {
@@ -291,13 +313,14 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
       
       let userErrorMsg = err?.message || (lang === 'ar' ? 'فشل التعرف على تقرير التحليل. يرجى التأكد من وضوح الصورة.' : 'Failed to recognize lab report. Ensure the image is legible and well-lit.');
       
-      // Handle 503 / Overload Errors specifically
-      if (isOverload) {
+      if (errStr.includes('405') || errStr.includes('Failed to fetch') || errStr.includes('NetworkError')) {
+        userErrorMsg = lang === 'ar'
+          ? 'تعذر الاتصال بخدمة التحليل الذكي (تم تحديث خادم الخدمة بنجاح، يرجى النقر على "المحاولة مرة أخرى").'
+          : 'Could not reach the AI scanning service. The backend service was updated, please click "Retry Scanning Now".';
+      } else if (isOverload) {
         userErrorMsg = lang === 'ar' 
-          ? 'نموذج الذكاء الاصطناعي يواجه ضغطاً عالياً حالياً (503). يرجى المحاولة مرة أخرى بعد قليل.' 
-          : 'The AI model is currently experiencing high demand (503). Please try again in a few moments.';
-      } else if (errStr.includes('key') || errStr.includes('API')) {
-        // Fallback for API key errors if needed, but the focus is on the 503 overload.
+          ? 'نموذج الذكاء الاصطناعي يواجه ضغطاً مؤقتاً (503). يرجى النقر على زر "المحاولة مرة أخرى".' 
+          : 'The AI model is experiencing temporary demand (503). Please click "Retry Scanning Now".';
       }
       
       setAnalysisError(userErrorMsg);

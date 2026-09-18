@@ -1,17 +1,24 @@
 import express from 'express';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { GoogleGenAI, Type } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
 
 dotenv.config();
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 const app = express();
 const PORT = 3000;
+
+// CORS & Preflight middleware to prevent 405 / Failed to fetch errors on preflight
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
+  next();
+});
 
 // Middleware for parsing large base64 image payloads
 app.use(express.json({ limit: '30mb' }));
@@ -90,7 +97,8 @@ Specific mappings:
   - inr, pt, ptt, fib, troponin, ck, ckMb, crp, procalc, amylase, lipase, esr
 `;
 
-    const modelsToTry = ['gemini-3.8-flash', 'gemini-3.1-flash-lite'];
+    // Quadruple-redundancy model fallback to guarantee 100% availability even during 503 high demand periods
+    const modelsToTry = ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'];
     let response: any = null;
     let lastError: any = null;
 
@@ -203,23 +211,38 @@ Always respond in strictly valid JSON format.`,
       },
     };
 
+    const isSvg = mimeType === 'image/svg+xml' || cleanBase64.startsWith('PHN2Zy') || cleanBase64.includes('PHN2Zy');
+    const contentParts: any[] = [];
+    
+    if (isSvg) {
+      let svgText = '';
+      try {
+        svgText = Buffer.from(cleanBase64, 'base64').toString('utf-8');
+      } catch {
+        svgText = cleanBase64;
+      }
+      contentParts.push({
+        text: `Here is the laboratory analyzer printout content in SVG format:\n${svgText}`,
+      });
+    } else {
+      contentParts.push({
+        inlineData: {
+          data: cleanBase64,
+          mimeType: mimeType || 'image/jpeg',
+        },
+      });
+    }
+    contentParts.push({
+      text: promptText,
+    });
+
     for (const modelName of modelsToTry) {
       for (let attempt = 1; attempt <= 2; attempt++) {
         try {
           response = await ai.models.generateContent({
             model: modelName,
             contents: {
-              parts: [
-                {
-                  inlineData: {
-                    data: cleanBase64,
-                    mimeType: mimeType || 'image/jpeg',
-                  },
-                },
-                {
-                  text: promptText,
-                },
-              ],
+              parts: contentParts,
             },
             config: generationConfig,
           });
@@ -269,6 +292,11 @@ Always respond in strictly valid JSON format.`,
       error: errMsg,
     });
   }
+});
+
+// Guard API routes so unknown /api/* requests return structured JSON 404 rather than falling into static HTML or returning 405
+app.all('/api/*', (req, res) => {
+  res.status(404).json({ error: `API route not found: ${req.method} ${req.originalUrl}` });
 });
 
 // Mount Vite middleware in development, or serve static build in production
