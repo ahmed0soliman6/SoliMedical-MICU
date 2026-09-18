@@ -720,6 +720,15 @@ export function subscribeToRealtimeFirestore(
 ): () => void {
   const unsubscribers: Unsubscribe[] = [];
 
+  const notifyUpdate = () => {
+    onDataUpdate();
+    try {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('icu-data-updated'));
+      }
+    } catch {}
+  };
+
   try {
     // 1. Subscribe to Beds
     const bedsCol = collection(firestore, 'beds');
@@ -738,7 +747,7 @@ export function subscribeToRealtimeFirestore(
       });
       if (remoteBeds.length > 0) {
         await db.beds.bulkPut(remoteBeds);
-        onDataUpdate();
+        notifyUpdate();
       }
     }, (err) => handleFirestoreError(err, OperationType.GET, 'beds'));
     unsubscribers.push(unsubBeds);
@@ -758,7 +767,7 @@ export function subscribeToRealtimeFirestore(
       });
       if (remotePatients.length > 0) {
         await db.patients.bulkPut(remotePatients);
-        onDataUpdate();
+        notifyUpdate();
       }
     }, (err) => handleFirestoreError(err, OperationType.GET, 'patients'));
     unsubscribers.push(unsubPatients);
@@ -799,7 +808,7 @@ export function subscribeToRealtimeFirestore(
 
       if (remoteVitals.length > 0) {
         await db.vitals.bulkPut(remoteVitals);
-        onDataUpdate();
+        notifyUpdate();
       }
     }, (err) => handleFirestoreError(err, OperationType.GET, 'vitals'));
     unsubscribers.push(unsubVitals);

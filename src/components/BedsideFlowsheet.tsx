@@ -286,10 +286,15 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
     setIsHistoryEditing(false);
 
     loadBedsideData();
+    const handleDataUpdate = () => loadBedsideData();
+    window.addEventListener('icu-data-updated', handleDataUpdate);
     const interval = setInterval(() => {
       loadBedsideData();
     }, 2500);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('icu-data-updated', handleDataUpdate);
+    };
   }, [bed.bedNumber, patient.id]);
 
   const loadBedsideData = async () => {
@@ -310,40 +315,6 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       }
     }
 
-    if (vitals.length === 0) {
-      const mapVal = Math.round(65 + (110 - 65) / 3);
-      const seedVital: TelemetryVitals = {
-        id: `vit-seed-${patient.id}`,
-        bedId: bed.bedNumber,
-        bedNumber: bed.bedNumber,
-        patientId: patient.id,
-        timestamp: new Date().toISOString(),
-        heartRateBpm: 88,
-        heartRhythm: 'Normal Sinus Rhythm',
-        systolicBpMmHg: 110,
-        diastolicBpMmHg: 65,
-        meanArterialPressureMmHg: mapVal,
-        isArterialLine: false,
-        spo2Percent: 97,
-        fio2SuppliedPercent: 40,
-        respiratoryRateCpm: 18,
-        coreTemperatureCelsius: 37.1,
-        temperatureSite: 'FOLEY_CORE',
-        gcsTotalScore: 15,
-        gcsBreakdown: { eyeOpening: 4, verbalResponse: 5, motorResponse: 6 },
-        sedationRassScore: 0,
-        lactateMmolPerL: 1.4,
-        bloodGlucoseMgDl: 120,
-        recordedBy: {
-          staffId: '1001',
-          name: 'ICU Triage Staff',
-          role: StaffRole.BEDSIDE_RN,
-        },
-        clinicalNotes: 'Initial admission baseline vitals',
-      };
-      await db.vitals.put(seedVital);
-      vitals = [seedVital];
-    }
     setVitalsHistory(vitals);
 
     const vent = await db.ventilators
@@ -392,7 +363,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       .equals(patient.id)
       .sortBy('timestamp');
 
-    if (labItems.length === 0) {
+    if (false as boolean) {
       const now = Date.now();
       const oneHour = 3600000;
       const oneDay = 86400000;
@@ -633,7 +604,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       .equals(patient.id)
       .sortBy('timestamp');
 
-    if (invItems.length === 0) {
+    if (false as boolean) {
       const now = Date.now();
       const seedInvs: InvestigationItem[] = [
         {

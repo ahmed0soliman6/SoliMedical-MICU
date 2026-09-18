@@ -91,16 +91,18 @@ export async function initializeDatabaseSeed(): Promise<void> {
       bayName: `Critical Care Bay ${num}`,
       isActive: true,
       displayOrder: idx,
-      status: idx === 0 ? BedStatus.OCCUPIED : idx === 1 ? BedStatus.OCCUPIED : idx === 2 ? BedStatus.OCCUPIED : idx === 3 ? BedStatus.OCCUPIED : idx === 5 ? BedStatus.UNAVAILABLE : BedStatus.VACANT,
-      currentPatientId: idx === 0 ? 'pat-bed-01' : idx === 1 ? 'pat-bed-02' : idx === 2 ? 'pat-bed-03' : idx === 3 ? 'pat-bed-04' : null,
+      status: idx === 5 ? BedStatus.UNAVAILABLE : BedStatus.VACANT,
+      currentPatientId: null,
       lastCleanedAt: new Date().toISOString()
     }));
     await db.beds.bulkPut(initialBeds);
   }
 
-  // Seed initial realistic clinical ICU patients if empty
+  await ensureBedPatientSync();
+
+  // Seed initial realistic clinical ICU patients if empty (Disabled)
   const patientCount = await db.patients.count();
-  if (patientCount === 0) {
+  if (false as boolean) {
     const now = Date.now();
     const threeDaysAgo = new Date(now - 3 * 24 * 3600 * 1000).toISOString();
     const twoDaysAgo = new Date(now - 2 * 24 * 3600 * 1000).toISOString();
@@ -787,6 +789,10 @@ export async function initializeDatabaseSeed(): Promise<void> {
     ]);
   }
 
+  await ensureBedPatientSync();
+}
+
+export async function ensureBedPatientSync(): Promise<void> {
   // Reconcile and synchronize bed occupancy state with active patients in IndexedDB
   const currentBeds = await db.beds.toArray();
   const allPatients = await db.patients.toArray();
