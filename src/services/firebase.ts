@@ -298,21 +298,15 @@ export async function checkIfAnyAdminExists(): Promise<boolean> {
     // 2. Check Firestore users collection
     const usersSnap = await getDocs(collection(firestore, 'users'));
     if (!usersSnap.empty) {
-      for (const doc of usersSnap.docs) {
-        const u = doc.data() as IcuUser;
-        if (u.role === StaffRole.ADMIN || u.isSuperAdmin) {
+      for (const d of usersSnap.docs) {
+        const u = d.data() as IcuUser;
+        if (u.role === StaffRole.ADMIN || u.isSuperAdmin || (u.role as any) === 'ADMIN') {
           return true;
         }
       }
     }
-
-    // 3. Check local Dexie DB
-    const localAdmins = await db.users.where('role').equals(StaffRole.ADMIN).toArray();
-    if (localAdmins.length > 0) return true;
   } catch (err) {
-    // Fallback: check local storage flag
-    const setupDone = localStorage.getItem('soli_icu_admin_setup_completed');
-    if (setupDone === 'true') return true;
+    console.warn('Check admin in Firestore warning:', err);
   }
   return false;
 }
@@ -558,204 +552,37 @@ export async function saveUserAccount(user: IcuUser): Promise<void> {
 }
 
 export function getInitialStaffUsers(): IcuUser[] {
-  const now = new Date().toISOString();
-  return [
-    {
-      uid: 'usr_admin_01',
-      email: 'admin@solimedical-micu.org',
-      nameEn: 'Dr. Ahmed Soliman',
-      nameAr: 'د. أحمد سليمان',
-      role: StaffRole.ADMIN,
-      department: 'إدارة العناية المركزة الباطنة',
-      badgeId: 'ADM-001',
-      licenseNumber: 'LIC-100001',
-      isActive: true,
-      isSuperAdmin: true,
-      pinCode: '12345678',
-      createdAt: now,
-      lastLoginAt: now,
-      permissions: getDefaultPermissionsForRole(StaffRole.ADMIN),
-    },
-    {
-      uid: 'usr_consultant_01',
-      email: 'consultant@solimedical-micu.org',
-      nameEn: 'Dr. Tariq Al-Mansoor',
-      nameAr: 'د. طارق المنصور',
-      role: StaffRole.CONSULTANT,
-      department: 'طب الحالات الحرجة',
-      badgeId: 'CON-101',
-      licenseNumber: 'LIC-200101',
-      isActive: true,
-      isSuperAdmin: false,
-      pinCode: '12345678',
-      createdAt: now,
-      lastLoginAt: now,
-      permissions: getDefaultPermissionsForRole(StaffRole.CONSULTANT),
-    },
-    {
-      uid: 'usr_specialist_01',
-      email: 'specialist@solimedical-micu.org',
-      nameEn: 'Dr. Layla Al-Ghamdi',
-      nameAr: 'د. ليلى الغامدي',
-      role: StaffRole.SPECIALIST,
-      department: 'الأمراض الصدرية والحالات الحرجة',
-      badgeId: 'SPC-204',
-      licenseNumber: 'LIC-300204',
-      isActive: true,
-      isSuperAdmin: false,
-      pinCode: '12345678',
-      createdAt: now,
-      lastLoginAt: now,
-      permissions: getDefaultPermissionsForRole(StaffRole.SPECIALIST),
-    },
-    {
-      uid: 'usr_resident_01',
-      email: 'resident@solimedical-micu.org',
-      nameEn: 'Dr. Omar Khaled',
-      nameAr: 'د. عمر خالد',
-      role: StaffRole.RESIDENT,
-      department: 'الطب الباطني / العناية المركزة',
-      badgeId: 'RES-305',
-      licenseNumber: 'LIC-400305',
-      isActive: true,
-      isSuperAdmin: false,
-      pinCode: '12345678',
-      createdAt: now,
-      lastLoginAt: now,
-      permissions: getDefaultPermissionsForRole(StaffRole.RESIDENT),
-    },
-    {
-      uid: 'usr_lead_rn_01',
-      email: 'lead_rn@solimedical-micu.org',
-      nameEn: 'RN Sarah Jenkins',
-      nameAr: 'م. سارة جنكينز',
-      role: StaffRole.LEAD_RN,
-      department: 'تمريض العناية المركزة (مسؤولة المناوبة)',
-      badgeId: 'RN-401',
-      licenseNumber: 'LIC-500401',
-      isActive: true,
-      isSuperAdmin: false,
-      pinCode: '12345678',
-      createdAt: now,
-      lastLoginAt: now,
-      permissions: getDefaultPermissionsForRole(StaffRole.LEAD_RN),
-    },
-    {
-      uid: 'usr_bedside_rn_01',
-      email: 'bedside_rn@solimedical-micu.org',
-      nameEn: 'RN Fatima Al-Zahrani',
-      nameAr: 'م. فاطمة الزهراني',
-      role: StaffRole.BEDSIDE_RN,
-      department: 'تمريض أسِرّة العناية المركزة',
-      badgeId: 'RN-502',
-      licenseNumber: 'LIC-600502',
-      isActive: true,
-      isSuperAdmin: false,
-      pinCode: '12345678',
-      createdAt: now,
-      lastLoginAt: now,
-      permissions: getDefaultPermissionsForRole(StaffRole.BEDSIDE_RN),
-    },
-    {
-      uid: 'usr_pharmacist_01',
-      email: 'pharmacist@solimedical-micu.org',
-      nameEn: 'Pharm. Zaid Al-Otaibi',
-      nameAr: 'ص. زيد العتيبي',
-      role: StaffRole.CLINICAL_PHARMACIST,
-      department: 'الصيدلة السريرية',
-      badgeId: 'PHM-601',
-      licenseNumber: 'LIC-700601',
-      isActive: true,
-      isSuperAdmin: false,
-      pinCode: '12345678',
-      createdAt: now,
-      lastLoginAt: now,
-      permissions: getDefaultPermissionsForRole(StaffRole.CLINICAL_PHARMACIST),
-    },
-    {
-      uid: 'usr_rt_01',
-      email: 'rt@solimedical-micu.org',
-      nameEn: 'RT Hisham Mahmoud',
-      nameAr: 'أ. هشام محمود',
-      role: StaffRole.RESPIRATORY_THERAPIST,
-      department: 'العلاج التنفسي',
-      badgeId: 'RT-701',
-      licenseNumber: 'LIC-800701',
-      isActive: true,
-      isSuperAdmin: false,
-      pinCode: '12345678',
-      createdAt: now,
-      lastLoginAt: now,
-      permissions: getDefaultPermissionsForRole(StaffRole.RESPIRATORY_THERAPIST),
-    },
-    {
-      uid: 'usr_auditor_01',
-      email: 'auditor@solimedical-micu.org',
-      nameEn: 'Eng. Mona Mahmoud',
-      nameAr: 'أ. منى محمود',
-      role: StaffRole.AUDITOR,
-      department: 'مراجعة الجودة - GAHAR / وزارة الصحة',
-      badgeId: 'AUD-801',
-      licenseNumber: 'LIC-900801',
-      isActive: true,
-      isSuperAdmin: false,
-      pinCode: '12345678',
-      createdAt: now,
-      lastLoginAt: now,
-      permissions: getDefaultPermissionsForRole(StaffRole.AUDITOR),
-    }
-  ];
+  // Disabled: No demo or mock staff accounts are seeded
+  return [];
 }
 
 /**
- * Run a database sanitation to delete any duplicate document IDs and mock/dummy users
+ * Run a database sanitation to delete any duplicate document IDs
  */
 export async function sanitizeFirestoreUsers() {
   try {
     const snap = await getDocs(collection(firestore, 'users'));
     const seenUids = new Map<string, { docId: string; data: IcuUser }>();
-    const mockUids = new Set([
-      'usr_admin_01',
-      'usr_consultant_01',
-      'usr_specialist_01',
-      'usr_resident_01',
-      'usr_lead_rn_01',
-      'usr_bedside_rn_01',
-      'usr_pharmacist_01',
-      'usr_rt_01',
-      'usr_auditor_01'
-    ]);
 
     for (const docSnap of snap.docs) {
       const u = docSnap.data() as IcuUser;
       const docId = docSnap.id;
       
-      // 1. If it's a mock user, delete it completely from Firestore
-      if (mockUids.has(docId) || (u && u.uid && mockUids.has(u.uid))) {
-        await deleteDoc(doc(firestore, 'users', docId));
-        continue;
-      }
-
       if (!u || !u.uid) {
-        // Corrupted record, delete it
-        await deleteDoc(doc(firestore, 'users', docId));
         continue;
       }
 
-      // 2. Identify duplicates
+      // Identify duplicates
       const uid = u.uid.trim();
       if (!seenUids.has(uid)) {
         seenUids.set(uid, { docId, data: u });
       } else {
         const existing = seenUids.get(uid)!;
-        // Keep the document whose ID matches the uid
         if (docId === uid) {
-          // Delete the other document which is a duplicate (likely keyed by email)
-          await deleteDoc(doc(firestore, 'users', existing.docId));
+          await deleteDoc(doc(firestore, 'users', existing.docId)).catch(() => {});
           seenUids.set(uid, { docId, data: u });
         } else {
-          // Delete this document as it is the duplicate
-          await deleteDoc(doc(firestore, 'users', docId));
+          await deleteDoc(doc(firestore, 'users', docId)).catch(() => {});
         }
       }
     }
@@ -765,23 +592,23 @@ export async function sanitizeFirestoreUsers() {
 }
 
 /**
- * Fetch all users from cloud and sync with local DB, automatically purging duplicate records
+ * Fetch all users from cloud and sync with local DB
  */
 export async function fetchAllUsers(): Promise<IcuUser[]> {
-  // Run Firestore sanitation first to clean up duplicate docs and mock/dummy accounts in the cloud
-  await sanitizeFirestoreUsers();
-
   let rawList: IcuUser[] = [];
   try {
     const snap = await getDocs(collection(firestore, 'users'));
     snap.forEach((d) => {
-      rawList.push(d.data() as IcuUser);
+      const data = d.data() as IcuUser;
+      if (data && data.uid) {
+        rawList.push(data);
+      }
     });
   } catch (err) {
     handleFirestoreError(err, OperationType.LIST, 'users');
   }
 
-  // Deduplicate strictly by uid to ensure absolute key uniqueness and prevent React map key collision errors
+  // Deduplicate strictly by uid to ensure absolute key uniqueness
   const uniqueUsersMap = new Map<string, IcuUser>();
   for (const user of rawList) {
     if (!user || !user.uid) continue;
@@ -798,8 +625,8 @@ export async function fetchAllUsers(): Promise<IcuUser[]> {
   }
 
   const finalUsers = Array.from(uniqueUsersMap.values());
-  await db.users.clear();
   if (finalUsers.length > 0) {
+    await db.users.clear();
     await db.users.bulkPut(finalUsers);
   }
 

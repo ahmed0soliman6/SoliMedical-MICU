@@ -15,8 +15,8 @@ import { SoliLogo } from './SoliLogo.tsx';
 export const LoginScreen: React.FC = () => {
   const { loginWithEmailOrBadge } = useAuth();
 
-  const [username, setUsername] = useState('Admin');
-  const [password, setPassword] = useState('12345678');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -101,7 +101,7 @@ export const LoginScreen: React.FC = () => {
           {/* Field: Username */}
           <div>
             <label className="block text-right text-xs font-medium text-slate-300 mb-1.5" htmlFor="username">
-              اسم المستخدم
+              اسم المستخدم أو البريد الإلكتروني
             </label>
             <div className="relative rounded-xl shadow-inner">
               <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-slate-400">
@@ -113,7 +113,7 @@ export const LoginScreen: React.FC = () => {
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="Admin"
+                placeholder="اسم المستخدم أو البريد الإلكتروني"
                 required
                 className="w-full pr-10 pl-3 py-3 bg-[#050b17] border border-slate-700/80 rounded-xl text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-1 focus:ring-[#00f2fe] focus:border-[#00f2fe] transition-all text-right font-sans tracking-wide"
               />

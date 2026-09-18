@@ -14,6 +14,15 @@ service cloud.firestore {
       return exists(/databases/$(database)/documents/users/$(request.auth.uid));
     }
 
+    function isNotDisabledUser() {
+      return isAuthenticated() && (
+        !isExistingUser() || (
+          getUserData().active != false &&
+          getUserData().isActive != false
+        )
+      );
+    }
+
     function isActiveUser() {
       return isAuthenticated() && isExistingUser() && (
         getUserData().active == true || 
@@ -76,7 +85,7 @@ service cloud.firestore {
 
     // Users Collection (Disabled users cannot read users)
     match /users/{userId} {
-      allow read: if isActiveUser();
+      allow read: if isNotDisabledUser();
       allow create: if isAuthenticated() && (isAdmin() || request.auth.uid == userId);
       allow update: if isAuthenticated() && (
         isAdmin() || (
