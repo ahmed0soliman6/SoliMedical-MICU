@@ -7,7 +7,7 @@ import { createServer as createViteServer } from 'vite';
 dotenv.config();
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT || 3000);
 
 // CORS & Preflight middleware to prevent 405 / Failed to fetch errors on preflight
 app.use((req, res, next) => {
