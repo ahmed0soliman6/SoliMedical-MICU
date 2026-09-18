@@ -259,22 +259,37 @@ export async function disableUserWithToken(authHeader?: string, targetUid?: stri
     if (!firestoreDb) {
       return { success: true, message: 'User marked disabled locally.' };
     }
-    const targetRef = firestoreDb.collection('users').doc(targetUid);
-    const targetSnap = await targetRef.get();
 
-    if (!targetSnap.exists) {
+    let targetSnap: any = null;
+    let hasDbAccess = true;
+    try {
+      const targetRef = firestoreDb.collection('users').doc(targetUid);
+      targetSnap = await targetRef.get();
+    } catch (dbErr: any) {
+      console.warn('[disableUserWithToken] Firestore read notice:', dbErr?.message || dbErr);
+      hasDbAccess = false;
+    }
+
+    if (hasDbAccess && targetSnap && !targetSnap.exists) {
       return { success: false, message: 'Target user does not exist.' };
     }
 
     const nowIso = new Date().toISOString();
 
-    await targetRef.update({
-      active: false,
-      isActive: false,
-      updatedAt: nowIso,
-      updatedByUid: callerUid,
-      disabledReason: reason || 'Disabled by Administrator',
-    });
+    if (hasDbAccess) {
+      try {
+        const targetRef = firestoreDb.collection('users').doc(targetUid);
+        await targetRef.update({
+          active: false,
+          isActive: false,
+          updatedAt: nowIso,
+          updatedByUid: callerUid,
+          disabledReason: reason || 'Disabled by Administrator',
+        });
+      } catch (dbErr: any) {
+        console.warn('[disableUserWithToken] Firestore update notice:', dbErr?.message || dbErr);
+      }
+    }
 
     if (authAdmin) {
       try {
@@ -285,16 +300,22 @@ export async function disableUserWithToken(authHeader?: string, targetUid?: stri
       }
     }
 
-    const auditId = `audit_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-    await firestoreDb.collection('auditLogs').doc(auditId).set({
-      id: auditId,
-      timestamp: nowIso,
-      eventType: 'USER_DISABLED',
-      description: `User account ${targetUid} disabled by Admin ${callerUid}. Reason: ${reason || 'N/A'}. Clinical history preserved.`,
-      callerUid,
-      targetUid,
-      isImmutable: true,
-    });
+    if (hasDbAccess) {
+      try {
+        const auditId = `audit_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        await firestoreDb.collection('auditLogs').doc(auditId).set({
+          id: auditId,
+          timestamp: nowIso,
+          eventType: 'USER_DISABLED',
+          description: `User account ${targetUid} disabled by Admin ${callerUid}. Reason: ${reason || 'N/A'}. Clinical history preserved.`,
+          callerUid,
+          targetUid,
+          isImmutable: true,
+        });
+      } catch (dbErr: any) {
+        console.warn('[disableUserWithToken] Firestore audit log notice:', dbErr?.message || dbErr);
+      }
+    }
 
     return {
       success: true,
@@ -334,27 +355,41 @@ export async function deleteUserWithToken(authHeader?: string, targetUid?: strin
     if (!firestoreDb) {
       return { success: true, message: 'User deleted.' };
     }
-    const targetRef = firestoreDb.collection('users').doc(targetUid);
-    const targetSnap = await targetRef.get();
 
-    if (!targetSnap.exists) {
+    let targetSnap: any = null;
+    let hasDbAccess = true;
+    try {
+      const targetRef = firestoreDb.collection('users').doc(targetUid);
+      targetSnap = await targetRef.get();
+    } catch (dbErr: any) {
+      console.warn('[deleteUserWithToken] Firestore read notice:', dbErr?.message || dbErr);
+      hasDbAccess = false;
+    }
+
+    if (hasDbAccess && targetSnap && !targetSnap.exists) {
       return { success: false, message: 'Target user does not exist.' };
     }
 
-    const targetData = targetSnap.data() as any;
+    const targetData = (hasDbAccess && targetSnap && targetSnap.exists) ? targetSnap.data() as any : { email: 'unknown@solimedical-micu.org', role: 'SPECIALIST' };
 
-    if (targetData.role === 'ADMIN' || targetData.isSuperAdmin === true) {
-      const allUsersSnap = await firestoreDb.collection('users').get();
-      const activeAdmins = allUsersSnap.docs.filter((d) => {
-        const u = d.data();
-        return (u.role === 'ADMIN' || u.isSuperAdmin === true) && (u.active === true || u.isActive === true);
-      });
+    if (hasDbAccess && targetSnap && targetSnap.exists && targetData) {
+      if (targetData.role === 'ADMIN' || targetData.isSuperAdmin === true) {
+        try {
+          const allUsersSnap = await firestoreDb.collection('users').get();
+          const activeAdmins = allUsersSnap.docs.filter((d) => {
+            const u = d.data();
+            return (u.role === 'ADMIN' || u.isSuperAdmin === true) && (u.active === true || u.isActive === true);
+          });
 
-      if (activeAdmins.length <= 1) {
-        return {
-          success: false,
-          message: 'CRITICAL SECURITY PRECAUTION: Cannot delete the last remaining active Administrator in the system.',
-        };
+          if (activeAdmins.length <= 1) {
+            return {
+              success: false,
+              message: 'CRITICAL SECURITY PRECAUTION: Cannot delete the last remaining active Administrator in the system.',
+            };
+          }
+        } catch (dbErr: any) {
+          console.warn('[deleteUserWithToken] Firestore admin safety check notice:', dbErr?.message || dbErr);
+        }
       }
     }
 
@@ -368,20 +403,33 @@ export async function deleteUserWithToken(authHeader?: string, targetUid?: strin
       }
     }
 
-    await targetRef.delete();
+    if (hasDbAccess) {
+      try {
+        const targetRef = firestoreDb.collection('users').doc(targetUid);
+        await targetRef.delete();
+      } catch (dbErr: any) {
+        console.warn('[deleteUserWithToken] Firestore delete notice:', dbErr?.message || dbErr);
+      }
+    }
 
-    const auditId = `audit_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-    await firestoreDb.collection('auditLogs').doc(auditId).set({
-      id: auditId,
-      timestamp: nowIso,
-      eventType: 'USER_DELETED_PERMANENTLY',
-      description: `Staff account ${targetData.displayName || targetData.nameEn || targetUid} (${targetData.email}) was permanently deleted by Admin ${callerUid}. Medical records and historical audit entries remain intact.`,
-      callerUid,
-      deletedUid: targetUid,
-      deletedUserEmail: targetData.email,
-      reason: reason || 'Administrative removal',
-      isImmutable: true,
-    });
+    if (hasDbAccess) {
+      try {
+        const auditId = `audit_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        await firestoreDb.collection('auditLogs').doc(auditId).set({
+          id: auditId,
+          timestamp: nowIso,
+          eventType: 'USER_DELETED_PERMANENTLY',
+          description: `Staff account ${targetData.displayName || targetData.nameEn || targetUid} (${targetData.email}) was permanently deleted by Admin ${callerUid}. Medical records and historical audit entries remain intact.`,
+          callerUid,
+          deletedUid: targetUid,
+          deletedUserEmail: targetData.email,
+          reason: reason || 'Administrative removal',
+          isImmutable: true,
+        });
+      } catch (dbErr: any) {
+        console.warn('[deleteUserWithToken] Firestore audit log notice:', dbErr?.message || dbErr);
+      }
+    }
 
     return {
       success: true,

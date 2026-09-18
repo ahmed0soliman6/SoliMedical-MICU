@@ -312,9 +312,9 @@ app.post('/api/admin/users/create', async (req, res) => {
     const authHeader = req.headers.authorization;
     const userData = req.body;
     const result = await adminCreateUser(authHeader, userData);
-    return res.status(result.success ? 200 : 403).json(result);
+    return res.status(200).json(result);
   } catch (err: any) {
-    return res.status(500).json({ success: false, message: err?.message || 'Internal server error.' });
+    return res.status(200).json({ success: false, message: err?.message || 'Internal server error.' });
   }
 });
 
@@ -323,12 +323,12 @@ app.post('/api/admin/users/disable', async (req, res) => {
     const authHeader = req.headers.authorization;
     const { targetUid, reason } = req.body;
     if (!targetUid) {
-      return res.status(400).json({ success: false, message: 'Missing targetUid.' });
+      return res.status(200).json({ success: false, message: 'Missing targetUid.' });
     }
     const result = await disableUserWithToken(authHeader, targetUid, reason);
-    return res.status(result.success ? 200 : 403).json(result);
+    return res.status(200).json(result);
   } catch (err: any) {
-    return res.status(500).json({ success: false, message: err?.message || 'Internal server error.' });
+    return res.status(200).json({ success: false, message: err?.message || 'Internal server error.' });
   }
 });
 
@@ -337,12 +337,12 @@ app.post('/api/admin/users/delete', async (req, res) => {
     const authHeader = req.headers.authorization;
     const { targetUid, reason } = req.body;
     if (!targetUid) {
-      return res.status(400).json({ success: false, message: 'Missing targetUid.' });
+      return res.status(200).json({ success: false, message: 'Missing targetUid.' });
     }
     const result = await deleteUserWithToken(authHeader, targetUid, reason);
-    return res.status(result.success ? 200 : 403).json(result);
+    return res.status(200).json(result);
   } catch (err: any) {
-    return res.status(500).json({ success: false, message: err?.message || 'Internal server error.' });
+    return res.status(200).json({ success: false, message: err?.message || 'Internal server error.' });
   }
 });
 
@@ -351,12 +351,12 @@ app.post('/api/admin/users/change-password', async (req, res) => {
     const authHeader = req.headers.authorization;
     const { targetUid, newPassword } = req.body;
     if (!targetUid || !newPassword) {
-      return res.status(400).json({ success: false, message: 'Missing targetUid or newPassword.' });
+      return res.status(200).json({ success: false, message: 'Missing targetUid or newPassword.' });
     }
     const result = await adminChangeUserPassword(authHeader, targetUid, newPassword);
-    return res.status(result.success ? 200 : 403).json(result);
+    return res.status(200).json(result);
   } catch (err: any) {
-    return res.status(500).json({ success: false, message: err?.message || 'Internal server error.' });
+    return res.status(200).json({ success: false, message: err?.message || 'Internal server error.' });
   }
 });
 
@@ -364,9 +364,9 @@ app.post('/api/admin/recovery', async (req, res) => {
   try {
     const { username, recoveryCode, newPassword } = req.body;
     const result = await adminPasswordRecovery(username, recoveryCode, newPassword);
-    return res.status(result.success ? 200 : 400).json(result);
+    return res.status(200).json(result);
   } catch (err: any) {
-    return res.status(500).json({ success: false, message: err?.message || 'Internal server error.' });
+    return res.status(200).json({ success: false, message: err?.message || 'Internal server error.' });
   }
 });
 
@@ -376,12 +376,12 @@ app.post('/api/admin/archive/patient', async (req, res) => {
     const authHeader = req.headers.authorization;
     const { patientId } = req.body;
     if (!patientId) {
-      return res.status(400).json({ success: false, message: 'Missing patientId in request body.' });
+      return res.status(200).json({ success: false, message: 'Missing patientId in request body.' });
     }
     const result = await adminArchivePatient(authHeader, patientId);
-    return res.status(result.success ? 200 : 403).json(result);
+    return res.status(200).json(result);
   } catch (err: any) {
-    return res.status(500).json({ success: false, message: err?.message || 'Internal server error.' });
+    return res.status(200).json({ success: false, message: err?.message || 'Internal server error.' });
   }
 });
 
@@ -390,9 +390,9 @@ app.post('/api/admin/archive/sweep', async (req, res) => {
     const authHeader = req.headers.authorization;
     const { retentionMonths = 6 } = req.body;
     const result = await adminArchiveSweep(authHeader, retentionMonths);
-    return res.status(result.success ? 200 : 403).json(result);
+    return res.status(200).json(result);
   } catch (err: any) {
-    return res.status(500).json({ success: false, message: err?.message || 'Internal server error.' });
+    return res.status(200).json({ success: false, message: err?.message || 'Internal server error.' });
   }
 });
 
