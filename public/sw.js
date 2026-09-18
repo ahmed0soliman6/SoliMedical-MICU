@@ -1,5 +1,5 @@
 // Service Worker for Soli Medical MICU (ICU-Sync)
-const CACHE_NAME = 'icu-sync-v1';
+const CACHE_NAME = 'icu-sync-v2';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
