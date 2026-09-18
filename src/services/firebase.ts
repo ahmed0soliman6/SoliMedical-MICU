@@ -1263,6 +1263,26 @@ export async function pullCloudDataToLocalDb(): Promise<boolean> {
 // Cloud Push Operations (Firestore Broadcast)
 // -------------------------------------------------------------
 
+export function sanitizeForFirestore(obj: any): any {
+  if (obj === null || obj === undefined) {
+    return null;
+  }
+  if (Array.isArray(obj)) {
+    return obj.map(item => sanitizeForFirestore(item));
+  }
+  if (typeof obj === 'object') {
+    const clean: any = {};
+    for (const key of Object.keys(obj)) {
+      const val = obj[key];
+      if (val !== undefined) {
+        clean[key] = sanitizeForFirestore(val);
+      }
+    }
+    return clean;
+  }
+  return obj;
+}
+
 export async function syncBedToCloud(bed: BedRecord): Promise<void> {
   try {
     const bedRef = doc(firestore, 'beds', bed.bedNumber);
@@ -1271,7 +1291,7 @@ export async function syncBedToCloud(bed: BedRecord): Promise<void> {
       currentPatientId: bed.currentPatientId || null,
       activePatientId: bed.activePatientId || bed.currentPatientId || null,
     };
-    await setDoc(bedRef, cleanBed);
+    await setDoc(bedRef, sanitizeForFirestore(cleanBed));
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `beds/${bed.bedNumber}`);
     throw err;
@@ -1281,7 +1301,7 @@ export async function syncBedToCloud(bed: BedRecord): Promise<void> {
 export async function syncPatientToCloud(patient: PatientDossier): Promise<void> {
   try {
     const patRef = doc(firestore, 'patients', patient.id);
-    await setDoc(patRef, patient, { merge: true });
+    await setDoc(patRef, sanitizeForFirestore(patient), { merge: true });
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `patients/${patient.id}`);
     throw err;
@@ -1291,7 +1311,7 @@ export async function syncPatientToCloud(patient: PatientDossier): Promise<void>
 export async function syncVitalsToCloud(vitals: TelemetryVitals): Promise<void> {
   try {
     const vitRef = doc(firestore, 'vitals', vitals.id);
-    await setDoc(vitRef, vitals);
+    await setDoc(vitRef, sanitizeForFirestore(vitals));
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `vitals/${vitals.id}`);
   }
@@ -1300,7 +1320,7 @@ export async function syncVitalsToCloud(vitals: TelemetryVitals): Promise<void> 
 export async function syncSbarToCloud(sbar: SbarHandoverReport): Promise<void> {
   try {
     const sbarRef = doc(firestore, 'sbarHandovers', sbar.id);
-    await setDoc(sbarRef, sbar, { merge: true });
+    await setDoc(sbarRef, sanitizeForFirestore(sbar), { merge: true });
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `sbarHandovers/${sbar.id}`);
   }
@@ -1309,7 +1329,7 @@ export async function syncSbarToCloud(sbar: SbarHandoverReport): Promise<void> {
 export async function syncClinicalNoteToCloud(note: ClinicalNote): Promise<void> {
   try {
     const noteRef = doc(firestore, 'clinicalNotes', note.id);
-    await setDoc(noteRef, note, { merge: true });
+    await setDoc(noteRef, sanitizeForFirestore(note), { merge: true });
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `clinicalNotes/${note.id}`);
   }
@@ -1318,7 +1338,7 @@ export async function syncClinicalNoteToCloud(note: ClinicalNote): Promise<void>
 export async function syncVentilatorToCloud(vent: VentilatorParameters): Promise<void> {
   try {
     const ventRef = doc(firestore, 'ventilators', vent.id);
-    await setDoc(ventRef, vent, { merge: true });
+    await setDoc(ventRef, sanitizeForFirestore(vent), { merge: true });
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `ventilators/${vent.id}`);
   }
@@ -1327,10 +1347,10 @@ export async function syncVentilatorToCloud(vent: VentilatorParameters): Promise
 export async function syncPumpToCloud(pump: InfusionPumpLine): Promise<void> {
   try {
     const pumpRef = doc(firestore, 'infusionPumps', pump.id);
-    await setDoc(pumpRef, pump, { merge: true });
+    await setDoc(pumpRef, sanitizeForFirestore(pump), { merge: true });
     // Mirror to legacy collection name for cross-version compatibility
     const pumpRefLegacy = doc(firestore, 'infusion_pumps', pump.id);
-    await setDoc(pumpRefLegacy, pump, { merge: true });
+    await setDoc(pumpRefLegacy, sanitizeForFirestore(pump), { merge: true });
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `infusionPumps/${pump.id}`);
   }
