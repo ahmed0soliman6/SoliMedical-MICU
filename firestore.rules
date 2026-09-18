@@ -54,17 +54,16 @@ service cloud.firestore {
     function isValidMedicalRecordCreate() {
       return isActiveUser() && (
         isAdmin() || 
-        request.resource.data.createdByUid == request.auth.uid
+        request.resource.data.createdByUid == request.auth.uid ||
+        !("createdByUid" in request.resource.data)
       );
     }
 
     function isValidMedicalRecordUpdate() {
       return isActiveUser() && (
         isAdmin() || (
-          resource.data.createdByUid == request.auth.uid &&
-          request.resource.data.createdByUid == resource.data.createdByUid &&
-          request.resource.data.createdByName == resource.data.createdByName &&
-          request.resource.data.createdAt == resource.data.createdAt
+          (!("createdByUid" in resource.data) || resource.data.createdByUid == request.auth.uid) &&
+          (!("createdByUid" in request.resource.data) || request.resource.data.createdByUid == resource.data.createdByUid)
         )
       );
     }
@@ -75,9 +74,9 @@ service cloud.firestore {
       allow write: if isAuthenticated();
     }
 
-    // Users Collection
+    // Users Collection (Disabled users cannot read users)
     match /users/{userId} {
-      allow read: if isAuthenticated();
+      allow read: if isActiveUser();
       allow create: if isAuthenticated() && (isAdmin() || request.auth.uid == userId);
       allow update: if isAuthenticated() && (
         isAdmin() || (
@@ -236,16 +235,26 @@ service cloud.firestore {
 
     // Hospital Chat (1-to-1 & Department Chat)
     match /chats/{chatId} {
-      allow read: if isClinician();
-      allow create: if isClinician();
-      allow update: if isClinician();
+      allow read: if isActiveUser() && (
+        isAdmin() ||
+        resource.data.type == 'department' ||
+        (resource.data.participantUids != null && request.auth.uid in resource.data.participantUids) ||
+        (resource.data.participants != null && request.auth.uid in resource.data.participants)
+      );
+      allow create: if isActiveUser();
+      allow update: if isActiveUser() && (
+        isAdmin() ||
+        resource.data.type == 'department' ||
+        (resource.data.participantUids != null && request.auth.uid in resource.data.participantUids) ||
+        (resource.data.participants != null && request.auth.uid in resource.data.participants)
+      );
       allow delete: if isAdmin();
     }
 
     match /chatMessages/{messageId} {
-      allow read: if isClinician();
-      allow create: if isClinician() && request.resource.data.senderUid == request.auth.uid;
-      allow update: if isClinician() && request.auth.uid == resource.data.senderUid;
+      allow read: if isActiveUser();
+      allow create: if isActiveUser() && request.resource.data.senderUid == request.auth.uid;
+      allow update: if isActiveUser() && request.auth.uid == resource.data.senderUid;
       allow delete: if isAdmin();
     }
 

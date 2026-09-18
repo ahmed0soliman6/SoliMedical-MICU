@@ -19,8 +19,18 @@ import {
   syncUserToFirebaseConsole,
   firestore
 } from './firebase.ts';
-import { signInWithPopup, signOut as firebaseSignOut, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, User as FirebaseUser } from 'firebase/auth';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { 
+  signInWithPopup, 
+  signOut as firebaseSignOut, 
+  onAuthStateChanged, 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  EmailAuthProvider,
+  reauthenticateWithCredential,
+  updatePassword,
+  User as FirebaseUser 
+} from 'firebase/auth';
+import { collection, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { db } from '../db/icuSyncDb.ts';
 
 interface AuthContextType {
@@ -261,7 +271,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return res;
   };
 
-  // Login with Username / Email / Badge ID + Password / PIN
+  // Login with Username / Email / Badge ID + Password / PIN (Firebase Auth SSOT)
   const loginWithEmailOrBadge = async (
     identifier: string, 
     pinOrPass: string
@@ -279,106 +289,62 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ? trimmedId 
       : `${trimmedId.replace(/\s+/g, '')}@solimedical-micu.org`;
 
-    // 1. Find user in current loaded users list or local DB
+    // 1. Authenticate via Firebase Authentication (SOLE Source of Truth)
+    let fbUser: FirebaseUser | null = null;
+    try {
+      const authResult = await signInWithEmailAndPassword(auth, convertedFirebaseEmail, trimmedPin);
+      fbUser = authResult.user;
+    } catch (fbAuthErr: any) {
+      const errCode = fbAuthErr?.code || '';
+      if (errCode === 'auth/user-disabled' || errCode === 'auth/user-not-found') {
+        return { success: false, message: 'هذا الحساب معطل مؤقتاً أو تم حذفه من المنظومة.' };
+      }
+      if (errCode === 'auth/wrong-password' || errCode === 'auth/invalid-credential') {
+        return { success: false, message: 'كلمة المرور غير صحيحة. يرجى التأكد والمحاولة مرة أخرى.' };
+      }
+      return { success: false, message: fbAuthErr?.message || 'فشل تسجيل الدخول عبر Firebase Authentication.' };
+    }
+
+    if (!fbUser) {
+      return { success: false, message: 'فشل التحقق من هوية المستخدم في Firebase Auth.' };
+    }
+
+    // 2. Load user document from Firestore / system directory
     let user = allUsers.find(
-      u => (u?.email || '').toLowerCase() === convertedFirebaseEmail || 
-           (u?.email || '').toLowerCase() === trimmedId || 
-           (u?.badgeId || '').toLowerCase() === trimmedId || 
-           (u?.uid || '').toLowerCase() === trimmedId ||
-           (u?.email ? u.email.split('@')[0].toLowerCase() === trimmedId : false)
+      u => u.uid === fbUser!.uid || 
+           (u?.email || '').toLowerCase() === convertedFirebaseEmail || 
+           (u?.email || '').toLowerCase() === trimmedId
     );
 
-    // If user not found in local memory, check IndexedDB directly
     if (!user) {
       try {
-        const localUsers = await db.users.toArray();
-        user = localUsers.find(
-          u => (u?.email || '').toLowerCase() === convertedFirebaseEmail || 
-               (u?.email || '').toLowerCase() === trimmedId || 
-               (u?.badgeId || '').toLowerCase() === trimmedId || 
-               (u?.uid || '').toLowerCase() === trimmedId ||
-               (u?.email ? u.email.split('@')[0].toLowerCase() === trimmedId : false)
-        );
-      } catch (e) {
-        console.warn('Local Dexie query error:', e);
-      }
-    }
-
-    // 2. Try REAL Firebase Auth sign in with 1-second fast timeout
-    let authSuccess = false;
-    try {
-      const authPromise = signInWithEmailAndPassword(auth, convertedFirebaseEmail, trimmedPin);
-      const timeoutPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Timeout')), 1000));
-      const authResult = await Promise.race([authPromise, timeoutPromise]);
-      if (authResult?.user) {
-        authSuccess = true;
-        if (user) {
-          user.uid = authResult.user.uid;
+        const userDocRef = doc(firestore, 'users', fbUser.uid);
+        const userSnap = await getDoc(userDocRef);
+        if (userSnap.exists()) {
+          user = userSnap.data() as IcuUser;
         }
-      }
-    } catch (fbAuthErr: any) {
-      console.warn('Firebase Auth sign in attempt warning:', fbAuthErr?.message || fbAuthErr?.code);
-    }
-
-    // 3. If user exists in system (or is Admin)
-    if (user) {
-      if (!user.isActive) {
-        return { 
-          success: false, 
-          message: 'هذا الحساب معطل مؤقتاً. لا يمكنك الدخول أو الكتابة في النظام حتى يتم إعادة تفعيله من قبل إدارة الوحدة' 
-        };
-      }
-
-      // Validate password stored in Cloud Firestore user record or Firebase Auth
-      const isPasswordCorrect = authSuccess || user.pinCode === trimmedPin || user.pinCode === pinOrPass || (!user.pinCode && (trimmedPin === '12345678' || trimmedPin === '1234'));
-
-      if (isPasswordCorrect) {
-        user.lastLoginAt = new Date().toISOString();
-        
-        await saveUserAccount(user);
-        
-        // Background sync to Firebase Auth Users list & Firestore DB
-        syncAdminAccountToFirebaseConsole(user).catch(err => console.warn('Sync notice:', err));
-
-        setCurrentUser(user);
-        localStorage.setItem('soli_icu_active_user', JSON.stringify(user));
-        return { success: true };
-      } else {
-        return { success: false, message: 'كلمة المرور غير صحيحة. يرجى التأكد من كلمة المرور والمحاولة مرة أخرى.' };
+      } catch (e) {
+        console.warn('Firestore user fetch error:', e);
       }
     }
 
-    // 4. Fallback: If no user exists at all and user is attempting admin login
-    if (trimmedId === 'admin' || trimmedId.startsWith('admin@')) {
-      const newAdmin: IcuUser = {
-        uid: `admin_usr_${Date.now()}`,
-        email: convertedFirebaseEmail,
-        nameEn: 'Dr. Admin',
-        nameAr: 'د. المدير العام',
-        role: StaffRole.ADMIN,
-        department: 'العناية المركزة الباطنة - مصر',
-        badgeId: 'ADM-001',
-        licenseNumber: 'EMS-ICU-EGYPT-10042',
-        isActive: true,
-        isSuperAdmin: true,
-        pinCode: trimmedPin,
-        createdAt: new Date().toISOString(),
-        lastLoginAt: new Date().toISOString(),
-        permissions: getDefaultPermissionsForRole(StaffRole.ADMIN),
+    // 3. Reject if user does not exist or is disabled
+    if (!user || user.isActive === false || user.active === false) {
+      await firebaseSignOut(auth);
+      return { 
+        success: false, 
+        message: 'هذا الحساب معطل مؤقتاً أو غير مسجل في جدول مستخدمي المنظومة.' 
       };
-
-      await saveUserAccount(newAdmin);
-      syncAdminAccountToFirebaseConsole(newAdmin).catch(err => console.warn('Sync notice:', err));
-
-      setCurrentUser(newAdmin);
-      localStorage.setItem('soli_icu_active_user', JSON.stringify(newAdmin));
-      return { success: true };
     }
 
-    return { 
-      success: false, 
-      message: `اسم المستخدم "${rawInput}" غير مسجل في المنظومة.` 
-    };
+    // 4. Update last login timestamp and set active user
+    user.lastLoginAt = new Date().toISOString();
+    user.uid = fbUser.uid;
+    
+    await saveUserAccount(user);
+    setCurrentUser(user);
+    localStorage.setItem('soli_icu_active_user', JSON.stringify(user));
+    return { success: true };
   };
 
   // Login with Google (Firebase Auth)
@@ -510,30 +476,66 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // Change password for any user account directly in Firestore & Firebase Auth
-  const changeUserPassword = async (uid: string, newPassword: string): Promise<{ success: boolean; message?: string }> => {
-    if (!newPassword || newPassword.trim().length < 4) {
-      return { success: false, message: 'كلمة المرور يجب أن تتكون من 4 أحرف/أرقام على الأقل' };
-    }
-
-    const targetUser = allUsers.find(u => u.uid === uid);
-    if (!targetUser) {
-      return { success: false, message: 'المستخدم غير موجود بالنظام' };
+  const changeUserPassword = async (uid: string, newPassword: string, oldPasswordForSelf?: string): Promise<{ success: boolean; message?: string }> => {
+    if (!newPassword || newPassword.trim().length < 6) {
+      return { success: false, message: 'كلمة المرور يجب أن تتكون من 6 أحرف/أرقام على الأقل' };
     }
 
     const cleanPass = newPassword.trim();
-    targetUser.pinCode = cleanPass;
 
-    await saveUserAccount(targetUser);
-    syncUserToFirebaseConsole(targetUser).catch(e => console.warn('Sync pass warning:', e));
+    // 1. If self change, attempt Firebase Auth updatePassword
+    if (auth.currentUser && auth.currentUser.uid === uid) {
+      try {
+        if (oldPasswordForSelf && auth.currentUser.email) {
+          const cred = EmailAuthProvider.credential(auth.currentUser.email, oldPasswordForSelf);
+          await reauthenticateWithCredential(auth.currentUser, cred);
+        }
+        await updatePassword(auth.currentUser, cleanPass);
+      } catch (authErr: any) {
+        console.warn('Self password update warning:', authErr);
+      }
+    }
 
-    if (currentUser?.uid === uid) {
-      const updatedCurrent = { ...currentUser, pinCode: cleanPass };
-      setCurrentUser(updatedCurrent);
-      localStorage.setItem('soli_icu_active_user', JSON.stringify(updatedCurrent));
+    // 2. If Admin changing another user, call Admin Server API with Bearer Token
+    if ((currentUser?.isSuperAdmin || currentUser?.role === StaffRole.ADMIN) && uid !== currentUser?.uid) {
+      try {
+        const idToken = await auth.currentUser?.getIdToken();
+        if (idToken) {
+          const resp = await fetch('/api/admin/users/change-password', {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${idToken}`
+            },
+            body: JSON.stringify({
+              targetUid: uid,
+              newPassword: cleanPass
+            })
+          });
+          const data = await resp.json();
+          if (!resp.ok || !data.success) {
+            return { success: false, message: data.message || 'فشل تحديث كلمة المرور عبر الخادم' };
+          }
+        }
+      } catch (err: any) {
+        console.warn('Admin change password API warning:', err);
+      }
+    }
+
+    // 3. Update Firestore User document
+    const targetUser = allUsers.find(u => u.uid === uid);
+    if (targetUser) {
+      targetUser.pinCode = cleanPass;
+      await saveUserAccount(targetUser);
+      if (currentUser?.uid === uid) {
+        const updatedCurrent = { ...currentUser, pinCode: cleanPass };
+        setCurrentUser(updatedCurrent);
+        localStorage.setItem('soli_icu_active_user', JSON.stringify(updatedCurrent));
+      }
     }
 
     await refreshUsers();
-    return { success: true, message: 'تم تغيير كلمة السر بنجاح في نظام المزامنة السحابية Firestore' };
+    return { success: true, message: 'تم تغيير كلمة المرور بنجاح وترحيلها إلى Firebase Auth' };
   };
 
   // Toggle user status (Activate/Deactivate) with server-side token revocation
@@ -542,31 +544,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!user) return;
     if (user.isSuperAdmin || user.role === StaffRole.ADMIN) return; // Cannot deactivate admin
 
-    if (user.isActive) {
-      try {
+    try {
+      const idToken = await auth.currentUser?.getIdToken();
+      if (user.isActive) {
         const resp = await fetch('/api/admin/users/disable', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${idToken}`
+          },
           body: JSON.stringify({
-            callerUid: currentUser?.uid,
             targetUid: uid,
             reason: 'Administrative deactivation'
           })
         });
-        if (!resp.ok) {
+        const data = await resp.json();
+        if (resp.ok && data.success) {
           user.isActive = false;
           user.active = false;
           await saveUserAccount(user);
         }
-      } catch (e) {
-        user.isActive = false;
-        user.active = false;
+      } else {
+        user.isActive = true;
+        user.active = true;
         await saveUserAccount(user);
       }
-    } else {
-      user.isActive = true;
-      user.active = true;
-      await saveUserAccount(user);
+    } catch (e) {
+      console.warn('Toggle status warning:', e);
     }
     await refreshUsers();
   };
@@ -589,11 +593,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!target) return { success: false, message: 'المستخدم غير موجود' };
 
     try {
+      const idToken = await auth.currentUser?.getIdToken();
       const resp = await fetch('/api/admin/users/delete', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
         body: JSON.stringify({
-          callerUid: currentUser?.uid,
           targetUid: uid,
           reason: 'Permanent administrative deletion'
         })
@@ -607,13 +614,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         success: true, 
         message: data.message || 'تم حذف الحساب بنجاح. تظل جميع السجلات الطبية والملاحظات التاريخية محفوظة بالكامل.' 
       };
-    } catch (e) {
-      // Local fallback if offline
-      await deleteUserAccount(uid);
-      await refreshUsers();
+    } catch (e: any) {
       return { 
-        success: true, 
-        message: 'تم حذف الحساب بنجاح مع الاحتفاظ بكافة السجلات الطبية.' 
+        success: false, 
+        message: e?.message || 'فشل الاتصال بالخادم لحذف الحساب.' 
       };
     }
   };

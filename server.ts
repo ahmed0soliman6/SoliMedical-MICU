@@ -297,15 +297,21 @@ Always respond in strictly valid JSON format.`,
 // ----------------------------------------------------------------------------
 // Admin User Management Operations (Server-Side SSOT & Firebase Admin)
 // ----------------------------------------------------------------------------
-import { disableUser, deleteUser } from './src/server/adminOperations';
+import { 
+  disableUserWithToken, 
+  deleteUserWithToken, 
+  adminChangeUserPassword, 
+  adminPasswordRecovery 
+} from './src/server/adminOperations';
 
 app.post('/api/admin/users/disable', async (req, res) => {
   try {
-    const { callerUid, targetUid, reason } = req.body;
-    if (!callerUid || !targetUid) {
-      return res.status(400).json({ success: false, message: 'Missing callerUid or targetUid.' });
+    const authHeader = req.headers.authorization;
+    const { targetUid, reason } = req.body;
+    if (!targetUid) {
+      return res.status(400).json({ success: false, message: 'Missing targetUid.' });
     }
-    const result = await disableUser(callerUid, targetUid, reason);
+    const result = await disableUserWithToken(authHeader, targetUid, reason);
     return res.status(result.success ? 200 : 403).json(result);
   } catch (err: any) {
     return res.status(500).json({ success: false, message: err?.message || 'Internal server error.' });
@@ -314,12 +320,37 @@ app.post('/api/admin/users/disable', async (req, res) => {
 
 app.post('/api/admin/users/delete', async (req, res) => {
   try {
-    const { callerUid, targetUid, reason } = req.body;
-    if (!callerUid || !targetUid) {
-      return res.status(400).json({ success: false, message: 'Missing callerUid or targetUid.' });
+    const authHeader = req.headers.authorization;
+    const { targetUid, reason } = req.body;
+    if (!targetUid) {
+      return res.status(400).json({ success: false, message: 'Missing targetUid.' });
     }
-    const result = await deleteUser(callerUid, targetUid, reason);
+    const result = await deleteUserWithToken(authHeader, targetUid, reason);
     return res.status(result.success ? 200 : 403).json(result);
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err?.message || 'Internal server error.' });
+  }
+});
+
+app.post('/api/admin/users/change-password', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const { targetUid, newPassword } = req.body;
+    if (!targetUid || !newPassword) {
+      return res.status(400).json({ success: false, message: 'Missing targetUid or newPassword.' });
+    }
+    const result = await adminChangeUserPassword(authHeader, targetUid, newPassword);
+    return res.status(result.success ? 200 : 403).json(result);
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err?.message || 'Internal server error.' });
+  }
+});
+
+app.post('/api/admin/recovery', async (req, res) => {
+  try {
+    const { username, recoveryCode, newPassword } = req.body;
+    const result = await adminPasswordRecovery(username, recoveryCode, newPassword);
+    return res.status(result.success ? 200 : 400).json(result);
   } catch (err: any) {
     return res.status(500).json({ success: false, message: err?.message || 'Internal server error.' });
   }
