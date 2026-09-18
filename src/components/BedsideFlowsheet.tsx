@@ -298,28 +298,17 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
   }, [bed.bedNumber, patient.id]);
 
   const loadBedsideData = async () => {
-    let vitals = await db.vitals
+    const vitals = await db.vitals
       .where('patientId')
       .equals(patient.id)
       .reverse()
       .sortBy('timestamp');
 
-    if (vitals.length === 0 && bed.bedNumber) {
-      const bedVitals = await db.vitals
-        .where('bedId')
-        .equals(bed.bedNumber)
-        .reverse()
-        .sortBy('timestamp');
-      if (bedVitals.length > 0) {
-        vitals = bedVitals;
-      }
-    }
-
     setVitalsHistory(vitals);
 
     const vent = await db.ventilators
-      .where('bedId')
-      .equals(bed.bedNumber)
+      .where('patientId')
+      .equals(patient.id)
       .first();
     setVentilator(vent || null);
 

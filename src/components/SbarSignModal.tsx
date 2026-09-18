@@ -190,8 +190,8 @@ export const SbarSignModal: React.FC<SbarSignModalProps> = ({
           if (v) setVitals(v);
         }
 
-        if (!initialVentilator && bedNumber) {
-          const vent = await db.ventilators.where('bedNumber').equals(bedNumber).first();
+        if (!initialVentilator && patientId) {
+          const vent = await db.ventilators.where('patientId').equals(patientId).first();
           if (vent) setVentilator(vent);
         }
 
