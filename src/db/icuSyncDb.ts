@@ -23,7 +23,9 @@ import {
   CodeStatus,
   IntakePathway,
   AcuityLevel,
-  StaffRole
+  StaffRole,
+  AllergySeverity,
+  PumpStatus
 } from '../types/schema.ts';
 
 export class IcuSyncDatabase extends Dexie {
@@ -89,14 +91,14 @@ export async function initializeDatabaseSeed(): Promise<void> {
       bayName: `Critical Care Bay ${num}`,
       isActive: true,
       displayOrder: idx,
-      status: idx === 0 ? BedStatus.OCCUPIED : idx === 1 ? BedStatus.OCCUPIED : idx === 2 ? BedStatus.ISOLATION : idx === 5 ? BedStatus.UNAVAILABLE : BedStatus.VACANT,
-      currentPatientId: idx === 0 ? 'pat-bed-01' : idx === 1 ? 'pat-bed-02' : null,
+      status: idx === 0 ? BedStatus.OCCUPIED : idx === 1 ? BedStatus.OCCUPIED : idx === 2 ? BedStatus.OCCUPIED : idx === 3 ? BedStatus.OCCUPIED : idx === 5 ? BedStatus.UNAVAILABLE : BedStatus.VACANT,
+      currentPatientId: idx === 0 ? 'pat-bed-01' : idx === 1 ? 'pat-bed-02' : idx === 2 ? 'pat-bed-03' : idx === 3 ? 'pat-bed-04' : null,
       lastCleanedAt: new Date().toISOString()
     }));
     await db.beds.bulkPut(initialBeds);
   }
 
-  // Seed initial demonstration patients if empty
+  // Seed initial realistic clinical ICU patients if empty
   const patientCount = await db.patients.count();
   if (patientCount === 0) {
     const now = Date.now();
@@ -105,6 +107,7 @@ export async function initializeDatabaseSeed(): Promise<void> {
     const oneDayAgo = new Date(now - 1 * 24 * 3600 * 1000).toISOString();
     const today = new Date(now).toISOString();
 
+    // Patient 1: Bed 01 - ARDS & Septic Shock
     const p1: PatientDossier = {
       id: 'pat-bed-01',
       mrn: 'MRN-104928',
@@ -125,8 +128,8 @@ export async function initializeDatabaseSeed(): Promise<void> {
       currentBedId: '01' as any,
       acuityLevel: AcuityLevel.CRITICAL_STAT as any,
       patientStatus: 'ACTIVE_ICU',
-      allergies: [],
-      microbiologyHistory: [],
+      allergies: [{ id: 'alg-01', allergen: 'Penicillin', reaction: 'Anaphylaxis', severity: AllergySeverity.FATAL_ANAPHYLAXIS, isLocked: true, verifiedBy: 'د. هشام طلعت' }] as any,
+      microbiologyHistory: [{ id: 'mic-01', specimenSource: 'Sputum Culture', isolatedOrganism: 'Acinetobacter baumannii', cultureDate: threeDaysAgo, isResistant: true, resistantTo: ['Ceftriaxone'], sensitiveTo: ['Colistin', 'Meropenem'], recommendedIsolation: 'Contact Isolation' }] as any,
       pastVisits: [],
       attendingPhysician: {
         staffId: 'DOC-101',
@@ -138,11 +141,12 @@ export async function initializeDatabaseSeed(): Promise<void> {
         name: 'ممرض/ منى حسان (RN Mona Hassan)',
         role: StaffRole.BEDSIDE_RN as any,
       },
-      isolationPrecautions: ['Airborne Precautions'],
+      isolationPrecautions: ['Airborne Precautions', 'Contact Precautions'],
       createdAt: threeDaysAgo,
       updatedAt: today,
     };
 
+    // Patient 2: Bed 02 - Acute Anterior STEMI with Cardiogenic Shock
     const p2: PatientDossier = {
       id: 'pat-bed-02',
       mrn: 'MRN-209841',
@@ -156,8 +160,8 @@ export async function initializeDatabaseSeed(): Promise<void> {
       heightCm: 160,
       idealBodyWeightKg: 52,
       codeStatus: CodeStatus.FULL_CODE as any,
-      primaryDiagnosisEn: 'Acute Anterior STEMI with Cardiogenic Shock',
-      primaryDiagnosisAr: 'احتشاء أمامي حاد بعضلة القلب مع صدمة قلبية',
+      primaryDiagnosisEn: 'Acute Anterior STEMI post-PCI with Cardiogenic Shock',
+      primaryDiagnosisAr: 'احتشاء أمامي حاد بعضلة القلب بعد القسطرة مع صدمة قلبية',
       intakePathway: IntakePathway.STAT_CRITICAL as any,
       admissionDate: twoDaysAgo,
       currentBedId: '02' as any,
@@ -169,21 +173,101 @@ export async function initializeDatabaseSeed(): Promise<void> {
       attendingPhysician: {
         staffId: 'DOC-102',
         name: 'د. طارق منصور (Dr. Tarek Mansour)',
-        role: StaffRole.SPECIALIST as any,
+        role: StaffRole.CONSULTANT as any,
       },
       primaryNurse: {
         staffId: 'RN-304',
         name: 'ممرض/ أحمد خليل (RN Ahmed Khalil)',
         role: StaffRole.BEDSIDE_RN as any,
       },
+      isolationPrecautions: [],
       createdAt: twoDaysAgo,
       updatedAt: today,
     };
 
-    await db.patients.bulkPut([p1, p2]);
+    // Patient 3: Bed 03 - Severe Traumatic Brain Injury
+    const p3: PatientDossier = {
+      id: 'pat-bed-03',
+      mrn: 'MRN-384012',
+      phoneNumber: '01288334455',
+      nationalId: '29201010103829',
+      fullNameEn: 'Tariq Abdulrahman Al-Otaibi',
+      fullNameAr: 'طارق عبد الرحمن العتيبي',
+      age: 34,
+      gender: Gender.MALE as any,
+      weightKg: 82,
+      heightCm: 180,
+      idealBodyWeightKg: 75,
+      codeStatus: CodeStatus.FULL_CODE as any,
+      primaryDiagnosisEn: 'Severe Traumatic Brain Injury (TBI) post-Craniotomy for Epidural Hematoma',
+      primaryDiagnosisAr: 'إصابة دماغية رضية حادة بعد جراحة تفريغ نزيف فوق الأم الجافية',
+      intakePathway: IntakePathway.STAT_CRITICAL as any,
+      admissionDate: oneDayAgo,
+      currentBedId: '03' as any,
+      acuityLevel: AcuityLevel.CRITICAL_STAT as any,
+      patientStatus: 'ACTIVE_ICU',
+      allergies: [],
+      microbiologyHistory: [],
+      pastVisits: [],
+      attendingPhysician: {
+        staffId: 'DOC-103',
+        name: 'د. أحمد الأحمدي (Dr. Ahmed Al-Ahmadi)',
+        role: StaffRole.CONSULTANT as any,
+      },
+      primaryNurse: {
+        staffId: 'RN-308',
+        name: 'ممرض/ سارة محمود (RN Sarah Mahmoud)',
+        role: StaffRole.BEDSIDE_RN as any,
+      },
+      isolationPrecautions: ['Contact Precautions'],
+      createdAt: oneDayAgo,
+      updatedAt: today,
+    };
 
-    // Seed serial lab results for Bed 01 showing exact trend: HG 5 > 7 > 8.5 > 8
+    // Patient 4: Bed 04 - Acute Exacerbation of COPD
+    const p4: PatientDossier = {
+      id: 'pat-bed-04',
+      mrn: 'MRN-419033',
+      phoneNumber: '01555443322',
+      nationalId: '25306120102918',
+      fullNameEn: 'Ibrahim Hassan Al-Ghamdi',
+      fullNameAr: 'إبراهيم حسن الغامدي',
+      age: 71,
+      gender: Gender.MALE as any,
+      weightKg: 70,
+      heightCm: 168,
+      idealBodyWeightKg: 65,
+      codeStatus: CodeStatus.FULL_CODE as any,
+      primaryDiagnosisEn: 'Acute Exacerbation of COPD with Type II Hypercapnic Respiratory Failure on NIV',
+      primaryDiagnosisAr: 'تفاقم حاد لمرض السدد الرئوي المزمن مع فشل تنفسي من النوع الثاني على التنفس غير الباضع',
+      intakePathway: IntakePathway.ER_REFERRAL as any,
+      admissionDate: today,
+      currentBedId: '04' as any,
+      acuityLevel: AcuityLevel.HIGH_VIGILANCE as any,
+      patientStatus: 'ACTIVE_ICU',
+      allergies: [{ id: 'alg-04', allergen: 'Sulfa', reaction: 'Skin Rash', severity: AllergySeverity.MILD, isLocked: false, verifiedBy: 'د. هشام طلعت' }] as any,
+      microbiologyHistory: [],
+      pastVisits: [],
+      attendingPhysician: {
+        staffId: 'DOC-101',
+        name: 'د. هشام طلعت (Dr. Hesham Talaat)',
+        role: StaffRole.CONSULTANT as any,
+      },
+      primaryNurse: {
+        staffId: 'RN-310',
+        name: 'ممرض/ خالد العلي (RN Khaled Al-Ali)',
+        role: StaffRole.BEDSIDE_RN as any,
+      },
+      isolationPrecautions: [],
+      createdAt: today,
+      updatedAt: today,
+    };
+
+    await db.patients.bulkPut([p1, p2, p3, p4]);
+
+    // Seed serial lab results showing clinical trends
     const sampleLabs: LabResultItem[] = [
+      // Bed 01 Hemoglobin Trend: 5 -> 7 -> 8.5 -> 8.0 g/dL
       {
         id: 'lab-hg-1',
         patientId: 'pat-bed-01',
@@ -232,7 +316,7 @@ export async function initializeDatabaseSeed(): Promise<void> {
         bedNumber: '01',
         testName: 'HG',
         category: 'CBC',
-        value: '8',
+        value: '8.0',
         unit: 'g/dL',
         normalRange: '12.0 - 16.0',
         timestamp: today,
@@ -240,7 +324,7 @@ export async function initializeDatabaseSeed(): Promise<void> {
         notes: 'استقرار نسبي للهيموجلوبين',
         recordedByName: 'د. هشام طلعت (Dr. Hesham)',
       },
-      // Creatinine declining (improvement)
+      // Bed 01 Creatinine & WBC
       {
         id: 'lab-cr-1',
         patientId: 'pat-bed-01',
@@ -261,29 +345,14 @@ export async function initializeDatabaseSeed(): Promise<void> {
         bedNumber: '01',
         testName: 'Creatinine',
         category: 'Biochemistry',
-        value: '2.4',
-        unit: 'mg/dL',
-        normalRange: '0.7 - 1.3',
-        timestamp: twoDaysAgo,
-        status: 'RESULTED',
-        notes: 'تحسن مع السوائل',
-        recordedByName: 'د. طارق منصور',
-      },
-      {
-        id: 'lab-cr-3',
-        patientId: 'pat-bed-01',
-        bedNumber: '01',
-        testName: 'Creatinine',
-        category: 'Biochemistry',
         value: '1.8',
         unit: 'mg/dL',
         normalRange: '0.7 - 1.3',
         timestamp: today,
         status: 'RESULTED',
-        notes: 'استمرار التحسن الكلوي',
+        notes: 'تحسن الوظائف الكلوية مع السوائل والميروبينيم',
         recordedByName: 'د. هشام طلعت',
       },
-      // WBC
       {
         id: 'lab-wbc-1',
         patientId: 'pat-bed-01',
@@ -295,25 +364,11 @@ export async function initializeDatabaseSeed(): Promise<void> {
         normalRange: '4.0 - 11.0',
         timestamp: threeDaysAgo,
         status: 'RESULTED',
-        notes: 'Leukocytosis due to sepsis',
+        notes: 'ارتفاع الكريات البيضاء نتيجة الإنتان',
         recordedByName: 'د. هشام طلعت',
       },
       {
         id: 'lab-wbc-2',
-        patientId: 'pat-bed-01',
-        bedNumber: '01',
-        testName: 'WBC',
-        category: 'CBC',
-        value: '14.2',
-        unit: 'x10^9/L',
-        normalRange: '4.0 - 11.0',
-        timestamp: twoDaysAgo,
-        status: 'RESULTED',
-        notes: 'Declining with Meropenem',
-        recordedByName: 'د. طارق منصور',
-      },
-      {
-        id: 'lab-wbc-3',
         patientId: 'pat-bed-01',
         bedNumber: '01',
         testName: 'WBC',
@@ -323,14 +378,58 @@ export async function initializeDatabaseSeed(): Promise<void> {
         normalRange: '4.0 - 11.0',
         timestamp: today,
         status: 'RESULTED',
-        notes: 'Normalized range',
+        notes: 'عودة إلى المعدل الطبيعي',
         recordedByName: 'د. هشام طلعت',
       },
+      // Bed 02 Cardiac Markers
+      {
+        id: 'lab-trop-1',
+        patientId: 'pat-bed-02',
+        bedNumber: '02',
+        testName: 'Troponin I',
+        category: 'Cardiac Markers',
+        value: '14.2',
+        unit: 'ng/mL',
+        normalRange: '0.0 - 0.04',
+        timestamp: twoDaysAgo,
+        status: 'RESULTED',
+        notes: 'High positive post-STEMI',
+        recordedByName: 'د. طارق منصور',
+      },
+      {
+        id: 'lab-bnp-1',
+        patientId: 'pat-bed-02',
+        bedNumber: '02',
+        testName: 'NT-proBNP',
+        category: 'Cardiac Markers',
+        value: '3400',
+        unit: 'pg/mL',
+        normalRange: '0 - 125',
+        timestamp: today,
+        status: 'RESULTED',
+        notes: 'Severe acute heart failure indicator',
+        recordedByName: 'د. طارق منصور',
+      },
+      // Bed 04 ABG Lab
+      {
+        id: 'lab-abg-p4',
+        patientId: 'pat-bed-04',
+        bedNumber: '04',
+        testName: 'ABG Panel',
+        category: 'ABG',
+        value: 'pH 7.33 / PaCO2 56 / PaO2 72 / HCO3 29',
+        unit: 'mmHg',
+        normalRange: 'pH 7.35-7.45',
+        timestamp: today,
+        status: 'RESULTED',
+        notes: 'Compensated Chronic Respiratory Acidosis with Hypercapnia',
+        recordedByName: 'د. هشام طلعت',
+      }
     ];
 
     await db.labResults.bulkPut(sampleLabs);
 
-    // Seed investigations for Bed 01
+    // Seed investigations
     const sampleInv: InvestigationItem[] = [
       {
         id: 'inv-cxr-1',
@@ -355,21 +454,21 @@ export async function initializeDatabaseSeed(): Promise<void> {
         recordedByName: 'د. طارق منصور (Dr. Tarek)',
       },
       {
-        id: 'inv-ecg-1',
-        patientId: 'pat-bed-01',
-        bedNumber: '01',
-        modality: 'ECG',
-        testName: '12-Lead Standard Electrocardiogram',
-        timestamp: today,
+        id: 'inv-ct-p3',
+        patientId: 'pat-bed-03',
+        bedNumber: '03',
+        modality: 'CT Brain',
+        testName: 'Emergency Non-Contrast Head CT',
+        timestamp: oneDayAgo,
         status: 'REPORTED',
-        resultReport: 'Sinus rhythm, HR 96 bpm, PR 160ms, QTc 430ms. No ischemic ST elevation or malignant arrhythmia.',
-        recordedByName: 'د. هشام طلعت (Dr. Hesham)',
-      },
+        resultReport: 'Post-operative changes right frontoparietal craniotomy with complete evacuation of epidural hematoma. Minimal residual edema.',
+        recordedByName: 'د. أشرف رضوان (Radiologist)',
+      }
     ];
 
     await db.investigations.bulkPut(sampleInv);
 
-    // Seed initial active antibiotics for Bed 01 & Bed 02
+    // Seed active antibiotics
     const sampleAntibiotics: PatientAntibiotic[] = [
       {
         id: 'abx-bed01-mero',
@@ -388,7 +487,7 @@ export async function initializeDatabaseSeed(): Promise<void> {
         renalAdjustment: 'Normal renal dose (CrCl > 50 mL/min)',
         requiresTdm: false,
         prescribedByDoctorName: 'Dr. Tarek Mansour (Consultant)',
-        administeredByRN: 'RN Sarah Jenkins',
+        administeredByRN: 'RN Mona Hassan',
         notes: 'Extended 3-hour infusion protocol for optimal MIC time-dependent killing.',
         createdAt: threeDaysAgo,
         updatedAt: today,
@@ -413,7 +512,7 @@ export async function initializeDatabaseSeed(): Promise<void> {
         latestTdmLevel: '16.8 mcg/mL',
         latestTdmTimestamp: twoDaysAgo,
         prescribedByDoctorName: 'Dr. Hesham Talaat (ICU Specialist)',
-        administeredByRN: 'RN Sarah Jenkins',
+        administeredByRN: 'RN Mona Hassan',
         notes: 'Trough level 16.8 mcg/mL within therapeutic target. Next trough due tomorrow morning.',
         createdAt: threeDaysAgo,
         updatedAt: today,
@@ -435,168 +534,257 @@ export async function initializeDatabaseSeed(): Promise<void> {
         renalAdjustment: 'CrCl > 50 mL/min standard dosing',
         requiresTdm: false,
         prescribedByDoctorName: 'Dr. Hesham Talaat',
-        administeredByRN: 'RN Ahmed Khaled',
+        administeredByRN: 'RN Ahmed Khalil',
         notes: 'Post-exploratory laparotomy broad spectrum coverage.',
         createdAt: twoDaysAgo,
+        updatedAt: today,
+      },
+      {
+        id: 'abx-bed03-cef',
+        patientId: 'pat-bed-03',
+        bedNumber: '03',
+        drugNameEn: 'Ceftriaxone',
+        drugNameAr: 'سيفترياكسون',
+        dose: '2 g',
+        route: 'IV',
+        frequency: 'Q12H',
+        indication: 'Post-Neurosurgical Meningitis Prophylaxis',
+        category: 'Cephalosporin 3rd Gen',
+        startDate: oneDayAgo.slice(0, 10),
+        plannedDurationDays: 5,
+        status: 'ACTIVE',
+        renalAdjustment: 'No renal adjustment needed',
+        requiresTdm: false,
+        prescribedByDoctorName: 'Dr. Ahmed Al-Ahmadi',
+        administeredByRN: 'RN Sarah Mahmoud',
+        notes: 'Prophylactic high-dose CSF penetration protocol.',
+        createdAt: oneDayAgo,
         updatedAt: today,
       }
     ];
 
     await db.patientAntibiotics.bulkPut(sampleAntibiotics);
-  } else {
-    // Check if antibiotics table needs initial seed if empty
-    const abxCount = await db.patientAntibiotics.count();
-    if (abxCount === 0) {
-      const now = new Date();
-      const threeDaysAgo = new Date(now.getTime() - 3 * 86400000).toISOString();
-      const twoDaysAgo = new Date(now.getTime() - 2 * 86400000).toISOString();
-      const today = now.toISOString();
 
-      await db.patientAntibiotics.bulkPut([
-        {
-          id: 'abx-bed01-mero',
-          patientId: 'pat-bed-01',
-          bedNumber: '01',
-          drugNameEn: 'Meropenem',
-          drugNameAr: 'ميروبينيم',
-          dose: '1 g',
-          route: 'IV',
-          frequency: 'Q8H (Extended 3h Infusion)',
-          indication: 'Severe Sepsis & Ventilator-Associated Pneumonia (VAP)',
-          category: 'Beta-Lactam / Carbapenem',
-          startDate: threeDaysAgo.slice(0, 10),
-          plannedDurationDays: 7,
-          status: 'ACTIVE',
-          renalAdjustment: 'Normal renal dose (CrCl > 50 mL/min)',
-          requiresTdm: false,
-          prescribedByDoctorName: 'Dr. Tarek Mansour (Consultant)',
-          administeredByRN: 'RN Sarah Jenkins',
-          notes: 'Extended 3-hour infusion protocol for optimal MIC time-dependent killing.',
-          createdAt: threeDaysAgo,
-          updatedAt: today,
-        },
-        {
-          id: 'abx-bed01-vanco',
-          patientId: 'pat-bed-01',
-          bedNumber: '01',
-          drugNameEn: 'Vancomycin',
-          drugNameAr: 'فانكومايسين',
-          dose: '1 g',
-          route: 'IV',
-          frequency: 'Q12H (Slow 2h infusion)',
-          indication: 'Empirical MRSA coverage & Catheter Sepsis',
-          category: 'Glycopeptide / Lipopeptide',
-          startDate: threeDaysAgo.slice(0, 10),
-          plannedDurationDays: 7,
-          status: 'ACTIVE',
-          renalAdjustment: 'Dose adjusted based on trough monitoring',
-          requiresTdm: true,
-          tdmTarget: 'Trough Target: 15 - 20 mcg/mL',
-          latestTdmLevel: '16.8 mcg/mL',
-          latestTdmTimestamp: twoDaysAgo,
-          prescribedByDoctorName: 'Dr. Hesham Talaat (ICU Specialist)',
-          administeredByRN: 'RN Sarah Jenkins',
-          notes: 'Trough level 16.8 mcg/mL within therapeutic target. Next trough due tomorrow morning.',
-          createdAt: threeDaysAgo,
-          updatedAt: today,
-        },
-        {
-          id: 'abx-bed02-tazo',
-          patientId: 'pat-bed-02',
-          bedNumber: '02',
-          drugNameEn: 'Piperacillin / Tazobactam (Tazocin)',
-          drugNameAr: 'بيبراسيلين / تازوباكتام (تازوسين)',
-          dose: '4.5 g',
-          route: 'IV',
-          frequency: 'Q6H',
-          indication: 'Complicated Intra-Abdominal Sepsis Post-Op',
-          category: 'Beta-Lactam / Carbapenem',
-          startDate: twoDaysAgo.slice(0, 10),
-          plannedDurationDays: 7,
-          status: 'ACTIVE',
-          renalAdjustment: 'CrCl > 50 mL/min standard dosing',
-          requiresTdm: false,
-          prescribedByDoctorName: 'Dr. Hesham Talaat',
-          administeredByRN: 'RN Ahmed Khaled',
-          notes: 'Post-exploratory laparotomy broad spectrum coverage.',
-          createdAt: twoDaysAgo,
-          updatedAt: today,
-        }
-      ]);
-    }
-  }
+    // Seed telemetry vitals
+    const sampleVitals: TelemetryVitals[] = [
+      {
+        id: 'vit-bed-01',
+        bedId: '01' as any,
+        patientId: 'pat-bed-01',
+        timestamp: today,
+        heartRateBpm: 88,
+        systolicBpMmHg: 118,
+        diastolicBpMmHg: 72,
+        meanArterialPressureMmHg: 87,
+        spo2Percent: 96,
+        respiratoryRateCpm: 18,
+        coreTemperatureCelsius: 37.2,
+        recordedByStaffName: 'د. هشام طلعت (Dr. Hesham)',
+      } as any,
+      {
+        id: 'vit-bed-02',
+        bedId: '02' as any,
+        patientId: 'pat-bed-02',
+        timestamp: today,
+        heartRateBpm: 94,
+        systolicBpMmHg: 105,
+        diastolicBpMmHg: 65,
+        meanArterialPressureMmHg: 78,
+        spo2Percent: 98,
+        respiratoryRateCpm: 16,
+        coreTemperatureCelsius: 36.8,
+        recordedByStaffName: 'د. طارق منصور (Dr. Tarek)',
+      } as any,
+      {
+        id: 'vit-bed-03',
+        bedId: '03' as any,
+        patientId: 'pat-bed-03',
+        timestamp: today,
+        heartRateBpm: 72,
+        systolicBpMmHg: 130,
+        diastolicBpMmHg: 80,
+        meanArterialPressureMmHg: 97,
+        spo2Percent: 99,
+        respiratoryRateCpm: 14,
+        coreTemperatureCelsius: 36.5,
+        recordedByStaffName: 'د. أحمد الأحمدي',
+      } as any,
+      {
+        id: 'vit-bed-04',
+        bedId: '04' as any,
+        patientId: 'pat-bed-04',
+        timestamp: today,
+        heartRateBpm: 82,
+        systolicBpMmHg: 124,
+        diastolicBpMmHg: 76,
+        meanArterialPressureMmHg: 92,
+        spo2Percent: 93,
+        respiratoryRateCpm: 20,
+        coreTemperatureCelsius: 37.0,
+        recordedByStaffName: 'د. هشام طلعت',
+      } as any
+    ];
 
-  // Seed default ventilators if empty
-  const ventCount = await db.ventilators.count();
-  if (ventCount === 0) {
-    const now = new Date();
-    const fourHoursAgo = new Date(now.getTime() - 4 * 3600000).toISOString();
-    const threeHoursAgo = new Date(now.getTime() - 3 * 3600000).toISOString();
-    const twoHoursAgo = new Date(now.getTime() - 2 * 3600000).toISOString();
-    const oneHourAgo = new Date(now.getTime() - 1 * 3600000).toISOString();
+    await db.vitals.bulkPut(sampleVitals);
 
-    await db.ventilators.put({
-      id: 'vent_01_pat-bed-01',
-      bedId: BedNumber.BED_01,
-      patientId: 'pat-bed-01',
-      timestamp: now.toISOString(),
-      deviceModel: 'Dräger Evita V800',
-      mode: VentilatorMode.PRVC,
-      fio2Percent: 40,
-      peepCmH2O: 8,
-      tidalVolumeMl: 420,
-      peakInspiratoryPressureCmH2O: 22,
-      plateauPressureCmH2O: 18,
-      drivingPressureCmH2O: 10,
-      setRespiratoryRateCpm: 16,
-      actualRespiratoryRateCpm: 18,
-      ieRatio: '1:2',
-      isWeaningTrialActive: false,
-      circuitLeakPercent: 2,
-      recordedByStaffName: 'د. طارق منصور (Dr. Tarek)',
-      history: [
-        {
-          id: 'hist-vent-1',
-          timestamp: fourHoursAgo,
-          mode: VentilatorMode.SIMV_VC,
-          fio2Percent: 60,
-          peepCmH2O: 10,
-          tidalVolumeMl: 450,
-          recordedByStaffName: 'د. هشام طلعت (Dr. Hesham)',
-          deviceModel: 'Dräger Evita V800',
+    // Seed infusion pumps
+    const samplePumps: InfusionPumpLine[] = [
+      {
+        id: 'pump-01-norad',
+        patientId: 'pat-bed-01',
+        bedId: '01' as any,
+        pumpChannel: 'PUMP_A',
+        lineAccessType: 'CVC_LINE_1',
+        drugNameEn: 'Noradrenaline (Norepinephrine)',
+        drugNameAr: 'نورأدرينالين',
+        solutionCarrier: '4 mg in 50 mL D5W',
+        currentRate: 0.12,
+        rateUnit: 'mcg/kg/min',
+        flowRateMlPerHour: 4.5,
+        status: PumpStatus.RUNNING,
+        clinicalTargetDescription: 'Target MAP > 65 mmHg',
+        remainingVolumeMl: 31.5,
+        totalVolumeMl: 50,
+      },
+      {
+        id: 'pump-02-dobut',
+        patientId: 'pat-bed-02',
+        bedId: '02' as any,
+        pumpChannel: 'PUMP_B',
+        lineAccessType: 'PERIPHERAL',
+        drugNameEn: 'Dobutamine',
+        drugNameAr: 'دوبوتامين',
+        solutionCarrier: '250 mg in 50 mL D5W',
+        currentRate: 5,
+        rateUnit: 'mcg/kg/min',
+        flowRateMlPerHour: 6.0,
+        status: PumpStatus.RUNNING,
+        clinicalTargetDescription: 'Target Cardiac Index > 2.2 L/min/m²',
+        remainingVolumeMl: 58.0,
+        totalVolumeMl: 100,
+      },
+      {
+        id: 'pump-03-prop',
+        patientId: 'pat-bed-03',
+        bedId: '03' as any,
+        pumpChannel: 'PUMP_A',
+        lineAccessType: 'CVC_LINE_2',
+        drugNameEn: 'Propofol 2%',
+        drugNameAr: 'بروبوفول',
+        solutionCarrier: '1000 mg in 50 mL Vial',
+        currentRate: 150,
+        rateUnit: 'mg/h',
+        flowRateMlPerHour: 7.5,
+        status: PumpStatus.RUNNING,
+        clinicalTargetDescription: 'Target RASS -2 to -3 (Deep Sedation for TBI)',
+        remainingVolumeMl: 25.0,
+        totalVolumeMl: 50,
+      }
+    ];
+
+    await db.infusionPumps.bulkPut(samplePumps);
+
+    // Seed fluid balance
+    const sampleFluids: FluidBalance24H[] = [
+      {
+        id: 'fluid-p1-today',
+        bedId: '01' as any,
+        patientId: 'pat-bed-01',
+        periodStartTimestamp: threeDaysAgo,
+        periodEndTimestamp: today,
+        intakeBreakdown: {
+          ivMaintenanceFluidMl: 1200,
+          ivMedicationInfusionsMl: 450,
+          enteralFeedingMl: 800,
+          bloodProductsMl: 0,
+          oralFluidsMl: 0,
+          totalIntakeMl: 2450,
         },
-        {
-          id: 'hist-vent-2',
-          timestamp: threeHoursAgo,
-          mode: VentilatorMode.SIMV_VC,
-          fio2Percent: 50,
-          peepCmH2O: 10,
-          tidalVolumeMl: 450,
-          recordedByStaffName: 'ممرض/ منى حسان (RN Mona)',
-          deviceModel: 'Dräger Evita V800',
+        outputBreakdown: {
+          urineOutputMl: 1800,
+          hourlyUrineAverageMlPerHour: 75,
+          nasogastricDrainageMl: 150,
+          chestTubeDrainageMl: 150,
+          surgicalDrainageMl: 0,
+          totalOutputMl: 2100,
         },
-        {
-          id: 'hist-vent-3',
-          timestamp: twoHoursAgo,
-          mode: VentilatorMode.PRVC,
-          fio2Percent: 45,
-          peepCmH2O: 8,
-          tidalVolumeMl: 420,
-          recordedByStaffName: 'د. طارق منصور (Dr. Tarek)',
-          deviceModel: 'Dräger Evita V800',
+        netCumulativeBalanceMl: 350,
+        recordedByStaffName: 'ممرض/ منى حسان',
+      },
+      {
+        id: 'fluid-p2-today',
+        bedId: '02' as any,
+        patientId: 'pat-bed-02',
+        periodStartTimestamp: oneDayAgo,
+        periodEndTimestamp: today,
+        intakeBreakdown: {
+          ivMaintenanceFluidMl: 500,
+          ivMedicationInfusionsMl: 300,
+          enteralFeedingMl: 400,
+          bloodProductsMl: 0,
+          oralFluidsMl: 0,
+          totalIntakeMl: 1200,
         },
-        {
-          id: 'hist-vent-4',
-          timestamp: oneHourAgo,
-          mode: VentilatorMode.PRVC,
-          fio2Percent: 40,
-          peepCmH2O: 8,
-          tidalVolumeMl: 420,
-          recordedByStaffName: 'د. طارق منصور (Dr. Tarek)',
-          deviceModel: 'Dräger Evita V800',
-        }
-      ]
-    });
+        outputBreakdown: {
+          urineOutputMl: 1200,
+          hourlyUrineAverageMlPerHour: 50,
+          nasogastricDrainageMl: 100,
+          chestTubeDrainageMl: 100,
+          surgicalDrainageMl: 0,
+          totalOutputMl: 1400,
+        },
+        netCumulativeBalanceMl: -200,
+        recordedByStaffName: 'ممرض/ أحمد خليل',
+      }
+    ];
+
+    await db.fluidBalances.bulkPut(sampleFluids);
+
+    // Seed ventilators
+    await db.ventilators.bulkPut([
+      {
+        id: 'vent_01_pat-bed-01',
+        bedId: BedNumber.BED_01,
+        patientId: 'pat-bed-01',
+        timestamp: today,
+        deviceModel: 'Dräger Evita V800',
+        mode: VentilatorMode.PRVC,
+        fio2Percent: 40,
+        peepCmH2O: 8,
+        tidalVolumeMl: 420,
+        peakInspiratoryPressureCmH2O: 22,
+        plateauPressureCmH2O: 18,
+        drivingPressureCmH2O: 10,
+        setRespiratoryRateCpm: 16,
+        actualRespiratoryRateCpm: 18,
+        ieRatio: '1:2',
+        isWeaningTrialActive: false,
+        circuitLeakPercent: 2,
+        recordedByStaffName: 'د. طارق منصور (Dr. Tarek)',
+        history: []
+      },
+      {
+        id: 'vent_03_pat-bed-03',
+        bedId: BedNumber.BED_03,
+        patientId: 'pat-bed-03',
+        timestamp: today,
+        deviceModel: 'Hamilton G5',
+        mode: VentilatorMode.SIMV_PC,
+        fio2Percent: 35,
+        peepCmH2O: 5,
+        tidalVolumeMl: 480,
+        peakInspiratoryPressureCmH2O: 18,
+        plateauPressureCmH2O: 15,
+        drivingPressureCmH2O: 10,
+        setRespiratoryRateCpm: 14,
+        actualRespiratoryRateCpm: 14,
+        ieRatio: '1:2',
+        isWeaningTrialActive: false,
+        circuitLeakPercent: 1,
+        recordedByStaffName: 'د. أحمد الأحمدي',
+        history: []
+      }
+    ]);
   }
 
   // Reconcile and synchronize bed occupancy state with active patients in IndexedDB
@@ -609,16 +797,14 @@ export async function initializeDatabaseSeed(): Promise<void> {
   for (const b of currentBeds) {
     let modified = false;
 
-    // 1. Find active patient for this bed
+    // Find active patient for this bed
     let targetPatient: PatientDossier | undefined;
 
-    // Check if bed's currentPatientId matches an active unassigned patient
     if (b.currentPatientId && !assignedPatientIds.has(b.currentPatientId)) {
       const p = activePatients.find(pt => pt.id === b.currentPatientId);
       if (p) targetPatient = p;
     }
 
-    // Secondary fallback: check patient by currentBedId if not yet claimed
     if (!targetPatient) {
       const p = activePatients.find(pt => pt.currentBedId === b.bedNumber && !assignedPatientIds.has(pt.id));
       if (p) targetPatient = p;
@@ -641,7 +827,6 @@ export async function initializeDatabaseSeed(): Promise<void> {
         await db.patients.put(targetPatient);
       }
     } else {
-      // Bed is vacant (or unavailable/isolation without patient)
       if (b.currentPatientId !== null) {
         b.currentPatientId = null;
         b.activePatientId = null;

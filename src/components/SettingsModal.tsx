@@ -35,12 +35,17 @@ import {
   Edit3,
   AlertTriangle,
   Pill,
-  FileCheck2
+  FileCheck2,
+  Database,
+  RefreshCw,
+  Loader2,
+  CloudOff
 } from 'lucide-react';
 import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
 import { SystemFeatureFlags } from '../types/settings.ts';
 import { ClinicalOptionsManager } from './ClinicalOptionsManager.tsx';
+import { clearLocalBrowserDataAndSyncFromCloud, clearAllCloudAndLocalDataAndReset } from '../services/firebase.ts';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -62,12 +67,56 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
     labsConfig: false,
     language: false,
     unit: false,
+    databaseGov: false,
   });
 
   const [unitForm, setUnitForm] = useState(settings.unit);
   const [savedFeedback, setSavedFeedback] = useState(false);
 
+  const [isSyncingLocal, setIsSyncingLocal] = useState(false);
+  const [isResettingCloud, setIsResettingCloud] = useState(false);
+  const [dbActionResult, setDbActionResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [confirmModalType, setConfirmModalType] = useState<'CLEAR_LOCAL' | 'RESET_CLOUD' | null>(null);
+
   if (!isOpen) return null;
+
+  const handleClearLocalBrowserData = async () => {
+    setIsSyncingLocal(true);
+    setDbActionResult(null);
+    try {
+      const res = await clearLocalBrowserDataAndSyncFromCloud();
+      setDbActionResult(res);
+      setConfirmModalType(null);
+      if (res.success) {
+        setTimeout(() => {
+          window.location.reload();
+        }, 1200);
+      }
+    } catch (err: any) {
+      setDbActionResult({ success: false, message: err.message || 'Error occurred' });
+    } finally {
+      setIsSyncingLocal(false);
+    }
+  };
+
+  const handleResetCloudAndLocalData = async () => {
+    setIsResettingCloud(true);
+    setDbActionResult(null);
+    try {
+      const res = await clearAllCloudAndLocalDataAndReset();
+      setDbActionResult(res);
+      setConfirmModalType(null);
+      if (res.success) {
+        setTimeout(() => {
+          window.location.reload();
+        }, 1500);
+      }
+    } catch (err: any) {
+      setDbActionResult({ success: false, message: err.message || 'Error occurred' });
+    } finally {
+      setIsResettingCloud(false);
+    }
+  };
 
   const toggleSection = (id: string) => {
     setOpenSections(prev => ({
@@ -86,6 +135,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
       labsConfig: true,
       language: true,
       unit: true,
+      databaseGov: true,
     });
   };
 
@@ -99,6 +149,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
       labsConfig: false,
       language: false,
       unit: false,
+      databaseGov: false,
     });
   };
 
@@ -385,6 +436,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
       badgeEn: 'Unit Config',
       icon: Sliders,
       isCustom: true
+    },
+    {
+      id: 'databaseGov',
+      labelAr: 'إدارة وتصفير بيانات المتصفح والسحابة (Cloud & Local Reset)',
+      labelEn: 'Browser Cache & Cloud Data Reset',
+      badgeAr: 'مسح وتصفير البيانات',
+      badgeEn: 'Data Governance',
+      icon: Database,
+      isCustom: true
     }
   ];
 
@@ -545,6 +605,136 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                           ) : section.id === 'clinicalCatalogs' ? (
                             <div className="mt-2">
                               <ClinicalOptionsManager />
+                            </div>
+                          ) : section.id === 'databaseGov' ? (
+                            <div className="space-y-4 mt-2">
+                              {dbActionResult && (
+                                <div className={`p-4 rounded-xl border flex items-center gap-3 text-xs font-bold ${
+                                  dbActionResult.success 
+                                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' 
+                                    : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                                }`}>
+                                  {dbActionResult.success ? <CheckCircle2 className="w-5 h-5 flex-shrink-0" /> : <AlertTriangle className="w-5 h-5 flex-shrink-0" />}
+                                  <span>{dbActionResult.message}</span>
+                                </div>
+                              )}
+
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {/* 1. Clear Browser Data & Re-sync from Cloud */}
+                                <div className="p-5 rounded-2xl bg-[#060a14] border border-teal-500/30 hover:border-teal-500/50 transition-all flex flex-col justify-between gap-4">
+                                  <div>
+                                    <div className="flex items-center gap-2.5 text-teal-400 font-bold mb-2">
+                                      <RefreshCw className="w-5 h-5" />
+                                      <h4 className="text-sm">
+                                        {lang === 'ar' ? 'حذف بيانات المتصفح فقط واستعادتها من السحابة' : 'Clear Browser Data & Re-sync'}
+                                      </h4>
+                                    </div>
+                                    <p className="text-xs text-slate-400 leading-relaxed">
+                                      {lang === 'ar'
+                                        ? 'يمسح بيانات المرضى والأسِرّة المحفوظة مؤقتاً في هذا المتصفح فقط، ثم ينفذ إعادة جلب تلقائي لأحدث البيانات السحابية الحقيقية من فايربيس دون مس البيانات السحابية.'
+                                        : 'Clears local IndexedDB browser cache for this device only, then re-syncs active patient states directly from Firestore Cloud.'}
+                                    </p>
+                                  </div>
+                                  <button
+                                    onClick={() => setConfirmModalType('CLEAR_LOCAL')}
+                                    disabled={isSyncingLocal || isResettingCloud}
+                                    className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 border border-teal-500/40 text-xs font-extrabold transition-all cursor-pointer disabled:opacity-50"
+                                  >
+                                    {isSyncingLocal ? (
+                                      <>
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        <span>{lang === 'ar' ? 'جاري مسح المتصفح وإعادة الجلب...' : 'Clearing & Re-syncing...'}</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <RefreshCw className="w-4 h-4" />
+                                        <span>{lang === 'ar' ? 'حذف بيانات المتصفح واستعادتها من السحابة' : 'Clear Browser Data & Re-sync'}</span>
+                                      </>
+                                    )}
+                                  </button>
+                                </div>
+
+                                {/* 2. Reset All Cloud and Local Data */}
+                                <div className="p-5 rounded-2xl bg-[#060a14] border border-rose-500/30 hover:border-rose-500/50 transition-all flex flex-col justify-between gap-4">
+                                  <div>
+                                    <div className="flex items-center gap-2.5 text-rose-400 font-bold mb-2">
+                                      <Trash2 className="w-5 h-5" />
+                                      <h4 className="text-sm">
+                                        {lang === 'ar' ? 'حذف البيانات من السحابة والمتصفح والبدء من جديد' : 'Purge All Cloud & Browser Data (Fresh Start)'}
+                                      </h4>
+                                    </div>
+                                    <p className="text-xs text-slate-400 leading-relaxed">
+                                      {lang === 'ar'
+                                        ? 'تنبيه هام: يحذف كافة سجلات المرضى والأسِرّة نهائياً من فايربيس والمتصفح، ويعيد تشغيل المنظومة ببيانات طبية سريرية حقيقية للبدء من جديد.'
+                                        : 'WARNING: Permanently deletes all patient records from Firestore Cloud and local browser cache, resetting the unit with clean, real clinical ICU datasets.'}
+                                    </p>
+                                  </div>
+                                  <button
+                                    onClick={() => setConfirmModalType('RESET_CLOUD')}
+                                    disabled={isSyncingLocal || isResettingCloud}
+                                    className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-xs font-extrabold transition-all cursor-pointer disabled:opacity-50"
+                                  >
+                                    {isResettingCloud ? (
+                                      <>
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        <span>{lang === 'ar' ? 'جاري حذف السحابة وتصفير النظام...' : 'Purging Cloud & Resetting...'}</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <CloudOff className="w-4 h-4" />
+                                        <span>{lang === 'ar' ? 'حذف البيانات من السحابة والمتصفح والبدء من جديد' : 'Delete All Cloud & Local Data'}</span>
+                                      </>
+                                    )}
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Confirmation Modal Overlay */}
+                              {confirmModalType && (
+                                <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                                  <div className="bg-[#0a1224] border border-slate-800 rounded-3xl p-6 max-w-md w-full space-y-5 shadow-2xl text-white">
+                                    <div className="flex items-center gap-3 text-amber-400">
+                                      <AlertTriangle className="w-7 h-7 flex-shrink-0" />
+                                      <h3 className="text-base font-extrabold">
+                                        {confirmModalType === 'CLEAR_LOCAL'
+                                          ? (lang === 'ar' ? 'تأكيد مسح بيانات المتصفح' : 'Confirm Clear Browser Cache')
+                                          : (lang === 'ar' ? 'تحذير هام: تأكيد حذف البيانات السحابية' : 'CRITICAL WARNING: Confirm Cloud Purge')}
+                                      </h3>
+                                    </div>
+
+                                    <p className="text-xs text-slate-300 leading-relaxed">
+                                      {confirmModalType === 'CLEAR_LOCAL'
+                                        ? (lang === 'ar'
+                                          ? 'هل أنت متأكد من مسح بيانات المتصفح المحلية فقط؟ سيتم إعادة جلب البيانات الحالية فوراً من السحابة.'
+                                          : 'Are you sure you want to clear local browser cache? Active records will immediately be re-fetched from Firestore Cloud.')
+                                        : (lang === 'ar'
+                                          ? 'هل أنت متأكد من مسح جميع بيانات المرضى والأسِرّة نهائياً من سحابة فايربيس والمتصفح؟ سيتم البدء ببيانات طبية حقيقية جديدة للنظام بالكامل.'
+                                          : 'Are you sure you want to permanently delete all patient and bed records from Firestore Cloud and local browser? This will re-initialize the unit with fresh clinical ICU datasets.')}
+                                    </p>
+
+                                    <div className="flex items-center gap-3 pt-2">
+                                      <button
+                                        onClick={() => setConfirmModalType(null)}
+                                        className="flex-1 py-2.5 px-4 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-white font-bold text-xs transition-all cursor-pointer"
+                                      >
+                                        {lang === 'ar' ? 'إلغاء' : 'Cancel'}
+                                      </button>
+                                      <button
+                                        onClick={confirmModalType === 'CLEAR_LOCAL' ? handleClearLocalBrowserData : handleResetCloudAndLocalData}
+                                        className={`flex-1 py-2.5 px-4 rounded-xl font-extrabold text-xs transition-all cursor-pointer ${
+                                          confirmModalType === 'CLEAR_LOCAL'
+                                            ? 'bg-teal-500 hover:bg-teal-400 text-slate-950 shadow-md'
+                                            : 'bg-rose-600 hover:bg-rose-500 text-white shadow-md'
+                                        }`}
+                                      >
+                                        {confirmModalType === 'CLEAR_LOCAL'
+                                          ? (lang === 'ar' ? 'تأكيد المسح والجلب' : 'Confirm & Re-sync')
+                                          : (lang === 'ar' ? 'تأكيد الحذف والبدء من جديد' : 'Confirm & Purge All')}
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           ) : (
                             <form onSubmit={handleSaveUnit} className="space-y-4 max-w-3xl mt-2">

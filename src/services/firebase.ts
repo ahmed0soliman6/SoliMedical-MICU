@@ -50,7 +50,7 @@ import {
   InvestigationItem,
   PatientAntibiotic
 } from '../types/schema.ts';
-import { db } from '../db/icuSyncDb.ts';
+import { db, initializeDatabaseSeed } from '../db/icuSyncDb.ts';
 
 // -------------------------------------------------------------
 // Firebase Initialization
@@ -1306,6 +1306,129 @@ export async function syncStatLabsToCloud(labs: StatLabPanel): Promise<void> {
     await setDoc(labsRef, labs, { merge: true });
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `statLabs/${labs.id}`);
+  }
+}
+
+// -------------------------------------------------------------
+// Database Governance & Reset Operations
+// -------------------------------------------------------------
+
+/**
+ * 1. Clear Local Browser Data (IndexedDB) & Re-sync active state from Firebase Cloud
+ */
+export async function clearLocalBrowserDataAndSyncFromCloud(): Promise<{ success: boolean; message: string }> {
+  try {
+    // Clear IndexedDB Dexie tables
+    await Promise.all([
+      db.beds.clear(),
+      db.patients.clear(),
+      db.vitals.clear(),
+      db.ventilators.clear(),
+      db.infusionPumps.clear(),
+      db.fluidBalances.clear(),
+      db.statLabs.clear(),
+      db.transfusions.clear(),
+      db.sbarHandovers.clear(),
+      db.clinicalNotes.clear(),
+      db.addendums.clear(),
+      db.auditLogs.clear(),
+      db.labResults.clear(),
+      db.investigations.clear(),
+      db.patientAntibiotics.clear(),
+    ]);
+
+    // Re-pull active single source of truth from Cloud
+    const pulled = await pullCloudDataToLocalDb();
+    if (!pulled) {
+      await initializeDatabaseSeed();
+      await seedInitialDataToFirestore();
+    }
+
+    return {
+      success: true,
+      message: 'تم مسح بيانات المتصفح بنجاح وتم استعادتها من السحابة'
+    };
+  } catch (err: any) {
+    console.error('Error clearing local browser data:', err);
+    return {
+      success: false,
+      message: err.message || 'حدث خطأ أثناء مسح بيانات المتصفح'
+    };
+  }
+}
+
+/**
+ * 2. Clear ALL Patient Data from Cloud and Local Browser & Start Fresh
+ */
+export async function clearAllCloudAndLocalDataAndReset(): Promise<{ success: boolean; message: string }> {
+  try {
+    // 1. Clear local IndexedDB tables
+    await Promise.all([
+      db.beds.clear(),
+      db.patients.clear(),
+      db.vitals.clear(),
+      db.ventilators.clear(),
+      db.infusionPumps.clear(),
+      db.fluidBalances.clear(),
+      db.statLabs.clear(),
+      db.transfusions.clear(),
+      db.sbarHandovers.clear(),
+      db.clinicalNotes.clear(),
+      db.addendums.clear(),
+      db.auditLogs.clear(),
+      db.labResults.clear(),
+      db.investigations.clear(),
+      db.patientAntibiotics.clear(),
+    ]);
+
+    // 2. Clear Firestore Cloud Collections
+    const collectionsToClear = [
+      'beds',
+      'patients',
+      'vitals',
+      'sbarHandovers',
+      'handovers',
+      'clinicalNotes',
+      'ventilators',
+      'infusionPumps',
+      'infusion_pumps',
+      'fluidBalances',
+      'statLabs',
+      'patientAntibiotics',
+      'medical_records',
+      'investigations',
+      'labResults',
+      'transfusions',
+      'addendums',
+      'auditLogs',
+      'transfers',
+      'operations'
+    ];
+
+    for (const colName of collectionsToClear) {
+      try {
+        const snap = await getDocs(collection(firestore, colName));
+        const deleteOps = snap.docs.map(docSnap => deleteDoc(doc(firestore, colName, docSnap.id)));
+        await Promise.all(deleteOps);
+      } catch (colErr) {
+        console.warn(`Collection clear failed for ${colName}:`, colErr);
+      }
+    }
+
+    // 3. Re-seed clean, realistic clinical ICU patient data into local DB & Firestore
+    await initializeDatabaseSeed();
+    await seedInitialDataToFirestore();
+
+    return {
+      success: true,
+      message: 'تم تصفير السحابة والمتصفح وتطبيق البيانات السريرية الحقيقية بنجاح'
+    };
+  } catch (err: any) {
+    console.error('Error resetting cloud and local database:', err);
+    return {
+      success: false,
+      message: err.message || 'حدث خطأ أثناء حذف البيانات السحابية والمحلية'
+    };
   }
 }
 
