@@ -6,7 +6,7 @@ import {
   persistentMultipleTabManager,
   collection, 
   doc, 
-  setDoc, 
+  setDoc as fsetDoc, 
   getDoc,
   getDocs, 
   deleteDoc,
@@ -16,7 +16,8 @@ import {
   orderBy, 
   limit, 
   Unsubscribe,
-  getDocFromServer
+  getDocFromServer,
+  updateDoc as fupdateDoc
 } from 'firebase/firestore';
 import {
   getAuth,
@@ -1287,6 +1288,17 @@ export function sanitizeForFirestore(obj: any): any {
     return clean;
   }
   return obj;
+}
+
+export async function setDoc(ref: any, data: any, options?: any) {
+  if (options) {
+    return fsetDoc(ref, sanitizeForFirestore(data), options);
+  }
+  return fsetDoc(ref, sanitizeForFirestore(data));
+}
+
+export async function updateDoc(ref: any, data: any) {
+  return fupdateDoc(ref, sanitizeForFirestore(data));
 }
 
 export async function syncBedToCloud(bed: BedRecord): Promise<void> {

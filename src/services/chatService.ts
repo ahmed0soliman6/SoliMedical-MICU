@@ -9,7 +9,6 @@
 import { 
   collection, 
   doc, 
-  setDoc, 
   getDoc, 
   getDocs, 
   query, 
@@ -18,12 +17,11 @@ import {
   limit, 
   onSnapshot, 
   serverTimestamp, 
-  updateDoc, 
   arrayUnion, 
   increment,
   Unsubscribe 
 } from 'firebase/firestore';
-import { firestore } from './firebase.ts';
+import { firestore, setDoc, updateDoc } from './firebase.ts';
 import { COLLECTIONS } from '../types/contracts.ts';
 import { ChatConversation, ChatMessage, IcuUser } from '../types/schema.ts';
 

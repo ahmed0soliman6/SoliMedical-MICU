@@ -10,17 +10,15 @@
 import { 
   collection, 
   doc, 
-  setDoc, 
   getDoc, 
   getDocs, 
-  updateDoc, 
   deleteDoc, 
   onSnapshot, 
   query, 
   orderBy, 
   Unsubscribe 
 } from 'firebase/firestore';
-import { firestore } from './firebase.ts';
+import { firestore, setDoc, updateDoc } from './firebase.ts';
 import { DynamicSection, DynamicBedsideCard } from '../types/schema.ts';
 
 const SECTIONS_COLLECTION = 'sections';

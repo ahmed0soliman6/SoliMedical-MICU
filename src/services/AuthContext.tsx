@@ -15,7 +15,8 @@ import {
   getDefaultPermissionsForRole,
   testFirestoreConnection,
   syncAdminAccountToFirebaseConsole,
-  firestore
+  firestore,
+  setDoc
 } from './firebase.ts';
 import { 
   signInWithPopup, 
@@ -27,7 +28,7 @@ import {
   updatePassword,
   User as FirebaseUser 
 } from 'firebase/auth';
-import { collection, onSnapshot, doc, getDoc, getDocs, query, where, setDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../db/icuSyncDb.ts';
 
 interface AuthContextType {

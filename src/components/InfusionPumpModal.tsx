@@ -15,8 +15,8 @@ import {
 } from 'lucide-react';
 import { BedNumber, PatientDossier, InfusionPumpLine, PumpStatus } from '../types/schema.ts';
 import { db } from '../db/icuSyncDb.ts';
-import { doc, setDoc, deleteDoc } from 'firebase/firestore';
-import { firestore } from '../services/firebase.ts';
+import { doc, deleteDoc } from 'firebase/firestore';
+import { firestore, setDoc } from '../services/firebase.ts';
 import { COLLECTIONS } from '../types/contracts.ts';
 import { useAuth } from '../services/AuthContext.tsx';
 import { useTranslation } from '../services/i18n.ts';

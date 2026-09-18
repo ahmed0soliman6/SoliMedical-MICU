@@ -18,8 +18,8 @@ import { useTranslation } from '../services/i18n.ts';
 import { db } from '../db/icuSyncDb.ts';
 import { toEnglishDigits, parseEnglishFloat, parseEnglishInt } from '../services/numberUtils.ts';
 
-import { doc, setDoc } from 'firebase/firestore';
-import { firestore } from '../services/firebase.ts';
+import { doc } from 'firebase/firestore';
+import { firestore, setDoc } from '../services/firebase.ts';
 
 interface FullPageAdmissionProps {
   bedNumber: BedNumber;
@@ -106,6 +106,7 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
   const [initialHr, setInitialHr] = useState<string>('');
   const [initialSpo2, setInitialSpo2] = useState<string>('');
   const [initialFio2, setInitialFio2] = useState<string>('');
+  const [admissionNoteInput, setAdmissionNoteInput] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   // Populate form if editing an existing patient
@@ -340,18 +341,18 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
         },
         allergies: allergiesList,
         isolationPrecautions: isolation ? [isolation] : [],
-        initialVitals: {
-          heartRateBpm: parseEnglishInt(initialHr) || 110,
-          systolicBpMmHg: Math.round((parseEnglishFloat(initialMap) || 65) + 25),
-          diastolicBpMmHg: Math.round((parseEnglishFloat(initialMap) || 65) - 15),
-          isArterialLine: true,
-          spo2Percent: parseEnglishInt(initialSpo2) || 90,
-          fio2SuppliedPercent: parseEnglishInt(initialFio2) || 50,
-          respiratoryRateCpm: 22,
-          coreTemperatureCelsius: 38.2,
-          gcsTotalScore: 12,
-        },
-        initialAdmissionNote: `Direct admission completed for Bed ${targetBed}. Recorded by logged user: ${docName}.`,
+        initialVitals: (initialHr || initialMap || initialSpo2 || initialFio2) ? {
+          heartRateBpm: initialHr ? parseEnglishInt(initialHr) : 80,
+          systolicBpMmHg: initialMap ? Math.round(parseEnglishFloat(initialMap) + 25) : 120,
+          diastolicBpMmHg: initialMap ? Math.round(parseEnglishFloat(initialMap) - 15) : 80,
+          isArterialLine: !!initialMap,
+          spo2Percent: initialSpo2 ? parseEnglishInt(initialSpo2) : 98,
+          fio2SuppliedPercent: initialFio2 ? parseEnglishInt(initialFio2) : 21,
+          respiratoryRateCpm: 16,
+          coreTemperatureCelsius: 37.0,
+          gcsTotalScore: 15,
+        } : undefined,
+        initialAdmissionNote: admissionNoteInput.trim() || undefined,
       });
 
       onAdmissionSuccess();
@@ -707,6 +708,19 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
                 className="w-full bg-[#070c18] border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-teal-500 focus:outline-none text-xs"
               />
             </div>
+          </div>
+
+          <div>
+            <label className="text-[11px] text-slate-300 font-semibold block mb-1">
+              {lang === 'ar' ? 'ملاحظة القبول السريرية الأولية (اختياري - لن تظهر ملاحظة فارغة)' : 'Initial Admission Clinical Note (Optional - empty will not create any note)'}
+            </label>
+            <textarea
+              value={admissionNoteInput}
+              onChange={(e) => setAdmissionNoteInput(e.target.value)}
+              placeholder={lang === 'ar' ? 'أدخل ملاحظة القبول الطبية الموثقة هنا...' : 'Type authenticated clinical admission notes here...'}
+              rows={3}
+              className="w-full bg-[#070c18] border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-teal-500 focus:outline-none text-xs"
+            />
           </div>
         </div>
 

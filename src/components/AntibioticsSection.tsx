@@ -26,8 +26,8 @@ import { PatientAntibiotic, PatientDossier, BedRecord, BedNumber } from '../type
 import { AntibioticPreset, SystemSettings } from '../types/settings.ts';
 import { useTranslation } from '../services/i18n.ts';
 import { db } from '../db/icuSyncDb.ts';
-import { doc, setDoc, deleteDoc } from 'firebase/firestore';
-import { firestore } from '../services/firebase.ts';
+import { doc, deleteDoc } from 'firebase/firestore';
+import { firestore, setDoc } from '../services/firebase.ts';
 
 // Dictionary of standard ICU antimicrobial doses & parameters
 export const COMMON_ANTIBIOTIC_DOSES_MAP: Record<string, { doses: string[]; defaultRoute?: string; defaultFreq?: string; category?: string }> = {

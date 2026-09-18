@@ -20,8 +20,8 @@ import { InvestigationItem } from '../types/schema.ts';
 import { useTranslation } from '../services/i18n.ts';
 import { useAuth } from '../services/AuthContext.tsx';
 import { db } from '../db/icuSyncDb.ts';
-import { doc, setDoc, deleteDoc } from 'firebase/firestore';
-import { firestore } from '../services/firebase.ts';
+import { doc, deleteDoc } from 'firebase/firestore';
+import { firestore, setDoc } from '../services/firebase.ts';
 
 interface InvestigationsSectionProps {
   patientId: string;
