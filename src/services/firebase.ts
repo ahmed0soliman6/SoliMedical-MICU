@@ -317,6 +317,26 @@ export async function checkIfAnyAdminExists(): Promise<boolean> {
   return false;
 }
 
+export function getFirebaseAuthErrorMessage(err: any): string {
+  const code = err?.code || '';
+  switch (code) {
+    case 'auth/email-already-in-use':
+      return 'البريد الإلكتروني أو اسم المستخدم مستخدم بالفعل من قبل حساب آخر (auth/email-already-in-use).';
+    case 'auth/invalid-email':
+      return 'صيغة البريد الإلكتروني غير صحيحة (auth/invalid-email).';
+    case 'auth/weak-password':
+      return 'كلمة المرور ضعيفة جداً، يجب أن تكون 6 أحرف أو أرقام على الأقل (auth/weak-password).';
+    case 'auth/network-request-failed':
+      return 'فشل الاتصال بالشبكة، تحقق من اتصال الإنترنت (auth/network-request-failed).';
+    case 'auth/operation-not-allowed':
+      return 'عملية إنشاء الحساب غير مفعلة في إعدادات المصادقة (auth/operation-not-allowed).';
+    case 'auth/too-many-requests':
+      return 'تم تقديم طلبات كثيرة جداً بشكل متكرر، تم حظر الطلب مؤقتاً (auth/too-many-requests).';
+    default:
+      return err?.message || `حدث خطأ أثناء المصادقة مع Firebase (${code || 'unknown'})`;
+  }
+}
+
 /**
  * Creates the First User (Super Admin) in REAL Firebase Authentication and Firestore
  */
@@ -332,30 +352,16 @@ export async function registerInitialSuperAdminWithFirebaseAuth(data: {
       ? rawUsername.toLowerCase()
       : `${rawUsername.toLowerCase().replace(/\s+/g, '')}@solimedical-micu.org`;
 
-    // Firebase Auth requires passwords >= 6 characters. Format/pad if shorter:
-    const authPassword = data.password.length >= 6 
-      ? data.password 
-      : data.password.padEnd(6, '0');
-
-    let uid: string;
-
-    // 1. Create user account in REAL Firebase Authentication
-    try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, authPassword);
-      uid = userCredential.user.uid;
-    } catch (authErr: any) {
-      console.warn('Firebase Auth notice:', authErr?.code || authErr);
-      if (authErr.code === 'auth/email-already-in-use') {
-        try {
-          const signInCred = await signInWithEmailAndPassword(auth, email, authPassword);
-          uid = signInCred.user.uid;
-        } catch (signInErr: any) {
-          uid = `admin_usr_${Date.now()}`;
-        }
-      } else {
-        uid = `admin_usr_${Date.now()}`;
-      }
+    if (!data.password || data.password.length < 6) {
+      return {
+        success: false,
+        message: 'كلمة المرور يجب ألا تقل عن 6 أحرف أو أرقام (auth/weak-password).'
+      };
     }
+
+    // 1. Create user account in REAL Firebase Authentication (Strictly required, no fake UIDs)
+    const userCredential = await createUserWithEmailAndPassword(auth, email, data.password);
+    const uid = userCredential.user.uid;
 
     const now = new Date().toISOString();
 
@@ -380,19 +386,15 @@ export async function registerInitialSuperAdminWithFirebaseAuth(data: {
     await db.users.put(superAdminUser);
 
     // 3. Save to Firestore users & admins collections
-    try {
-      await setDoc(doc(firestore, 'users', uid), superAdminUser, { merge: true });
-      await setDoc(doc(firestore, 'admins', uid), {
-        uid,
-        email,
-        nameAr: data.fullName,
-        nameEn: data.fullName,
-        jobTitle: data.jobTitle,
-        createdAt: now,
-      }, { merge: true });
-    } catch (err) {
-      console.warn('Firestore write warning:', err);
-    }
+    await setDoc(doc(firestore, 'users', uid), superAdminUser, { merge: true });
+    await setDoc(doc(firestore, 'admins', uid), {
+      uid,
+      email,
+      nameAr: data.fullName,
+      nameEn: data.fullName,
+      jobTitle: data.jobTitle,
+      createdAt: now,
+    }, { merge: true });
 
     // 4. Mark setup as completed permanently
     localStorage.setItem('soli_icu_admin_setup_completed', 'true');
@@ -402,9 +404,10 @@ export async function registerInitialSuperAdminWithFirebaseAuth(data: {
 
     return { success: true, user: superAdminUser };
   } catch (err: any) {
+    const errorMessage = getFirebaseAuthErrorMessage(err);
     return {
       success: false,
-      message: err.message || 'حدث خطأ أثناء إنشاء أول مستخدم في Firebase'
+      message: errorMessage
     };
   }
 }
@@ -424,60 +427,51 @@ export async function deleteUserAccount(uid: string): Promise<void> {
 }
 
 export async function syncUserToFirebaseConsole(user: IcuUser): Promise<void> {
-  try {
-    const rawEmail = user.email ? user.email.toLowerCase() : `${user.uid}@solimedical-micu.org`;
-    const email = rawEmail.includes('@') ? rawEmail : `${rawEmail}@solimedical-micu.org`;
-    const rawPin = user.pinCode || '123456';
-    const authPassword = rawPin.length >= 6 ? rawPin : rawPin.padEnd(6, '0');
+  const rawEmail = user.email ? user.email.toLowerCase() : `${user.uid}@solimedical-micu.org`;
+  const email = rawEmail.includes('@') ? rawEmail : `${rawEmail}@solimedical-micu.org`;
+  const rawPin = user.pinCode || '123456';
+  if (rawPin.length < 6) {
+    throw new Error('كلمة المرور يجب ألا تقل عن 6 أحرف أو أرقام (auth/weak-password)');
+  }
 
-    let finalUid = user.uid;
+  let finalUid = user.uid;
 
-    // Only attempt client auth creation if no active user session or if same user
-    if (!auth.currentUser || auth.currentUser.uid === user.uid) {
-      try {
-        const cred = await createUserWithEmailAndPassword(auth, email, authPassword);
-        finalUid = cred.user.uid;
-      } catch (authErr: any) {
-        if (authErr.code === 'auth/email-already-in-use') {
-          try {
-            if (!auth.currentUser) {
-              const signCred = await signInWithEmailAndPassword(auth, email, authPassword);
-              finalUid = signCred.user.uid;
-            }
-          } catch (e) {
-            console.warn('Sign-in fallback during sync:', e);
-          }
-        } else {
-          console.warn('Firebase Auth create notice during sync:', authErr?.code || authErr);
-        }
+  // Only attempt client auth creation if no active user session or if same user
+  if (!auth.currentUser || auth.currentUser.uid === user.uid) {
+    try {
+      const cred = await createUserWithEmailAndPassword(auth, email, rawPin);
+      finalUid = cred.user.uid;
+    } catch (authErr: any) {
+      if (authErr.code === 'auth/email-already-in-use') {
+        // Keep existing uid if already in use
+      } else {
+        throw authErr;
       }
     }
-
-    if (user.uid && user.uid !== finalUid) {
-      deleteUserAccount(user.uid).catch(e => console.warn('Old user cleanup notice:', e));
-    }
-
-    const updatedUser = { ...user, uid: finalUid, email };
-    
-    // Save to Firestore (default) database users collection
-    await setDoc(doc(firestore, 'users', finalUid), updatedUser, { merge: true });
-    
-    if (user.role === StaffRole.ADMIN || user.isSuperAdmin) {
-      await setDoc(doc(firestore, 'admins', finalUid), {
-        uid: finalUid,
-        email,
-        nameAr: user.nameAr,
-        nameEn: user.nameEn,
-        jobTitle: user.department,
-        createdAt: user.createdAt || new Date().toISOString(),
-      }, { merge: true });
-    }
-
-    // Save to local IndexedDB
-    await db.users.put(updatedUser);
-  } catch (err) {
-    console.warn('Notice during syncUserToFirebaseConsole:', err);
   }
+
+  if (user.uid && user.uid !== finalUid) {
+    deleteUserAccount(user.uid).catch(e => console.warn('Old user cleanup notice:', e));
+  }
+
+  const updatedUser = { ...user, uid: finalUid, email };
+  
+  // Save to Firestore (default) database users collection
+  await setDoc(doc(firestore, 'users', finalUid), updatedUser, { merge: true });
+  
+  if (user.role === StaffRole.ADMIN || user.isSuperAdmin) {
+    await setDoc(doc(firestore, 'admins', finalUid), {
+      uid: finalUid,
+      email,
+      nameAr: user.nameAr,
+      nameEn: user.nameEn,
+      jobTitle: user.department,
+      createdAt: user.createdAt || new Date().toISOString(),
+    }, { merge: true });
+  }
+
+  // Save to local IndexedDB
+  await db.users.put(updatedUser);
 }
 
 /**

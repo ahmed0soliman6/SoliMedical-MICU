@@ -180,7 +180,10 @@ export async function adminCreateUser(authHeader?: string, userData?: any): Prom
     const { db, auth } = requireAdminServices();
     const email = (userData.email || '').trim().toLowerCase();
     const rawPass = userData.pinCode || '123456';
-    const cleanPassword = rawPass.length >= 6 ? rawPass : rawPass.padEnd(6, '0');
+    if (rawPass.length < 6) {
+      throw new Error('كلمة المرور يجب ألا تقل عن 6 أحرف أو أرقام (auth/weak-password)');
+    }
+    const cleanPassword = rawPass;
     const cleanDisplayName = userData.nameAr || userData.nameEn || email.split('@')[0];
 
     let fbUid: string;

@@ -15,6 +15,7 @@ import {
   getDefaultPermissionsForRole,
   testFirestoreConnection,
   syncAdminAccountToFirebaseConsole,
+  getFirebaseAuthErrorMessage,
   firestore,
   setDoc
 } from './firebase.ts';
@@ -23,6 +24,7 @@ import {
   signOut as firebaseSignOut, 
   onAuthStateChanged, 
   signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword,
   EmailAuthProvider,
   reauthenticateWithCredential,
   updatePassword,
@@ -533,31 +535,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     const role = userData.role || StaffRole.BEDSIDE_RN;
-    const now = new Date().toISOString();
-    const newUser: IcuUser = {
-      uid: userData.uid || `usr_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
-      email: userData.email || `staff_${Date.now()}@solimedical-micu.org`,
-      nameEn: userData.nameEn || 'Clinical Staff',
-      nameAr: userData.nameAr || 'كادر سريري',
-      role: role,
-      department: userData.department || 'MICU',
-      badgeId: userData.badgeId || `ID-${Math.floor(100 + Math.random() * 900)}`,
-      licenseNumber: userData.licenseNumber || `LIC-${Math.floor(100000 + Math.random() * 900000)}`,
-      isActive: userData.isActive ?? true,
-      isSuperAdmin: role === StaffRole.ADMIN,
-      pinCode: userData.pinCode || '123456',
-      createdAt: now,
-      lastLoginAt: now,
-      permissions: userData.permissions || getDefaultPermissionsForRole(role as StaffRole),
-    };
+    const rawEmail = userData.email || `staff_${Date.now()}@solimedical-micu.org`;
+    const email = rawEmail.includes('@') ? rawEmail.toLowerCase() : `${rawEmail.toLowerCase()}@solimedical-micu.org`;
+    const password = userData.pinCode || '123456';
+
+    if (password.length < 6) {
+      return { success: false, message: 'كلمة المرور يجب ألا تقل عن 6 أحرف أو أرقام (auth/weak-password).' };
+    }
 
     try {
+      // 1. Create user in Firebase Authentication first (Strictly required, no fake UIDs)
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const uid = userCredential.user.uid;
+      const now = new Date().toISOString();
+
+      const newUser: IcuUser = {
+        uid,
+        email,
+        nameEn: userData.nameEn || 'Clinical Staff',
+        nameAr: userData.nameAr || 'كادر سريري',
+        role: role,
+        department: userData.department || 'MICU',
+        badgeId: userData.badgeId || `ID-${Math.floor(100 + Math.random() * 900)}`,
+        licenseNumber: userData.licenseNumber || `LIC-${Math.floor(100000 + Math.random() * 900000)}`,
+        isActive: userData.isActive ?? true,
+        isSuperAdmin: role === StaffRole.ADMIN,
+        pinCode: password,
+        createdAt: now,
+        lastLoginAt: now,
+        permissions: userData.permissions || getDefaultPermissionsForRole(role as StaffRole),
+      };
+
+      // 2. Save to Firestore and Dexie ONLY after Firebase Auth success
       await saveUserAccount(newUser);
       await refreshUsers();
       return { success: true };
     } catch (err: any) {
-      console.error('Firestore user create failed:', err);
-      return { success: false, message: err?.message || 'فشل حفظ ملف المستخدم في Firestore.' };
+      console.error('User creation failed:', err);
+      const errorMessage = getFirebaseAuthErrorMessage(err);
+      return { success: false, message: errorMessage };
     }
   };
 
