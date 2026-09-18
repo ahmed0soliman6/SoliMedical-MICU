@@ -301,7 +301,9 @@ import {
   disableUserWithToken, 
   deleteUserWithToken, 
   adminChangeUserPassword, 
-  adminPasswordRecovery 
+  adminPasswordRecovery,
+  adminArchivePatient,
+  adminArchiveSweep
 } from './src/server/adminOperations';
 
 app.post('/api/admin/users/disable', async (req, res) => {
@@ -351,6 +353,32 @@ app.post('/api/admin/recovery', async (req, res) => {
     const { username, recoveryCode, newPassword } = req.body;
     const result = await adminPasswordRecovery(username, recoveryCode, newPassword);
     return res.status(result.success ? 200 : 400).json(result);
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err?.message || 'Internal server error.' });
+  }
+});
+
+// Patient Archival Endpoints (Server-Side SSOT)
+app.post('/api/admin/archive/patient', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const { patientId } = req.body;
+    if (!patientId) {
+      return res.status(400).json({ success: false, message: 'Missing patientId in request body.' });
+    }
+    const result = await adminArchivePatient(authHeader, patientId);
+    return res.status(result.success ? 200 : 403).json(result);
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err?.message || 'Internal server error.' });
+  }
+});
+
+app.post('/api/admin/archive/sweep', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const { retentionMonths = 6 } = req.body;
+    const result = await adminArchiveSweep(authHeader, retentionMonths);
+    return res.status(result.success ? 200 : 403).json(result);
   } catch (err: any) {
     return res.status(500).json({ success: false, message: err?.message || 'Internal server error.' });
   }

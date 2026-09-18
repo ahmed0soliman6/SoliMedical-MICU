@@ -471,6 +471,110 @@ export async function adminPasswordRecovery(username: string, recoveryCode: stri
   }
 }
 
+/**
+ * Server-Side Patient Archival Operation
+ * Safely marks patient dossiers as ARCHIVED without deleting clinical records
+ */
+export async function adminArchivePatient(authHeader: string | undefined, patientId: string): Promise<AdminOpResult> {
+  const authCheck = await verifyAdminCallerToken(authHeader);
+  if (!authCheck.isAdmin) {
+    return { success: false, message: authCheck.error || 'غير مصرح لك بتنفيذ هذه العملية. يتطلب صلاحيات مدير النظام.' };
+  }
+
+  if (!firestoreDb) {
+    return { success: false, message: 'قاعدة بيانات Firestore غير مهيأة على الخادم.' };
+  }
+
+  try {
+    const patientRef = firestoreDb.collection('patients').doc(patientId);
+    const snap = await patientRef.get();
+    if (!snap.exists) {
+      return { success: false, message: 'ملف المريض غير موجود في النظام.' };
+    }
+
+    const archiveId = `arch_${patientId}_${Date.now()}`;
+    await patientRef.update({
+      archiveStatus: 'ARCHIVED',
+      archiveDate: new Date().toISOString(),
+      archiveId,
+      updatedAt: new Date().toISOString(),
+      updatedByUid: authCheck.callerUid,
+    });
+
+    // Immutable Audit Log
+    const auditId = `audit_archive_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    await firestoreDb.collection('auditLogs').doc(auditId).set({
+      id: auditId,
+      timestamp: new Date().toISOString(),
+      eventType: 'PATIENT_ARCHIVED_SERVER_SIDE',
+      performedByUid: authCheck.callerUid,
+      targetPatientId: patientId,
+      description: `Patient ${patientId} securely transitioned to ARCHIVED tier. Clinical records preserved.`,
+      isImmutable: true,
+    });
+
+    return {
+      success: true,
+      message: 'تمت أرشفة ملف المريض بنجاح مع الحفاظ التام على كامل السجلات الطبية.',
+      data: { archiveId },
+    };
+  } catch (err: any) {
+    return { success: false, message: err?.message || 'فشلت عملية أرشفة المريض.' };
+  }
+}
+
+/**
+ * Server-Side Archive Retention Sweep
+ * Evaluates discharged records exceeding the retention threshold (default 6 months)
+ */
+export async function adminArchiveSweep(authHeader: string | undefined, retentionMonths: number = 6): Promise<AdminOpResult> {
+  const authCheck = await verifyAdminCallerToken(authHeader);
+  if (!authCheck.isAdmin) {
+    return { success: false, message: authCheck.error || 'غير مصرح لك بتنفيذ هذه العملية.' };
+  }
+
+  if (!firestoreDb) {
+    return { success: false, message: 'قاعدة بيانات Firestore غير مهيأة على الخادم.' };
+  }
+
+  try {
+    const cutoffMs = Date.now() - retentionMonths * 30 * 24 * 60 * 60 * 1000;
+    const snap = await firestoreDb.collection('patients')
+      .where('currentStatus', 'in', ['DISCHARGED', 'EXPIRED'])
+      .get();
+
+    let archivedCount = 0;
+    const batch = firestoreDb.batch();
+
+    snap.forEach((docSnap) => {
+      const data = docSnap.data();
+      if (data.archiveStatus !== 'ARCHIVED' && data.archiveStatus !== 'COLD_STORAGE') {
+        const updateTime = data.updatedAt ? new Date(data.updatedAt).getTime() : 0;
+        if (updateTime > 0 && updateTime < cutoffMs) {
+          batch.update(docSnap.ref, {
+            archiveStatus: 'ARCHIVED',
+            archiveDate: new Date().toISOString(),
+            archiveId: `arch_sweep_${docSnap.id}_${Date.now()}`,
+          });
+          archivedCount++;
+        }
+      }
+    });
+
+    if (archivedCount > 0) {
+      await batch.commit();
+    }
+
+    return {
+      success: true,
+      message: `تم فحص الأرشيف وتحديث ${archivedCount} سجلاً إلى حالة الأرشفة الدائمة.`,
+      data: { archivedCount },
+    };
+  } catch (err: any) {
+    return { success: false, message: err?.message || 'فشلت عملية فحص الأرشيف.' };
+  }
+}
+
 // Backward-compatible exports
 export async function disableUser(callerUid: string, targetUid: string, reason?: string): Promise<AdminOpResult> {
   return disableUserWithToken(`Bearer legacy_${callerUid}`, targetUid, reason);

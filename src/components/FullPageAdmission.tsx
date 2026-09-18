@@ -13,6 +13,7 @@ import {
   PatientDossier
 } from '../types/schema.ts';
 import { admitPatient, calculateIdealBodyWeight } from '../services/dataModel.ts';
+import { searchExistingPatients, PatientCandidateMatch } from '../services/operations.ts';
 import { useTranslation } from '../services/i18n.ts';
 import { db } from '../db/icuSyncDb.ts';
 import { toEnglishDigits, parseEnglishFloat, parseEnglishInt } from '../services/numberUtils.ts';
@@ -96,7 +97,9 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
   const [primaryDiagnosisEn, setPrimaryDiagnosisEn] = useState<string>('Acute Respiratory Failure secondary to Severe Community-Acquired Pneumonia');
   const [allergiesInput, setAllergiesInput] = useState<string>('None Known');
   const [isolation, setIsolation] = useState<string>('Standard Precautions');
-  const [recalledArchiveNotice, setRecalledArchiveNotice] = useState<string | null>(null);
+  const [candidateMatches, setCandidateMatches] = useState<PatientCandidateMatch[]>([]);
+  const [selectedExistingPatient, setSelectedExistingPatient] = useState<PatientCandidateMatch | null>(null);
+  const [isSearchingCandidates, setIsSearchingCandidates] = useState<boolean>(false);
   
   // Baselines - initialized empty so users don't have to clear zeroes
   const [initialMap, setInitialMap] = useState<string>('');
@@ -134,58 +137,52 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
     }
   }, [initialPatient]);
 
-  // Auto-search archive/patients when entering Card ID or Name or MRN (only when admitting new patient)
+  // Deterministic Candidate Search (Normalized Name + National ID Last 4 + MRN) with User Confirmation
   useEffect(() => {
-    if (initialPatient) return;
-    async function searchArchive() {
-      const cleanNationalId = nationalId.trim();
-      const cleanMrn = mrn.trim();
-      const cleanName = fullNameAr.trim();
+    if (initialPatient || selectedExistingPatient) return;
+    const cleanNationalId = nationalId.trim();
+    const cleanMrn = mrn.trim();
+    const cleanName = fullNameAr.trim();
 
-      if (!cleanNationalId && !cleanMrn && cleanName.length < 4) {
-        setRecalledArchiveNotice(null);
-        return;
-      }
-      try {
-        const allRecords = await db.patients.toArray();
-        const match = allRecords.find(p => {
-          if (cleanNationalId && p.nationalId && (p.nationalId.endsWith(cleanNationalId) || p.nationalId.includes(cleanNationalId))) {
-            return true;
-          }
-          if (cleanMrn && p.mrn && (p.mrn.endsWith(cleanMrn) || p.mrn.includes(cleanMrn))) {
-            return true;
-          }
-          if (cleanName.length >= 6 && p.fullNameAr && (p.fullNameAr.includes(cleanName) || cleanName.includes(p.fullNameAr))) {
-            return true;
-          }
-          return false;
-        });
-        if (match) {
-          if (match.fullNameAr && !fullNameAr) setFullNameAr(match.fullNameAr);
-          if (match.nationalId && !nationalId) setNationalId(match.nationalId);
-          if (match.mrn && !mrn) setMrn(match.mrn);
-          if (match.age) setAge(String(match.age));
-          if (match.gender) setGender(match.gender as Gender);
-          if (match.bloodType) setBloodType(match.bloodType);
-          if (match.heightCm) setHeightCm(String(match.heightCm));
-          if (match.weightKg) setWeightKg(String(match.weightKg));
-          if (match.primaryDiagnosisAr) setPrimaryDiagnosisAr(match.primaryDiagnosisAr);
-          if (match.allergies && match.allergies.length > 0) {
-            setAllergiesInput(match.allergies.map(a => a.allergen).join(', '));
-          }
-          if (match.isolationPrecautions && match.isolationPrecautions.length > 0) {
-            setIsolation(match.isolationPrecautions[0]);
-          }
-          setRecalledArchiveNotice(match.fullNameAr || match.fullNameEn || match.mrn);
-        } else {
-          setRecalledArchiveNotice(null);
-        }
-      } catch (e) {
-        console.error('Error searching patient archive:', e);
-      }
+    if (!cleanNationalId && !cleanMrn && cleanName.length < 3) {
+      setCandidateMatches([]);
+      return;
     }
-    searchArchive();
-  }, [nationalId, mrn, initialPatient]);
+
+    const timer = setTimeout(async () => {
+      try {
+        setIsSearchingCandidates(true);
+        const matches = await searchExistingPatients(cleanName, cleanNationalId, cleanMrn);
+        setCandidateMatches(matches);
+      } catch (e) {
+        console.error('Error searching patient candidates:', e);
+      } finally {
+        setIsSearchingCandidates(false);
+      }
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [nationalId, mrn, fullNameAr, initialPatient, selectedExistingPatient]);
+
+  const handleSelectCandidate = (candidate: PatientCandidateMatch) => {
+    setSelectedExistingPatient(candidate);
+    setCandidateMatches([]);
+    if (candidate.fullNameAr) setFullNameAr(candidate.fullNameAr);
+    if (candidate.mrn) setMrn(candidate.mrn);
+    if (candidate.gender) setGender(candidate.gender as Gender);
+    if (candidate.bloodType) setBloodType(candidate.bloodType);
+    if (candidate.allergies && candidate.allergies.length > 0) {
+      setAllergiesInput(candidate.allergies.join(', '));
+    }
+  };
+
+  const handleRejectCandidate = () => {
+    setCandidateMatches([]);
+  };
+
+  const handleClearSelectedExisting = () => {
+    setSelectedExistingPatient(null);
+  };
 
   const numHeight = parseEnglishFloat(heightCm) || 170;
   const calculatedIbw = calculateIdealBodyWeight(numHeight, gender);
@@ -291,6 +288,7 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
 
       await admitPatient({
         targetBed,
+        existingPatientId: selectedExistingPatient?.patientId,
         mrn: toEnglishDigits(mrn.trim() || `MRN-${Math.floor(10000 + Math.random() * 90000)}`),
         nationalId: toEnglishDigits(nationalId.trim()),
         fullNameAr: fullNameAr.trim(),
@@ -378,14 +376,90 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
         <div className="space-y-4">
           <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider border-b border-slate-800 pb-2 flex items-center justify-between">
             <span>1. {lang === 'ar' ? 'البيانات الشخصية والتعريفية للمريض' : 'Patient Identifiers & Demographics'}</span>
-            {recalledArchiveNotice && (
-              <span className="text-[11px] font-normal text-teal-300 bg-teal-950/80 border border-teal-500/50 px-2.5 py-1 rounded-lg animate-pulse">
+            {selectedExistingPatient && (
+              <span className="text-[11px] font-semibold text-emerald-300 bg-emerald-950/80 border border-emerald-500/50 px-2.5 py-1 rounded-lg flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                 {lang === 'ar' 
-                  ? `✨ تم استرجاع الملف الطبي السابق من الأرشيف تلقائياً (${recalledArchiveNotice})`
-                  : `✨ Archived record auto-recalled (${recalledArchiveNotice})`}
+                  ? `مرتبط بالملف الدائم: ${selectedExistingPatient.mrn || selectedExistingPatient.patientId}`
+                  : `Linked to Dossier: ${selectedExistingPatient.mrn || selectedExistingPatient.patientId}`}
+                <button
+                  type="button"
+                  onClick={handleClearSelectedExisting}
+                  className="ms-1 underline text-[10px] text-slate-400 hover:text-white"
+                >
+                  {lang === 'ar' ? 'فك الارتباط' : 'Detach'}
+                </button>
               </span>
             )}
           </h3>
+
+          {/* Candidate Match Alert Card (Requires Explicit User Confirmation) */}
+          {candidateMatches.length > 0 && !selectedExistingPatient && (
+            <div className="p-4 rounded-xl bg-amber-950/40 border border-amber-500/60 shadow-lg space-y-3">
+              <div className="flex items-start gap-2.5">
+                <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <h4 className="text-xs font-bold text-amber-200">
+                    {lang === 'ar' 
+                      ? 'تم العثور على سجل مريض مطابق في قاعدة البيانات السريرية'
+                      : 'Matching Patient Record Found in Clinical Database'}
+                  </h4>
+                  <p className="text-[11px] text-slate-300 mt-0.5">
+                    {lang === 'ar'
+                      ? 'تمت مطابقة البيانات مع ملف مريض مسجل مسبقاً. هل تود استعادة السجل الدائم وإعادة التنويم (Readmission) أم إنشاء مريض جديد؟'
+                      : 'Demographics match an existing patient dossier. Do you wish to re-admit under this permanent record or create a separate new patient?'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                {candidateMatches.map((cand) => (
+                  <div key={cand.patientId} className="bg-[#070c18] p-3 rounded-lg border border-slate-700/80 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-white text-xs">{cand.fullNameAr || cand.fullNameEn}</span>
+                        <span className="font-mono text-teal-400 text-[11px]">MRN: {cand.mrn}</span>
+                        {cand.nationalIdLast4 && (
+                          <span className="text-slate-400 text-[10px] bg-slate-800 px-1.5 py-0.5 rounded">
+                            ID: ****{cand.nationalIdLast4}
+                          </span>
+                        )}
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-900/60 text-blue-300">
+                          {cand.status}
+                        </span>
+                      </div>
+                      {cand.primaryDiagnosis && (
+                        <div className="text-[11px] text-slate-400">
+                          {lang === 'ar' ? 'التشخيص السابق: ' : 'Previous Dx: '}{cand.primaryDiagnosis}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleSelectCandidate(cand)}
+                        className="px-3 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-500 text-white font-semibold text-xs transition flex items-center gap-1 shadow"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        {lang === 'ar' ? 'تأكيد واستعادة السجل (Readmission)' : 'Confirm & Re-admit'}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex justify-end pt-1">
+                <button
+                  type="button"
+                  onClick={handleRejectCandidate}
+                  className="text-xs text-slate-400 hover:text-slate-200 underline"
+                >
+                  {lang === 'ar' ? 'تجاهل والتسجيل كمريض جديد منفصل' : 'Ignore & Create as New Separate Patient'}
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="space-y-4">
             {/* Box 1: Patient Full Name (At least 3 parts) */}

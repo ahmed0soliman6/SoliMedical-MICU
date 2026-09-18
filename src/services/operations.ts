@@ -1,54 +1,286 @@
-import { runTransaction, doc, serverTimestamp } from 'firebase/firestore';
+import { 
+  runTransaction, 
+  doc, 
+  serverTimestamp, 
+  collection, 
+  query, 
+  where, 
+  getDocs,
+  limit 
+} from 'firebase/firestore';
 import { firestore } from './firebase.ts';
 import { 
   COLLECTIONS, 
   PatientContract, 
   BedContract, 
   TransferContract, 
-  OperationContract
+  OperationContract,
+  EpisodeContract 
 } from '../types/contracts.ts';
 import { db } from '../db/icuSyncDb.ts';
-import { BedStatus, BedNumber } from '../types/schema.ts';
+import { BedStatus, BedNumber, PatientDossier } from '../types/schema.ts';
+import { normalizeArabicName, extractLast4, computeSha256Hash } from './patientSearchUtils.ts';
+import { toEnglishDigits } from './numberUtils.ts';
 
 const generateId = () => crypto.randomUUID();
 
+export interface AdmissionPayload {
+  existingPatientId?: string; // If readmitting an existing patient
+  mrn: string;
+  nationalId?: string;
+  fullNameAr: string;
+  fullNameEn?: string;
+  age?: number;
+  gender?: string;
+  bloodType?: string;
+  weightKg?: number;
+  heightCm?: number;
+  codeStatus?: string;
+  acuityLevel?: string;
+  primaryDiagnosisAr?: string;
+  primaryDiagnosisEn?: string;
+  allergies?: string[];
+  chronicDiseases?: string[];
+  history?: string;
+  presentingComplaint?: string;
+}
+
+export interface PatientCandidateMatch {
+  patientId: string;
+  mrn: string;
+  fullNameAr: string;
+  fullNameEn?: string;
+  nationalIdLast4: string;
+  gender?: string;
+  age?: number;
+  bloodType?: string;
+  lastAdmissionDate?: string | number;
+  lastDiagnosis?: string;
+  allergies?: string[];
+  chronicDiseases?: string[];
+  matchType: 'MRN_EXACT' | 'NAME_AND_NATIONAL_ID_EXACT' | 'NAME_PARTIAL';
+}
+
 /**
- * ADMISSION TRANSACTION
- * Ensures bed is empty, creates patient, operation, and transfer.
+ * Searches for existing registered patients by MRN or (Normalized Name + Last 4 digits of National ID).
+ * Never performs destructive or automatic merges; returns candidates for clinician confirmation.
+ */
+export async function searchExistingPatients(
+  inputName: string,
+  inputNationalId: string,
+  inputMrn?: string
+): Promise<PatientCandidateMatch[]> {
+  const matches: PatientCandidateMatch[] = [];
+  const cleanMrn = inputMrn ? toEnglishDigits(inputMrn).trim() : '';
+  const last4 = extractLast4(inputNationalId);
+  const normalizedName = normalizeArabicName(inputName);
+
+  // 1. Exact MRN Search (Highest Priority)
+  if (cleanMrn) {
+    try {
+      const q = query(
+        collection(firestore, COLLECTIONS.PATIENTS),
+        where('mrn', '==', cleanMrn),
+        limit(5)
+      );
+      const snap = await getDocs(q);
+      snap.forEach((d) => {
+        const data = d.data() as PatientContract;
+        matches.push({
+          patientId: data.patientId || d.id,
+          mrn: data.mrn,
+          fullNameAr: data.fullNameAr || data.fullName,
+          fullNameEn: data.fullNameEn,
+          nationalIdLast4: data.nationalIdLast4 || '',
+          gender: data.gender,
+          bloodType: data.bloodGroup,
+          allergies: data.allergiesSummary,
+          chronicDiseases: data.chronicConditionsSummary,
+          matchType: 'MRN_EXACT',
+        });
+      });
+    } catch (e) {
+      console.warn('Firestore MRN search warning:', e);
+    }
+  }
+
+  // 2. Strict Compound Match (Normalized Full Name + Last 4 digits ID)
+  if (normalizedName && last4 && last4.length === 4) {
+    try {
+      const q = query(
+        collection(firestore, COLLECTIONS.PATIENTS),
+        where('normalizedFullName', '==', normalizedName),
+        where('nationalIdLast4', '==', last4),
+        limit(5)
+      );
+      const snap = await getDocs(q);
+      snap.forEach((d) => {
+        const data = d.data() as PatientContract;
+        if (!matches.some((m) => m.patientId === (data.patientId || d.id))) {
+          matches.push({
+            patientId: data.patientId || d.id,
+            mrn: data.mrn,
+            fullNameAr: data.fullNameAr || data.fullName,
+            fullNameEn: data.fullNameEn,
+            nationalIdLast4: data.nationalIdLast4,
+            gender: data.gender,
+            bloodType: data.bloodGroup,
+            allergies: data.allergiesSummary,
+            chronicDiseases: data.chronicConditionsSummary,
+            matchType: 'NAME_AND_NATIONAL_ID_EXACT',
+          });
+        }
+      });
+    } catch (e) {
+      console.warn('Firestore Name+ID compound search warning:', e);
+    }
+  }
+
+  // 3. Fallback search on local Dexie cache if online search returned no hits or was offline
+  if (matches.length === 0) {
+    try {
+      const localPatients = await db.patients.toArray();
+      for (const p of localPatients) {
+        const pNorm = normalizeArabicName(p.fullNameAr || p.fullNameEn);
+        const pLast4 = extractLast4(p.nationalId);
+        const pMrn = toEnglishDigits(p.mrn).trim();
+
+        if (cleanMrn && pMrn === cleanMrn) {
+          matches.push({
+            patientId: p.id,
+            mrn: p.mrn,
+            fullNameAr: p.fullNameAr || p.fullNameEn,
+            fullNameEn: p.fullNameEn,
+            nationalIdLast4: pLast4,
+            gender: p.gender,
+            age: p.age,
+            bloodType: p.bloodType,
+            lastAdmissionDate: p.admissionDate,
+            lastDiagnosis: p.primaryDiagnosisAr || p.primaryDiagnosisEn,
+            allergies: p.allergies?.map((a) => a.allergen),
+            matchType: 'MRN_EXACT',
+          });
+        } else if (normalizedName && last4 && pNorm === normalizedName && pLast4 === last4) {
+          matches.push({
+            patientId: p.id,
+            mrn: p.mrn,
+            fullNameAr: p.fullNameAr || p.fullNameEn,
+            fullNameEn: p.fullNameEn,
+            nationalIdLast4: pLast4,
+            gender: p.gender,
+            age: p.age,
+            bloodType: p.bloodType,
+            lastAdmissionDate: p.admissionDate,
+            lastDiagnosis: p.primaryDiagnosisAr || p.primaryDiagnosisEn,
+            allergies: p.allergies?.map((a) => a.allergen),
+            matchType: 'NAME_AND_NATIONAL_ID_EXACT',
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('Local Dexie candidate search warning:', err);
+    }
+  }
+
+  return matches;
+}
+
+/**
+ * ATOMIC ADMISSION TRANSACTION
+ * Supports brand new admissions and readmissions of existing patients.
+ * Syncs patients.currentBedId and beds.activePatientId atomically.
  */
 export async function executeAdmission(
-  patientData: Omit<PatientContract, 'patientId' | 'status' | 'createdAt'>,
+  payload: AdmissionPayload,
   bedId: string,
   doctorId: string,
+  doctorName: string,
   unitId: string
-): Promise<string> {
-  return await runTransaction(firestore, async (transaction) => {
+): Promise<{ patientId: string; episodeId: string; transferId: string }> {
+  const patientId = payload.existingPatientId || generateId();
+  const episodeId = generateId();
+  const operationId = generateId();
+  const transferId = generateId();
+
+  const isReadmission = !!payload.existingPatientId;
+  const nowMs = Date.now();
+  const last4 = extractLast4(payload.nationalId);
+  const normalizedName = normalizeArabicName(payload.fullNameAr || payload.fullNameEn);
+  const idHash = payload.nationalId ? await computeSha256Hash(payload.nationalId) : '';
+
+  await runTransaction(firestore, async (transaction) => {
     const bedRef = doc(firestore, COLLECTIONS.BEDS, bedId);
     const bedSnap = await transaction.get(bedRef);
-    
-    if (!bedSnap.exists()) throw new Error('Bed does not exist');
-    
-    const bed = bedSnap.data() as BedContract;
-    if (bed.activePatientId) throw new Error('Bed is already occupied');
 
-    const patientId = generateId();
-    const operationId = generateId();
-    const transferId = generateId();
+    if (!bedSnap.exists()) {
+      throw new Error('السرير غير مسجل في النظام.');
+    }
+
+    const bedData = bedSnap.data() as BedContract;
+    if (bedData.activePatientId) {
+      throw new Error('السرير المختار مشغول حالياً بمريض آخر.');
+    }
 
     const patientRef = doc(firestore, COLLECTIONS.PATIENTS, patientId);
+    const episodeRef = doc(firestore, COLLECTIONS.EPISODES, episodeId);
     const operationRef = doc(firestore, COLLECTIONS.OPERATIONS, operationId);
     const transferRef = doc(firestore, COLLECTIONS.TRANSFERS, transferId);
 
-    const newPatient: PatientContract = {
-      ...patientData,
+    const patientDoc: PatientContract = {
       patientId,
+      unitId,
+      mrn: toEnglishDigits(payload.mrn).trim(),
+      fullName: payload.fullNameAr || payload.fullNameEn || '',
+      fullNameAr: payload.fullNameAr,
+      fullNameEn: payload.fullNameEn || payload.fullNameAr,
+      normalizedFullName: normalizedName,
+      nationalIdLast4: last4,
+      nationalIdHash: idHash,
+      dateOfBirth: '',
+      gender: (payload.gender as any) || 'OTHER',
+      bloodGroup: payload.bloodType,
+      idealBodyWeightKg: payload.weightKg,
+      allergiesSummary: payload.allergies || [],
+      chronicConditionsSummary: payload.chronicDiseases || [],
+      currentStatus: 'ACTIVE_ICU',
       status: 'ACTIVE_ICU',
-      createdAt: serverTimestamp() as unknown as number,
+      currentBedId: bedId,
+      currentEpisodeId: episodeId,
+      codeStatus: payload.codeStatus || 'FULL_CODE',
+      acuityLevel: payload.acuityLevel || 'CRITICAL_STAT',
+      archiveStatus: 'HOT',
+      archiveDate: null,
+      archiveStoragePath: null,
+      archiveId: null,
+      createdAt: isReadmission ? (undefined as any) : (serverTimestamp() as unknown as number),
+      createdBy: doctorId,
+      createdByUid: doctorId,
+      updatedAt: serverTimestamp() as unknown as number,
+      updatedByUid: doctorId,
+    };
+
+    const newEpisode: EpisodeContract = {
+      episodeId,
+      patientId,
+      bedId,
+      unitId,
+      admissionDate: nowMs,
+      dischargeDate: null,
+      admittingDoctorUid: doctorId,
+      admittingDoctorName: doctorName || doctorId,
+      primaryDiagnosis: payload.primaryDiagnosisEn || payload.primaryDiagnosisAr || '',
+      primaryDiagnosisAr: payload.primaryDiagnosisAr,
+      primaryDiagnosisEn: payload.primaryDiagnosisEn,
+      acuityLevel: payload.acuityLevel,
+      codeStatus: payload.codeStatus,
+      status: 'ACTIVE',
+      createdAt: nowMs,
+      updatedAt: nowMs,
     };
 
     const newOperation: OperationContract = {
       operationId,
-      operationType: 'ADMISSION',
+      operationType: isReadmission ? 'READMISSION' : 'ADMISSION',
       initiatedBy: doctorId,
       initiatedAt: serverTimestamp() as unknown as number,
     };
@@ -57,32 +289,40 @@ export async function executeAdmission(
       transferId,
       unitId,
       patientId,
-      transferType: 'ADMISSION',
+      transferType: isReadmission ? 'READMISSION' : 'ADMISSION',
       operationId,
       fromBedId: null,
       toBedId: bedId,
-      transferredBy: doctorId,
+      transferredBy: doctorName || doctorId,
       transferredAt: serverTimestamp() as unknown as number,
-      reason: 'Initial Admission',
+      reason: isReadmission ? 'Patient Readmission' : 'Initial Direct Admission',
     };
 
-    transaction.set(patientRef, newPatient);
+    if (isReadmission) {
+      transaction.set(patientRef, patientDoc, { merge: true });
+    } else {
+      transaction.set(patientRef, patientDoc);
+    }
+
+    transaction.set(episodeRef, newEpisode);
     transaction.set(operationRef, newOperation);
     transaction.set(transferRef, newTransfer);
-    
+
     transaction.update(bedRef, {
       activePatientId: patientId,
-      lastTransferId: transferId
+      currentPatientId: patientId,
+      status: 'OCCUPIED',
+      lastTransferId: transferId,
     });
-
-    return patientId;
   });
+
+  return { patientId, episodeId, transferId };
 }
 
 /**
- * TRANSFER TRANSACTION
+ * ATOMIC TRANSFER TRANSACTION
  * Moves patient from one bed to another empty bed atomically.
- * Strictly adheres to patientId persistence and operation audit logging.
+ * Updates both fromBed, toBed, and patients.currentBedId in a single transaction.
  */
 export async function executeTransfer(
   patientId: string,
@@ -100,12 +340,14 @@ export async function executeTransfer(
   const transferResult = await runTransaction(firestore, async (transaction) => {
     const fromBedRef = doc(firestore, COLLECTIONS.BEDS, fromBedId);
     const toBedRef = doc(firestore, COLLECTIONS.BEDS, toBedId);
-    
+    const patientRef = doc(firestore, COLLECTIONS.PATIENTS, patientId);
+
     const fromBedSnap = await transaction.get(fromBedRef);
     const toBedSnap = await transaction.get(toBedRef);
+    const patientSnap = await transaction.get(patientRef);
 
-    if (!fromBedSnap.exists() || !toBedSnap.exists()) {
-      throw new Error('السرير غير موجود في النظام.');
+    if (!fromBedSnap.exists() || !toBedSnap.exists() || !patientSnap.exists()) {
+      throw new Error('بيانات السرير أو المريض غير موجودة في النظام.');
     }
 
     const fromBed = fromBedSnap.data() as BedContract;
@@ -140,7 +382,7 @@ export async function executeTransfer(
       createdAt: Date.now(),
       initiatedBy: doctorId,
       initiatedAt: serverTimestamp(),
-      reason
+      reason,
     };
 
     const newTransfer: TransferContract = {
@@ -158,36 +400,41 @@ export async function executeTransfer(
 
     transaction.set(operationRef, newOperation);
     transaction.set(transferRef, newTransfer);
-    
-    transaction.update(fromBedRef, { 
+
+    transaction.update(fromBedRef, {
       activePatientId: null,
       currentPatientId: null,
-      status: 'VACANT'
+      status: 'VACANT',
     });
     transaction.update(toBedRef, {
       activePatientId: patientId,
       currentPatientId: patientId,
       status: 'OCCUPIED',
-      lastTransferId: transferId
+      lastTransferId: transferId,
+    });
+    transaction.update(patientRef, {
+      currentBedId: toBedId,
+      updatedAt: serverTimestamp(),
+      updatedByUid: doctorId,
     });
 
     return transferId;
   });
 
-  // Local state update after successful atomic transaction
+  // Local cache update
   try {
     await db.beds.update(fromBedId, {
       status: BedStatus.VACANT,
       currentPatientId: null,
-      activePatientId: null
+      activePatientId: null,
     });
     await db.beds.update(toBedId, {
       status: BedStatus.OCCUPIED,
       currentPatientId: patientId,
-      activePatientId: patientId
+      activePatientId: patientId,
     });
     await db.patients.update(patientId, {
-      currentBedId: toBedId as BedNumber
+      currentBedId: toBedId as BedNumber,
     });
   } catch (err) {
     console.warn('Local Dexie update following transfer:', err);
@@ -197,9 +444,9 @@ export async function executeTransfer(
 }
 
 /**
- * BED SWAP TRANSACTION
+ * ATOMIC BED SWAP TRANSACTION
  * Swaps two occupied beds atomically in a single Firestore Transaction.
- * Patient medical records remain permanently bound to their fixed patientId.
+ * Updates bedA, bedB, patientA, patientB together.
  */
 export async function executeBedSwap(
   bedAId: string,
@@ -242,6 +489,9 @@ export async function executeBedSwap(
       throw new Error('أحد السريرين غير متاح للخدمة.');
     }
 
+    const patientARef = doc(firestore, COLLECTIONS.PATIENTS, patientAId);
+    const patientBRef = doc(firestore, COLLECTIONS.PATIENTS, patientBId);
+
     const operationId = generateId();
     const transferAId = generateId();
     const transferBId = generateId();
@@ -263,7 +513,7 @@ export async function executeBedSwap(
       doctorName,
       createdAt: Date.now(),
       initiatedBy: doctorId,
-      initiatedAt: serverTimestamp()
+      initiatedAt: serverTimestamp(),
     };
 
     const transferA = {
@@ -276,7 +526,7 @@ export async function executeBedSwap(
       toBedId: bedBId,
       transferredBy: doctorName || doctorId,
       transferredAt: serverTimestamp(),
-      reason
+      reason,
     };
 
     const transferB = {
@@ -289,7 +539,7 @@ export async function executeBedSwap(
       toBedId: bedAId,
       transferredBy: doctorName || doctorId,
       transferredAt: serverTimestamp(),
-      reason
+      reason,
     };
 
     transaction.set(operationRef, newOperation);
@@ -300,20 +550,32 @@ export async function executeBedSwap(
       activePatientId: patientBId,
       currentPatientId: patientBId,
       status: 'OCCUPIED',
-      lastTransferId: transferBId
+      lastTransferId: transferBId,
     });
 
     transaction.update(bedBRef, {
       activePatientId: patientAId,
       currentPatientId: patientAId,
       status: 'OCCUPIED',
-      lastTransferId: transferAId
+      lastTransferId: transferAId,
+    });
+
+    transaction.update(patientARef, {
+      currentBedId: bedBId,
+      updatedAt: serverTimestamp(),
+      updatedByUid: doctorId,
+    });
+
+    transaction.update(patientBRef, {
+      currentBedId: bedAId,
+      updatedAt: serverTimestamp(),
+      updatedByUid: doctorId,
     });
 
     return operationId;
   });
 
-  // Local state update after successful atomic transaction
+  // Local state update
   try {
     const bedA = await db.beds.get(bedAId);
     const bedB = await db.beds.get(bedBId);
@@ -324,18 +586,18 @@ export async function executeBedSwap(
       await db.beds.update(bedAId, {
         status: BedStatus.OCCUPIED,
         currentPatientId: patientBId,
-        activePatientId: patientBId
+        activePatientId: patientBId,
       });
       await db.beds.update(bedBId, {
         status: BedStatus.OCCUPIED,
         currentPatientId: patientAId,
-        activePatientId: patientAId
+        activePatientId: patientAId,
       });
       await db.patients.update(patientAId, {
-        currentBedId: bedBId as BedNumber
+        currentBedId: bedBId as BedNumber,
       });
       await db.patients.update(patientBId, {
-        currentBedId: bedAId as BedNumber
+        currentBedId: bedAId as BedNumber,
       });
     }
   } catch (err) {
@@ -346,15 +608,17 @@ export async function executeBedSwap(
 }
 
 /**
- * DISCHARGE TRANSACTION
- * Frees the bed and sets patient status to DISCHARGED atomicaly.
+ * ATOMIC DISCHARGE TRANSACTION
+ * Frees the bed and updates patient status to DISCHARGED atomically.
+ * Medical records remain permanently untouched.
  */
 export async function executeDischarge(
   patientId: string,
   fromBedId: string,
   doctorId: string,
   unitId: string,
-  reason: string
+  reason: string,
+  outcome: string = 'DISCHARGED_STEPDOWN'
 ): Promise<string> {
   return await runTransaction(firestore, async (transaction) => {
     const bedRef = doc(firestore, COLLECTIONS.BEDS, fromBedId);
@@ -368,10 +632,12 @@ export async function executeDischarge(
     }
 
     const bed = bedSnap.data() as BedContract;
-
     if (bed.activePatientId !== patientId) {
-      throw new Error('Patient is not in the specified bed');
+      throw new Error('المريض غير متواجد بالسرير المحدد.');
     }
+
+    const patientData = patientSnap.data() as PatientContract;
+    const currentEpisodeId = patientData.currentEpisodeId;
 
     const operationId = generateId();
     const transferId = generateId();
@@ -401,9 +667,30 @@ export async function executeDischarge(
 
     transaction.set(operationRef, newOperation);
     transaction.set(transferRef, newTransfer);
-    
-    transaction.update(bedRef, { activePatientId: null });
-    transaction.update(patientRef, { status: 'DISCHARGED' });
+
+    transaction.update(bedRef, {
+      activePatientId: null,
+      currentPatientId: null,
+      status: 'VACANT',
+    });
+
+    transaction.update(patientRef, {
+      currentStatus: 'DISCHARGED',
+      status: 'DISCHARGED',
+      currentBedId: null,
+      updatedAt: serverTimestamp(),
+      updatedByUid: doctorId,
+    });
+
+    if (currentEpisodeId) {
+      const episodeRef = doc(firestore, COLLECTIONS.EPISODES, currentEpisodeId);
+      transaction.update(episodeRef, {
+        dischargeDate: Date.now(),
+        status: 'DISCHARGED',
+        outcome,
+        updatedAt: Date.now(),
+      });
+    }
 
     return transferId;
   });

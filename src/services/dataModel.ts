@@ -72,12 +72,15 @@ export function calculateIdealBodyWeight(heightCm: number, gender: Gender): numb
   }
 }
 
+import { normalizeArabicName, extractLast4, computeSha256Hash } from './patientSearchUtils.ts';
+
 // -------------------------------------------------------------
 // Admission Data Model
 // -------------------------------------------------------------
 
 export interface DirectAdmissionInput {
   targetBed: BedNumber;
+  existingPatientId?: string; // Readmission of existing patient
   mrn: string;
   nationalId?: string;
   fullNameEn: string;
@@ -131,7 +134,7 @@ export interface DirectAdmissionInput {
  * Admits a patient to a specified ICU bed with full transactional integrity:
  * - Checks bed occupancy
  * - Sets Bed status to OCCUPIED
- * - Creates PatientDossier
+ * - Creates/Updates PatientDossier
  * - Records initial telemetry vitals
  * - Logs initial admission clinical note (with immutable cryptographic hash)
  * - Emits audit trail log
@@ -161,7 +164,7 @@ export async function admitPatient(input: DirectAdmissionInput): Promise<{ patie
     }
 
     const nowIso = new Date().toISOString();
-    const patientId = `pat-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+    const patientId = input.existingPatientId || `pat-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
     const idealWeight = calculateIdealBodyWeight(input.heightCm, input.gender);
 
     const formattedAllergies: AllergyRecord[] = (input.allergies || []).map((a, idx) => ({
@@ -175,10 +178,17 @@ export async function admitPatient(input: DirectAdmissionInput): Promise<{ patie
       clinicalNote: a.clinicalNote,
     }));
 
+    const last4 = extractLast4(input.nationalId);
+    const normalizedName = normalizeArabicName(input.fullNameAr || input.fullNameEn);
+    const idHash = input.nationalId ? await computeSha256Hash(input.nationalId) : undefined;
+
     const newPatient: PatientDossier = {
       id: patientId,
       mrn: toEnglishDigits(input.mrn),
       nationalId: input.nationalId ? toEnglishDigits(input.nationalId) : undefined,
+      nationalIdLast4: last4,
+      nationalIdHash: idHash,
+      normalizedFullName: normalizedName,
       fullNameEn: input.fullNameEn,
       fullNameAr: input.fullNameAr,
       age: input.age,
@@ -195,6 +205,7 @@ export async function admitPatient(input: DirectAdmissionInput): Promise<{ patie
       currentBedId: input.targetBed,
       acuityLevel: input.acuityLevel,
       patientStatus: 'ACTIVE_ICU',
+      archiveStatus: 'HOT',
       allergies: formattedAllergies,
       microbiologyHistory: [],
       pastVisits: [],
@@ -214,6 +225,7 @@ export async function admitPatient(input: DirectAdmissionInput): Promise<{ patie
     await db.beds.update(input.targetBed, {
       status: BedStatus.OCCUPIED,
       currentPatientId: patientId,
+      activePatientId: patientId,
       lastTelemetryPingUtc: nowIso,
     });
 
@@ -702,7 +714,6 @@ export async function dischargeOrTransferPatient(input: DispositionInput): Promi
 
     if (input.dispositionType === DispositionType.CLINICAL_MORTALITY) {
       nextPatientStatus = 'EXPIRED_MORTALITY';
-      const scheduledPurgeDate = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(); // 10 days retention countdown
 
       patient.mortalityRecord = {
         patientId: patient.id,
@@ -713,9 +724,8 @@ export async function dischargeOrTransferPatient(input: DispositionInput): Promi
         supervisingConsultant: input.mortalityDetails?.supervisingConsultant || input.authorStaff.name,
         deathSummaryNoteId: `note-death-${Date.now()}`,
         burialReportGenerated: true,
-        autoPurgeScheduledAt: scheduledPurgeDate,
         isArchived: true,
-        isPurged: false,
+        isReadOnly: true,
       };
     } else if (input.dispositionType === DispositionType.DISCHARGE_HOME) {
       nextPatientStatus = 'DISCHARGED_HOME';
@@ -726,6 +736,7 @@ export async function dischargeOrTransferPatient(input: DispositionInput): Promi
     // Update Patient
     await db.patients.update(input.patientId, {
       patientStatus: nextPatientStatus,
+      archiveStatus: input.dispositionType === DispositionType.CLINICAL_MORTALITY ? 'ARCHIVED' : patient.archiveStatus,
       currentBedId: undefined,
       mortalityRecord: patient.mortalityRecord,
       updatedAt: nowIso,
@@ -790,53 +801,6 @@ export async function dischargeOrTransferPatient(input: DispositionInput): Promi
     };
     await db.auditLogs.put(auditLog);
   });
-}
-
-// -------------------------------------------------------------
-// 10-Day Auto-Purge Compliance Engine
-// -------------------------------------------------------------
-
-export async function checkAndExecuteMortalityAutoPurge(): Promise<number> {
-  const now = Date.now();
-  let purgedCount = 0;
-
-  await db.transaction('rw', [db.patients, db.auditLogs], async () => {
-    const expiredPatients = await db.patients
-      .where('patientStatus')
-      .equals('EXPIRED_MORTALITY')
-      .toArray();
-
-    for (const pat of expiredPatients) {
-      if (pat.mortalityRecord && !pat.mortalityRecord.isPurged) {
-        const purgeTime = new Date(pat.mortalityRecord.autoPurgeScheduledAt).getTime();
-        if (now >= purgeTime) {
-          // Execute Auto-Purge per CBAHI / JCI standards
-          pat.mortalityRecord.isPurged = true;
-          await db.patients.update(pat.id, {
-            mortalityRecord: pat.mortalityRecord,
-          });
-          purgedCount++;
-
-          const auditLog: WardAuditLog = {
-            id: `audit-${Date.now()}-${purgedCount}`,
-            timestamp: new Date().toISOString(),
-            eventType: 'AUTO_PURGE_EXECUTED',
-            performedBy: {
-              staffId: 'SYSTEM_DAEMON',
-              name: 'ICU-Sync Security Daemon',
-              role: StaffRole.ADMIN,
-            },
-            targetPatientMrn: pat.mrn,
-            description: `10-day retention window expired. Patient ${pat.fullNameEn} (#${pat.mrn}) mortality file securely purged from active cache.`,
-            immutableHash: await computeSha256(`PURGE|${pat.id}|${now}`),
-          };
-          await db.auditLogs.put(auditLog);
-        }
-      }
-    }
-  });
-
-  return purgedCount;
 }
 
 // -------------------------------------------------------------

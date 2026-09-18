@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { 
   X, 
-  Search, 
-  Trash2
+  Search,
+  Archive
 } from 'lucide-react';
 import { PatientDossier, BedNumber } from '../types/schema.ts';
 import { db } from '../db/icuSyncDb.ts';
-import { checkAndExecuteMortalityAutoPurge } from '../services/dataModel.ts';
 import { useTranslation } from '../services/i18n.ts';
 
 interface ArchiveSearchModalProps {
@@ -37,8 +36,7 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
   const { t, lang, isRTL } = useTranslation();
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [allPatients, setAllPatients] = useState<PatientDossier[]>([]);
-  const [filterType, setFilterType] = useState<'ALL' | 'ACTIVE_ICU' | 'DISCHARGED' | 'DECEASED'>('ALL');
-  const [purgeResult, setPurgeResult] = useState<string | null>(null);
+  const [filterType, setFilterType] = useState<'ALL' | 'ACTIVE_ICU' | 'DISCHARGED' | 'ARCHIVED' | 'DECEASED'>('ALL');
 
   useEffect(() => {
     if (isOpen) {
@@ -51,16 +49,6 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
     setAllPatients(list);
   };
 
-  const handleRunPurge = async () => {
-    const count = await checkAndExecuteMortalityAutoPurge();
-    if (lang === 'ar') {
-      setPurgeResult(`تم فحص سجلات الوفيات وأرشفة/حذف ${count} ملف تجاوز مدة الـ 10 أيام القانونية.`);
-    } else {
-      setPurgeResult(`Mortality retention sweep complete: purged ${count} records exceeding the 10-day CBAHI statutory window.`);
-    }
-    await loadPatients();
-  };
-
   if (!isOpen) return null;
 
   const filteredPatients = (allPatients || []).filter((p) => {
@@ -71,17 +59,20 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
     const nameEn = (p.fullNameEn || '').toLowerCase();
     const diagAr = p.primaryDiagnosisAr || '';
     const diagEn = (p.primaryDiagnosisEn || '').toLowerCase();
+    const last4 = p.nationalIdLast4 || (p.nationalId ? p.nationalId.slice(-4) : '');
 
     const matchesSearch = 
       mrn.includes(q) ||
       nameAr.includes(searchTerm) ||
       nameEn.includes(q) ||
       diagAr.includes(searchTerm) ||
-      diagEn.includes(q);
+      diagEn.includes(q) ||
+      last4.includes(q);
 
     if (!matchesSearch) return false;
     if (filterType === 'ALL') return true;
     if (filterType === 'ACTIVE_ICU') return p.patientStatus === 'ACTIVE_ICU';
+    if (filterType === 'ARCHIVED') return p.archiveStatus === 'ARCHIVED' || p.archiveStatus === 'COLD_STORAGE';
     if (filterType === 'DECEASED') return p.patientStatus === 'EXPIRED_MORTALITY';
     if (filterType === 'DISCHARGED') return p.patientStatus !== 'ACTIVE_ICU' && p.patientStatus !== 'EXPIRED_MORTALITY';
     return true;
@@ -102,8 +93,8 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
               </h3>
               <p className="text-xs text-slate-400">
                 {lang === 'ar' 
-                  ? 'بحث فوري برقم الملف MRN، الاسم، التشخيص، وبروتوكول الحفظ لمدة 10 أيام'
-                  : 'Universal search by MRN, patient name, diagnosis, and 10-day retention policies'}
+                  ? 'بحث فوري برقم الملف MRN، الاسم، آخر 4 أرقام، والتشخيص الطبي'
+                  : 'Universal search by MRN, patient name, last 4 digits, and diagnosis'}
               </p>
             </div>
           </div>
@@ -123,14 +114,14 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder={lang === 'ar' ? "ابحث بالرقم الطبي MRN، اسم المريض بالعربي/الإنجليزي، أو التشخيص..." : "Search by MRN, patient name, or ICD-10 diagnosis..."}
+              placeholder={lang === 'ar' ? "ابحث بالرقم الطبي MRN، اسم المريض بالعربي/الإنجليزي، آخر 4 أرقام، أو التشخيص..." : "Search by MRN, patient name, last 4 digits, or ICD-10 diagnosis..."}
               className={`w-full bg-[#0f172a] border border-slate-700 rounded-xl py-2.5 text-xs text-white placeholder-slate-500 focus:border-teal-500 focus:outline-none ${isRTL ? 'pr-10 pl-4' : 'pl-10 pr-4'}`}
             />
           </div>
 
           <div className="flex items-center justify-between gap-2 flex-wrap text-xs">
-            <div className="flex items-center gap-1.5">
-              {(['ALL', 'ACTIVE_ICU', 'DISCHARGED', 'DECEASED'] as const).map((type) => (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {(['ALL', 'ACTIVE_ICU', 'DISCHARGED', 'ARCHIVED', 'DECEASED'] as const).map((type) => (
                 <button
                   key={type}
                   onClick={() => setFilterType(type)}
@@ -143,26 +134,12 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
                   {type === 'ALL' && (lang === 'ar' ? 'الكل' : 'All Records')}
                   {type === 'ACTIVE_ICU' && (lang === 'ar' ? 'منوم بالرعاية' : 'Active ICU')}
                   {type === 'DISCHARGED' && (lang === 'ar' ? 'خرج/نُقل' : 'Discharged / Step-Down')}
-                  {type === 'DECEASED' && (lang === 'ar' ? 'وفيات (10d Auto-Purge)' : 'Mortality (10d Auto-Purge)')}
+                  {type === 'ARCHIVED' && (lang === 'ar' ? 'الأرشيف الدائم' : 'Permanent Archive')}
+                  {type === 'DECEASED' && (lang === 'ar' ? 'وفيات (أرشيف دائم)' : 'Mortality (Archived)')}
                 </button>
               ))}
             </div>
-
-            {/* Run Purge Sweep Button */}
-            <button
-              onClick={handleRunPurge}
-              className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-red-950/40 hover:bg-red-900/60 text-red-300 border border-red-800/50 text-[11px] font-mono transition-all"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span>{lang === 'ar' ? 'فحص انتهاء مهلة الـ 10 أيام' : 'Execute 10-Day Purge Audit'}</span>
-            </button>
           </div>
-
-          {purgeResult && (
-            <div className="text-[11px] text-emerald-400 bg-emerald-950/40 border border-emerald-800/40 p-2 rounded-lg">
-              {purgeResult}
-            </div>
-          )}
         </div>
 
         {/* Results List */}
@@ -198,13 +175,23 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
                         </span>
                       )}
                       {isDeceased && (
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-red-950 text-red-400 border border-red-800">
-                          {lang === 'ar' ? 'متوفى (10d Retention)' : 'Deceased (10d Retention)'}
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900 text-slate-400 border border-slate-700">
+                          {lang === 'ar' ? 'متوفى (أرشيف دائم للقراءة فقط)' : 'Deceased (Permanent Read-Only Archive)'}
                         </span>
                       )}
                       {isDischarged && (
                         <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-800">
                           {lang === 'ar' ? 'نُقل للجناح / خرج' : 'Discharged / Step-Down'}
+                        </span>
+                      )}
+                      {(patient.archiveStatus === 'ARCHIVED' || patient.archiveStatus === 'COLD_STORAGE') && (
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-800/80">
+                          {lang === 'ar' ? 'مؤرشف دائم' : 'Archived Tier'}
+                        </span>
+                      )}
+                      {(patient.nationalIdLast4 || patient.nationalId) && (
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">
+                          ID: ****{patient.nationalIdLast4 || (patient.nationalId ? patient.nationalId.slice(-4) : '')}
                         </span>
                       )}
                     </div>

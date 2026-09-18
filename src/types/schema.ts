@@ -77,11 +77,24 @@ export interface PatientRecord {
   unitId: string;
   mrn: string;
   fullName: string;
+  fullNameAr?: string;
+  fullNameEn?: string;
+  normalizedFullName?: string;
+  nationalIdLast4?: string;
+  nationalIdHash?: string;
   phoneNumber?: string;
-  dateOfBirth: string;
+  dateOfBirth?: string;
   gender: Gender;
-  status: 'ACTIVE_ICU' | 'DISCHARGED' | 'EXPIRED';
-  createdAt: number; // Server Timestamp
+  status: 'ACTIVE_ICU' | 'DISCHARGED' | 'EXPIRED' | 'TRANSFERRED_EXTERNAL';
+  currentStatus?: 'ACTIVE_ICU' | 'DISCHARGED' | 'EXPIRED' | 'TRANSFERRED_EXTERNAL';
+  currentBedId?: string | null;
+  currentEpisodeId?: string | null;
+  archiveStatus?: 'HOT' | 'ARCHIVED' | 'COLD_STORAGE';
+  archiveDate?: number | null;
+  archiveStoragePath?: string | null;
+  archiveId?: string | null;
+  createdAt: number | string; // Server Timestamp or ISO string
+  updatedAt?: number | string;
 }
 
 export interface BedIsolationInfo {
@@ -645,9 +658,8 @@ export interface MortalityAuditRecord {
   supervisingConsultant: string;
   deathSummaryNoteId: string;
   burialReportGenerated: boolean;
-  autoPurgeScheduledAt: string; // 10-day retention countdown timestamp
   isArchived: boolean;
-  isPurged: boolean;
+  isReadOnly: boolean;
 }
 
 export interface PatientDossier {
@@ -655,6 +667,9 @@ export interface PatientDossier {
   mrn: string; // Medical Record Number e.g. #99281, ICU-992-814
   phoneNumber?: string;
   nationalId?: string;
+  nationalIdLast4?: string;
+  nationalIdHash?: string;
+  normalizedFullName?: string;
   fullNameEn: string;
   fullNameAr: string;
   age: number;
@@ -669,8 +684,13 @@ export interface PatientDossier {
   intakePathway: IntakePathway;
   admissionDate: string;
   currentBedId?: BedNumber;
+  currentEpisodeId?: string | null;
   acuityLevel: AcuityLevel;
   patientStatus: 'ACTIVE_ICU' | 'DISCHARGED_STEPDOWN' | 'DISCHARGED_HOME' | 'TRANSFERRED_EXTERNAL' | 'EXPIRED_MORTALITY';
+  archiveStatus?: 'HOT' | 'ARCHIVED' | 'COLD_STORAGE';
+  archiveDate?: number | string | null;
+  archiveStoragePath?: string | null;
+  archiveId?: string | null;
   allergies: AllergyRecord[];
   microbiologyHistory: MicrobiologyRecord[];
   pastVisits: PastICUVisit[];

@@ -22,7 +22,7 @@ import { ArchiveSearchModal } from './components/ArchiveSearchModal.tsx';
 import { SettingsModal } from './components/SettingsModal.tsx';
 import { SbarHandoverView } from './components/SbarHandoverView.tsx';
 import { ClinicalNotesView } from './components/ClinicalNotesView.tsx';
-import { checkAndExecuteMortalityAutoPurge, getPatientForBed } from './services/dataModel.ts';
+import { getPatientForBed } from './services/dataModel.ts';
 import { 
   subscribeToRealtimeFirestore, 
   seedInitialDataToFirestore,
@@ -119,9 +119,6 @@ export default function App() {
         pMap[p.patientId].push(p);
       }
       setPumpsMap(pMap);
-
-      // Check auto-purge expired mortal records
-      await checkAndExecuteMortalityAutoPurge();
     } catch (err) {
       console.error('Error reloading local ICU database:', err);
     }

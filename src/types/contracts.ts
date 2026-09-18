@@ -14,6 +14,7 @@ export const COLLECTIONS = {
   USERS: 'users',
   PATIENTS: 'patients',
   BEDS: 'beds',
+  EPISODES: 'episodes',
   TRANSFERS: 'transfers',
   MEDICAL_RECORDS: 'medical_records',
   CLINICAL_NOTES: 'clinicalNotes',
@@ -41,10 +42,11 @@ export const COLLECTIONS = {
 // 3. System Enums (Strict Union Types)
 // ----------------------------------------------------------------------------
 export type Gender = 'MALE' | 'FEMALE' | 'OTHER';
-export type PatientStatus = 'ACTIVE_ICU' | 'DISCHARGED' | 'EXPIRED';
+export type PatientStatus = 'ACTIVE_ICU' | 'DISCHARGED' | 'EXPIRED' | 'TRANSFERRED_EXTERNAL';
+export type ArchiveStatus = 'HOT' | 'ARCHIVED' | 'COLD_STORAGE';
 export type Shift = 'DAY' | 'NIGHT';
-export type TransferType = 'ADMISSION' | 'TRANSFER' | 'BED_SWAP' | 'DISCHARGE';
-export type OperationType = 'ADMISSION' | 'TRANSFER' | 'DISCHARGE' | 'BED_SWAP';
+export type TransferType = 'ADMISSION' | 'TRANSFER' | 'BED_SWAP' | 'DISCHARGE' | 'READMISSION';
+export type OperationType = 'ADMISSION' | 'TRANSFER' | 'DISCHARGE' | 'BED_SWAP' | 'READMISSION';
 export type StaffRole = 
   | 'CONSULTANT' 
   | 'SPECIALIST' 
@@ -87,12 +89,53 @@ export interface PatientContract {
   unitId: string;
   mrn: string;
   fullName: string;
+  fullNameAr?: string;
+  fullNameEn?: string;
+  normalizedFullName: string;
+  nationalIdLast4: string;
+  nationalIdHash: string;
   phoneNumber?: string;
-  dateOfBirth: string; // ISO Date String (YYYY-MM-DD)
+  dateOfBirth: string; // ISO Date String (YYYY-MM-DD) or Timestamp string
   gender: Gender;
-  status: PatientStatus;
+  bloodGroup?: string;
+  idealBodyWeightKg?: number;
+  allergiesSummary?: string[];
+  chronicConditionsSummary?: string[];
+  currentStatus: PatientStatus;
+  status: PatientStatus; // Backwards-compatible alias
+  currentBedId: string | null;
+  currentEpisodeId: string | null;
+  codeStatus?: string;
+  acuityLevel?: string;
+  archiveStatus: ArchiveStatus;
+  archiveDate?: number | null;
+  archiveStoragePath?: string | null;
+  archiveId?: string | null;
   createdAt: number;
-  createdBy: string; // doctorId
+  createdBy: string; // doctorId / staffId
+  createdByUid?: string;
+  updatedAt?: number;
+  updatedByUid?: string;
+}
+
+export interface EpisodeContract {
+  episodeId: string;
+  patientId: string;
+  bedId: string | null;
+  unitId: string;
+  admissionDate: number;
+  dischargeDate?: number | null;
+  admittingDoctorUid: string;
+  admittingDoctorName: string;
+  primaryDiagnosis: string;
+  primaryDiagnosisAr?: string;
+  primaryDiagnosisEn?: string;
+  acuityLevel?: string;
+  codeStatus?: string;
+  status: 'ACTIVE' | 'DISCHARGED' | 'TRANSFERRED' | 'EXPIRED';
+  outcome?: string;
+  createdAt: number;
+  updatedAt?: number;
 }
 
 export interface BedContract {
