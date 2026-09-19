@@ -76,6 +76,11 @@ export const LoginScreen: React.FC = () => {
           newPassword: forgotNewPass.trim()
         })
       });
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        setForgotMsg({ type: 'error', text: 'تعذر الاتصال بالخادم الرئيسي للنظام. يرجى المحاولة بعد قليل.' });
+        return;
+      }
       const data = await response.json();
       if (data.success) {
         setForgotMsg({ type: 'success', text: data.message || 'تمت استعادة كلمة المرور بنجاح. يمكنك تسجيل الدخول الآن.' });
@@ -87,7 +92,7 @@ export const LoginScreen: React.FC = () => {
           setForgotMsg(null);
         }, 2000);
       } else {
-        setForgotMsg({ type: 'error', text: data.message || 'فشل عملية الاستعادة. تحقق من صحة رمز التشفير.' });
+        setForgotMsg({ type: 'error', text: data.message || 'فشل عملية الاستعادة. تحقق من صحة رمز التشفير واسم المستخدم.' });
       }
     } catch (err: any) {
       setForgotMsg({ type: 'error', text: err?.message || 'حدث خطأ أثناء الاتصال بالخادم.' });
@@ -266,7 +271,7 @@ export const LoginScreen: React.FC = () => {
                     استعادة كلمة المرور
                   </h3>
                   <p className="text-xs text-slate-400">
-                    أدخل اسم المستخدم أو البريد الإلكتروني لإرسال رابط الاستعادة
+                    أدخل البيانات المطلوبة لتعيين كلمة مرور جديدة
                   </p>
                 </div>
               </div>
@@ -291,7 +296,7 @@ export const LoginScreen: React.FC = () => {
             <form onSubmit={handleForgotPasswordSubmit} className="space-y-3.5">
               <div>
                 <label className="block text-right text-xs font-medium text-slate-300 mb-1" htmlFor="forgot-username">
-                  اسم المستخدم أو البريد الإلكتروني للمدير
+                  اسم المستخدم أو البريد الإلكتروني
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-slate-400">
@@ -302,8 +307,9 @@ export const LoginScreen: React.FC = () => {
                     type="text"
                     value={forgotInput}
                     onChange={(e) => setForgotInput(e.target.value)}
-                    placeholder="admin"
+                    placeholder=""
                     required
+                    autoComplete="off"
                     className="w-full pr-10 pl-3 py-2.5 bg-[#050b17] border border-slate-700 rounded-xl text-white placeholder-slate-500 text-xs focus:outline-none focus:ring-1 focus:ring-cyan-400 text-right font-sans"
                   />
                 </div>
@@ -311,7 +317,7 @@ export const LoginScreen: React.FC = () => {
 
               <div>
                 <label className="block text-right text-xs font-medium text-slate-300 mb-1" htmlFor="forgot-token">
-                  رمز التشفير / كود الاستعادة (Recovery Token)
+                  رمز التشفير / كود الاستعادة
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-slate-400">
@@ -319,11 +325,12 @@ export const LoginScreen: React.FC = () => {
                   </div>
                   <input
                     id="forgot-token"
-                    type="text"
+                    type="password"
                     value={forgotToken}
                     onChange={(e) => setForgotToken(e.target.value)}
-                    placeholder="SOLI-MICU-RECOVERY-2026"
+                    placeholder=""
                     required
+                    autoComplete="off"
                     className="w-full pr-10 pl-3 py-2.5 bg-[#050b17] border border-slate-700 rounded-xl text-white placeholder-slate-500 text-xs focus:outline-none focus:ring-1 focus:ring-cyan-400 text-right font-mono"
                   />
                 </div>
@@ -342,9 +349,10 @@ export const LoginScreen: React.FC = () => {
                     type="password"
                     value={forgotNewPass}
                     onChange={(e) => setForgotNewPass(e.target.value)}
-                    placeholder="••••••••"
+                    placeholder=""
                     required
                     minLength={6}
+                    autoComplete="new-password"
                     className="w-full pr-10 pl-3 py-2.5 bg-[#050b17] border border-slate-700 rounded-xl text-white placeholder-slate-500 text-xs focus:outline-none focus:ring-1 focus:ring-cyan-400 text-left font-mono tracking-widest"
                   />
                 </div>

@@ -1,12 +1,35 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @layer base {
+  :root {
+    color-scheme: light;
+    --app-bg: #f1f5f9;
+    --app-text: #0f172a;
+    --card-bg: #ffffff;
+    --card-hover: #e2e8f0;
+    --card-active: #ffffff;
+    --card-border: #cbd5e1;
+  }
+
+  html.dark {
+    color-scheme: dark;
+    --app-bg: #070d18;
+    --app-text: #dbe2fd;
+    --card-bg: #0c1322;
+    --card-hover: #18233c;
+    --card-active: #1e2b48;
+    --card-border: #1e293b;
+  }
+
   body {
     font-family: 'Cairo', 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    background-color: #070d18;
-    color: #dbe2fd;
+    background-color: var(--app-bg);
+    color: var(--app-text);
     -webkit-tap-highlight-color: transparent;
     user-select: none;
+    transition: background-color 0.25s ease, color 0.25s ease;
   }
 }
 
@@ -15,15 +38,1083 @@
   width: 6px;
   height: 6px;
 }
-::-webkit-scrollbar-track {
+
+html:not(.dark) ::-webkit-scrollbar-track,
+html.light ::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+html:not(.dark) ::-webkit-scrollbar-thumb,
+html.light ::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+html:not(.dark) ::-webkit-scrollbar-thumb:hover,
+html.light ::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+html.dark ::-webkit-scrollbar-track {
   background: #090f1d;
 }
-::-webkit-scrollbar-thumb {
+html.dark ::-webkit-scrollbar-thumb {
   background: #1e293b;
   border-radius: 4px;
 }
-::-webkit-scrollbar-thumb:hover {
+html.dark ::-webkit-scrollbar-thumb:hover {
   background: #334155;
+}
+
+/* 
+  Clinical Card Interactions:
+  1. Day Mode (Light):
+     - Hover: makes card slightly darker (#e2e8f0)
+     - Active / Opened: slightly darker than closed card (#e2e8f0, NOT night mode!) with prominent border
+  2. Night Mode (Dark):
+     - Hover: makes card slightly lighter (#1a253c)
+     - Active / Opened: slightly lighter than original dark color (#202f50, distinctly lighter than #0b1224)
+*/
+.icu-card-interactive {
+  transition: background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1), 
+              border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1), 
+              box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1), 
+              filter 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+              transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Day Mode (Light) - Hover makes card slightly darker */
+html:not(.dark) .icu-card-interactive:not(.icu-card-active):not([data-card-open="true"]):hover,
+html.light .icu-card-interactive:not(.icu-card-active):not([data-card-open="true"]):hover {
+  background-color: #e2e8f0 !important;
+  border-color: #cbd5e1 !important;
+  filter: brightness(0.96);
+}
+
+/* Night Mode (Dark) - Hover makes card slightly lighter */
+html.dark .icu-card-interactive:not(.icu-card-active):not([data-card-open="true"]):hover {
+  background-color: #1a253c !important;
+  border-color: #334155 !important;
+  filter: brightness(1.18);
+}
+
+/* Active / Opened Bed Matrix Card - In Day Mode: slightly darker than white, NOT night mode! */
+html:not(.dark) .icu-card-active,
+html:not(.dark) [data-card-open="true"],
+html.light .icu-card-active,
+html.light [data-card-open="true"] {
+  background-color: #e2e8f0 !important;
+  filter: brightness(0.98);
+  box-shadow: 0 10px 24px -4px rgba(13, 148, 136, 0.22), 0 4px 6px -2px rgba(0, 0, 0, 0.06);
+  border-color: #0d9488 !important;
+}
+
+/* Active / Opened Bed Matrix Card - In Night Mode: noticeably lighter than background/other cards */
+html.dark .icu-card-active,
+html.dark [data-card-open="true"] {
+  background-color: #202f50 !important;
+  filter: brightness(1.22);
+  box-shadow: 0 12px 28px -6px rgba(20, 184, 166, 0.35), 0 8px 12px -6px rgba(0, 0, 0, 0.5);
+  border-color: #14b8a6 !important;
+}
+
+/* =========================================================================
+   UNIVERSAL HIGH-CONTRAST TYPOGRAPHY & THEME SYSTEM
+   - Day Mode (Light): Deep, crisp, sharp dark texts (#0f172a / #1e293b / #334155), never faded
+   - Night Mode (Dark): Crisp, bright white (#ffffff) and luminous legible accents (#cbd5e1 / #94a3b8)
+   ========================================================================= */
+
+/* DAY MODE GLOBAL TEXT & CONTRAST */
+html:not(.dark),
+html.light {
+  color: #0f172a;
+}
+
+html:not(.dark) h1,
+html:not(.dark) h2,
+html:not(.dark) h3,
+html:not(.dark) h4,
+html:not(.dark) h5,
+html:not(.dark) strong,
+html:not(.dark) b,
+html.light h1,
+html.light h2,
+html.light h3,
+html.light h4,
+html.light h5,
+html.light strong,
+html.light b {
+  color: #0f172a !important;
+}
+
+html:not(.dark) .text-white:not(.text-keep-white),
+html.light .text-white:not(.text-keep-white) {
+  color: #0f172a !important;
+}
+
+html:not(.dark) .text-slate-400,
+html:not(.dark) .text-slate-500,
+html:not(.dark) .text-gray-400,
+html:not(.dark) .text-gray-500,
+html.light .text-slate-400,
+html.light .text-slate-500,
+html.light .text-gray-400,
+html.light .text-gray-500 {
+  color: #334155 !important;
+}
+
+html:not(.dark) .text-slate-300,
+html:not(.dark) .text-gray-300,
+html.light .text-slate-300,
+html.light .text-gray-300 {
+  color: #1e293b !important;
+}
+
+html:not(.dark) .text-slate-200,
+html:not(.dark) .text-gray-200,
+html.light .text-slate-200,
+html.light .text-gray-200 {
+  color: #0f172a !important;
+}
+
+/* Day Mode: High-Contrast Saturated Colors for Badges, Labels & Buttons (No light faded texts) */
+html:not(.dark) .text-teal-300,
+html:not(.dark) .text-teal-400,
+html.light .text-teal-300,
+html.light .text-teal-400 {
+  color: #0f766e !important;
+}
+
+html:not(.dark) .text-amber-300,
+html:not(.dark) .text-amber-400,
+html.light .text-amber-300,
+html.light .text-amber-400 {
+  color: #b45309 !important;
+}
+
+html:not(.dark) .text-cyan-300,
+html:not(.dark) .text-cyan-400,
+html.light .text-cyan-300,
+html.light .text-cyan-400 {
+  color: #0e7490 !important;
+}
+
+html:not(.dark) .text-emerald-300,
+html:not(.dark) .text-emerald-400,
+html.light .text-emerald-300,
+html.light .text-emerald-400 {
+  color: #047857 !important;
+}
+
+html:not(.dark) .text-purple-300,
+html:not(.dark) .text-purple-400,
+html.light .text-purple-300,
+html.light .text-purple-400 {
+  color: #6b21a8 !important;
+}
+
+html:not(.dark) .text-rose-300,
+html:not(.dark) .text-rose-400,
+html:not(.dark) .text-red-300,
+html:not(.dark) .text-red-400,
+html.light .text-rose-300,
+html.light .text-rose-400,
+html.light .text-red-300,
+html.light .text-red-400 {
+  color: #be123c !important;
+}
+
+html:not(.dark) .text-blue-300,
+html:not(.dark) .text-blue-400,
+html:not(.dark) .text-sky-300,
+html:not(.dark) .text-sky-400,
+html.light .text-blue-300,
+html.light .text-blue-400,
+html.light .text-sky-300,
+html.light .text-sky-400 {
+  color: #1d4ed8 !important;
+}
+
+/* DAY MODE: ALL HARDCODED DARK BACKGROUNDS OVERRIDDEN TO CLEAN WHITE */
+html:not(.dark) .bg-\[\#040813\],
+html:not(.dark) .bg-\[\#050a17\],
+html:not(.dark) .bg-\[\#050b17\],
+html:not(.dark) .bg-\[\#050b18\],
+html:not(.dark) .bg-\[\#060a14\],
+html:not(.dark) .bg-\[\#060b14\],
+html:not(.dark) .bg-\[\#060b17\],
+html:not(.dark) .bg-\[\#060c1a\],
+html:not(.dark) .bg-\[\#060d1b\],
+html:not(.dark) .bg-\[\#060d1d\],
+html:not(.dark) .bg-\[\#070c17\],
+html:not(.dark) .bg-\[\#070c18\],
+html:not(.dark) .bg-\[\#070d18\],
+html:not(.dark) .bg-\[\#070d1a\],
+html:not(.dark) .bg-\[\#070d1d\],
+html:not(.dark) .bg-\[\#070e1b\],
+html:not(.dark) .bg-\[\#080d19\],
+html:not(.dark) .bg-\[\#080d1a\],
+html:not(.dark) .bg-\[\#080f1e\],
+html:not(.dark) .bg-\[\#08101e\],
+html:not(.dark) .bg-\[\#081326\],
+html:not(.dark) .bg-\[\#09050d\],
+html:not(.dark) .bg-\[\#090f1d\],
+html:not(.dark) .bg-\[\#091122\],
+html:not(.dark) .bg-\[\#0a0f1c\],
+html:not(.dark) .bg-\[\#0a0f1d\],
+html:not(.dark) .bg-\[\#0a101c\],
+html:not(.dark) .bg-\[\#0a101d\],
+html:not(.dark) .bg-\[\#0a101f\],
+html:not(.dark) .bg-\[\#0a1122\],
+html:not(.dark) .bg-\[\#0a1224\],
+html:not(.dark) .bg-\[\#0b1224\],
+html:not(.dark) .bg-\[\#0b1325\],
+html:not(.dark) .bg-\[\#0b1424\],
+html:not(.dark) .bg-\[\#0b1428\],
+html:not(.dark) .bg-\[\#0c1222\],
+html:not(.dark) .bg-\[\#0c1322\],
+html:not(.dark) .bg-\[\#0c1426\],
+html:not(.dark) .bg-\[\#0c162c\],
+html:not(.dark) .bg-\[\#0c192e\],
+html:not(.dark) .bg-\[\#0d1527\],
+html:not(.dark) .bg-\[\#0e172a\],
+html:not(.dark) .bg-\[\#100f1a\],
+html:not(.dark) .bg-\[\#111c34\],
+html:not(.dark) .bg-\[\#111d38\],
+html:not(.dark) .bg-\[\#130912\],
+html:not(.dark) .bg-\[\#131d35\],
+html:not(.dark) .bg-slate-900,
+html:not(.dark) .bg-slate-950,
+html.light .bg-\[\#040813\],
+html.light .bg-\[\#050a17\],
+html.light .bg-\[\#050b17\],
+html.light .bg-\[\#050b18\],
+html.light .bg-\[\#060a14\],
+html.light .bg-\[\#060b14\],
+html.light .bg-\[\#060b17\],
+html.light .bg-\[\#060c1a\],
+html.light .bg-\[\#060d1b\],
+html.light .bg-\[\#060d1d\],
+html.light .bg-\[\#070c17\],
+html.light .bg-\[\#070c18\],
+html.light .bg-\[\#070d18\],
+html.light .bg-\[\#070d1a\],
+html.light .bg-\[\#070d1d\],
+html.light .bg-\[\#070e1b\],
+html.light .bg-\[\#080d19\],
+html.light .bg-\[\#080d1a\],
+html.light .bg-\[\#080f1e\],
+html.light .bg-\[\#08101e\],
+html.light .bg-\[\#081326\],
+html.light .bg-\[\#09050d\],
+html.light .bg-\[\#090f1d\],
+html.light .bg-\[\#091122\],
+html.light .bg-\[\#0a0f1c\],
+html.light .bg-\[\#0a0f1d\],
+html.light .bg-\[\#0a101c\],
+html.light .bg-\[\#0a101d\],
+html.light .bg-\[\#0a101f\],
+html.light .bg-\[\#0a1122\],
+html.light .bg-\[\#0a1224\],
+html.light .bg-\[\#0b1224\],
+html.light .bg-\[\#0b1325\],
+html.light .bg-\[\#0b1424\],
+html.light .bg-\[\#0b1428\],
+html.light .bg-\[\#0c1222\],
+html.light .bg-\[\#0c1322\],
+html.light .bg-\[\#0c1426\],
+html.light .bg-\[\#0c162c\],
+html.light .bg-\[\#0c192e\],
+html.light .bg-\[\#0d1527\],
+html.light .bg-\[\#0e172a\],
+html.light .bg-\[\#100f1a\],
+html.light .bg-\[\#111c34\],
+html.light .bg-\[\#111d38\],
+html.light .bg-\[\#130912\],
+html.light .bg-\[\#131d35\],
+html.light .bg-slate-900,
+html.light .bg-slate-950 {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+/* Day Mode: Active / Highlighted Cards in User Management & Settings */
+html:not(.dark) .bg-\[\#0e1b30\],
+html:not(.dark) .bg-\[\#10192d\],
+html.light .bg-\[\#0e1b30\],
+html.light .bg-\[\#10192d\] {
+  background-color: #f0fdfa !important;
+  border-color: #0d9488 !important;
+  color: #0f172a !important;
+  box-shadow: 0 4px 12px rgba(13, 148, 136, 0.08) !important;
+}
+
+/* Day Mode: Password Change & Quick Teal Action Buttons */
+html:not(.dark) .bg-\[\#0d2a2a\],
+html.light .bg-\[\#0d2a2a\] {
+  background-color: #ccfbf1 !important;
+  border-color: #5eead4 !important;
+  color: #0f766e !important;
+}
+html:not(.dark) .bg-\[\#0d2a2a\]:hover,
+html.light .bg-\[\#0d2a2a\]:hover {
+  background-color: #99f6e4 !important;
+}
+
+/* Day Mode: Borders Across All Cards, Modals, Forms & Inputs */
+html:not(.dark) .border-slate-800,
+html:not(.dark) .border-slate-700,
+html:not(.dark) .border-slate-800\/80,
+html:not(.dark) .border-slate-800\/90,
+html:not(.dark) .border-slate-800\/70,
+html:not(.dark) .border-slate-800\/60,
+html:not(.dark) .border-slate-700\/80,
+html:not(.dark) .border-slate-700\/90,
+html:not(.dark) .border-slate-700\/60,
+html:not(.dark) .border-slate-900,
+html:not(.dark) .border-slate-950,
+html.light .border-slate-800,
+html.light .border-slate-700,
+html.light .border-slate-800\/80,
+html.light .border-slate-800\/90,
+html.light .border-slate-800\/70,
+html.light .border-slate-800\/60,
+html.light .border-slate-700\/80,
+html.light .border-slate-700\/90,
+html.light .border-slate-700\/60,
+html.light .border-slate-900,
+html.light .border-slate-950 {
+  border-color: #cbd5e1 !important;
+}
+
+/* Day Mode: Modal Backdrop Overlay (Never pure pitch black) */
+html:not(.dark) .fixed.inset-0.bg-black\/80,
+html:not(.dark) .fixed.inset-0.bg-black\/70,
+html:not(.dark) .fixed.inset-0.bg-black\/60,
+html:not(.dark) .fixed.inset-0.bg-black\/50,
+html:not(.dark) .fixed.inset-0.bg-slate-950\/80,
+html:not(.dark) .fixed.inset-0.bg-slate-950\/90,
+html:not(.dark) .fixed.inset-0.bg-slate-900\/80,
+html.light .fixed.inset-0.bg-black\/80,
+html.light .fixed.inset-0.bg-black\/70,
+html.light .fixed.inset-0.bg-black\/60,
+html.light .fixed.inset-0.bg-black\/50,
+html.light .fixed.inset-0.bg-slate-950\/80,
+html.light .fixed.inset-0.bg-slate-950\/90,
+html.light .fixed.inset-0.bg-slate-900\/80 {
+  background-color: rgba(15, 23, 42, 0.45) !important;
+  backdrop-filter: blur(4px) !important;
+}
+
+/* Day Mode: Neutral Buttons, Chips, Drug Preset Badges & Permission Pills */
+html:not(.dark) .bg-slate-800,
+html:not(.dark) .bg-slate-800\/30,
+html:not(.dark) .bg-slate-800\/40,
+html:not(.dark) .bg-slate-800\/50,
+html:not(.dark) .bg-slate-800\/60,
+html:not(.dark) .bg-slate-800\/70,
+html:not(.dark) .bg-slate-800\/80,
+html:not(.dark) .bg-slate-800\/90,
+html:not(.dark) .bg-slate-900\/30,
+html:not(.dark) .bg-slate-900\/40,
+html:not(.dark) .bg-slate-900\/50,
+html:not(.dark) .bg-slate-900\/60,
+html:not(.dark) .bg-slate-900\/70,
+html:not(.dark) .bg-slate-900\/80,
+html:not(.dark) .bg-slate-900\/90,
+html:not(.dark) .bg-slate-950\/25,
+html:not(.dark) .bg-slate-950\/40,
+html:not(.dark) .bg-slate-950\/50,
+html:not(.dark) .bg-slate-950\/60,
+html:not(.dark) .bg-slate-950\/70,
+html:not(.dark) .bg-slate-950\/80,
+html:not(.dark) .bg-slate-950\/85,
+html:not(.dark) .bg-slate-950\/90,
+html:not(.dark) .bg-slate-950\/95,
+html.light .bg-slate-800,
+html.light .bg-slate-800\/30,
+html.light .bg-slate-800\/40,
+html.light .bg-slate-800\/50,
+html.light .bg-slate-800\/60,
+html.light .bg-slate-800\/70,
+html.light .bg-slate-800\/80,
+html.light .bg-slate-800\/90,
+html.light .bg-slate-900\/30,
+html.light .bg-slate-900\/40,
+html.light .bg-slate-900\/50,
+html.light .bg-slate-900\/60,
+html.light .bg-slate-900\/70,
+html.light .bg-slate-900\/80,
+html.light .bg-slate-900\/90,
+html.light .bg-slate-950\/25,
+html.light .bg-slate-950\/40,
+html.light .bg-slate-950\/50,
+html.light .bg-slate-950\/60,
+html.light .bg-slate-950\/70,
+html.light .bg-slate-950\/80,
+html.light .bg-slate-950\/85,
+html.light .bg-slate-950\/90,
+html.light .bg-slate-950\/95 {
+  background-color: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+  color: #1e293b !important;
+}
+
+html:not(.dark) button.bg-slate-800:hover,
+html:not(.dark) button.bg-slate-800\/80:hover,
+html:not(.dark) button.bg-slate-900:hover,
+html:not(.dark) button.bg-slate-950:hover,
+html.light button.bg-slate-800:hover,
+html.light button.bg-slate-800\/80:hover,
+html.light button.bg-slate-900:hover,
+html.light button.bg-slate-950:hover {
+  background-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+/* Day Mode: Colored Action Buttons & Badges (Rich Crisp Contrast) */
+html:not(.dark) .bg-teal-500\/10,
+html:not(.dark) .bg-teal-500\/15,
+html:not(.dark) .bg-teal-500\/20,
+html:not(.dark) .bg-teal-500\/25,
+html:not(.dark) .bg-teal-500\/30,
+html:not(.dark) .bg-teal-900\/60,
+html:not(.dark) .bg-teal-950,
+html:not(.dark) .bg-teal-950\/20,
+html:not(.dark) .bg-teal-950\/40,
+html:not(.dark) .bg-teal-950\/50,
+html:not(.dark) .bg-teal-950\/60,
+html:not(.dark) .bg-teal-950\/80,
+html:not(.dark) .bg-teal-950\/90,
+html.light .bg-teal-500\/10,
+html.light .bg-teal-500\/15,
+html.light .bg-teal-500\/20,
+html.light .bg-teal-500\/25,
+html.light .bg-teal-500\/30,
+html.light .bg-teal-900\/60,
+html.light .bg-teal-950,
+html.light .bg-teal-950\/20,
+html.light .bg-teal-950\/40,
+html.light .bg-teal-950\/50,
+html.light .bg-teal-950\/60,
+html.light .bg-teal-950\/80,
+html.light .bg-teal-950\/90 {
+  background-color: #ccfbf1 !important;
+  border-color: #5eead4 !important;
+  color: #0f766e !important;
+}
+
+html:not(.dark) .bg-amber-400\/20,
+html:not(.dark) .bg-amber-500\/10,
+html:not(.dark) .bg-amber-500\/15,
+html:not(.dark) .bg-amber-500\/20,
+html:not(.dark) .bg-amber-500\/25,
+html:not(.dark) .bg-amber-500\/30,
+html:not(.dark) .bg-amber-900\/60,
+html:not(.dark) .bg-amber-900\/70,
+html:not(.dark) .bg-amber-950,
+html:not(.dark) .bg-amber-950\/20,
+html:not(.dark) .bg-amber-950\/30,
+html:not(.dark) .bg-amber-950\/40,
+html:not(.dark) .bg-amber-950\/50,
+html:not(.dark) .bg-amber-950\/60,
+html:not(.dark) .bg-amber-950\/80,
+html:not(.dark) .bg-amber-950\/90,
+html.light .bg-amber-400\/20,
+html.light .bg-amber-500\/10,
+html.light .bg-amber-500\/15,
+html.light .bg-amber-500\/20,
+html.light .bg-amber-500\/25,
+html.light .bg-amber-500\/30,
+html.light .bg-amber-900\/60,
+html.light .bg-amber-900\/70,
+html.light .bg-amber-950,
+html.light .bg-amber-950\/20,
+html.light .bg-amber-950\/30,
+html.light .bg-amber-950\/40,
+html.light .bg-amber-950\/50,
+html.light .bg-amber-950\/60,
+html.light .bg-amber-950\/80,
+html.light .bg-amber-950\/90 {
+  background-color: #fef3c7 !important;
+  border-color: #fcd34d !important;
+  color: #92400e !important;
+}
+
+html:not(.dark) .bg-cyan-500\/10,
+html:not(.dark) .bg-cyan-500\/15,
+html:not(.dark) .bg-cyan-500\/20,
+html:not(.dark) .bg-cyan-500\/25,
+html:not(.dark) .bg-cyan-500\/30,
+html:not(.dark) .bg-cyan-950,
+html:not(.dark) .bg-cyan-950\/20,
+html:not(.dark) .bg-cyan-950\/30,
+html:not(.dark) .bg-cyan-950\/40,
+html:not(.dark) .bg-cyan-950\/60,
+html:not(.dark) .bg-cyan-950\/70,
+html:not(.dark) .bg-cyan-950\/80,
+html.light .bg-cyan-500\/10,
+html.light .bg-cyan-500\/15,
+html.light .bg-cyan-500\/20,
+html.light .bg-cyan-500\/25,
+html.light .bg-cyan-500\/30,
+html.light .bg-cyan-950,
+html.light .bg-cyan-950\/20,
+html.light .bg-cyan-950\/30,
+html.light .bg-cyan-950\/40,
+html.light .bg-cyan-950\/60,
+html.light .bg-cyan-950\/70,
+html.light .bg-cyan-950\/80 {
+  background-color: #cffafe !important;
+  border-color: #67e8f9 !important;
+  color: #155e75 !important;
+}
+
+html:not(.dark) .bg-emerald-500\/10,
+html:not(.dark) .bg-emerald-500\/15,
+html:not(.dark) .bg-emerald-500\/20,
+html:not(.dark) .bg-emerald-500\/25,
+html:not(.dark) .bg-emerald-500\/30,
+html:not(.dark) .bg-emerald-900\/50,
+html:not(.dark) .bg-emerald-900\/60,
+html:not(.dark) .bg-emerald-900\/70,
+html:not(.dark) .bg-emerald-900\/80,
+html:not(.dark) .bg-emerald-950,
+html:not(.dark) .bg-emerald-950\/20,
+html:not(.dark) .bg-emerald-950\/50,
+html:not(.dark) .bg-emerald-950\/60,
+html:not(.dark) .bg-emerald-950\/80,
+html:not(.dark) .bg-emerald-950\/90,
+html.light .bg-emerald-500\/10,
+html.light .bg-emerald-500\/15,
+html.light .bg-emerald-500\/20,
+html.light .bg-emerald-500\/25,
+html.light .bg-emerald-500\/30,
+html.light .bg-emerald-900\/50,
+html.light .bg-emerald-900\/60,
+html.light .bg-emerald-900\/70,
+html.light .bg-emerald-900\/80,
+html.light .bg-emerald-950,
+html.light .bg-emerald-950\/20,
+html.light .bg-emerald-950\/50,
+html.light .bg-emerald-950\/60,
+html.light .bg-emerald-950\/80,
+html.light .bg-emerald-950\/90 {
+  background-color: #d1fae5 !important;
+  border-color: #6ee7b7 !important;
+  color: #065f46 !important;
+}
+
+html:not(.dark) .bg-purple-500\/10,
+html:not(.dark) .bg-purple-500\/15,
+html:not(.dark) .bg-purple-500\/20,
+html:not(.dark) .bg-purple-500\/25,
+html:not(.dark) .bg-purple-500\/30,
+html:not(.dark) .bg-purple-900\/60,
+html:not(.dark) .bg-purple-950,
+html:not(.dark) .bg-purple-950\/20,
+html:not(.dark) .bg-purple-950\/30,
+html:not(.dark) .bg-purple-950\/40,
+html:not(.dark) .bg-purple-950\/60,
+html:not(.dark) .bg-purple-950\/80,
+html:not(.dark) .bg-violet-950\/20,
+html:not(.dark) .bg-fuchsia-500\/10,
+html:not(.dark) .bg-fuchsia-500\/15,
+html:not(.dark) .bg-fuchsia-500\/20,
+html:not(.dark) .bg-fuchsia-500\/30,
+html.light .bg-purple-500\/10,
+html.light .bg-purple-500\/15,
+html.light .bg-purple-500\/20,
+html.light .bg-purple-500\/25,
+html.light .bg-purple-500\/30,
+html.light .bg-purple-900\/60,
+html.light .bg-purple-950,
+html.light .bg-purple-950\/20,
+html.light .bg-purple-950\/30,
+html.light .bg-purple-950\/40,
+html.light .bg-purple-950\/60,
+html.light .bg-purple-950\/80,
+html.light .bg-violet-950\/20,
+html.light .bg-fuchsia-500\/10,
+html.light .bg-fuchsia-500\/15,
+html.light .bg-fuchsia-500\/20,
+html.light .bg-fuchsia-500\/30 {
+  background-color: #f3e8ff !important;
+  border-color: #d8b4fe !important;
+  color: #6b21a8 !important;
+}
+
+html:not(.dark) .bg-rose-500\/10,
+html:not(.dark) .bg-rose-500\/20,
+html:not(.dark) .bg-rose-500\/30,
+html:not(.dark) .bg-rose-950,
+html:not(.dark) .bg-rose-950\/20,
+html:not(.dark) .bg-rose-950\/30,
+html:not(.dark) .bg-rose-950\/60,
+html:not(.dark) .bg-rose-950\/80,
+html:not(.dark) .bg-red-500\/10,
+html:not(.dark) .bg-red-500\/20,
+html:not(.dark) .bg-red-900\/60,
+html:not(.dark) .bg-red-900\/80,
+html:not(.dark) .bg-red-950,
+html:not(.dark) .bg-red-950\/30,
+html:not(.dark) .bg-red-950\/40,
+html:not(.dark) .bg-red-950\/50,
+html:not(.dark) .bg-red-950\/60,
+html:not(.dark) .bg-red-950\/70,
+html:not(.dark) .bg-red-950\/80,
+html.light .bg-rose-500\/10,
+html.light .bg-rose-500\/20,
+html.light .bg-rose-500\/30,
+html.light .bg-rose-950,
+html.light .bg-rose-950\/20,
+html.light .bg-rose-950\/30,
+html.light .bg-rose-950\/60,
+html.light .bg-rose-950\/80,
+html.light .bg-red-500\/10,
+html.light .bg-red-500\/20,
+html.light .bg-red-900\/60,
+html.light .bg-red-900\/80,
+html.light .bg-red-950,
+html.light .bg-red-950\/30,
+html.light .bg-red-950\/40,
+html.light .bg-red-950\/50,
+html.light .bg-red-950\/60,
+html.light .bg-red-950\/70,
+html.light .bg-red-950\/80 {
+  background-color: #ffe4e6 !important;
+  border-color: #fda4af !important;
+  color: #9f1239 !important;
+}
+
+html:not(.dark) .bg-blue-500\/10,
+html:not(.dark) .bg-blue-500\/15,
+html:not(.dark) .bg-blue-500\/20,
+html:not(.dark) .bg-blue-500\/25,
+html:not(.dark) .bg-blue-900\/60,
+html:not(.dark) .bg-blue-950\/80,
+html:not(.dark) .bg-indigo-500\/10,
+html:not(.dark) .bg-indigo-500\/20,
+html:not(.dark) .bg-indigo-950\/20,
+html:not(.dark) .bg-indigo-950\/80,
+html.light .bg-blue-500\/10,
+html.light .bg-blue-500\/15,
+html.light .bg-blue-500\/20,
+html.light .bg-blue-500\/25,
+html.light .bg-blue-900\/60,
+html.light .bg-blue-950\/80,
+html.light .bg-indigo-500\/10,
+html.light .bg-indigo-500\/20,
+html.light .bg-indigo-950\/20,
+html.light .bg-indigo-950\/80 {
+  background-color: #dbeafe !important;
+  border-color: #93c5fd !important;
+  color: #1e40af !important;
+}
+
+/* PROTECT SOLID PRIMARY BUTTONS IN DAY MODE (High Contrast text on solid backgrounds) */
+html:not(.dark) .bg-teal-600,
+html:not(.dark) .bg-teal-700,
+html:not(.dark) .bg-rose-600,
+html:not(.dark) .bg-rose-700,
+html:not(.dark) .bg-blue-600,
+html:not(.dark) .bg-blue-700,
+html:not(.dark) .bg-indigo-600,
+html:not(.dark) .bg-purple-600,
+html:not(.dark) .bg-emerald-600,
+html.light .bg-teal-600,
+html.light .bg-teal-700,
+html.light .bg-rose-600,
+html.light .bg-rose-700,
+html.light .bg-blue-600,
+html.light .bg-blue-700,
+html.light .bg-indigo-600,
+html.light .bg-purple-600,
+html.light .bg-emerald-600 {
+  color: #ffffff !important;
+}
+
+html:not(.dark) .bg-teal-600 *,
+html:not(.dark) .bg-teal-700 *,
+html:not(.dark) .bg-rose-600 *,
+html:not(.dark) .bg-rose-700 *,
+html:not(.dark) .bg-blue-600 *,
+html:not(.dark) .bg-blue-700 *,
+html:not(.dark) .bg-indigo-600 *,
+html:not(.dark) .bg-purple-600 *,
+html:not(.dark) .bg-emerald-600 *,
+html.light .bg-teal-600 *,
+html.light .bg-teal-700 *,
+html.light .bg-rose-600 *,
+html.light .bg-rose-700 *,
+html.light .bg-blue-600 *,
+html.light .bg-blue-700 *,
+html.light .bg-indigo-600 *,
+html.light .bg-purple-600 *,
+html.light .bg-emerald-600 * {
+  color: #ffffff !important;
+}
+
+html:not(.dark) .bg-amber-500,
+html:not(.dark) .bg-amber-400,
+html:not(.dark) .bg-teal-400,
+html:not(.dark) .bg-teal-500,
+html.light .bg-amber-500,
+html.light .bg-amber-400,
+html.light .bg-teal-400,
+html.light .bg-teal-500 {
+  color: #020617 !important;
+}
+
+html:not(.dark) .bg-amber-500 *,
+html:not(.dark) .bg-amber-400 *,
+html:not(.dark) .bg-teal-400 *,
+html:not(.dark) .bg-teal-500 *,
+html.light .bg-amber-500 *,
+html.light .bg-amber-400 *,
+html.light .bg-teal-400 *,
+html.light .bg-teal-500 * {
+  color: #020617 !important;
+}
+
+/* Day Mode: Toggle Switch Knob */
+html:not(.dark) div.rounded-full.bg-white,
+html.light div.rounded-full.bg-white {
+  background-color: #ffffff !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* Form Controls Global Styling */
+html:not(.dark) input:not([type="checkbox"]):not([type="radio"]),
+html:not(.dark) select,
+html:not(.dark) textarea,
+html.light input:not([type="checkbox"]):not([type="radio"]),
+html.light select,
+html.light textarea {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+html:not(.dark) select option,
+html.light select option {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+html:not(.dark) input::placeholder,
+html:not(.dark) textarea::placeholder,
+html.light input::placeholder,
+html.light textarea::placeholder {
+  color: #64748b !important;
+}
+
+/* Day Mode: Table and Flowsheet Rows */
+html:not(.dark) table thead tr,
+html.light table thead tr {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+html:not(.dark) table tbody tr:hover,
+html.light table tbody tr:hover {
+  background-color: #f8fafc !important;
+}
+
+html:not(.dark) table td,
+html:not(.dark) table th,
+html.light table td,
+html.light table th {
+  border-color: #cbd5e1 !important;
+}
+
+/* Day Mode: Monospace & Code Badges */
+html:not(.dark) code,
+html:not(.dark) pre,
+html.light code,
+html.light pre {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+/* Day Mode Scrollbars */
+html:not(.dark) ::-webkit-scrollbar-track,
+html.light ::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+html:not(.dark) ::-webkit-scrollbar-thumb,
+html.light ::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 6px;
+}
+html:not(.dark) ::-webkit-scrollbar-thumb:hover,
+html.light ::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* =========================================================================
+   NIGHT MODE (Dark)
+   ========================================================================= */
+html.dark {
+  color: #f8fafc;
+}
+
+html.dark h1,
+html.dark h2,
+html.dark h3,
+html.dark h4,
+html.dark .text-white {
+  color: #ffffff !important;
+}
+
+html.dark .text-slate-400,
+html.dark .text-slate-500,
+html.dark .text-gray-400,
+html.dark .text-gray-500 {
+  color: #cbd5e1 !important;
+}
+
+html.dark .text-slate-300,
+html.dark .text-gray-300 {
+  color: #e2e8f0 !important;
+}
+
+html.dark .text-slate-200,
+html.dark .text-gray-200 {
+  color: #f8fafc !important;
+}
+
+html.dark input:not([type="checkbox"]):not([type="radio"]),
+html.dark select,
+html.dark textarea {
+  background-color: #070c18 !important;
+  color: #ffffff !important;
+  border-color: #334155 !important;
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+/* =========================================================================
+   ICU Collapsible Section Cards (Flowsheet & Clinical Dossier)
+   - Day Mode (Light):
+       * Closed / Folded Card: Clean crisp white #ffffff, subtle light border #e2e8f0
+       * Opened Card (عند فتحها): Light Slate #f1f5f9 with refined border #cbd5e1, inner panels #ffffff with deep dark #0f172a text
+   - Night Mode (Dark):
+       * Closed / Folded Card: Original dark #0b1224 with dark border #334155
+       * Opened Card (عند فتحها): Luminous Slate-Navy #1a2742, text #ffffff, inner panels #070c18
+   ========================================================================= */
+
+/* DAY MODE (Default / Light) */
+html:not(.dark) .icu-collapsible-section,
+html.light .icu-collapsible-section {
+  color: #0f172a !important;
+  transition: background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1), 
+              border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1), 
+              box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Day Mode: Closed / Folded Card */
+html:not(.dark) .icu-collapsible-section:not([data-expanded="true"]),
+html:not(.dark) .icu-collapsible-section[data-expanded="false"],
+html.light .icu-collapsible-section:not([data-expanded="true"]),
+html.light .icu-collapsible-section[data-expanded="false"] {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+}
+
+/* Day Mode: OPENED Card - Light slate #f1f5f9 (NOT night mode!) with crisp border */
+html:not(.dark) .icu-collapsible-section[data-expanded="true"],
+html.light .icu-collapsible-section[data-expanded="true"] {
+  background-color: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 4px 14px -2px rgba(0, 0, 0, 0.08), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+}
+
+/* Day Mode: Headings and general text inside Collapsible Sections */
+html:not(.dark) .icu-collapsible-section h1,
+html:not(.dark) .icu-collapsible-section h2,
+html:not(.dark) .icu-collapsible-section h3,
+html:not(.dark) .icu-collapsible-section h4,
+html:not(.dark) .icu-collapsible-section h5,
+html:not(.dark) .icu-collapsible-section strong,
+html:not(.dark) .icu-collapsible-section b,
+html.light .icu-collapsible-section h1,
+html.light .icu-collapsible-section h2,
+html.light .icu-collapsible-section h3,
+html.light .icu-collapsible-section h4,
+html.light .icu-collapsible-section h5,
+html.light .icu-collapsible-section strong,
+html.light .icu-collapsible-section b {
+  color: #0f172a !important;
+}
+
+html:not(.dark) .icu-collapsible-section .text-white,
+html.light .icu-collapsible-section .text-white {
+  color: #0f172a !important;
+}
+
+html:not(.dark) .icu-collapsible-section .text-slate-400,
+html:not(.dark) .icu-collapsible-section .text-slate-500,
+html.light .icu-collapsible-section .text-slate-400,
+html.light .icu-collapsible-section .text-slate-500 {
+  color: #334155 !important;
+}
+
+html:not(.dark) .icu-collapsible-section .text-slate-300,
+html:not(.dark) .icu-collapsible-section .text-slate-200,
+html.light .icu-collapsible-section .text-slate-300,
+html.light .icu-collapsible-section .text-slate-200 {
+  color: #1e293b !important;
+}
+
+html:not(.dark) .icu-collapsible-section .border-slate-800,
+html:not(.dark) .icu-collapsible-section .border-slate-700,
+html:not(.dark) .icu-collapsible-section .border-slate-800\/80,
+html:not(.dark) .icu-collapsible-section .border-slate-800\/60,
+html:not(.dark) .icu-collapsible-section .border-slate-700\/80,
+html.light .icu-collapsible-section .border-slate-800,
+html.light .icu-collapsible-section .border-slate-700,
+html.light .icu-collapsible-section .border-slate-800\/80,
+html.light .icu-collapsible-section .border-slate-800\/60,
+html.light .icu-collapsible-section .border-slate-700\/80 {
+  border-color: #cbd5e1 !important;
+}
+
+/* Day Mode: Inner Panels & Containers become Crisp White with Clear Borders */
+html:not(.dark) .icu-collapsible-section .bg-\[\#070c18\],
+html:not(.dark) .icu-collapsible-section .bg-\[\#0a101f\],
+html:not(.dark) .icu-collapsible-section .bg-\[\#0e172a\],
+html:not(.dark) .icu-collapsible-section .bg-\[\#091122\],
+html:not(.dark) .icu-collapsible-section .bg-\[\#0b1224\],
+html:not(.dark) .icu-collapsible-section .bg-slate-900,
+html:not(.dark) .icu-collapsible-section .bg-slate-950,
+html:not(.dark) .icu-collapsible-section .bg-slate-900\/40,
+html:not(.dark) .icu-collapsible-section .bg-slate-900\/60,
+html:not(.dark) .icu-collapsible-section .bg-slate-900\/70,
+html:not(.dark) .icu-collapsible-section .bg-slate-900\/90,
+html:not(.dark) .icu-collapsible-section .bg-slate-950\/40,
+html:not(.dark) .icu-collapsible-section .bg-slate-950\/80,
+html.light .icu-collapsible-section .bg-\[\#070c18\],
+html.light .icu-collapsible-section .bg-\[\#0a101f\],
+html.light .icu-collapsible-section .bg-\[\#0e172a\],
+html.light .icu-collapsible-section .bg-\[\#091122\],
+html.light .icu-collapsible-section .bg-\[\#0b1224\],
+html.light .icu-collapsible-section .bg-slate-900,
+html.light .icu-collapsible-section .bg-slate-950,
+html.light .icu-collapsible-section .bg-slate-900\/40,
+html.light .icu-collapsible-section .bg-slate-900\/60,
+html.light .icu-collapsible-section .bg-slate-900\/70,
+html.light .icu-collapsible-section .bg-slate-900\/90,
+html.light .icu-collapsible-section .bg-slate-950\/40,
+html.light .icu-collapsible-section .bg-slate-950\/80 {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04) !important;
+}
+
+/* Day Mode: Buttons inside collapsible sections */
+html:not(.dark) .icu-collapsible-section button.bg-slate-800,
+html:not(.dark) .icu-collapsible-section button.bg-slate-800\/90,
+html:not(.dark) .icu-collapsible-section button.bg-slate-900,
+html.light .icu-collapsible-section button.bg-slate-800,
+html.light .icu-collapsible-section button.bg-slate-800\/90,
+html.light .icu-collapsible-section button.bg-slate-900 {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+  font-weight: 600 !important;
+}
+
+html:not(.dark) .icu-collapsible-section button.bg-slate-800:hover,
+html.light .icu-collapsible-section button.bg-slate-800:hover {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+
+/* Day Mode: Tinted Action Badges and Pills */
+html:not(.dark) .icu-collapsible-section .bg-amber-500\/20,
+html:not(.dark) .icu-collapsible-section .bg-amber-950\/80,
+html.light .icu-collapsible-section .bg-amber-500\/20,
+html.light .icu-collapsible-section .bg-amber-950\/80 {
+  background-color: #fef3c7 !important;
+  border-color: #fcd34d !important;
+  color: #92400e !important;
+}
+
+html:not(.dark) .icu-collapsible-section .bg-cyan-500\/20,
+html:not(.dark) .icu-collapsible-section .bg-cyan-500\/15,
+html:not(.dark) .icu-collapsible-section .bg-cyan-950\/80,
+html.light .icu-collapsible-section .bg-cyan-500\/20,
+html.light .icu-collapsible-section .bg-cyan-500\/15,
+html.light .icu-collapsible-section .bg-cyan-950\/80 {
+  background-color: #cffafe !important;
+  border-color: #67e8f9 !important;
+  color: #155e75 !important;
+}
+
+html:not(.dark) .icu-collapsible-section .bg-emerald-500\/20,
+html:not(.dark) .icu-collapsible-section .bg-emerald-950\/80,
+html.light .icu-collapsible-section .bg-emerald-500\/20,
+html.light .icu-collapsible-section .bg-emerald-950\/80 {
+  background-color: #d1fae5 !important;
+  border-color: #6ee7b7 !important;
+  color: #065f46 !important;
+}
+
+html:not(.dark) .icu-collapsible-section .bg-purple-950\/30,
+html.light .icu-collapsible-section .bg-purple-950\/30 {
+  background-color: #f3e8ff !important;
+  border-color: #d8b4fe !important;
+  color: #6b21a8 !important;
+}
+
+html:not(.dark) .icu-collapsible-section .bg-rose-950\/30,
+html:not(.dark) .icu-collapsible-section .bg-red-500\/10,
+html.light .icu-collapsible-section .bg-rose-950\/30,
+html.light .icu-collapsible-section .bg-red-500\/10 {
+  background-color: #ffe4e6 !important;
+  border-color: #fecdd3 !important;
+  color: #9f1239 !important;
+}
+
+html:not(.dark) .icu-card-header-toggle:hover,
+html.light .icu-card-header-toggle:hover {
+  background-color: rgba(0, 0, 0, 0.04) !important;
+}
+
+/* =========================================================================
+   NIGHT MODE (Dark)
+   ========================================================================= */
+html.dark .icu-collapsible-section {
+  color: #f8fafc !important;
+  transition: background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1), 
+              border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1), 
+              box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Night Mode: Closed / Folded Card (Original Dark Color) */
+html.dark .icu-collapsible-section:not([data-expanded="true"]),
+html.dark .icu-collapsible-section[data-expanded="false"] {
+  background-color: #0b1224 !important;
+  border-color: rgba(51, 65, 85, 0.8) !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+}
+
+/* Night Mode: OPENED Card - Luminous Slate-Navy #1a2742 distinctly lighter than #0b1224 */
+html.dark .icu-collapsible-section[data-expanded="true"] {
+  background-color: #1a2742 !important;
+  border-color: #334155 !important;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4), 0 0 15px rgba(20, 184, 166, 0.12);
+}
+
+html.dark .icu-card-header-toggle:hover {
+  background-color: rgba(255, 255, 255, 0.05) !important;
 }
 
 @keyframes pulse-subtle {

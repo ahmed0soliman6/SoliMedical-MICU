@@ -12,6 +12,7 @@ export function loadSavedSettings(): SystemSettings {
     return {
       ...DEFAULT_SYSTEM_SETTINGS,
       ...parsed,
+      theme: parsed.theme || 'light',
       features: {
         ...DEFAULT_SYSTEM_SETTINGS.features,
         ...(parsed.features || {}),
@@ -48,6 +49,7 @@ interface SettingsContextType {
   settings: SystemSettings;
   updateSettings: (newSettings: Partial<SystemSettings>) => void;
   toggleFeature: (featureKey: keyof SystemSettings['features']) => void;
+  toggleTheme: () => void;
   resetToDefaults: () => void;
 }
 
@@ -58,7 +60,28 @@ export const SettingsProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     saveSettingsToStorage(settings);
+    if (typeof document !== 'undefined') {
+      const root = document.documentElement;
+      if (settings.theme === 'dark') {
+        root.classList.add('dark');
+        root.classList.remove('light');
+      } else {
+        root.classList.remove('dark');
+        root.classList.add('light');
+      }
+    }
   }, [settings]);
+
+  const toggleTheme = () => {
+    setSettings((prev) => {
+      const nextTheme = prev.theme === 'dark' ? 'light' : 'dark';
+      return {
+        ...prev,
+        theme: nextTheme,
+        lastUpdated: new Date().toISOString(),
+      };
+    });
+  };
 
   const updateSettings = (newSettings: Partial<SystemSettings>) => {
     setSettings((prev) => {
@@ -98,7 +121,7 @@ export const SettingsProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <SettingsContext.Provider value={{ settings, updateSettings, toggleFeature, resetToDefaults }}>
+    <SettingsContext.Provider value={{ settings, updateSettings, toggleFeature, toggleTheme, resetToDefaults }}>
       {children}
     </SettingsContext.Provider>
   );

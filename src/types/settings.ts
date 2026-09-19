@@ -102,6 +102,7 @@ export interface SbarFieldConfig {
 
 export interface SystemSettings {
   language: 'en' | 'ar';
+  theme: 'light' | 'dark';
   features: SystemFeatureFlags;
   unit: UnitCustomization;
   labCategories?: LabCategoryTemplate[];
@@ -342,6 +343,7 @@ export const DEFAULT_ANTIBIOTIC_PRESETS: AntibioticPreset[] = [
 
 export const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
   language: 'en',
+  theme: 'light',
   features: {
     enableBedMatrix: true,
     enableSbarHandover: true,

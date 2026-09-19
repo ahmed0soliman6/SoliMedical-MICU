@@ -26,7 +26,8 @@ import {
 import { useAuth } from '../services/AuthContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
 import { StaffRole, IcuUser, UserPermissions } from '../types/schema.ts';
-import { getDefaultPermissionsForRole, auth } from '../services/firebase.ts';
+import { getDefaultPermissionsForRole, auth, firestore } from '../services/firebase.ts';
+import { doc, setDoc } from 'firebase/firestore';
 
 interface UserManagementModalProps {
   isOpen: boolean;
@@ -54,7 +55,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
 
   // Recovery Token state
   const [showRecoveryModal, setShowRecoveryModal] = useState(false);
-  const [recoveryCodeInput, setRecoveryCodeInput] = useState('SOLI-MICU-RECOVERY-2026');
+  const [recoveryCodeInput, setRecoveryCodeInput] = useState('');
   const [recoveryStatus, setRecoveryStatus] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [recoveryLoading, setRecoveryLoading] = useState(false);
 
@@ -67,18 +68,35 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
     setRecoveryLoading(true);
     setRecoveryStatus(null);
     try {
-      const idToken = await auth.currentUser?.getIdToken();
+      const idToken = await auth.currentUser?.getIdToken().catch(() => null);
+      const authHeader = idToken ? `Bearer ${idToken}` : (currentUser?.uid ? `Bearer legacy_${currentUser.uid}` : 'Bearer legacy_admin');
       const response = await fetch('/api/admin/recovery/set', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${idToken || 'legacy_admin'}`
+          'Authorization': authHeader
         },
         body: JSON.stringify({ recoveryCode: recoveryCodeInput.trim() })
       });
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        setRecoveryStatus({ type: 'error', text: 'تعذر الاتصال بخادم النظام، يرجى المحاولة بعد قليل.' });
+        return;
+      }
       const data = await response.json();
       if (data.success) {
         setRecoveryStatus({ type: 'success', text: data.message || 'تم تحديث رمز التشفير بنجاح.' });
+        if (firestore && auth.currentUser) {
+          try {
+            await setDoc(doc(firestore, 'system_settings', 'recovery'), {
+              hasCustomRecoveryCode: true,
+              updatedAt: new Date().toISOString(),
+              updatedByUid: auth.currentUser.uid
+            }, { merge: true });
+          } catch {
+            // Optional non-blocking client-side backup
+          }
+        }
       } else {
         setRecoveryStatus({ type: 'error', text: data.message || 'فشل تحديث رمز التشفير.' });
       }
@@ -305,7 +323,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
               <>
                 <button
                   onClick={() => {
-                    setRecoveryCodeInput('SOLI-MICU-RECOVERY-2026');
+                    setRecoveryCodeInput('');
                     setRecoveryStatus(null);
                     setShowRecoveryModal(true);
                   }}
@@ -902,8 +920,9 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
                   onChange={(e) => setRecoveryCodeInput(e.target.value)}
                   required
                   minLength={6}
+                  autoComplete="off"
                   className="w-full bg-[#070d1a] border border-slate-700 focus:border-teal-400 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none font-mono tracking-wider"
-                  placeholder="SOLI-MICU-RECOVERY-2026"
+                  placeholder=""
                 />
                 <p className="text-[10px] text-slate-400 mt-1">
                   {lang === 'ar' ? 'احتفظ بهذا الرمز في مكان آمن. سيحتاجه المدير في شاشة تسجيل الدخول عبر رابط "نسيت كلمة المرور؟".' : 'Keep this token secure. Admin will need it on the login screen if password is forgotten.'}

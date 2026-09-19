@@ -1113,17 +1113,17 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
     <div className="space-y-4 animate-in fade-in duration-200">
       {/* Quick Bed Switcher Bar (Direct Single-Click Page Navigation) */}
       {allBeds.length > 0 && onSelectBed && (
-        <div className="bg-[#0a1224] border border-slate-800/80 rounded-xl px-3 py-2 flex items-center gap-1.5 overflow-x-auto shadow-sm">
+        <div className="bg-white dark:bg-[#0a1224] border border-slate-200 dark:border-slate-800/80 rounded-xl px-3 py-2 flex items-center gap-1.5 overflow-x-auto shadow-sm">
           <button
             onClick={onBack}
-            className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold flex items-center gap-1 shrink-0 transition-all cursor-pointer"
+            className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 text-xs font-semibold flex items-center gap-1 shrink-0 transition-all cursor-pointer"
             title={lang === 'ar' ? 'العودة لشبكة الأسِرّة الستة' : 'Back to Bed Console'}
           >
-            <ArrowLeft className="w-3.5 h-3.5 text-teal-400" />
+            <ArrowLeft className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
             <span className="hidden sm:inline">{lang === 'ar' ? 'شبكة الأسِرّة' : 'Console'}</span>
           </button>
 
-          <span className="text-slate-700 mx-1">|</span>
+          <span className="text-slate-300 dark:text-slate-700 mx-1">|</span>
 
           {allBeds.map((b) => {
             const isCurrent = b.bedNumber === bed.bedNumber;
@@ -1136,17 +1136,17 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                 onClick={() => onSelectBed(b.bedNumber as BedNumber)}
                 className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-2 shrink-0 transition-all cursor-pointer ${
                   isCurrent
-                    ? 'bg-teal-500/25 text-teal-200 border border-teal-500/60 font-black shadow-md'
-                    : 'bg-[#0e172a] hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800'
+                    ? 'bg-teal-500/20 text-teal-800 dark:text-teal-200 border border-teal-500/60 font-black shadow-sm'
+                    : 'bg-slate-50 hover:bg-slate-100 text-slate-700 hover:text-slate-900 border border-slate-200 dark:bg-[#0e172a] dark:hover:bg-slate-800 dark:text-slate-400 dark:hover:text-slate-200 dark:border-slate-800'
                 }`}
               >
-                <span className="font-mono font-bold text-teal-400">{b.bedNumber}</span>
+                <span className="font-mono font-bold text-teal-600 dark:text-teal-400">{b.bedNumber}</span>
                 <span className="truncate max-w-[90px] text-[11px]">
                   {isOccupied 
                     ? (bPatient?.fullNameAr?.split(' ')[0] || bPatient?.fullNameEn?.split(' ')[0] || (lang === 'ar' ? 'مشغول' : 'Occupied'))
                     : (lang === 'ar' ? 'شاغر' : 'Vacant')}
                 </span>
-                <span className={`w-2 h-2 rounded-full shrink-0 ${isOccupied ? 'bg-emerald-400' : 'bg-slate-600'}`} />
+                <span className={`w-2 h-2 rounded-full shrink-0 ${isOccupied ? 'bg-emerald-500' : 'bg-slate-400 dark:bg-slate-600'}`} />
               </button>
             );
           })}
@@ -1154,13 +1154,16 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       )}
 
       {/* Top Patient Header Banner Card (Clean minimal view, folded by default) */}
-      <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-3 sm:p-4 shadow-xl transition-all space-y-3">
+      <div 
+        data-expanded={!isPatientCardCollapsed ? "true" : "false"}
+        className="icu-collapsible-section rounded-2xl p-3 sm:p-4 shadow-sm dark:shadow-xl transition-all space-y-3 border"
+      >
         <div className="flex items-center justify-between gap-3">
           {/* Back Button, Bed Number, Patient Name & Age */}
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
             <button
               onClick={onBack}
-              className="p-2 sm:p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-all flex-shrink-0 cursor-pointer"
+              className="p-2 sm:p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 hover:text-white transition-all flex-shrink-0 cursor-pointer"
               title={lang === 'ar' ? 'العودة لشبكة الأسِرّة' : 'Back to Bed Matrix'}
             >
               <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -1170,7 +1173,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
             <span className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl font-mono font-black text-xs sm:text-sm flex items-center justify-center shadow-md flex-shrink-0 ${
               (bed.status === 'ISOLATION' || bed.isolation?.isIsolated)
                 ? 'bg-red-950 text-red-500 border border-red-500/40 animate-pulse'
-                : 'bg-teal-500/20 text-teal-300 border border-teal-500/40'
+                : 'bg-teal-500/20 text-teal-700 dark:text-teal-300 border border-teal-500/40'
             }`}>
               {bed.bedNumber}
             </span>
@@ -1178,19 +1181,19 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
             {/* Name, Age, Diagnosis Column */}
             <div className="flex flex-col min-w-0 flex-1">
               <div className="flex items-center gap-2 flex-nowrap min-w-0">
-                <h1 className="text-xs xs:text-sm sm:text-base md:text-lg font-black text-white truncate min-w-0 flex-shrink">
+                <h1 className="text-xs xs:text-sm sm:text-base md:text-lg font-black text-slate-900 dark:text-white truncate min-w-0 flex-shrink">
                   {patient.fullNameAr || patient.fullNameEn}
                 </h1>
                 {patient.age && (
-                  <span className="text-[10px] sm:text-xs font-extrabold text-teal-300 font-mono bg-teal-950/90 px-1.5 py-0.5 rounded-lg border border-teal-800/80 shrink-0 whitespace-nowrap">
+                  <span className="text-[10px] sm:text-xs font-extrabold text-teal-700 dark:text-teal-300 font-mono bg-teal-500/10 dark:bg-teal-950/90 px-1.5 py-0.5 rounded-lg border border-teal-500/30 dark:border-teal-800/80 shrink-0 whitespace-nowrap">
                     {patient.age} {lang === 'ar' ? 'سنة' : 'Y'}
                   </span>
                 )}
               </div>
               {isPatientCardCollapsed && (
-                <p className="text-[11px] sm:text-xs text-slate-400 font-medium mt-1 leading-normal break-words">
-                  <span className="text-slate-500">{lang === 'ar' ? 'التشخيص:' : 'Dx:'}</span>{' '}
-                  <span className="text-teal-300 font-semibold">
+                <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 font-medium mt-1 leading-normal break-words">
+                  <span className="text-slate-400 dark:text-slate-500">{lang === 'ar' ? 'التشخيص:' : 'Dx:'}</span>{' '}
+                  <span className="text-teal-700 dark:text-teal-300 font-semibold">
                     {lang === 'ar' 
                       ? (patient.primaryDiagnosisAr || patient.primaryDiagnosisEn || '—') 
                       : (patient.primaryDiagnosisEn || patient.primaryDiagnosisAr || '—')}
@@ -1204,16 +1207,16 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
           <button
             type="button"
             onClick={() => setIsPatientCardCollapsed(!isPatientCardCollapsed)}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-medium border border-slate-700/60 transition-all cursor-pointer shrink-0"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800/90 dark:hover:bg-slate-700 dark:text-slate-300 hover:text-white text-xs font-medium border border-slate-300 dark:border-slate-700/60 transition-all cursor-pointer shrink-0"
             title={isPatientCardCollapsed ? (lang === 'ar' ? 'توسيع البطاقة' : 'Expand Card') : (lang === 'ar' ? 'طي البطاقة' : 'Collapse Card')}
           >
-            <span className="hidden sm:inline text-[11px] text-slate-400">
+            <span className="hidden sm:inline text-[11px] text-slate-500 dark:text-slate-400">
               {isPatientCardCollapsed ? (lang === 'ar' ? 'تفاصيل السرير' : 'Details') : (lang === 'ar' ? 'طي' : 'Collapse')}
             </span>
             {isPatientCardCollapsed ? (
-              <ChevronDown className="w-4 h-4 text-teal-400" />
+              <ChevronDown className="w-4 h-4 text-teal-600 dark:text-teal-400" />
             ) : (
-              <ChevronUp className="w-4 h-4 text-teal-400" />
+              <ChevronUp className="w-4 h-4 text-teal-600 dark:text-teal-400" />
             )}
           </button>
         </div>
@@ -1222,7 +1225,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
         {settings.features.enableSbarHandover && (() => {
           const pendingSbar = sbarList.find(s => !s.incomingDoctor?.signedAt);
           return (
-            <div className="pt-2 border-t border-slate-800/80 flex items-center gap-2 flex-wrap sm:flex-nowrap w-full">
+            <div className="pt-2 border-t border-slate-200 dark:border-slate-800/80 flex items-center gap-2 flex-wrap sm:flex-nowrap w-full">
               {/* Receive Shift Button */}
               {pendingSbar && (
                 <button
@@ -1260,33 +1263,33 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
 
         {/* Expandable Details: Action Buttons (Hidden when collapsed) */}
         {!isPatientCardCollapsed && (
-          <div className="mt-3 pt-3 border-t border-slate-800/80 animate-in fade-in duration-200">
+          <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-800/80 animate-in fade-in duration-200">
             {/* Action Buttons: Transfer, Swap, Isolation - Unified Row */}
             <div className="grid grid-cols-3 gap-1.5 w-full sm:flex sm:items-center sm:justify-end sm:gap-2">
               <button
                 onClick={() => setIsTransferModalOpen(true)}
-                className="flex flex-col sm:flex-row items-center justify-center gap-1 px-1 py-1.5 sm:px-3 sm:py-1.5 rounded-xl bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-500/40 text-[10px] xs:text-[11px] sm:text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer text-center min-w-0"
+                className="flex flex-col sm:flex-row items-center justify-center gap-1 px-1 py-1.5 sm:px-3 sm:py-1.5 rounded-xl bg-blue-500/15 hover:bg-blue-500/25 text-blue-700 dark:text-blue-300 border border-blue-500/30 text-[10px] xs:text-[11px] sm:text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer text-center min-w-0"
                 title={lang === 'ar' ? 'نقل المريض لسرير شاغر' : 'Transfer patient to vacant bed'}
               >
-                <ArrowRightLeft className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                <ArrowRightLeft className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
                 <span className="truncate">{lang === 'ar' ? 'نقل المريض' : 'Transfer'}</span>
               </button>
 
               <button
                 onClick={() => setIsSwapModalOpen(true)}
-                className="flex flex-col sm:flex-row items-center justify-center gap-1 px-1 py-1.5 sm:px-3 sm:py-1.5 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 text-[10px] xs:text-[11px] sm:text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer text-center min-w-0"
+                className="flex flex-col sm:flex-row items-center justify-center gap-1 px-1 py-1.5 sm:px-3 sm:py-1.5 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 text-purple-700 dark:text-purple-300 border border-purple-500/30 text-[10px] xs:text-[11px] sm:text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer text-center min-w-0"
                 title={lang === 'ar' ? 'تبديل سريرين ومشغولين' : 'Swap beds'}
               >
-                <Layers className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                <Layers className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400 shrink-0" />
                 <span className="truncate">{lang === 'ar' ? 'تبديل سريرين' : 'Swap Beds'}</span>
               </button>
 
               <button
                 onClick={() => setIsIsolationModalOpen(true)}
-                className="flex flex-col sm:flex-row items-center justify-center gap-1 px-1 py-1.5 sm:px-3 sm:py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-[10px] xs:text-[11px] sm:text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer text-center min-w-0"
+                className="flex flex-col sm:flex-row items-center justify-center gap-1 px-1 py-1.5 sm:px-3 sm:py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-[10px] xs:text-[11px] sm:text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer text-center min-w-0"
                 title={lang === 'ar' ? 'تدابير العزل وحالة السرير' : 'Manage bed status & isolation'}
               >
-                <ShieldAlert className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <ShieldAlert className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
                 <span className="truncate">{lang === 'ar' ? 'العزل والحالة' : 'Bed Status'}</span>
               </button>
             </div>
@@ -1294,7 +1297,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
         )}
       </div>
 
-      <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-4 shadow-xl">
+      <div className="bg-white dark:bg-[#0b1224] border border-slate-200 dark:border-slate-700/80 rounded-2xl p-4 shadow-sm dark:shadow-xl">
         {/* Tab Navigation Controls */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs font-semibold">
           {[
@@ -1377,10 +1380,10 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl whitespace-nowrap transition-all ${
+                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl whitespace-nowrap transition-all font-semibold ${
                   isActive
-                    ? 'bg-teal-500/20 text-teal-300 border border-teal-500/50 shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                    ? 'bg-teal-500/15 text-teal-800 dark:text-teal-300 border border-teal-500/40 shadow-sm font-bold'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800/60'
                 }`}
               >
                 <Icon className="w-3.5 h-3.5" />
@@ -1397,10 +1400,13 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
           {/* Top Row: Patient Data Grid (Demographics first, then Clinical History/Diagnosis) */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {/* Demographics / Pt Data Box */}
-            <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-4 shadow-xl flex flex-col justify-between lg:col-span-1">
+            <div 
+              data-expanded={!isDemographicsCardCollapsed ? "true" : "false"}
+              className="icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl flex flex-col justify-between lg:col-span-1 border transition-all"
+            >
               <div 
                 onClick={() => setIsDemographicsCardCollapsed(!isDemographicsCardCollapsed)}
-                className="border-b border-slate-800/80 pb-3 flex flex-col gap-2.5 cursor-pointer hover:bg-slate-800/40 p-2 rounded-xl transition-all"
+                className="icu-card-header-toggle border-b border-slate-200 dark:border-slate-800/80 pb-3 flex flex-col gap-2.5 cursor-pointer p-2 rounded-xl transition-all"
               >
                 {/* Header Row: Title & Action Controls */}
                 <div className="flex items-center justify-between w-full">
@@ -1533,10 +1539,13 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
             </div>
 
             {/* History & Presenting Complaints Box (Diagnosis / Shakwa) */}
-            <div className="lg:col-span-2 bg-[#0b1224] border border-slate-700/80 rounded-2xl p-4 shadow-xl space-y-3">
+            <div 
+              data-expanded={!isHistoryCardCollapsed ? "true" : "false"}
+              className="lg:col-span-2 icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-3 border transition-all"
+            >
               <div 
                 onClick={() => setIsHistoryCardCollapsed(!isHistoryCardCollapsed)}
-                className="flex items-center justify-between border-b border-slate-800 pb-2.5 cursor-pointer hover:bg-slate-800/40 p-2 rounded-xl transition-all"
+                className="icu-card-header-toggle flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2.5 cursor-pointer p-2 rounded-xl transition-all"
               >
                 <div className="flex items-center gap-2">
                   <FileText className="w-5 h-5 text-teal-400" />
@@ -1695,10 +1704,13 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
 
       {/* Tab 1: Continuous Vitals & Telemetry (Top Section after Patient Data) */}
       {(activeTab === 'vitals' || activeTab === 'all' || activeTab === 'paperFlowsheet') && (
-        <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-4 shadow-xl space-y-4">
+        <div 
+          data-expanded={!isPaperVitalsCardCollapsed ? "true" : "false"}
+          className="icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-4 border transition-all"
+        >
           <div 
             onClick={() => setIsPaperVitalsCardCollapsed(!isPaperVitalsCardCollapsed)}
-            className="flex items-center justify-between border-b border-slate-800 pb-2.5 cursor-pointer hover:bg-slate-800/40 p-2 rounded-xl transition-all"
+            className="icu-card-header-toggle flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2.5 cursor-pointer p-2 rounded-xl transition-all"
           >
             <div className="flex items-center gap-2.5">
               <div className="p-2 rounded-xl bg-teal-500/10 border border-teal-500/30 text-teal-400">
@@ -1902,10 +1914,13 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       {activeTab === 'paperFlowsheet' && (
         <div className="space-y-4 animate-in fade-in duration-300">
           {/* Interactive Labs Grid Table (التحاليل الطبية المتسلسلة التراكمية) */}
-          <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-4 shadow-xl space-y-3">
+          <div 
+            data-expanded={!isPaperLabsCardCollapsed ? "true" : "false"}
+            className="icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-3 border transition-all"
+          >
             <div 
               onClick={() => setIsPaperLabsCardCollapsed(!isPaperLabsCardCollapsed)}
-              className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-2.5 cursor-pointer hover:bg-slate-800/40 p-2 rounded-xl transition-all"
+              className="icu-card-header-toggle flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-2.5 cursor-pointer p-2 rounded-xl transition-all"
             >
               <div className="flex items-center gap-2">
                 <Activity className="w-5 h-5 text-emerald-400" />
@@ -2257,11 +2272,14 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {/* Ventilator connectivity status */}
             {cardsConfig.showVentilatorCard && (
-              <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-4 shadow-xl space-y-3 flex flex-col justify-between">
+              <div 
+                data-expanded={!isPaperVentCardCollapsed ? "true" : "false"}
+                className="icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-3 flex flex-col justify-between border transition-all"
+              >
                 <div>
                   <div 
                     onClick={() => setIsPaperVentCardCollapsed(!isPaperVentCardCollapsed)}
-                    className="flex items-center justify-between border-b border-slate-800 pb-2.5 cursor-pointer hover:bg-slate-800/40 p-2 rounded-xl transition-all"
+                    className="icu-card-header-toggle flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2.5 cursor-pointer p-2 rounded-xl transition-all"
                   >
                     <div className="flex items-center gap-2">
                       <Wind className="w-5 h-5 text-cyan-400" />
@@ -2424,11 +2442,14 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
 
             {/* Infusion lines connectivity status */}
             {cardsConfig.showInfusionPumpsCard && (
-              <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-4 shadow-xl space-y-3 flex flex-col justify-between">
+              <div 
+                data-expanded={!isPaperPumpsCardCollapsed ? "true" : "false"}
+                className="icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-3 flex flex-col justify-between border transition-all"
+              >
                 <div>
                   <div 
                     onClick={() => setIsPaperPumpsCardCollapsed(!isPaperPumpsCardCollapsed)}
-                    className="flex items-center justify-between border-b border-slate-800 pb-2.5 cursor-pointer hover:bg-slate-800/40 p-2 rounded-xl transition-all"
+                    className="icu-card-header-toggle flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2.5 cursor-pointer p-2 rounded-xl transition-all"
                   >
                     <div className="flex items-center gap-2">
                       <Droplet className="w-5 h-5 text-amber-400" />
@@ -2586,11 +2607,14 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
 
             {/* Daily Fluid balances */}
             {cardsConfig.showFluidBalanceCard && (
-              <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-4 shadow-xl space-y-3 flex flex-col justify-between">
+              <div 
+                data-expanded={!isPaperFluidsCardCollapsed ? "true" : "false"}
+                className="icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-3 flex flex-col justify-between border transition-all"
+              >
                 <div>
                   <div 
                     onClick={() => setIsPaperFluidsCardCollapsed(!isPaperFluidsCardCollapsed)}
-                    className="flex items-center justify-between border-b border-slate-800 pb-2.5 cursor-pointer hover:bg-slate-800/40 p-2 rounded-xl transition-all"
+                    className="icu-card-header-toggle flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2.5 cursor-pointer p-2 rounded-xl transition-all"
                   >
                     <div className="flex items-center gap-2">
                       <Scale className="w-5 h-5 text-teal-400" />
@@ -2884,10 +2908,13 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
 
       {/* Tab: Daily Lab Flowsheet with Interactive Trend History (HG 5 > 7 > 8.5 > 8) */}
       {(activeTab === 'labs' || activeTab === 'all') && (
-        <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-4 shadow-xl space-y-4">
+        <div 
+          data-expanded={!isPaperLabsCardCollapsed ? "true" : "false"}
+          className="icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-4 border transition-all"
+        >
           <div 
             onClick={() => setIsPaperLabsCardCollapsed(!isPaperLabsCardCollapsed)}
-            className="flex items-center justify-between border-b border-slate-800 pb-2.5 cursor-pointer hover:bg-slate-800/40 p-2 rounded-xl transition-all"
+            className="icu-card-header-toggle flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2.5 cursor-pointer p-2 rounded-xl transition-all"
           >
             <div className="flex items-center gap-2.5">
               <div className="p-2 rounded-xl bg-teal-500/10 border border-teal-500/30 text-teal-400">
@@ -2953,10 +2980,14 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
 
       {/* Tab: Investigations, Radiology & POCUS Studies */}
       {(activeTab === 'investigations' || activeTab === 'all') && (
-        <div id="patient-investigations-card" className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-4 shadow-xl space-y-4">
+        <div 
+          id="patient-investigations-card" 
+          data-expanded={!isPaperInvestigationsCardCollapsed ? "true" : "false"}
+          className="icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-4 border transition-all"
+        >
           <div 
             onClick={() => setIsPaperInvestigationsCardCollapsed(!isPaperInvestigationsCardCollapsed)}
-            className="flex items-center justify-between border-b border-slate-800 pb-2.5 cursor-pointer hover:bg-slate-800/40 p-2 rounded-xl transition-all"
+            className="icu-card-header-toggle flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2.5 cursor-pointer p-2 rounded-xl transition-all"
           >
             <div className="flex items-center gap-2.5">
               <div className="p-2 rounded-xl bg-teal-500/10 border border-teal-500/30 text-teal-400">
@@ -3007,10 +3038,13 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
 
       {/* Tab 3: Infusion Pumps */}
       {(activeTab === 'pumps' || activeTab === 'all') && (
-        <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-4 shadow-xl space-y-4">
+        <div 
+          data-expanded={!isPaperPumpsCardCollapsed ? "true" : "false"}
+          className="icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-4 border transition-all"
+        >
           <div 
             onClick={() => setIsPaperPumpsCardCollapsed(!isPaperPumpsCardCollapsed)}
-            className="flex items-center justify-between border-b border-slate-800 pb-2.5 cursor-pointer hover:bg-slate-800/40 p-2 rounded-xl transition-all"
+            className="icu-card-header-toggle flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2.5 cursor-pointer p-2 rounded-xl transition-all"
           >
             <div className="flex items-center gap-2">
               <Droplet className="w-5 h-5 text-amber-400" />
@@ -3200,10 +3234,13 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
 
       {/* Tab 2: Ventilator & ABG */}
       {(activeTab === 'vent' || activeTab === 'all') && (
-        <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-4 shadow-xl space-y-4">
+        <div 
+          data-expanded={!isPaperVentCardCollapsed ? "true" : "false"}
+          className="icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-4 border transition-all"
+        >
           <div 
             onClick={() => setIsPaperVentCardCollapsed(!isPaperVentCardCollapsed)}
-            className="flex items-center justify-between border-b border-slate-800 pb-2.5 cursor-pointer hover:bg-slate-800/44 p-2 rounded-xl transition-all"
+            className="icu-card-header-toggle flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2.5 cursor-pointer p-2 rounded-xl transition-all"
           >
             <div className="flex items-center gap-2">
               <Wind className="w-5 h-5 text-cyan-400" />
@@ -3414,10 +3451,13 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
 
       {/* Tab 4: Fluids & MTP */}
       {(activeTab === 'fluids' || activeTab === 'all') && (
-        <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-4 shadow-xl space-y-4">
+        <div 
+          data-expanded={!isPaperFluidsCardCollapsed ? "true" : "false"}
+          className="icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-4 border transition-all"
+        >
           <div 
             onClick={() => setIsPaperFluidsCardCollapsed(!isPaperFluidsCardCollapsed)}
-            className="flex items-center justify-between border-b border-slate-800 pb-2.5 cursor-pointer hover:bg-slate-800/40 p-2 rounded-xl transition-all"
+            className="icu-card-header-toggle flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2.5 cursor-pointer p-2 rounded-xl transition-all"
           >
             <div className="flex items-center gap-2">
               <Scale className="w-5 h-5 text-teal-400" />
@@ -3719,10 +3759,13 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
 
       {/* Tab 5: SBAR Handovers */}
       {(activeTab === 'sbar' || activeTab === 'all') && (
-        <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-4 shadow-xl space-y-4">
+        <div 
+          data-expanded={!isPaperSbarCardCollapsed ? "true" : "false"}
+          className="icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-4 border transition-all"
+        >
           <div 
             onClick={() => setIsPaperSbarCardCollapsed(!isPaperSbarCardCollapsed)}
-            className="flex items-center justify-between border-b border-slate-800 pb-2.5 cursor-pointer hover:bg-slate-800/40 p-2 rounded-xl transition-all"
+            className="icu-card-header-toggle flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2.5 cursor-pointer p-2 rounded-xl transition-all"
           >
             <div className="flex items-center gap-2">
               <ShieldCheck className="w-5 h-5 text-teal-400" />
@@ -3955,10 +3998,13 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
 
       {/* Tab 6: Clinical Notes & SHA-256 Addendums */}
       {(activeTab === 'notes' || activeTab === 'all') && (
-        <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-4 shadow-xl space-y-4">
+        <div 
+          data-expanded={!isPaperNotesCardCollapsed ? "true" : "false"}
+          className="icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-4 border transition-all"
+        >
           <div 
             onClick={() => setIsPaperNotesCardCollapsed(!isPaperNotesCardCollapsed)}
-            className="flex items-center justify-between border-b border-slate-800 pb-2.5 cursor-pointer hover:bg-slate-800/40 p-2 rounded-xl transition-all"
+            className="icu-card-header-toggle flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2.5 cursor-pointer p-2 rounded-xl transition-all"
           >
             <div className="flex items-center gap-2">
               <FileText className="w-5 h-5 text-teal-400" />
@@ -4076,10 +4122,13 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
 
       {/* Tab 7: Disposition */}
       {(activeTab === 'disposition' || activeTab === 'all') && (
-        <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl p-4 shadow-xl space-y-4">
+        <div 
+          data-expanded={!isPaperDispCardCollapsed ? "true" : "false"}
+          className="icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-4 border transition-all"
+        >
           <div 
             onClick={() => setIsPaperDispCardCollapsed(!isPaperDispCardCollapsed)}
-            className="flex items-center justify-between border-b border-slate-800 pb-2.5 cursor-pointer hover:bg-slate-800/40 p-2 rounded-xl transition-all"
+            className="icu-card-header-toggle flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2.5 cursor-pointer p-2 rounded-xl transition-all"
           >
             <div className="flex items-center gap-2">
               <ExternalLink className="w-5 h-5 text-amber-400" />

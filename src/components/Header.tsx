@@ -14,7 +14,9 @@ import {
   Menu,
   X,
   Volume2,
-  CheckCircle2
+  CheckCircle2,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { BedRecord, PatientDossier, BedNumber } from '../types/schema.ts';
 import { requestNotificationPermission, playIcuAlarmAudio } from '../services/firebase.ts';
@@ -53,7 +55,7 @@ export const Header: React.FC<HeaderProps> = ({
   activeAlertMessage,
   onDismissAlert,
 }) => {
-  const { settings, updateSettings } = useSystemSettings();
+  const { settings, updateSettings, toggleTheme } = useSystemSettings();
   const { t, lang, setLanguage, isRTL } = useTranslation();
   const occupiedBedsCount = (beds || []).filter(b => b && b.status === 'OCCUPIED').length;
   const criticalCount = (patients || []).filter(p => p && p.patientStatus === 'ACTIVE_ICU' && p.acuityLevel === 'CRITICAL_STAT').length;
@@ -99,26 +101,26 @@ export const Header: React.FC<HeaderProps> = ({
   const hasActiveNotice = !!activeAlertMessage || criticalCount > 0;
 
   return (
-    <header className="sticky top-0 z-40 bg-[#0a1122]/95 backdrop-blur-md border-b border-slate-800/80 px-2.5 sm:px-6 py-2 shadow-lg">
+    <header className="sticky top-0 z-40 bg-white/95 dark:bg-[#0a1122]/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800/80 px-2.5 sm:px-6 py-2 shadow-sm dark:shadow-lg transition-colors">
       <div className="max-w-[1600px] mx-auto flex items-center justify-between gap-2">
         {/* Left Side: Sidebar Navigation Toggle & Live Status Indicator */}
         <div className="flex items-center gap-3">
           {/* Hamburger Menu Button for Mobile/Tablet */}
           <button
             onClick={onOpenSidebar}
-            className="md:hidden flex items-center gap-2 px-3 py-1.5 sm:py-2 rounded-xl bg-[#0f172a] hover:bg-teal-950/50 hover:border-teal-500/60 border border-slate-700 text-teal-400 transition-all active:scale-95 shadow-sm cursor-pointer"
+            className="md:hidden flex items-center gap-2 px-3 py-1.5 sm:py-2 rounded-xl bg-slate-100 dark:bg-[#0f172a] hover:bg-teal-50 dark:hover:bg-teal-950/50 hover:border-teal-500/60 border border-slate-300 dark:border-slate-700 text-teal-700 dark:text-teal-400 transition-all active:scale-95 shadow-sm cursor-pointer"
             title={lang === 'ar' ? 'القائمة الجانبية والصفحات' : 'Open Sidebar & Navigation'}
             aria-label="Toggle navigation menu"
           >
             <Menu className="w-5 h-5" />
-            <span className="text-xs font-bold text-slate-200">
+            <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
               {lang === 'ar' ? 'القائمة' : 'Menu'}
             </span>
           </button>
 
           {/* Active System Indicator Dot */}
           <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" title={lang === 'ar' ? 'النظام يعمل بكفاءة' : 'System Operational'}></span>
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 dark:bg-emerald-400 animate-pulse" title={lang === 'ar' ? 'النظام يعمل بكفاءة' : 'System Operational'}></span>
           </div>
         </div>
 
@@ -126,14 +128,14 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="hidden md:flex items-center gap-3">
           {/* Bed Occupancy */}
           {settings.features.enableBedMatrix && (
-            <div className="bg-[#0e172a] border border-slate-800 px-3 py-1.5 rounded-xl flex items-center gap-2">
-              <Layers className="w-4 h-4 text-cyan-400" />
+            <div className="bg-slate-100 dark:bg-[#0e172a] border border-slate-200 dark:border-slate-800 px-3 py-1.5 rounded-xl flex items-center gap-2">
+              <Layers className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
               <div className={isRTL ? 'text-right' : 'text-left'}>
-                <div className="text-[10px] text-slate-400 uppercase tracking-wider">
+                <div className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold">
                   {lang === 'ar' ? 'الإشغال الإجمالي' : 'Total Occupancy'}
                 </div>
-                <div className="text-xs font-mono font-bold text-white">
-                  <span className="text-teal-400">{occupiedBedsCount}</span> / {settings.unit.totalBedsCount} {lang === 'ar' ? 'أسِرّة' : 'Beds'}
+                <div className="text-xs font-mono font-bold text-slate-900 dark:text-white">
+                  <span className="text-teal-600 dark:text-teal-400">{occupiedBedsCount}</span> / {settings.unit.totalBedsCount} {lang === 'ar' ? 'أسِرّة' : 'Beds'}
                 </div>
               </div>
             </div>
@@ -141,13 +143,13 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* STAT Critical Alerts */}
           {settings.features.enableAcuityLevels && (
-            <div className="bg-[#0e172a] border border-red-500/30 px-3 py-1.5 rounded-xl flex items-center gap-2">
-              <ShieldAlert className="w-4 h-4 text-red-400 animate-bounce" />
+            <div className="bg-red-50 dark:bg-[#0e172a] border border-red-200 dark:border-red-500/30 px-3 py-1.5 rounded-xl flex items-center gap-2">
+              <ShieldAlert className="w-4 h-4 text-red-500 dark:text-red-400 animate-bounce" />
               <div className={isRTL ? 'text-right' : 'text-left'}>
-                <div className="text-[10px] text-red-400 uppercase tracking-wider font-bold">
+                <div className="text-[10px] text-red-600 dark:text-red-400 uppercase tracking-wider font-bold">
                   {lang === 'ar' ? 'حالات حرجة STAT' : 'Critical STAT'}
                 </div>
-                <div className="text-xs font-mono font-bold text-red-300">
+                <div className="text-xs font-mono font-bold text-red-700 dark:text-red-300">
                   {criticalCount} {lang === 'ar' ? 'مريض' : 'Patients'}
                 </div>
               </div>
@@ -158,33 +160,33 @@ export const Header: React.FC<HeaderProps> = ({
           {settings.features.enableCloudSync && (
             <button
               onClick={handleCloudSyncClick}
-              className="bg-[#0e172a] hover:bg-teal-950/60 border border-teal-500/40 hover:border-teal-400 px-3 py-1.5 rounded-xl flex items-center gap-2 shadow-sm transition-all active:scale-95 group cursor-pointer"
+              className="bg-slate-100 hover:bg-teal-50 dark:bg-[#0e172a] dark:hover:bg-teal-950/60 border border-slate-200 hover:border-teal-400 dark:border-teal-500/40 dark:hover:border-teal-400 px-3 py-1.5 rounded-xl flex items-center gap-2 shadow-sm transition-all active:scale-95 group cursor-pointer"
               title={lang === 'ar' ? 'حالة المزامنة السحابية: متصل بـ Firebase Firestore. انقر لإجراء فحص وتحديث' : 'Cloud Sync: Online (Firebase). Click to verify status'}
             >
-              <Cloud className="w-4 h-4 text-teal-400 group-hover:scale-110 transition-transform flex-shrink-0" />
-              <div className="flex items-center gap-1.5 font-mono text-xs font-bold text-teal-300">
-                <span className="w-2 h-2 rounded-full bg-teal-400 animate-ping inline-block"></span>
+              <Cloud className="w-4 h-4 text-teal-600 dark:text-teal-400 group-hover:scale-110 transition-transform flex-shrink-0" />
+              <div className="flex items-center gap-1.5 font-mono text-xs font-bold text-teal-700 dark:text-teal-300">
+                <span className="w-2 h-2 rounded-full bg-teal-500 dark:bg-teal-400 animate-ping inline-block"></span>
                 <span>{lang === 'ar' ? 'متصل' : 'Online'}</span>
               </div>
             </button>
           )}
         </div>
 
-        {/* Action Controls: Compact Search Icon, Alerts & Settings */}
+        {/* Action Controls: Search, Theme Toggle, Alerts & Settings */}
         <div className="flex items-center gap-2 sm:gap-2.5 relative">
-          {/* Universal Search Icon Button (Freeing header space) */}
+          {/* Universal Search Icon Button */}
           {settings.features.enableArchiveSearch && (
             <button
               onClick={onOpenSearch}
               className={`flex items-center justify-center p-2 sm:px-2.5 sm:py-2 rounded-xl border text-xs font-semibold transition-all active:scale-95 shadow-sm group cursor-pointer ${
                 activeTab === 'search'
-                  ? 'bg-teal-500/20 border-teal-500 text-teal-300 shadow-teal-500/10'
-                  : 'bg-[#0b1325] hover:bg-[#111d38] border-slate-700/80 text-slate-300 hover:text-teal-300 hover:border-teal-500/50'
+                  ? 'bg-teal-50 dark:bg-teal-500/20 border-teal-500 text-teal-700 dark:text-teal-300 shadow-teal-500/10'
+                  : 'bg-white hover:bg-slate-100 dark:bg-[#0b1325] dark:hover:bg-[#111d38] border-slate-200 dark:border-slate-700/80 text-slate-700 hover:text-teal-700 dark:text-slate-300 dark:hover:text-teal-300'
               }`}
               title={lang === 'ar' ? 'البحث السريع في سجلات المرضى والأرشيف' : 'Search patient records & MRN'}
               aria-label="Search patient records"
             >
-              <Search className="w-4 h-4 text-teal-400 group-hover:scale-110 transition-transform flex-shrink-0" />
+              <Search className="w-4 h-4 text-teal-600 dark:text-teal-400 group-hover:scale-110 transition-transform flex-shrink-0" />
             </button>
           )}
 
@@ -200,10 +202,10 @@ export const Header: React.FC<HeaderProps> = ({
                 }}
                 className={`relative flex items-center gap-2 px-3 py-1.5 sm:py-2 rounded-xl border text-xs font-semibold transition-all active:scale-95 shadow-sm cursor-pointer ${
                   hasActiveNotice
-                    ? 'bg-red-950/80 border-red-500 text-red-200 hover:bg-red-900 ring-2 ring-red-500/30'
+                    ? 'bg-red-100 dark:bg-red-950/80 border-red-400 dark:border-red-500 text-red-800 dark:text-red-200 hover:bg-red-200 dark:hover:bg-red-900 ring-2 ring-red-500/30'
                     : notificationPermission === 'granted'
-                    ? 'bg-emerald-950/50 border-emerald-500/50 text-emerald-300 hover:bg-emerald-900/60'
-                    : 'bg-[#0b1325] hover:bg-[#111d38] border-amber-500/50 text-amber-300'
+                    ? 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-300 dark:border-emerald-500/50 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60'
+                    : 'bg-white hover:bg-slate-100 dark:bg-[#0b1325] dark:hover:bg-[#111d38] border-slate-200 dark:border-amber-500/50 text-slate-700 dark:text-amber-300'
                 }`}
                 title={
                   hasActiveNotice
@@ -213,40 +215,40 @@ export const Header: React.FC<HeaderProps> = ({
               >
                 {hasActiveNotice ? (
                   <>
-                    <BellRing className="w-4 h-4 text-red-400 animate-bounce" />
+                    <BellRing className="w-4 h-4 text-red-600 dark:text-red-400 animate-bounce" />
                     <span className="hidden sm:inline">{lang === 'ar' ? 'تنبيه طارئ' : 'Emergency Alert'}</span>
-                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[11px] font-black text-white shadow-md animate-pulse">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-[11px] font-black text-white shadow-md animate-pulse">
                       {activeAlertMessage ? 1 : criticalCount}
                     </span>
                   </>
                 ) : notificationPermission === 'granted' ? (
                   <>
-                    <BellRing className="w-4 h-4 text-emerald-400" />
+                    <BellRing className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                     <span className="hidden sm:inline">{lang === 'ar' ? 'الإشعارات' : 'Alerts'}</span>
-                    <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 dark:bg-emerald-400"></span>
                   </>
                 ) : (
                   <>
-                    <Bell className="w-4 h-4 text-amber-400 animate-pulse" />
+                    <Bell className="w-4 h-4 text-amber-600 dark:text-amber-400 animate-pulse" />
                     <span className="hidden sm:inline">{lang === 'ar' ? 'تفعيل التنبيهات' : 'Enable Alerts'}</span>
-                    <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                    <span className="w-2 h-2 rounded-full bg-amber-500 dark:bg-amber-400"></span>
                   </>
                 )}
               </button>
 
               {/* Integrated Notification Popover Dropdown */}
               {isNotificationMenuOpen && (
-                <div className={`absolute top-full mt-2 ${isRTL ? 'left-0' : 'right-0'} w-80 sm:w-96 bg-[#0c162c] border border-slate-700/80 rounded-2xl shadow-2xl p-4 z-50 animate-in fade-in zoom-in-95`}>
-                  <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                <div className={`absolute top-full mt-2 ${isRTL ? 'left-0' : 'right-0'} w-80 sm:w-96 bg-white dark:bg-[#0c162c] border border-slate-200 dark:border-slate-700/80 rounded-2xl shadow-2xl p-4 z-50 animate-in fade-in zoom-in-95`}>
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
                     <div className="flex items-center gap-2">
-                      <BellRing className="w-4 h-4 text-teal-400" />
-                      <span className="text-xs font-bold text-white">
+                      <BellRing className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                      <span className="text-xs font-bold text-slate-900 dark:text-white">
                         {lang === 'ar' ? 'مركز التنبيهات والإشعارات' : 'Notification Center'}
                       </span>
                     </div>
                     <button
                       onClick={() => setIsNotificationMenuOpen(false)}
-                      className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
+                      className="text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                     >
                       <X className="w-4 h-4" />
                     </button>
@@ -349,7 +351,7 @@ export const Header: React.FC<HeaderProps> = ({
       )}
 
       {/* Desktop Tab Navigation Bar (Interactive Bed Pages) */}
-      <div className="max-w-[1600px] mx-auto hidden md:flex items-center gap-1.5 mt-2 pt-2 border-t border-slate-800/60 overflow-x-auto">
+      <div className="max-w-[1600px] mx-auto hidden md:flex items-center gap-1.5 mt-2 pt-2 border-t border-slate-200 dark:border-slate-800/60 overflow-x-auto">
         {settings.features.enableBedMatrix && (
           <button
             onClick={() => {
@@ -358,17 +360,17 @@ export const Header: React.FC<HeaderProps> = ({
             }}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
               activeTab === 'beds' && !selectedBedNumber
-                ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+                ? 'bg-teal-50 dark:bg-teal-500/20 text-teal-800 dark:text-teal-300 border border-teal-300 dark:border-teal-500/40 shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/40'
             }`}
             title={lang === 'ar' ? 'عرض الكونسول المركزي لجميع الأسرة الستة' : 'View 6-Bed Central Console Grid'}
           >
-            <Layers className="w-3.5 h-3.5 text-teal-400" />
+            <Layers className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
             <span>{lang === 'ar' ? 'شبكة الأسِرّة الستة (Matrix)' : '6-Bed Console'}</span>
           </button>
         )}
 
-        <span className="text-slate-700 mx-1">|</span>
+        <span className="text-slate-300 dark:text-slate-700 mx-1">|</span>
 
         {/* Individual Dedicated Bed Pages */}
         {beds.map((b) => {
@@ -385,18 +387,18 @@ export const Header: React.FC<HeaderProps> = ({
               }}
               className={`px-2.5 py-1.5 rounded-lg text-xs transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
                 isSelected
-                  ? 'bg-teal-500/25 text-teal-200 border border-teal-500/50 font-black shadow-md'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent'
+                  ? 'bg-teal-100 dark:bg-teal-500/25 text-teal-900 dark:text-teal-200 border border-teal-400 dark:border-teal-500/50 font-black shadow-sm'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/50 border border-transparent'
               }`}
               title={lang === 'ar' ? `صفحة السرير ${b.bedNumber}` : `Bed ${b.bedNumber} Dedicated Page`}
             >
-              <span className={`font-mono font-extrabold ${b.status === 'ISOLATION' ? 'text-red-500 font-black' : 'text-teal-400'}`}>{b.bedNumber}</span>
+              <span className={`font-mono font-extrabold ${b.status === 'ISOLATION' ? 'text-red-500 font-black' : 'text-teal-600 dark:text-teal-400'}`}>{b.bedNumber}</span>
               <span className="truncate max-w-[110px] text-[11px]">
                 {isOccupied 
                   ? (patient?.fullNameAr?.split(' ')[0] || patient?.fullNameEn?.split(' ')[0] || (lang === 'ar' ? 'مشغول' : 'Occupied')) 
                   : (lang === 'ar' ? 'شاغر' : 'Vacant')}
               </span>
-              <span className={`w-2 h-2 rounded-full shrink-0 ${isOccupied ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
+              <span className={`w-2 h-2 rounded-full shrink-0 ${isOccupied ? 'bg-emerald-500 dark:bg-emerald-400 animate-pulse' : 'bg-slate-300 dark:bg-slate-600'}`} />
             </button>
           );
         })}

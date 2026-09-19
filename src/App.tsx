@@ -224,11 +224,11 @@ export default function App() {
 
   if (!isReady || isAuthLoading) {
     return (
-      <div className="min-h-screen bg-[#070d18] text-teal-400 flex flex-col items-center justify-center space-y-4">
+      <div className="min-h-screen bg-slate-100 text-teal-600 dark:bg-[#070d18] dark:text-teal-400 flex flex-col items-center justify-center space-y-4">
         <div className="w-12 h-12 rounded-2xl bg-teal-500/20 border border-teal-500/40 flex items-center justify-center animate-spin">
-          <span className="w-6 h-6 border-2 border-teal-400 border-t-transparent rounded-full"></span>
+          <span className="w-6 h-6 border-2 border-teal-500 dark:border-teal-400 border-t-transparent rounded-full"></span>
         </div>
-        <div className="text-sm font-bold font-mono tracking-widest text-slate-300">
+        <div className="text-sm font-bold font-mono tracking-widest text-slate-600 dark:text-slate-300">
           INITIALIZING SOLI MEDICAL MICU (FIREBASE REAL-TIME CLOUD SYNC)...
         </div>
       </div>
@@ -240,7 +240,7 @@ export default function App() {
   const selectedPatient = getPatientForBed(selectedBed, patients);
 
   return (
-    <div className="min-h-screen bg-[#070d18] text-[#dbe2fd] flex flex-row font-sans selection:bg-teal-500 selection:text-teal-950" dir={isRTL ? 'rtl' : 'ltr'}>
+    <div className="min-h-screen bg-[#f1f5f9] text-[#0f172a] dark:bg-[#070d18] dark:text-[#dbe2fd] flex flex-row font-sans selection:bg-teal-500 selection:text-teal-950 transition-colors duration-200" dir={isRTL ? 'rtl' : 'ltr'}>
       {/* Sidebar: Full Height Sticky Column on Desktop + Mobile Slide Drawer */}
       <Sidebar
         isOpen={isSidebarOpen}
@@ -405,6 +405,7 @@ export default function App() {
                         key={bed.bedNumber}
                         bed={bed}
                         patient={patient}
+                        isSelected={selectedBedNumber === bed.bedNumber}
                         onSelectBed={(bNum) => {
                           setSelectedBedNumber(bNum);
                           setActiveTab('beds');

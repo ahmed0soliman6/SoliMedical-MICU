@@ -445,21 +445,25 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
   const activeCount = antibiotics.filter(a => a.status === 'ACTIVE').length;
 
   return (
-    <div id="patient-antibiotics-card" className="bg-[#0b1224] border border-amber-500/40 rounded-2xl p-4 shadow-xl space-y-4 animate-in fade-in duration-300">
+    <div 
+      id="patient-antibiotics-card" 
+      data-expanded={!isCollapsed ? "true" : "false"}
+      className="icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-4 border transition-all animate-in fade-in duration-300"
+    >
       {/* Header Bar */}
       <div 
         onClick={() => setIsCollapsed(!isCollapsed)}
-        className="flex items-center justify-between border-b border-slate-800 pb-3 cursor-pointer hover:bg-slate-800/40 p-2 rounded-xl transition-all"
+        className="icu-card-header-toggle flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3 cursor-pointer p-2 rounded-xl transition-all"
       >
         <div className="flex items-center gap-2.5">
-          <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400">
+          <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-500 dark:text-amber-400">
             <Pill className="w-5 h-5" />
           </div>
           <div className="flex items-center gap-2 whitespace-nowrap">
-            <h3 className="text-base font-bold text-white whitespace-nowrap">
+            <h3 className="text-base font-bold text-slate-900 dark:text-white whitespace-nowrap">
               {lang === 'ar' ? 'المضادات الحيوية' : 'Antibiotics'}
             </h3>
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold font-mono bg-amber-950/80 text-amber-300 border border-amber-700/60 shadow-sm whitespace-nowrap">
+            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold font-mono bg-amber-100 dark:bg-amber-950/80 text-amber-900 dark:text-amber-300 border border-amber-300 dark:border-amber-700/60 shadow-sm whitespace-nowrap">
               {activeCount} {lang === 'ar' ? 'نشط' : 'Active'}
             </span>
           </div>
@@ -469,9 +473,9 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
         <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
           <button
             onClick={() => setIsCollapsed(!isCollapsed)}
-            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all cursor-pointer flex items-center gap-1 text-xs"
+            className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-all cursor-pointer flex items-center gap-1 text-xs border border-slate-300 dark:border-slate-700"
           >
-            <span className="text-[11px] text-slate-400 hidden sm:inline">
+            <span className="text-[11px] text-slate-700 dark:text-slate-300 font-medium hidden sm:inline">
               {isCollapsed ? (lang === 'ar' ? 'عرض السجل' : 'Expand') : (lang === 'ar' ? 'طي' : 'Collapse')}
             </span>
             {isCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
