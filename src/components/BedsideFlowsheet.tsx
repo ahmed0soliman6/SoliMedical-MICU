@@ -68,6 +68,7 @@ import { dischargeOrTransferPatient, getPatientForBed } from '../services/dataMo
 import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
 import { useAuth } from '../services/AuthContext.tsx';
+import { useAppNotifications } from '../services/NotificationContext.tsx';
 import { syncStatLabsToCloud, deleteStatLabFromCloud, syncLabResultToCloud, syncPatientToCloud, syncPumpToCloud, deletePumpFromCloud, firestore } from '../services/firebase.ts';
 import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { FullPageAdmission } from './FullPageAdmission.tsx';
@@ -134,6 +135,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
   const { settings } = useSystemSettings();
   const { t, lang, isRTL } = useTranslation();
   const { currentUser } = useAuth();
+  const { triggerNotification } = useAppNotifications();
   
   const [activeTab, setActiveTab] = useState<'all' | 'paperFlowsheet' | 'labs' | 'antibiotics' | 'investigations' | 'vitals' | 'vent' | 'pumps' | 'fluids' | 'sbar' | 'notes' | 'disposition' | 'labTemplates'>('all');
   const [isPatientCardCollapsed, setIsPatientCardCollapsed] = useState<boolean>(true);
@@ -1101,6 +1103,31 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
           role: StaffRole.CONSULTANT,
         },
       });
+
+      // Trigger Smart Discharge / Death / Transfer Notification
+      const isDeceased = dispType === DispositionType.CLINICAL_MORTALITY;
+      const isTransfer = dispType === DispositionType.TRANSFER_GENERAL_WARD || 
+                         dispType === DispositionType.TRANSFER_SURGERY || 
+                         dispType === DispositionType.TRANSFER_CARDIOLOGY || 
+                         dispType === DispositionType.TRANSFER_EXTERNAL_HOSPITAL;
+      const notifType = isDeceased ? 'DEATH' : isTransfer ? 'TRANSFER' : 'DISCHARGE';
+      const patientName = patient.fullNameAr || patient.fullNameEn || `Bed ${bed.bedNumber}`;
+
+      triggerNotification({
+        type: notifType,
+        titleEn: isDeceased ? `Patient Deceased - Bed ${bed.bedNumber}` : isTransfer ? `Patient Transferred - Bed ${bed.bedNumber}` : `Patient Discharged - Bed ${bed.bedNumber}`,
+        titleAr: isDeceased ? `تسجيل وفاة - سرير ${bed.bedNumber}` : isTransfer ? `تحويل مريض - سرير ${bed.bedNumber}` : `خروج مريض - سرير ${bed.bedNumber}`,
+        messageEn: `Patient ${patientName} dispositioned (${dispType}). Click to view archive record.`,
+        messageAr: `تم تسجيل خروج المريض ${patientName} (${dispType}) ونقل السجل للأرشيف. اضغط لعرض الملف.`,
+        target: {
+          action: 'OPEN_ARCHIVE',
+          patientId: patient.id,
+          patientMrn: patient.mrn,
+          patientName: patientName,
+          bedNumber: bed.bedNumber,
+        },
+      });
+
       onDataUpdated();
       onBack();
     } catch (err) {

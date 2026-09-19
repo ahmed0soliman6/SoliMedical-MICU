@@ -39,12 +39,14 @@ import {
   Database,
   RefreshCw,
   Loader2,
-  CloudOff
+  CloudOff,
+  Bell
 } from 'lucide-react';
 import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
 import { SystemFeatureFlags } from '../types/settings.ts';
 import { ClinicalOptionsManager } from './ClinicalOptionsManager.tsx';
+import { NotificationSettingsCard } from './NotificationSettingsCard.tsx';
 import { clearLocalBrowserDataAndSyncFromCloud, clearAllCloudAndLocalDataAndReset } from '../services/firebase.ts';
 
 interface SettingsModalProps {
@@ -130,6 +132,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
       modules: true,
       bedside: true,
       alerts: true,
+      notificationsHub: true,
       rbac: true,
       clinicalCatalogs: true,
       labsConfig: true,
@@ -411,6 +414,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
       items: featureItems.filter(f => f.category === 'alerts')
     },
     {
+      id: 'notificationsHub',
+      labelAr: 'إدارة وتخصيص التنبيهات المرئية والصوتية (Notification Center)',
+      labelEn: 'Visual & Audio Notifications Hub',
+      badgeAr: 'تنبيهات مخصصة',
+      badgeEn: 'Smart Alerts',
+      icon: BellRing,
+      isCustom: true
+    },
+    {
       id: 'clinicalCatalogs',
       labelAr: 'إدارة خيارات المضخات والتنفس وميزان السوائل (إضافة وحذف الخيارات)',
       labelEn: 'Infusion Pumps, Ventilator & Fluid Balance Catalogs (Add & Delete)',
@@ -452,23 +464,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
     <div className="w-full space-y-4 animate-in fade-in duration-300 pb-12" dir={isRTL ? 'rtl' : 'ltr'}>
       {/* Large Full-Width Settings Container */}
       <div 
-        className="w-full max-w-6xl mx-auto bg-[#0a1224] border border-slate-800 rounded-3xl shadow-xl p-4 sm:p-7 text-slate-100 flex flex-col"
+        className="w-full max-w-6xl mx-auto bg-white dark:bg-[#0a1224] border border-slate-200 dark:border-slate-800 rounded-3xl shadow-xl p-4 sm:p-7 text-slate-900 dark:text-slate-100 flex flex-col transition-colors"
         dir={isRTL ? 'rtl' : 'ltr'}
       >
         {/* Page Header Bar */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-800/80 mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-200 dark:border-slate-800/80 mb-6">
           <div className="flex items-center gap-3.5">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-teal-500/20 to-teal-500/5 border border-teal-500/30 flex items-center justify-center text-teal-400 shadow-lg shadow-teal-500/10">
+            <div className="w-11 h-11 rounded-2xl bg-teal-50 dark:bg-teal-500/10 border border-teal-200 dark:border-teal-500/30 flex items-center justify-center text-teal-600 dark:text-teal-400 shadow-sm">
               <Settings className="w-6 h-6" />
             </div>
             <div>
-              <h1 className="text-lg sm:text-xl font-extrabold text-white tracking-tight flex items-center gap-2">
+              <h1 className="text-lg sm:text-xl font-extrabold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
                 <span>{lang === 'ar' ? 'مركز تخصيص وإعدادات المنظومة الشامل' : 'System Configuration Center'}</span>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-teal-950 text-teal-300 border border-teal-800">
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-teal-100 dark:bg-teal-950 text-teal-800 dark:text-teal-300 border border-teal-300 dark:border-teal-800">
                   v2.5 MICU
                 </span>
               </h1>
-              <p className="text-xs text-slate-400 mt-0.5">
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                 {lang === 'ar' 
                   ? 'إدارة مرنة لجميع الموديولات والخصائص السريرية والمزامنة السحابية والصلاحيات' 
                   : 'Modular clinical controls, flowsheet tabs, telemetry flags, and access governance'}
@@ -479,26 +491,29 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
           {/* Quick Accordion Actions: Expand All / Collapse All & Close */}
           <div className="flex items-center gap-2 self-end sm:self-center">
             <button
+              type="button"
               onClick={expandAll}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 text-xs font-semibold transition-all active:scale-95 cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold transition-all active:scale-95 cursor-pointer shadow-sm"
               title={lang === 'ar' ? 'فتح جميع البطاقات' : 'Expand all cards'}
             >
-              <FolderOpen className="w-3.5 h-3.5 text-teal-400" />
+              <FolderOpen className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
               <span>{lang === 'ar' ? 'توسيع الكل' : 'Expand All'}</span>
             </button>
 
             <button
+              type="button"
               onClick={collapseAll}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 text-xs font-semibold transition-all active:scale-95 cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold transition-all active:scale-95 cursor-pointer shadow-sm"
               title={lang === 'ar' ? 'طي جميع البطاقات' : 'Collapse all cards'}
             >
-              <FolderMinus className="w-3.5 h-3.5 text-amber-400" />
+              <FolderMinus className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
               <span>{lang === 'ar' ? 'طي الكل' : 'Collapse All'}</span>
             </button>
 
             <button
+              type="button"
               onClick={onClose}
-              className="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:border-slate-700 transition-all active:scale-95 group cursor-pointer"
+              className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-all active:scale-95 group cursor-pointer shadow-sm"
               title={lang === 'ar' ? 'العودة لشبكة الأسِرّة' : 'Close settings'}
             >
               <X className="w-5 h-5 group-hover:rotate-90 transition-transform" />
@@ -517,35 +532,36 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                 key={section.id}
                 className={`rounded-2xl border transition-all duration-300 overflow-hidden ${
                   isExpanded 
-                    ? 'bg-[#0c1426] border-teal-500/40 shadow-xl ring-1 ring-teal-500/20' 
-                    : 'bg-[#080d1a] border-slate-800/80 hover:border-slate-700 hover:bg-[#0a0f1c]'
+                    ? 'bg-slate-50/70 dark:bg-[#0c1426] border-teal-500/40 shadow-md ring-1 ring-teal-500/20' 
+                    : 'bg-white dark:bg-[#080d1a] border-slate-200 dark:border-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-[#0a0f1c]'
                 }`}
               >
                 {/* Collapsible Card Trigger Header */}
                 <button
+                  type="button"
                   onClick={() => toggleSection(section.id)}
                   className="w-full p-4 sm:p-5 flex items-center justify-between gap-4 text-left transition-colors cursor-pointer group"
                 >
                   <div className="flex items-center gap-3.5">
                     <div className={`p-2.5 rounded-xl border transition-colors ${
                       isExpanded 
-                        ? 'bg-teal-500/20 border-teal-500/40 text-teal-300' 
-                        : 'bg-slate-900 border-slate-800 text-slate-400 group-hover:text-teal-400'
+                        ? 'bg-teal-100 dark:bg-teal-500/20 border-teal-300 dark:border-teal-500/40 text-teal-700 dark:text-teal-300' 
+                        : 'bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 group-hover:text-teal-600 dark:group-hover:text-teal-400'
                     }`}>
                       <Icon className="w-5 h-5" />
                     </div>
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className={`text-sm sm:text-base font-bold transition-colors ${isExpanded ? 'text-white' : 'text-slate-200'}`}>
+                        <h3 className={`text-sm sm:text-base font-bold transition-colors ${isExpanded ? 'text-slate-900 dark:text-white' : 'text-slate-800 dark:text-slate-200'}`}>
                           {lang === 'ar' ? section.labelAr : section.labelEn}
                         </h3>
                         {section.badgeAr && (
-                          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-slate-400">
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400">
                             {lang === 'ar' ? section.badgeAr : section.badgeEn}
                           </span>
                         )}
                       </div>
-                      <p className="text-[11px] text-slate-400 mt-0.5">
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
                         {lang === 'ar' ? section.labelEn : section.labelAr}
                       </p>
                     </div>
@@ -553,7 +569,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
 
                   <div className="flex items-center gap-2">
                     <div className={`p-2 rounded-xl transition-all ${
-                      isExpanded ? 'bg-teal-500/10 text-teal-400 rotate-180' : 'text-slate-500 group-hover:text-slate-300'
+                      isExpanded ? 'bg-teal-100 dark:bg-teal-500/10 text-teal-700 dark:text-teal-400 rotate-180' : 'text-slate-400 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300'
                     }`}>
                       <ChevronDown className="w-5 h-5" />
                     </div>
@@ -569,34 +585,38 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                       exit={{ height: 0, opacity: 0 }}
                       transition={{ duration: 0.25, ease: 'easeInOut' }}
                     >
-                      <div className="px-4 sm:px-6 pb-6 pt-2 border-t border-slate-800/60">
+                      <div className="px-4 sm:px-6 pb-6 pt-2 border-t border-slate-200 dark:border-slate-800/60">
                         {section.isCustom ? (
-                          section.id === 'language' ? (
+                          section.id === 'notificationsHub' ? (
+                            <NotificationSettingsCard />
+                          ) : section.id === 'language' ? (
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
                               <button
+                                type="button"
                                 onClick={() => setLanguage('en')}
-                                className={`p-5 rounded-2xl border text-left transition-all ${
+                                className={`p-5 rounded-2xl border text-left transition-all cursor-pointer ${
                                   lang === 'en' 
-                                    ? 'bg-teal-500/10 border-teal-500 text-teal-300 ring-1 ring-teal-500/30 shadow-md' 
-                                    : 'bg-[#060a14] border-slate-800 text-slate-400 hover:border-slate-700'
+                                    ? 'bg-teal-50 dark:bg-teal-500/10 border-teal-500 text-teal-900 dark:text-teal-300 ring-1 ring-teal-500/30 shadow-sm' 
+                                    : 'bg-white dark:bg-[#060a14] border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-700'
                                 }`}
                               >
                                 <div className="flex items-center justify-between">
                                   <span className="block font-black text-base">ENGLISH</span>
-                                  {lang === 'en' && <CheckCircle2 className="w-5 h-5 text-teal-400" />}
+                                  {lang === 'en' && <CheckCircle2 className="w-5 h-5 text-teal-600 dark:text-teal-400" />}
                                 </div>
                                 <span className="text-xs opacity-75 mt-1 block">Strictly English International Medical Standard (LTR)</span>
                               </button>
                               <button
+                                type="button"
                                 onClick={() => setLanguage('ar')}
-                                className={`p-5 rounded-2xl border text-right transition-all ${
+                                className={`p-5 rounded-2xl border text-right transition-all cursor-pointer ${
                                   lang === 'ar' 
-                                    ? 'bg-teal-500/10 border-teal-500 text-teal-300 ring-1 ring-teal-500/30 shadow-md' 
-                                    : 'bg-[#060a14] border-slate-800 text-slate-400 hover:border-slate-700'
+                                    ? 'bg-teal-50 dark:bg-teal-500/10 border-teal-500 text-teal-900 dark:text-teal-300 ring-1 ring-teal-500/30 shadow-sm' 
+                                    : 'bg-white dark:bg-[#060a14] border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-700'
                                 }`}
                               >
                                 <div className="flex items-center justify-between">
-                                  {lang === 'ar' && <CheckCircle2 className="w-5 h-5 text-teal-400" />}
+                                  {lang === 'ar' && <CheckCircle2 className="w-5 h-5 text-teal-600 dark:text-teal-400" />}
                                   <span className="block font-black text-base">العربية السريرية</span>
                                 </div>
                                 <span className="text-xs opacity-75 mt-1 block">واجهة معربة مع الحفاظ على الاختصارات الطبية (RTL)</span>
@@ -611,8 +631,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                               {dbActionResult && (
                                 <div className={`p-4 rounded-xl border flex items-center gap-3 text-xs font-bold ${
                                   dbActionResult.success 
-                                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' 
-                                    : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                                    ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-300 dark:border-emerald-500/30 text-emerald-800 dark:text-emerald-400' 
+                                    : 'bg-rose-50 dark:bg-rose-500/10 border-rose-300 dark:border-rose-500/30 text-rose-800 dark:text-rose-400'
                                 }`}>
                                   {dbActionResult.success ? <CheckCircle2 className="w-5 h-5 flex-shrink-0" /> : <AlertTriangle className="w-5 h-5 flex-shrink-0" />}
                                   <span>{dbActionResult.message}</span>
@@ -621,24 +641,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
 
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {/* 1. Clear Browser Data & Re-sync from Cloud */}
-                                <div className="p-5 rounded-2xl bg-[#060a14] border border-teal-500/30 hover:border-teal-500/50 transition-all flex flex-col justify-between gap-4">
+                                <div className="p-5 rounded-2xl bg-white dark:bg-[#060a14] border border-teal-200 dark:border-teal-500/30 hover:border-teal-400 dark:hover:border-teal-500/50 transition-all flex flex-col justify-between gap-4 shadow-sm">
                                   <div>
-                                    <div className="flex items-center gap-2.5 text-teal-400 font-bold mb-2">
+                                    <div className="flex items-center gap-2.5 text-teal-700 dark:text-teal-400 font-bold mb-2">
                                       <RefreshCw className="w-5 h-5" />
                                       <h4 className="text-sm">
                                         {lang === 'ar' ? 'حذف بيانات المتصفح فقط واستعادتها من السحابة' : 'Clear Browser Data & Re-sync'}
                                       </h4>
                                     </div>
-                                    <p className="text-xs text-slate-400 leading-relaxed">
+                                    <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
                                       {lang === 'ar'
                                         ? 'يمسح بيانات المرضى والأسِرّة المحفوظة مؤقتاً في هذا المتصفح فقط، ثم ينفذ إعادة جلب تلقائي لأحدث البيانات السحابية الحقيقية من فايربيس دون مس البيانات السحابية.'
                                         : 'Clears local IndexedDB browser cache for this device only, then re-syncs active patient states directly from Firestore Cloud.'}
                                     </p>
                                   </div>
                                   <button
+                                    type="button"
                                     onClick={() => setConfirmModalType('CLEAR_LOCAL')}
                                     disabled={isSyncingLocal || isResettingCloud}
-                                    className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 border border-teal-500/40 text-xs font-extrabold transition-all cursor-pointer disabled:opacity-50"
+                                    className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-teal-50 hover:bg-teal-100 dark:bg-teal-500/20 dark:hover:bg-teal-500/30 text-teal-800 dark:text-teal-300 border border-teal-300 dark:border-teal-500/40 text-xs font-extrabold transition-all cursor-pointer disabled:opacity-50"
                                   >
                                     {isSyncingLocal ? (
                                       <>
@@ -655,24 +676,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                                 </div>
 
                                 {/* 2. Reset All Cloud and Local Data */}
-                                <div className="p-5 rounded-2xl bg-[#060a14] border border-rose-500/30 hover:border-rose-500/50 transition-all flex flex-col justify-between gap-4">
+                                <div className="p-5 rounded-2xl bg-white dark:bg-[#060a14] border border-rose-200 dark:border-rose-500/30 hover:border-rose-400 dark:hover:border-rose-500/50 transition-all flex flex-col justify-between gap-4 shadow-sm">
                                   <div>
-                                    <div className="flex items-center gap-2.5 text-rose-400 font-bold mb-2">
+                                    <div className="flex items-center gap-2.5 text-rose-700 dark:text-rose-400 font-bold mb-2">
                                       <Trash2 className="w-5 h-5" />
                                       <h4 className="text-sm">
                                         {lang === 'ar' ? 'حذف البيانات من السحابة والمتصفح والبدء من جديد' : 'Purge All Cloud & Browser Data (Fresh Start)'}
                                       </h4>
                                     </div>
-                                    <p className="text-xs text-slate-400 leading-relaxed">
+                                    <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
                                       {lang === 'ar'
                                         ? 'تنبيه هام: يحذف كافة سجلات المرضى والأسِرّة نهائياً من فايربيس والمتصفح، ويعيد تشغيل المنظومة ببيانات طبية سريرية حقيقية للبدء من جديد.'
                                         : 'WARNING: Permanently deletes all patient records from Firestore Cloud and local browser cache, resetting the unit with clean, real clinical ICU datasets.'}
                                     </p>
                                   </div>
                                   <button
+                                    type="button"
                                     onClick={() => setConfirmModalType('RESET_CLOUD')}
                                     disabled={isSyncingLocal || isResettingCloud}
-                                    className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-xs font-extrabold transition-all cursor-pointer disabled:opacity-50"
+                                    className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-500/20 dark:hover:bg-rose-500/30 text-rose-800 dark:text-rose-300 border border-rose-300 dark:border-rose-500/40 text-xs font-extrabold transition-all cursor-pointer disabled:opacity-50"
                                   >
                                     {isResettingCloud ? (
                                       <>
@@ -692,8 +714,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                               {/* Confirmation Modal Overlay */}
                               {confirmModalType && (
                                 <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                                  <div className="bg-[#0a1224] border border-slate-800 rounded-3xl p-6 max-w-md w-full space-y-5 shadow-2xl text-white">
-                                    <div className="flex items-center gap-3 text-amber-400">
+                                  <div className="bg-white dark:bg-[#0a1224] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-md w-full space-y-5 shadow-2xl text-slate-900 dark:text-white">
+                                    <div className="flex items-center gap-3 text-amber-600 dark:text-amber-400">
                                       <AlertTriangle className="w-7 h-7 flex-shrink-0" />
                                       <h3 className="text-base font-extrabold">
                                         {confirmModalType === 'CLEAR_LOCAL'
@@ -702,7 +724,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                                       </h3>
                                     </div>
 
-                                    <p className="text-xs text-slate-300 leading-relaxed">
+                                    <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
                                       {confirmModalType === 'CLEAR_LOCAL'
                                         ? (lang === 'ar'
                                           ? 'هل أنت متأكد من مسح بيانات المتصفح المحلية فقط؟ سيتم إعادة جلب البيانات الحالية فوراً من السحابة.'
@@ -714,16 +736,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
 
                                     <div className="flex items-center gap-3 pt-2">
                                       <button
+                                        type="button"
                                         onClick={() => setConfirmModalType(null)}
-                                        className="flex-1 py-2.5 px-4 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-white font-bold text-xs transition-all cursor-pointer"
+                                        className="flex-1 py-2.5 px-4 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white font-bold text-xs transition-all cursor-pointer"
                                       >
                                         {lang === 'ar' ? 'إلغاء' : 'Cancel'}
                                       </button>
                                       <button
+                                        type="button"
                                         onClick={confirmModalType === 'CLEAR_LOCAL' ? handleClearLocalBrowserData : handleResetCloudAndLocalData}
                                         className={`flex-1 py-2.5 px-4 rounded-xl font-extrabold text-xs transition-all cursor-pointer ${
                                           confirmModalType === 'CLEAR_LOCAL'
-                                            ? 'bg-teal-500 hover:bg-teal-400 text-slate-950 shadow-md'
+                                            ? 'bg-teal-600 hover:bg-teal-500 text-white shadow-md'
                                             : 'bg-rose-600 hover:bg-rose-500 text-white shadow-md'
                                         }`}
                                       >
@@ -740,38 +764,38 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                             <form onSubmit={handleSaveUnit} className="space-y-4 max-w-3xl mt-2">
                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
-                                  <label className="block text-xs font-bold text-slate-400 mb-1.5">
+                                  <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5">
                                     {lang === 'ar' ? 'اسم وحدة العناية المركزة' : 'Unit Name'}
                                   </label>
                                   <input
                                     type="text"
                                     value={unitForm.unitName}
                                     onChange={(e) => setUnitForm({ ...unitForm, unitName: e.target.value })}
-                                    className="w-full bg-[#060a14] border border-slate-800 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-teal-500 transition-all font-semibold text-sm"
+                                    className="w-full bg-white dark:bg-[#060a14] border border-slate-300 dark:border-slate-800 rounded-xl px-4 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500 transition-all font-semibold text-sm"
                                   />
                                 </div>
                                 <div>
-                                  <label className="block text-xs font-bold text-slate-400 mb-1.5">
+                                  <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5">
                                     {lang === 'ar' ? 'المناوبة الحالية' : 'Active Shift'}
                                   </label>
                                   <input
                                     type="text"
                                     value={unitForm.shiftName}
                                     onChange={(e) => setUnitForm({ ...unitForm, shiftName: e.target.value })}
-                                    className="w-full bg-[#060a14] border border-slate-800 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-teal-500 transition-all font-semibold text-sm"
+                                    className="w-full bg-white dark:bg-[#060a14] border border-slate-300 dark:border-slate-800 rounded-xl px-4 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500 transition-all font-semibold text-sm"
                                   />
                                 </div>
                               </div>
                               <div className="flex items-center gap-3 pt-2">
                                 <button
                                   type="submit"
-                                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs transition-all shadow-md cursor-pointer"
+                                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs transition-all shadow-md cursor-pointer"
                                 >
                                   <Save className="w-4 h-4" />
                                   <span>{lang === 'ar' ? 'حفظ إعدادات الوحدة' : 'Save Unit Details'}</span>
                                 </button>
                                 {savedFeedback && (
-                                  <div className="flex items-center gap-1.5 text-emerald-400 font-bold text-xs animate-in fade-in">
+                                  <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-bold text-xs animate-in fade-in">
                                     <Check className="w-4 h-4" />
                                     <span>{lang === 'ar' ? 'تم الحفظ بنجاح' : 'Saved successfully'}</span>
                                   </div>
@@ -787,29 +811,30 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                               return (
                                 <button
                                   key={item.key}
+                                  type="button"
                                   onClick={() => toggleFeature(item.key)}
                                   className={`p-4 rounded-xl border text-left flex items-start justify-between gap-3 transition-all cursor-pointer ${
                                     isEnabled 
-                                      ? 'bg-[#10192d] border-teal-500/30 shadow-sm' 
-                                      : 'bg-[#060a14] border-slate-800/80 opacity-60 hover:opacity-90'
+                                      ? 'bg-teal-50/70 dark:bg-[#10192d] border-teal-300 dark:border-teal-500/30 text-slate-900 dark:text-white shadow-sm' 
+                                      : 'bg-white dark:bg-[#060a14] border-slate-200 dark:border-slate-800/80 text-slate-600 dark:text-slate-400 opacity-70 hover:opacity-100'
                                   }`}
                                 >
                                   <div className="flex items-start gap-3">
                                     <div className={`p-2 rounded-lg border transition-colors ${
-                                      isEnabled ? 'bg-teal-500/10 border-teal-500/20 text-teal-400' : 'bg-slate-900 border-slate-800 text-slate-600'
+                                      isEnabled ? 'bg-teal-100 dark:bg-teal-500/10 border-teal-300 dark:border-teal-500/20 text-teal-700 dark:text-teal-400' : 'bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-600'
                                     }`}>
                                       <ItemIcon className="w-4 h-4" />
                                     </div>
                                     <div>
-                                      <h4 className={`text-xs sm:text-sm font-bold transition-colors ${isEnabled ? 'text-white' : 'text-slate-400'}`}>
+                                      <h4 className={`text-xs sm:text-sm font-bold transition-colors ${isEnabled ? 'text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-400'}`}>
                                         {lang === 'ar' ? item.labelAr : item.labelEn}
                                       </h4>
-                                      <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed">
+                                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
                                         {lang === 'ar' ? item.descriptionAr : item.descriptionEn}
                                       </p>
                                     </div>
                                   </div>
-                                  <div className={`w-9 h-5 rounded-full transition-colors relative flex items-center p-0.5 flex-shrink-0 mt-0.5 ${isEnabled ? 'bg-teal-500' : 'bg-slate-800'}`}>
+                                  <div className={`w-9 h-5 rounded-full transition-colors relative flex items-center p-0.5 flex-shrink-0 mt-0.5 ${isEnabled ? 'bg-teal-600 dark:bg-teal-500' : 'bg-slate-300 dark:bg-slate-800'}`}>
                                     <div className={`w-4 h-4 rounded-full bg-white transition-transform ${isEnabled ? (isRTL ? '-translate-x-4' : 'translate-x-4') : 'translate-x-0'}`} />
                                   </div>
                                 </button>
@@ -827,10 +852,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
         </div>
 
         {/* Restore System Defaults Footer */}
-        <div className="pt-6 mt-4 border-t border-slate-800/80 flex justify-center">
+        <div className="pt-6 mt-4 border-t border-slate-200 dark:border-slate-800/80 flex justify-center">
           <button
+            type="button"
             onClick={resetToDefaults}
-            className="flex items-center gap-2 px-6 py-3 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-amber-400 hover:border-amber-500/30 transition-all text-xs font-bold cursor-pointer group"
+            className="flex items-center gap-2 px-6 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:text-amber-700 dark:hover:text-amber-400 hover:border-amber-300 dark:hover:border-amber-500/30 transition-all text-xs font-bold cursor-pointer group shadow-sm"
           >
             <RotateCcw className="w-4 h-4 group-hover:rotate-180 transition-transform duration-500" />
             <span>{lang === 'ar' ? 'استعادة إعدادات المصنع الافتراضية' : 'Restore System Factory Defaults'}</span>

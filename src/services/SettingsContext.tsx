@@ -1,5 +1,5 @@
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
-import { SystemSettings, DEFAULT_SYSTEM_SETTINGS } from '../types/settings.ts';
+import { SystemSettings, DEFAULT_SYSTEM_SETTINGS, DEFAULT_NOTIFICATION_SETTINGS, NotificationSettings } from '../types/settings.ts';
 
 const SETTINGS_STORAGE_KEY = 'soli_medical_icu_settings_v1';
 
@@ -20,6 +20,18 @@ export function loadSavedSettings(): SystemSettings {
       unit: {
         ...DEFAULT_SYSTEM_SETTINGS.unit,
         ...(parsed.unit || {}),
+      },
+      notifications: {
+        ...DEFAULT_NOTIFICATION_SETTINGS,
+        ...(parsed.notifications || {}),
+        vitalThresholds: {
+          ...DEFAULT_NOTIFICATION_SETTINGS.vitalThresholds,
+          ...(parsed.notifications?.vitalThresholds || {}),
+        },
+        events: {
+          ...DEFAULT_NOTIFICATION_SETTINGS.events,
+          ...(parsed.notifications?.events || {}),
+        }
       },
       labCategories: parsed.labCategories || DEFAULT_SYSTEM_SETTINGS.labCategories,
       infusionDrugs: parsed.infusionDrugs || DEFAULT_SYSTEM_SETTINGS.infusionDrugs,
@@ -48,6 +60,7 @@ export function saveSettingsToStorage(settings: SystemSettings): void {
 interface SettingsContextType {
   settings: SystemSettings;
   updateSettings: (newSettings: Partial<SystemSettings>) => void;
+  updateNotificationSettings: (newNotifs: Partial<NotificationSettings>) => void;
   toggleFeature: (featureKey: keyof SystemSettings['features']) => void;
   toggleTheme: () => void;
   resetToDefaults: () => void;
@@ -96,6 +109,32 @@ export const SettingsProvider = ({ children }: { children: ReactNode }) => {
           ...prev.unit,
           ...(newSettings.unit || {}),
         },
+        notifications: {
+          ...prev.notifications,
+          ...(newSettings.notifications || {}),
+          events: {
+            ...prev.notifications.events,
+            ...(newSettings.notifications?.events || {}),
+          }
+        },
+        lastUpdated: new Date().toISOString(),
+      };
+      return updated;
+    });
+  };
+
+  const updateNotificationSettings = (newNotifs: Partial<NotificationSettings>) => {
+    setSettings((prev) => {
+      const updated: SystemSettings = {
+        ...prev,
+        notifications: {
+          ...prev.notifications,
+          ...newNotifs,
+          events: {
+            ...prev.notifications.events,
+            ...(newNotifs.events || {}),
+          }
+        },
         lastUpdated: new Date().toISOString(),
       };
       return updated;
@@ -121,7 +160,7 @@ export const SettingsProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <SettingsContext.Provider value={{ settings, updateSettings, toggleFeature, toggleTheme, resetToDefaults }}>
+    <SettingsContext.Provider value={{ settings, updateSettings, updateNotificationSettings, toggleFeature, toggleTheme, resetToDefaults }}>
       {children}
     </SettingsContext.Provider>
   );

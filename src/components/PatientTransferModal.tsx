@@ -13,6 +13,7 @@ import { BedRecord, PatientDossier, BedNumber } from '../types/schema.ts';
 import { executeTransfer } from '../services/operations.ts';
 import { useAuth } from '../services/AuthContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
+import { useAppNotifications } from '../services/NotificationContext.tsx';
 
 interface PatientTransferModalProps {
   isOpen: boolean;
@@ -39,6 +40,7 @@ export const PatientTransferModal: React.FC<PatientTransferModalProps> = ({
 }) => {
   const { lang, isRTL } = useTranslation();
   const { currentUser } = useAuth();
+  const { triggerNotification } = useAppNotifications();
 
   const [targetBedId, setTargetBedId] = useState<string>('');
   const [reason, setReason] = useState<string>('');
@@ -98,6 +100,20 @@ export const PatientTransferModal: React.FC<PatientTransferModalProps> = ({
         reason.trim(),
         doctorName
       );
+
+      triggerNotification({
+        type: 'TRANSFER',
+        titleAr: `تحويل مريض - سرير ${effectiveSourceBed.bedNumber} ⬅️ ${targetBedId}`,
+        titleEn: `Patient Transfer - Bed ${effectiveSourceBed.bedNumber} ⬅️ ${targetBedId}`,
+        messageAr: `تم نقل المريض ${patient.fullNameAr || patient.fullNameEn} إلى السرير رقم ${targetBedId}.`,
+        messageEn: `Patient ${patient.fullNameEn || patient.fullNameAr} transferred to Bed ${targetBedId}.`,
+        target: {
+          action: 'OPEN_BED',
+          bedNumber: targetBedId as BedNumber,
+          patientId: patient.id,
+          patientMrn: patient.mrn,
+        },
+      });
 
       (onSuccess || onTransferSuccess)?.();
       onClose();

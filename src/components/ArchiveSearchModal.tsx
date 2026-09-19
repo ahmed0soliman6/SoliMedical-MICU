@@ -12,6 +12,8 @@ interface ArchiveSearchModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSelectPatientBed: (bedNumber: BedNumber) => void;
+  initialSearchTerm?: string;
+  initialFilterType?: 'ALL' | 'ACTIVE_ICU' | 'DISCHARGED' | 'ARCHIVED' | 'DECEASED';
 }
 
 const formatNumericDate = (dateVal?: string | Date | number): string => {
@@ -32,17 +34,25 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
   isOpen,
   onClose,
   onSelectPatientBed,
+  initialSearchTerm = '',
+  initialFilterType = 'ALL',
 }) => {
   const { t, lang, isRTL } = useTranslation();
-  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [searchTerm, setSearchTerm] = useState<string>(initialSearchTerm);
   const [allPatients, setAllPatients] = useState<PatientDossier[]>([]);
-  const [filterType, setFilterType] = useState<'ALL' | 'ACTIVE_ICU' | 'DISCHARGED' | 'ARCHIVED' | 'DECEASED'>('ALL');
+  const [filterType, setFilterType] = useState<'ALL' | 'ACTIVE_ICU' | 'DISCHARGED' | 'ARCHIVED' | 'DECEASED'>(initialFilterType);
 
   useEffect(() => {
     if (isOpen) {
       loadPatients();
+      if (initialSearchTerm) {
+        setSearchTerm(initialSearchTerm);
+      }
+      if (initialFilterType) {
+        setFilterType(initialFilterType);
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, initialSearchTerm, initialFilterType]);
 
   const loadPatients = async () => {
     const list = await db.patients.toArray();

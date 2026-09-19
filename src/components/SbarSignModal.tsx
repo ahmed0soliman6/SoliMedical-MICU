@@ -43,6 +43,7 @@ import { signSbarHandover, acknowledgeSbarHandover } from '../services/dataModel
 import { useTranslation } from '../services/i18n.ts';
 import { useAuth } from '../services/AuthContext.tsx';
 import { db } from '../db/icuSyncDb.ts';
+import { useAppNotifications } from '../services/NotificationContext.tsx';
 
 interface SbarSignModalProps {
   isOpen: boolean;
@@ -84,6 +85,7 @@ export const SbarSignModal: React.FC<SbarSignModalProps> = ({
   const { lang, isRTL } = useTranslation();
   const { currentUser, allUsers } = useAuth();
   const { settings } = useSystemSettings();
+  const { triggerNotification } = useAppNotifications();
 
   // Internal fetched states if not supplied via props
   const [patient, setPatient] = useState<PatientDossier | null>(initialPatient || null);
@@ -156,6 +158,23 @@ export const SbarSignModal: React.FC<SbarSignModalProps> = ({
       const updated = await acknowledgeSbarHandover(pendingHandover.id, docInfo);
       if (updated) {
         setPreviousHandovers(prev => prev.map(h => h.id === updated.id ? updated : h));
+
+        // Trigger SBAR Handover Received Notification
+        const pName = patientName || patient?.fullNameAr || patient?.fullNameEn || `Bed ${bedNumber}`;
+        triggerNotification({
+          type: 'SBAR_RECEIVED',
+          titleEn: `SBAR Acknowledged - Bed ${bedNumber}`,
+          titleAr: `تم استلام مناوبة SBAR - سرير ${bedNumber}`,
+          messageEn: `Shift handover acknowledged by ${docInfo.name} for Bed ${bedNumber} (${pName}).`,
+          messageAr: `تم استلام وتأكيد تسليم المناوبة بواسطة ${docInfo.name} لسرير ${bedNumber} (${pName}).`,
+          target: {
+            action: 'OPEN_SBAR',
+            bedNumber,
+            patientId,
+            patientName: pName,
+          },
+        });
+
         onHandoverSigned();
         setModalTab('NEW');
       }
@@ -471,6 +490,24 @@ export const SbarSignModal: React.FC<SbarSignModalProps> = ({
           name: incomingDoctorName.trim(),
           role: StaffRole.RESIDENT,
         } : undefined,
+      });
+
+      // Trigger SBAR Handover Signed Notification
+      const pName = patientName || patient?.fullNameAr || patient?.fullNameEn || `Bed ${bedNumber}`;
+      const outgoingName = currentUser?.nameAr || currentUser?.nameEn || outgoingDoctorName.trim() || (lang === 'ar' ? 'الطبيب المعالج' : 'Attending Physician');
+
+      triggerNotification({
+        type: 'SBAR_HANDOVER',
+        titleEn: `SBAR Handover Signed - Bed ${bedNumber}`,
+        titleAr: `تسليم مناوبة SBAR - سرير ${bedNumber}`,
+        messageEn: `Shift handover documented by ${outgoingName} for Bed ${bedNumber} (${pName}).`,
+        messageAr: `تم توثيق واعتماد تسليم المناوبة بواسطة ${outgoingName} لسرير ${bedNumber} (${pName}).`,
+        target: {
+          action: 'OPEN_SBAR',
+          bedNumber,
+          patientId,
+          patientName: pName,
+        },
       });
 
       onHandoverSigned();

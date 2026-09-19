@@ -15,6 +15,7 @@ import { doc, updateDoc } from 'firebase/firestore';
 import { firestore } from '../services/firebase.ts';
 import { COLLECTIONS } from '../types/contracts.ts';
 import { useTranslation } from '../services/i18n.ts';
+import { useAppNotifications } from '../services/NotificationContext.tsx';
 
 interface BedIsolationModalProps {
   isOpen: boolean;
@@ -43,6 +44,7 @@ export const BedIsolationModal: React.FC<BedIsolationModalProps> = ({
   onUpdated,
 }) => {
   const { lang, isRTL } = useTranslation();
+  const { triggerNotification } = useAppNotifications();
 
   const [selectedStatus, setSelectedStatus] = useState<BedStatus>(bed?.status || BedStatus.VACANT);
   const [isIsolated, setIsIsolated] = useState<boolean>(
@@ -108,6 +110,21 @@ export const BedIsolationModal: React.FC<BedIsolationModalProps> = ({
         });
       } catch (cloudErr) {
         console.warn('Firestore bed status update (offline cache will sync):', cloudErr);
+      }
+
+      if (isIsolated) {
+        triggerNotification({
+          type: 'ISOLATION_CHANGE',
+          titleEn: `Isolation Precautions - Bed ${bed.bedNumber}`,
+          titleAr: `تدابير العزل السريري - سرير ${bed.bedNumber}`,
+          messageEn: `Bed ${bed.bedNumber} (${patient?.fullNameEn || 'Patient'}) flagged for Isolation (${isolationType}).`,
+          messageAr: `تم تفعيل تدابير العزل بالسرير رقم ${bed.bedNumber} (${patient?.fullNameAr || 'المريض'}) نوع (${isolationType}).`,
+          target: {
+            action: 'OPEN_ISOLATION',
+            bedNumber: bed.bedNumber,
+            patientName: patient?.fullNameAr || patient?.fullNameEn,
+          }
+        });
       }
 
       (onSuccess || onUpdated)?.();

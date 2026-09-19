@@ -17,6 +17,7 @@ import { searchExistingPatients, PatientCandidateMatch } from '../services/opera
 import { useTranslation } from '../services/i18n.ts';
 import { db } from '../db/icuSyncDb.ts';
 import { toEnglishDigits, parseEnglishFloat, parseEnglishInt } from '../services/numberUtils.ts';
+import { useAppNotifications } from '../services/NotificationContext.tsx';
 
 import { doc } from 'firebase/firestore';
 import { firestore, setDoc } from '../services/firebase.ts';
@@ -39,6 +40,7 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
   onAdmissionSuccess,
 }) => {
   const { lang, isRTL } = useTranslation();
+  const { triggerNotification } = useAppNotifications();
 
   const [bedsList, setBedsList] = useState<BedRecord[]>(allBeds || []);
   const [patientsList, setPatientsList] = useState<PatientDossier[]>(allPatients || []);
@@ -355,6 +357,36 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
         } : undefined,
         initialAdmissionNote: admissionNoteInput.trim() || undefined,
       });
+
+      // Trigger Smart Admission Notification
+      triggerNotification({
+        type: 'ADMISSION',
+        titleEn: `New ICU Admission - Bed ${targetBed}`,
+        titleAr: `دخول حالة جديدة - سرير ${targetBed}`,
+        messageEn: `Patient ${fullNameAr.trim()} successfully admitted to Bed ${targetBed}.`,
+        messageAr: `تم تسجيل دخول المريض ${fullNameAr.trim()} بالسرير رقم ${targetBed}.`,
+        target: {
+          action: 'OPEN_BED',
+          bedNumber: targetBed,
+          patientName: fullNameAr.trim(),
+        }
+      });
+
+      // Trigger Isolation Notification if isolation was selected
+      if (isolation) {
+        triggerNotification({
+          type: 'ISOLATION_CHANGE',
+          titleEn: `Isolation Precautions - Bed ${targetBed}`,
+          titleAr: `تدابير العزل السريري - سرير ${targetBed}`,
+          messageEn: `Bed ${targetBed} flagged with isolation precautions (${isolation}).`,
+          messageAr: `تم تفعيل إجراءات العزل بالسرير رقم ${targetBed} (${isolation}).`,
+          target: {
+            action: 'OPEN_ISOLATION',
+            bedNumber: targetBed,
+            patientName: fullNameAr.trim(),
+          }
+        });
+      }
 
       onAdmissionSuccess();
     } catch (err: any) {

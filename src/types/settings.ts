@@ -100,11 +100,67 @@ export interface SbarFieldConfig {
   order: number;
 }
 
+export interface NotificationEventConfig {
+  visual: boolean;
+  audio: boolean;
+}
+
+export interface VitalThresholdsConfig {
+  minSystolicBp: number;   // default 90 mmHg (BP < 90/50)
+  minDiastolicBp: number;  // default 50 mmHg
+  minSpo2: number;         // default 80 %
+  minMap: number;          // default 60 mmHg
+  minHeartRate: number;    // default 45 bpm
+  maxHeartRate: number;    // default 140 bpm
+  enableTelemetryAlerts: boolean; // default true
+}
+
+export const DEFAULT_VITAL_THRESHOLDS: VitalThresholdsConfig = {
+  minSystolicBp: 90,
+  minDiastolicBp: 50,
+  minSpo2: 80,
+  minMap: 60,
+  minHeartRate: 45,
+  maxHeartRate: 140,
+  enableTelemetryAlerts: true,
+};
+
+export interface NotificationSettings {
+  masterVisual: boolean;          // تفعيل/إلغاء التنبيهات المرئية بالكامل
+  masterAudio: boolean;           // تفعيل/إلغاء التنبيهات الصوتية بالكامل
+  isMuted: boolean;               // كتم التنبيهات الصوتية
+  vitalThresholds: VitalThresholdsConfig; // حدود التنبيه للعلامات الحيوية (BP 90/50, SpO2 80%)
+  events: {
+    admission: NotificationEventConfig;         // عند إضافة مريض جديد
+    discharge: NotificationEventConfig;         // عند خروج المريض (خروج، وفاة، تحويل)
+    sbarHandover: NotificationEventConfig;      // عند تسليم مناوبة SBAR
+    sbarReceived: NotificationEventConfig;      // عند استلام مناوبة SBAR
+    isolationChange: NotificationEventConfig;   // عند تحويل الحالة إلى عزل أو تعديل العزل
+    criticalTelemetry: NotificationEventConfig; // عند هبوط المؤشرات الحيوية الطارئ
+  };
+}
+
+export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
+  masterVisual: true,
+  masterAudio: true,
+  isMuted: false,
+  vitalThresholds: DEFAULT_VITAL_THRESHOLDS,
+  events: {
+    admission: { visual: true, audio: true },
+    discharge: { visual: true, audio: true },
+    sbarHandover: { visual: true, audio: true },
+    sbarReceived: { visual: true, audio: true },
+    isolationChange: { visual: true, audio: true },
+    criticalTelemetry: { visual: true, audio: true },
+  },
+};
+
 export interface SystemSettings {
   language: 'en' | 'ar';
   theme: 'light' | 'dark';
   features: SystemFeatureFlags;
   unit: UnitCustomization;
+  notifications: NotificationSettings;
   labCategories?: LabCategoryTemplate[];
   infusionDrugs?: InfusionDrugPreset[];
   ventilatorModes?: VentilatorModePreset[];
@@ -368,6 +424,7 @@ export const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
     enableCloudSync: true,
     enableMortalityAutoPurge: true,
   },
+  notifications: DEFAULT_NOTIFICATION_SETTINGS,
   unit: {
     unitName: 'Soli Medical MICU',
     unitSubtitle: 'ICU-Sync 6-Pod',

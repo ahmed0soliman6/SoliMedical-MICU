@@ -30,18 +30,31 @@ import {
 } from './services/firebase.ts';
 import { useTranslation } from './services/i18n.ts';
 import { useAuth } from './services/AuthContext.tsx';
+import { useSystemSettings } from './services/SettingsContext.tsx';
+import { DEFAULT_VITAL_THRESHOLDS } from './types/settings.ts';
 import { LoginScreen } from './components/LoginScreen.tsx';
 import { UserManagementModal } from './components/UserManagementModal.tsx';
 import { FullPageAdmission } from './components/FullPageAdmission.tsx';
 import { HospitalChatView } from './components/HospitalChatView.tsx';
+import { TopNotificationBanner } from './components/TopNotificationBanner.tsx';
+import { useAppNotifications } from './services/NotificationContext.tsx';
+import { AppNotificationTarget } from './types/notification.ts';
 
 export default function App() {
   const { t, lang, isRTL } = useTranslation();
   const { currentUser, isAuthenticated, needsInitialAdminSetup, isLoading: isAuthLoading } = useAuth();
+  const { settings } = useSystemSettings();
+  const { setNavigationHandler, triggerNotification } = useAppNotifications();
   const [isReady, setIsReady] = useState(false);
   const [activeTab, setActiveTab] = useState<'beds' | 'sbar' | 'notes' | 'search' | 'users' | 'settings' | 'chat'>('beds');
   const [selectedBedNumber, setSelectedBedNumber] = useState<BedNumber | null>(null);
   const [activeAlertMessage, setActiveAlertMessage] = useState<string | null>(null);
+  const [currentAlertKey, setCurrentAlertKey] = useState<string | null>(null);
+  const [dismissedAlertKeys, setDismissedAlertKeys] = useState<Set<string>>(() => new Set());
+
+  // Archive Search filters when navigated from notification
+  const [archiveSearchTerm, setArchiveSearchTerm] = useState<string>('');
+  const [archiveFilterType, setArchiveFilterType] = useState<'ALL' | 'ACTIVE_ICU' | 'DISCHARGED' | 'ARCHIVED' | 'DECEASED'>('ALL');
 
   // Unit State
   const [beds, setBeds] = useState<BedRecord[]>([]);
@@ -64,6 +77,39 @@ export default function App() {
   const [clinicalNoteTarget, setClinicalNoteTarget] = useState<{ bedNumber?: BedNumber; patientId: string; patientName: string } | null>(null);
   const [isSbarModalOpen, setIsSbarModalOpen] = useState(false);
   const [sbarTarget, setSbarTarget] = useState<{ bedNumber: BedNumber; patientId: string; patientName: string; diagnosis: string; codeStatus: any } | null>(null);
+
+  useEffect(() => {
+    setNavigationHandler((target: AppNotificationTarget) => {
+      if (!target) return;
+      if (target.action === 'OPEN_ARCHIVE') {
+        const searchTerm = target.patientMrn || target.patientNameAr || target.patientNameEn || target.patientName || target.patientId || '';
+        setArchiveSearchTerm(searchTerm);
+        setArchiveFilterType('ALL');
+        setActiveTab('search');
+      } else if (target.action === 'OPEN_BED' || target.action === 'OPEN_ISOLATION' || target.action === 'OPEN_SBAR') {
+        let bedToSelect = target.bedNumber;
+        if (!bedToSelect && target.patientId) {
+          const matchedBed = (beds || []).find(b => b.currentPatientId === target.patientId);
+          if (matchedBed) {
+            bedToSelect = matchedBed.bedNumber;
+          }
+        }
+
+        if (bedToSelect) {
+          setSelectedBedNumber(bedToSelect);
+          setActiveTab('beds');
+          if (target.action === 'OPEN_SBAR') {
+            setIsSbarModalOpen(true);
+          }
+        } else if (target.patientId || target.patientMrn || target.patientName) {
+          const searchTerm = target.patientMrn || target.patientNameAr || target.patientNameEn || target.patientName || target.patientId || '';
+          setArchiveSearchTerm(searchTerm);
+          setArchiveFilterType('ALL');
+          setActiveTab('search');
+        }
+      }
+    });
+  }, [setNavigationHandler, beds]);
 
   // Smart admission with automatic vacant bed detection
   const handleSmartAdmission = useCallback(() => {
@@ -180,24 +226,128 @@ export default function App() {
     };
   }, [reloadData, currentUser?.uid]);
 
-  // Periodic Telemetry MAP & Desaturation Safety Monitor
-  useEffect(() => {
-    const alertInterval = setInterval(async () => {
-      const activeVitals: TelemetryVitals[] = Object.values(latestVitalsMap);
-      const criticalBed = activeVitals.find(v => v.meanArterialPressureMmHg < 65 || (v.spo2Percent || v.oxygenSaturationPercent || 100) < 88);
-      if (criticalBed) {
-        const bedNum = criticalBed.bedNumber || criticalBed.bedId;
-        const bedLabel = lang === 'ar' ? `السرير ${bedNum}` : `Bed ${bedNum}`;
-        const spo2 = criticalBed.spo2Percent || criticalBed.oxygenSaturationPercent || 0;
-        const issue = criticalBed.meanArterialPressureMmHg < 65 
-          ? (lang === 'ar' ? `انخفاض حاد في الضغط الشرياني الوسطي MAP (${criticalBed.meanArterialPressureMmHg} mmHg)` : `Critical MAP Drop (${criticalBed.meanArterialPressureMmHg} mmHg)`)
-          : (lang === 'ar' ? `هبوط نسبة تشبع الأكسجين SpO₂ (${spo2}%)` : `Critical Desaturation SpO₂ (${spo2}%)`);
-        setActiveAlertMessage(`🚨 STAT ALERT [${bedLabel}]: ${issue} — Immediate intervention required!`);
-      }
-    }, 15000);
+  // Dismiss active alert and prevent recurrence for this reading instance
+  const handleDismissAlert = useCallback(() => {
+    if (currentAlertKey) {
+      setDismissedAlertKeys(prev => new Set([...prev, currentAlertKey]));
+    }
+    setActiveAlertMessage(null);
+    setCurrentAlertKey(null);
+  }, [currentAlertKey]);
 
+  // Periodic Telemetry MAP, BP & Desaturation Safety Monitor with Customizable Thresholds
+  useEffect(() => {
+    const thresholds = settings.notifications?.vitalThresholds || DEFAULT_VITAL_THRESHOLDS;
+    if (!thresholds.enableTelemetryAlerts) {
+      if (activeAlertMessage && activeAlertMessage.startsWith('🚨 STAT ALERT')) {
+        setActiveAlertMessage(null);
+        setCurrentAlertKey(null);
+      }
+      return;
+    }
+
+    const checkCriticalVitals = () => {
+      // Only evaluate beds that are actively OCCUPIED with an admitted patient
+      const occupiedBeds = (beds || []).filter(b => b.status === BedStatus.OCCUPIED && b.currentPatientId);
+      if (occupiedBeds.length === 0) {
+        if (activeAlertMessage && activeAlertMessage.startsWith('🚨 STAT ALERT')) {
+          setActiveAlertMessage(null);
+          setCurrentAlertKey(null);
+        }
+        return;
+      }
+
+      let foundAlert: { 
+        key: string; 
+        message: string; 
+        bedNumber: BedNumber; 
+        patientId?: string;
+        issueAr: string; 
+        issueEn: string 
+      } | null = null;
+
+      for (const bed of occupiedBeds) {
+        const bedNum = bed.bedNumber;
+        const v = latestVitalsMap[bedNum];
+        if (!v) continue;
+
+        const vitId = v.id || v.timestamp || 'latest';
+        const alertKey = `bed-${bedNum}-${vitId}`;
+        if (dismissedAlertKeys.has(alertKey)) continue;
+
+        const sys = Number(v.systolicBloodPressureMmHg || (v as any).systolicBp || 120);
+        const dia = Number(v.diastolicBloodPressureMmHg || (v as any).diastolicBp || 80);
+        const map = Number(v.meanArterialPressureMmHg || Math.round((sys + 2 * dia) / 3));
+        const spo2 = Number(v.spo2Percent || v.oxygenSaturationPercent || 98);
+        const hr = Number(v.heartRateBpm || (v as any).pulseBpm || 75);
+
+        const isHypotensive = (sys < thresholds.minSystolicBp || dia < thresholds.minDiastolicBp || map < thresholds.minMap);
+        const isHypoxic = spo2 < thresholds.minSpo2;
+        const isBrady = hr < thresholds.minHeartRate;
+        const isTachy = hr > thresholds.maxHeartRate;
+
+        if (isHypotensive || isHypoxic || isBrady || isTachy) {
+          const bedLabel = lang === 'ar' ? `السرير ${bedNum}` : `Bed ${bedNum}`;
+          let issueAr = '';
+          let issueEn = '';
+
+          if (isHypotensive) {
+            issueAr = `انخفاض حاد في ضغط الدم (${sys}/${dia} ملم زئبق، MAP ${map})`;
+            issueEn = `Severe Hypotension (BP ${sys}/${dia}, MAP ${map} mmHg)`;
+          } else if (isHypoxic) {
+            issueAr = `هبوط حاد في تشبع الأكسجين SpO₂ (${spo2}%)`;
+            issueEn = `Critical Hypoxemia SpO₂ (${spo2}%)`;
+          } else if (isBrady) {
+            issueAr = `تباطؤ نبض حاد (${hr} bpm)`;
+            issueEn = `Severe Bradycardia (${hr} bpm)`;
+          } else if (isTachy) {
+            issueAr = `تسارع نبض حاد (${hr} bpm)`;
+            issueEn = `Severe Tachycardia (${hr} bpm)`;
+          }
+
+          foundAlert = {
+            key: alertKey,
+            bedNumber: bedNum,
+            patientId: bed.currentPatientId || undefined,
+            issueAr,
+            issueEn,
+            message: `🚨 STAT ALERT [${bedLabel}]: ${lang === 'ar' ? issueAr : issueEn} — ${lang === 'ar' ? 'يتطلب تدخلاً سريرياً عاجلاً!' : 'Immediate intervention required!'}`
+          };
+          break;
+        }
+      }
+
+      if (foundAlert) {
+        if (currentAlertKey !== foundAlert.key) {
+          setCurrentAlertKey(foundAlert.key);
+          setActiveAlertMessage(foundAlert.message);
+
+          // Trigger system-wide notification connected to NotificationSettingsCard
+          triggerNotification({
+            type: 'CRITICAL_TELEMETRY',
+            titleAr: `تنبيه طارئ STAT [سرير ${foundAlert.bedNumber}]`,
+            titleEn: `STAT ALERT [Bed ${foundAlert.bedNumber}]`,
+            messageAr: foundAlert.issueAr,
+            messageEn: foundAlert.issueEn,
+            target: {
+              action: 'OPEN_BED',
+              bedNumber: foundAlert.bedNumber,
+              patientId: foundAlert.patientId,
+            },
+          });
+        }
+      } else {
+        if (activeAlertMessage && activeAlertMessage.startsWith('🚨 STAT ALERT')) {
+          setActiveAlertMessage(null);
+          setCurrentAlertKey(null);
+        }
+      }
+    };
+
+    checkCriticalVitals();
+    const alertInterval = setInterval(checkCriticalVitals, 15000);
     return () => clearInterval(alertInterval);
-  }, [latestVitalsMap, lang]);
+  }, [beds, latestVitalsMap, lang, settings.notifications?.vitalThresholds, dismissedAlertKeys, activeAlertMessage]);
 
   // Handle ESC key to exit Bedside Flowsheet back to Central 6-Bed Console
   useEffect(() => {
@@ -240,7 +390,10 @@ export default function App() {
   const selectedPatient = getPatientForBed(selectedBed, patients);
 
   return (
-    <div className="min-h-screen bg-[#f1f5f9] text-[#0f172a] dark:bg-[#070d18] dark:text-[#dbe2fd] flex flex-row font-sans selection:bg-teal-500 selection:text-teal-950 transition-colors duration-200" dir={isRTL ? 'rtl' : 'ltr'}>
+    <div className="min-h-screen bg-[#f1f5f9] text-[#0f172a] dark:bg-[#070d18] dark:text-[#dbe2fd] flex flex-row font-sans selection:bg-teal-500 selection:text-teal-950 transition-colors duration-200 relative" dir={isRTL ? 'rtl' : 'ltr'}>
+      {/* Top Floating Visual Notification Banner (Gentle 2.8s overlay) */}
+      <TopNotificationBanner />
+
       {/* Sidebar: Full Height Sticky Column on Desktop + Mobile Slide Drawer */}
       <Sidebar
         isOpen={isSidebarOpen}
@@ -304,7 +457,7 @@ export default function App() {
             }
           }}
           activeAlertMessage={activeAlertMessage}
-          onDismissAlert={() => setActiveAlertMessage(null)}
+          onDismissAlert={handleDismissAlert}
         />
 
         {/* Main Canvas View - Renders Selected Full Page */}
@@ -312,7 +465,12 @@ export default function App() {
           {activeTab === 'search' ? (
             <ArchiveSearchModal
               isOpen={true}
-              onClose={() => setActiveTab('beds')}
+              initialSearchTerm={archiveSearchTerm}
+              initialFilterType={archiveFilterType}
+              onClose={() => {
+                setArchiveSearchTerm('');
+                setActiveTab('beds');
+              }}
               onSelectPatientBed={(bNum) => {
                 setSelectedBedNumber(bNum);
                 setActiveTab('beds');
