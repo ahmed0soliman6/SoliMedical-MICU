@@ -108,17 +108,43 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({ activeTa
     return () => window.removeEventListener('soli_toggle_floating_chat' as any, handleToggle);
   }, []);
 
-  // Save position on drag end
+  // Save position on drag end with Messenger-style edge snapping
   const handleDragEnd = (_: any, info: { offset: { x: number; y: number } }) => {
-    const newPos = {
-      x: position.x + info.offset.x,
-      y: position.y + info.offset.y,
-    };
-    setPosition(newPos);
-    try {
-      localStorage.setItem(POS_STORAGE_KEY, JSON.stringify(newPos));
-    } catch (e) {
-      console.warn('Unable to save floating chat position:', e);
+    const rawX = position.x + info.offset.x;
+    const rawY = position.y + info.offset.y;
+
+    if (fabRef.current) {
+      const rect = fabRef.current.getBoundingClientRect();
+      const screenW = window.innerWidth;
+      const screenH = window.innerHeight;
+      const centerX = rect.left + rect.width / 2;
+
+      // Snap to closest edge (left vs right)
+      let targetX = rawX;
+      if (centerX < screenW / 2) {
+        targetX = 0; // Left edge
+      } else {
+        targetX = screenW - rect.width - 24; // Right edge
+      }
+
+      // Constrain vertical bounds safely within viewport
+      let targetY = rawY;
+      if (rect.top < 60) {
+        targetY = rawY + (60 - rect.top);
+      } else if (rect.bottom > screenH - 70) {
+        targetY = rawY - (rect.bottom - (screenH - 70));
+      }
+
+      const snappedPos = { x: targetX, y: targetY };
+      setPosition(snappedPos);
+      try {
+        localStorage.setItem(POS_STORAGE_KEY, JSON.stringify(snappedPos));
+      } catch (e) {
+        console.warn('Unable to save floating chat position:', e);
+      }
+    } else {
+      const newPos = { x: rawX, y: rawY };
+      setPosition(newPos);
     }
   };
 
@@ -229,33 +255,43 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({ activeTa
   );
 
   return (
-    <div className="fixed bottom-6 left-6 sm:left-8 z-50 pointer-events-none select-none" dir={isRTL ? 'rtl' : 'ltr'}>
-      <motion.div
-        ref={fabRef}
-        drag={!isOpen}
-        dragMomentum={false}
-        dragElastic={0.05}
-        onDragEnd={handleDragEnd}
-        animate={{ x: position.x, y: position.y }}
-        transition={isOpen ? { duration: 0 } : { type: 'spring', damping: 30, stiffness: 300 }}
-        className="pointer-events-auto relative flex flex-col items-start"
-      >
-        {/* Messenger-style Clean Floating Window */}
-        <AnimatePresence>
-          {isOpen && (
-            <div 
-              className={`absolute z-50 pointer-events-auto transition-all ${
-                isAbove ? 'bottom-full mb-3' : 'top-full mt-3'
-              } ${
-                isLeftAligned ? 'left-0' : 'right-0'
-              }`}
-            >
+    <>
+      {/* Outside Click / Backdrop Dismiss Overlay */}
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="fixed inset-0 z-40 bg-black/20 backdrop-blur-[1px] pointer-events-auto cursor-pointer"
+            onClick={() => setIsOpen(false)}
+            title={lang === 'ar' ? 'اضغط لإغلاق الدردشة' : 'Click outside to close chat'}
+          />
+        )}
+      </AnimatePresence>
+
+      <div className="fixed bottom-6 left-6 sm:left-8 z-50 pointer-events-none select-none" dir={isRTL ? 'rtl' : 'ltr'}>
+        <motion.div
+          ref={fabRef}
+          drag={!isOpen}
+          dragMomentum={false}
+          dragElastic={0.05}
+          onDragEnd={handleDragEnd}
+          animate={{ x: position.x, y: position.y }}
+          transition={isOpen ? { duration: 0 } : { type: 'spring', damping: 30, stiffness: 300 }}
+          className="pointer-events-auto relative flex flex-col items-start"
+        >
+          {/* Messenger-style Clean Floating Window */}
+          <AnimatePresence>
+            {isOpen && (
               <motion.div
-                initial={{ opacity: 0, scale: 0.95, y: isAbove ? 10 : -10 }}
+                initial={{ opacity: 0, scale: 0.92, y: 15 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95, y: isAbove ? 10 : -10 }}
-                transition={{ duration: 0.16, ease: 'easeOut' }}
-                className="w-[92vw] sm:w-[380px] h-[520px] max-h-[75vh] bg-white dark:bg-[#081020] border border-slate-200 dark:border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col backdrop-blur-xl text-slate-900 dark:text-slate-100 ring-1 ring-black/5"
+                exit={{ opacity: 0, scale: 0.92, y: 15 }}
+                transition={{ duration: 0.18, ease: 'easeOut' }}
+                onClick={(e) => e.stopPropagation()}
+                className="fixed z-50 inset-x-3 bottom-20 sm:bottom-24 sm:inset-x-auto sm:left-auto sm:right-6 sm:w-[390px] h-[520px] max-h-[78vh] bg-white dark:bg-[#081020] border border-slate-200 dark:border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col backdrop-blur-xl text-slate-900 dark:text-slate-100 ring-1 ring-black/10 pointer-events-auto"
               >
                 {/* Header */}
                 <div className="p-3 bg-slate-100 dark:bg-[#0a1428] border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
@@ -476,7 +512,6 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({ activeTa
                   </form>
                 </div>
               </motion.div>
-            </div>
           )}
         </AnimatePresence>
 
@@ -515,6 +550,7 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({ activeTa
         </motion.button>
       </motion.div>
     </div>
+    </>
   );
 };
 

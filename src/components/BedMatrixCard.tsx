@@ -32,7 +32,15 @@ export const BedMatrixCard: React.FC<BedMatrixCardProps> = ({
   const isUnavailable = bed.status === BedStatus.UNAVAILABLE;
   const isOccupied = (bed.status === BedStatus.OCCUPIED || isIsolation) && !!patient;
   const isTransferPending = bed.status === BedStatus.TRANSFER_PENDING && !!patient;
-  const isDecontaminating = bed.status === BedStatus.DECONTAMINATING;
+
+  // Check decontamination timer (max 30 minutes = 1800000ms)
+  const lastCleanedTime = bed.lastCleanedAt ? new Date(bed.lastCleanedAt).getTime() : 0;
+  const elapsedMs = Date.now() - lastCleanedTime;
+  const thirtyMinMs = 30 * 60 * 1000;
+  const isDeconExpired = !bed.lastCleanedAt || elapsedMs >= thirtyMinMs;
+  const remainingMinutes = Math.max(0, Math.ceil((thirtyMinMs - elapsedMs) / 60000));
+
+  const isDecontaminating = bed.status === BedStatus.DECONTAMINATING && !isDeconExpired;
   const isVacant = (bed.status === BedStatus.VACANT || (!patient && !isDecontaminating && !isUnavailable && !isIsolation));
 
   useEffect(() => {
@@ -216,8 +224,11 @@ export const BedMatrixCard: React.FC<BedMatrixCardProps> = ({
             </div>
           </div>
         ) : isDecontaminating ? (
-          <div className="text-xs font-semibold text-purple-700 dark:text-purple-300">
-            {lang === 'ar' ? 'قيد التعقيم والتطهير الشامل' : 'Decontamination in progress'}
+          <div className="text-xs font-semibold text-purple-700 dark:text-purple-300 flex items-center justify-between gap-1">
+            <span className="truncate">{lang === 'ar' ? 'قيد التعقيم والتطهير الشامل' : 'Decontamination in progress'}</span>
+            <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 bg-purple-100 text-purple-900 dark:bg-purple-950 dark:text-purple-300 rounded border border-purple-300 dark:border-purple-800 shrink-0">
+              {lang === 'ar' ? `متبقي ${remainingMinutes} دقيقة` : `${remainingMinutes}m left`}
+            </span>
           </div>
         ) : isUnavailable ? (
           <div className="text-xs font-semibold text-red-600 dark:text-red-400">

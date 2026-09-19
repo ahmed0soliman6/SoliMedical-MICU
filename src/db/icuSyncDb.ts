@@ -91,7 +91,7 @@ export async function initializeDatabaseSeed(): Promise<void> {
       bayName: `Critical Care Bay ${num}`,
       isActive: true,
       displayOrder: idx,
-      status: idx === 5 ? BedStatus.UNAVAILABLE : BedStatus.VACANT,
+      status: BedStatus.VACANT,
       currentPatientId: null,
       lastCleanedAt: new Date().toISOString()
     }));
@@ -841,6 +841,14 @@ export async function ensureBedPatientSync(): Promise<void> {
       if (b.status === BedStatus.OCCUPIED) {
         b.status = BedStatus.VACANT;
         modified = true;
+      } else if (b.status === BedStatus.DECONTAMINATING || b.status === BedStatus.UNAVAILABLE) {
+        // Auto-expire decontamination or unassigned status after 30 minutes
+        const cleanedTime = b.lastCleanedAt ? new Date(b.lastCleanedAt).getTime() : 0;
+        const thirtyMinutesMs = 30 * 60 * 1000;
+        if (!b.lastCleanedAt || (Date.now() - cleanedTime) >= thirtyMinutesMs) {
+          b.status = BedStatus.VACANT;
+          modified = true;
+        }
       }
     }
 
