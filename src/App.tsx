@@ -742,8 +742,11 @@ export default function App() {
         />
       )}
 
-      {/* Global Real-Time Floating Chat Widget */}
-      <FloatingChatWidget onOpenFullChatPage={() => setActiveTab('chat')} />
+      {/* Global Real-Time Floating Chat Widget - conditionally hidden when activeTab is chat */}
+      <FloatingChatWidget 
+        activeTab={activeTab} 
+        onOpenFullChatPage={() => setActiveTab('chat')} 
+      />
     </div>
   );
 }

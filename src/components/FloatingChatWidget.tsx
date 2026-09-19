@@ -10,6 +10,8 @@ import {
   Sparkles,
   Building,
   User,
+  Users,
+  Search,
   ArrowLeft,
   ArrowRight,
   Plus,
@@ -17,24 +19,26 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../services/AuthContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
-import { ChatConversation, ChatMessage } from '../types/schema.ts';
+import { ChatConversation, ChatMessage, IcuUser } from '../types/schema.ts';
 import { 
   subscribeToUserChats, 
   subscribeToChatMessages, 
   sendChatMessage, 
+  getOrCreateDirectChat,
   markChatAsRead,
   calculateTotalUnreadCount,
   DEFAULT_DEPARTMENTS 
 } from '../services/chatService.ts';
 
 interface FloatingChatWidgetProps {
+  activeTab?: string;
   onOpenFullChatPage?: () => void;
 }
 
 const POS_STORAGE_KEY = 'soli_floating_chat_pos_v2';
 const VISIBILITY_STORAGE_KEY = 'soli_show_floating_chat_widget';
 
-export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({ onOpenFullChatPage }) => {
+export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({ activeTab, onOpenFullChatPage }) => {
   const { currentUser, allUsers } = useAuth();
   const { lang, isRTL } = useTranslation();
 
@@ -50,9 +54,11 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({ onOpenFu
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState<string>('');
   const [isSending, setIsSending] = useState<boolean>(false);
-  const [mobileSelectedChat, setMobileSelectedChat] = useState<boolean>(false);
+  const [isStaffDrawerOpen, setIsStaffDrawerOpen] = useState<boolean>(false);
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fabRef = useRef<HTMLDivElement>(null);
 
   // Position state with localStorage persistence
   const [position, setPosition] = useState<{ x: number; y: number }>(() => {
@@ -65,6 +71,29 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({ onOpenFu
     }
     return { x: 0, y: 0 };
   });
+
+  // Dynamic state for popup placement relative to FAB
+  const [isAbove, setIsAbove] = useState<boolean>(true);
+  const [isLeftAligned, setIsLeftAligned] = useState<boolean>(true);
+
+  // Measure FAB position on window whenever isOpen changes
+  useEffect(() => {
+    if (isOpen && fabRef.current) {
+      const rect = fabRef.current.getBoundingClientRect();
+      const windowHeight = window.innerHeight;
+      const windowWidth = window.innerWidth;
+
+      // If FAB is in top 45% of viewport, show popup below it; otherwise above
+      setIsAbove(rect.top > windowHeight * 0.45);
+
+      // If FAB is near right edge (< 400px), align popup to right; else align to left
+      if (rect.left + 380 > windowWidth) {
+        setIsLeftAligned(false);
+      } else {
+        setIsLeftAligned(true);
+      }
+    }
+  }, [isOpen, position]);
 
   // Listen for global visibility toggle event
   useEffect(() => {
@@ -150,7 +179,22 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({ onOpenFu
     }
   };
 
-  if (!currentUser || !isVisible) return null;
+  const handleStartDirectChat = async (targetUser: IcuUser) => {
+    if (!currentUser) return;
+    try {
+      const chatId = await getOrCreateDirectChat(currentUser, targetUser);
+      setActiveChatId(chatId);
+      setIsStaffDrawerOpen(false);
+      if (currentUser?.uid) {
+        markChatAsRead(chatId, currentUser.uid);
+      }
+    } catch (err) {
+      console.warn('Failed to open direct chat:', err);
+    }
+  };
+
+  // Automatically hide floating widget when user is actively inside the Chat view
+  if (!currentUser || !isVisible || activeTab === 'chat') return null;
 
   const activeChat = chats.find(c => c.id === activeChatId) || {
     id: activeChatId,
@@ -176,9 +220,18 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({ onOpenFu
     return chat.name;
   };
 
+  const filteredStaff = (allUsers || []).filter(u => 
+    u.uid !== currentUser?.uid &&
+    u.isActive !== false &&
+    ((u.nameEn && u.nameEn.toLowerCase().includes(searchQuery.toLowerCase())) ||
+     (u.nameAr && u.nameAr.includes(searchQuery)) ||
+     (u.email && u.email.toLowerCase().includes(searchQuery.toLowerCase())))
+  );
+
   return (
     <div className="fixed bottom-6 left-6 sm:left-8 z-50 pointer-events-none select-none" dir={isRTL ? 'rtl' : 'ltr'}>
       <motion.div
+        ref={fabRef}
         drag={!isOpen}
         dragMomentum={false}
         dragElastic={0.05}
@@ -187,34 +240,56 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({ onOpenFu
         transition={isOpen ? { duration: 0 } : { type: 'spring', damping: 30, stiffness: 300 }}
         className="pointer-events-auto relative flex flex-col items-start"
       >
-        {/* Quick Popup Floating Card when Open */}
+        {/* Messenger-style Clean Floating Window */}
         <AnimatePresence>
           {isOpen && (
-            <div className="absolute bottom-full left-0 mb-3 z-50 pointer-events-auto">
+            <div 
+              className={`absolute z-50 pointer-events-auto transition-all ${
+                isAbove ? 'bottom-full mb-3' : 'top-full mt-3'
+              } ${
+                isLeftAligned ? 'left-0' : 'right-0'
+              }`}
+            >
               <motion.div
-                initial={{ opacity: 0, scale: 0.95, y: 4 }}
+                initial={{ opacity: 0, scale: 0.95, y: isAbove ? 10 : -10 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95, y: 4 }}
-                transition={{ duration: 0.12 }}
-                className="w-[92vw] sm:w-[380px] h-[500px] max-h-[75vh] bg-white dark:bg-[#081020] border border-slate-200 dark:border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col backdrop-blur-xl text-slate-900 dark:text-slate-100"
+                exit={{ opacity: 0, scale: 0.95, y: isAbove ? 10 : -10 }}
+                transition={{ duration: 0.16, ease: 'easeOut' }}
+                className="w-[92vw] sm:w-[380px] h-[520px] max-h-[75vh] bg-white dark:bg-[#081020] border border-slate-200 dark:border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col backdrop-blur-xl text-slate-900 dark:text-slate-100 ring-1 ring-black/5"
               >
                 {/* Header */}
                 <div className="p-3 bg-slate-100 dark:bg-[#0a1428] border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-xl bg-teal-500/20 border border-teal-500/40 flex items-center justify-center text-teal-700 dark:text-teal-300">
-                      <MessageSquare className="w-4 h-4" />
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-8 h-8 rounded-xl bg-teal-500/20 border border-teal-500/40 flex items-center justify-center text-teal-700 dark:text-teal-300 shrink-0">
+                      {activeChat.type === 'DEPARTMENT' ? <Building className="w-4 h-4" /> : <User className="w-4 h-4" />}
                     </div>
-                    <div>
-                      <h3 className="text-xs font-bold text-slate-900 dark:text-white leading-tight">
-                        {lang === 'ar' ? 'الدردشة السريرية المباشرة' : 'Clinical Direct Chat'}
-                      </h3>
-                      <span className="text-[10px] text-teal-700 dark:text-teal-400 font-mono block">
+                    <div className="min-w-0">
+                      <h3 className="text-xs font-bold text-slate-900 dark:text-white leading-tight truncate">
                         {getChatDisplayName(activeChat)}
+                      </h3>
+                      <span className="text-[10px] text-teal-700 dark:text-teal-400 font-mono block truncate">
+                        {activeChat.type === 'DEPARTMENT' 
+                          ? (lang === 'ar' ? 'قناة عامة' : 'Public Channel') 
+                          : (lang === 'ar' ? 'محادثة خاصة' : 'Direct Message')}
                       </span>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1 shrink-0">
+                    {/* Toggle Users/Staff Drawer */}
+                    <button
+                      type="button"
+                      onClick={() => setIsStaffDrawerOpen(!isStaffDrawerOpen)}
+                      className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
+                        isStaffDrawerOpen
+                          ? 'bg-teal-600 text-white border-teal-500 dark:bg-teal-500 dark:text-slate-950'
+                          : 'bg-slate-200 hover:bg-slate-300 text-slate-700 hover:text-slate-900 border-transparent dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 dark:hover:text-white'
+                      }`}
+                      title={lang === 'ar' ? 'قائمة الكوادر الطبية' : 'Staff Members'}
+                    >
+                      <Users className="w-3.5 h-3.5" />
+                    </button>
+
                     {onOpenFullChatPage && (
                       <button
                         type="button"
@@ -239,7 +314,7 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({ onOpenFu
                 </div>
 
                 {/* Chat Content Body */}
-                <div className="flex-1 flex flex-col min-h-0 bg-slate-50 dark:bg-[#060b14]">
+                <div className="flex-1 flex flex-col min-h-0 bg-slate-50 dark:bg-[#060b14] relative">
                   {/* Horizontal Channel Selector */}
                   <div className="p-2 bg-slate-100 dark:bg-[#091122] border-b border-slate-200 dark:border-slate-800/80 flex items-center gap-1.5 overflow-x-auto custom-scrollbar">
                     {chats.map((c) => {
@@ -250,7 +325,7 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({ onOpenFu
                           key={c.id}
                           onClick={() => {
                             setActiveChatId(c.id);
-                            setMobileSelectedChat(true);
+                            setIsStaffDrawerOpen(false);
                             if (currentUser?.uid) {
                               markChatAsRead(c.id, currentUser.uid);
                             }
@@ -271,6 +346,78 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({ onOpenFu
                       );
                     })}
                   </div>
+
+                  {/* Staff Selection Drawer Overlay */}
+                  <AnimatePresence>
+                    {isStaffDrawerOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        className="absolute inset-x-0 top-0 bottom-0 z-20 bg-white/95 dark:bg-[#081020]/95 backdrop-blur-md p-3 flex flex-col"
+                      >
+                        <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800">
+                          <div className="flex items-center gap-1.5">
+                            <Users className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                            <h4 className="text-xs font-bold text-slate-900 dark:text-white">
+                              {lang === 'ar' ? 'الكوادر الطبية المتاحة' : 'Staff Directory'}
+                            </h4>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setIsStaffDrawerOpen(false)}
+                            className="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-white"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        {/* Search Input */}
+                        <div className="relative my-2">
+                          <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                          <input
+                            type="text"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            placeholder={lang === 'ar' ? 'بحث عن كادر...' : 'Search staff...'}
+                            className="w-full bg-slate-100 dark:bg-[#0c162c] border border-slate-300 dark:border-slate-700 rounded-lg pl-8 pr-2 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-teal-500"
+                          />
+                        </div>
+
+                        {/* Staff List */}
+                        <div className="flex-1 overflow-y-auto space-y-1 pr-1">
+                          {filteredStaff.length === 0 ? (
+                            <p className="text-center text-slate-400 text-xs py-4">
+                              {lang === 'ar' ? 'لا يوجد كوادر مطابقة' : 'No staff found'}
+                            </p>
+                          ) : (
+                            filteredStaff.map((u) => (
+                              <button
+                                key={u.uid}
+                                onClick={() => handleStartDirectChat(u)}
+                                className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-left transition-colors cursor-pointer border border-transparent hover:border-slate-200 dark:hover:border-slate-700"
+                              >
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <div className="w-7 h-7 rounded-lg bg-teal-500/20 text-teal-700 dark:text-teal-300 font-bold text-xs flex items-center justify-center shrink-0">
+                                    {(u.displayName || u.nameEn || 'S').slice(0, 2).toUpperCase()}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                                      {lang === 'ar' ? (u.nameAr || u.displayName) : (u.nameEn || u.displayName)}
+                                    </p>
+                                    <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">{u.role}</p>
+                                  </div>
+                                </div>
+                                <span className="text-[10px] text-teal-600 dark:text-teal-400 font-bold shrink-0">
+                                  {lang === 'ar' ? 'محادثة' : 'Chat'}
+                                </span>
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
 
                   {/* Messages Stream */}
                   <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
@@ -351,7 +498,7 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({ onOpenFu
               ? 'bg-rose-600 text-white border-rose-400 ring-4 ring-rose-500/40 animate-bounce'
               : 'bg-white text-teal-800 hover:bg-teal-50 hover:text-teal-950 border-2 border-teal-500/80 shadow-xl ring-2 ring-teal-500/20 dark:bg-[#0a1428]/95 dark:text-teal-300 dark:hover:bg-teal-950/80 dark:hover:text-white dark:border-teal-500/60 dark:ring-teal-500/20'
           }`}
-          title={lang === 'ar' ? 'زر الدردشة السريرية العائم (يمكنك تحريكه بسحب)' : 'Floating Clinical Chat (Drag to move)'}
+          title={lang === 'ar' ? 'زر الدردشة السريرية العائم (اسحب لتحريكه)' : 'Floating Clinical Chat (Drag to move)'}
         >
           <GripVertical className="w-3.5 h-3.5 text-slate-400 opacity-60 group-hover:opacity-100 transition-opacity" />
           <MessageSquare className="w-5 h-5 shrink-0" />
@@ -370,3 +517,4 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({ onOpenFu
     </div>
   );
 };
+

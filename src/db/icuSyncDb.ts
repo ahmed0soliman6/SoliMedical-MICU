@@ -130,12 +130,12 @@ export async function initializeDatabaseSeed(): Promise<void> {
       currentBedId: '01' as any,
       acuityLevel: AcuityLevel.CRITICAL_STAT as any,
       patientStatus: 'ACTIVE_ICU',
-      allergies: [{ id: 'alg-01', allergen: 'Penicillin', reaction: 'Anaphylaxis', severity: AllergySeverity.FATAL_ANAPHYLAXIS, isLocked: true, verifiedBy: 'د. هشام طلعت' }] as any,
+      allergies: [{ id: 'alg-01', allergen: 'Penicillin', reaction: 'Anaphylaxis', severity: AllergySeverity.FATAL_ANAPHYLAXIS, isLocked: true, verifiedBy: 'طبيب العناية المتابع' }] as any,
       microbiologyHistory: [{ id: 'mic-01', specimenSource: 'Sputum Culture', isolatedOrganism: 'Acinetobacter baumannii', cultureDate: threeDaysAgo, isResistant: true, resistantTo: ['Ceftriaxone'], sensitiveTo: ['Colistin', 'Meropenem'], recommendedIsolation: 'Contact Isolation' }] as any,
       pastVisits: [],
       attendingPhysician: {
         staffId: 'DOC-101',
-        name: 'د. هشام طلعت (Dr. Hesham Talaat)',
+        name: 'د. المدير العام',
         role: StaffRole.CONSULTANT as any,
       },
       primaryNurse: {
@@ -247,12 +247,12 @@ export async function initializeDatabaseSeed(): Promise<void> {
       currentBedId: '04' as any,
       acuityLevel: AcuityLevel.HIGH_VIGILANCE as any,
       patientStatus: 'ACTIVE_ICU',
-      allergies: [{ id: 'alg-04', allergen: 'Sulfa', reaction: 'Skin Rash', severity: AllergySeverity.MILD, isLocked: false, verifiedBy: 'د. هشام طلعت' }] as any,
+      allergies: [{ id: 'alg-04', allergen: 'Sulfa', reaction: 'Skin Rash', severity: AllergySeverity.MILD, isLocked: false, verifiedBy: 'طبيب العناية المتابع' }] as any,
       microbiologyHistory: [],
       pastVisits: [],
       attendingPhysician: {
         staffId: 'DOC-101',
-        name: 'د. هشام طلعت (Dr. Hesham Talaat)',
+        name: 'د. سامح محمود',
         role: StaffRole.CONSULTANT as any,
       },
       primaryNurse: {

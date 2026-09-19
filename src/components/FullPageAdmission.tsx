@@ -303,8 +303,8 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
       }
 
       // Detect current logged in physician / user in background
-      let docName = 'د. هشام طلعت (الاستشاري المسجل)';
-      let nurseName = 'ممرض السرير المسؤول (RN)';
+      let docName = '';
+      let nurseName = '';
       try {
         const storedUser = localStorage.getItem('icu_current_user') || localStorage.getItem('soli_logged_user');
         if (storedUser) {

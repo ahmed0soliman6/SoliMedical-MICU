@@ -1,12 +1,14 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   BedRecord, 
   PatientDossier, 
   BedStatus, 
   BedNumber 
 } from '../types/schema.ts';
+import { db } from '../db/icuSyncDb.ts';
 import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
+import { Stethoscope, UserCheck, Activity } from 'lucide-react';
 
 interface BedMatrixCardProps {
   bed: BedRecord;
@@ -24,6 +26,7 @@ export const BedMatrixCard: React.FC<BedMatrixCardProps> = ({
   onAdmitToBed,
 }) => {
   const { lang } = useTranslation();
+  const [lastHandoverDoctor, setLastHandoverDoctor] = useState<string | null>(null);
   
   const isIsolation = bed.status === BedStatus.ISOLATION || (bed.isolation?.isIsolated ?? false);
   const isUnavailable = bed.status === BedStatus.UNAVAILABLE;
@@ -31,6 +34,44 @@ export const BedMatrixCard: React.FC<BedMatrixCardProps> = ({
   const isTransferPending = bed.status === BedStatus.TRANSFER_PENDING && !!patient;
   const isDecontaminating = bed.status === BedStatus.DECONTAMINATING;
   const isVacant = (bed.status === BedStatus.VACANT || (!patient && !isDecontaminating && !isUnavailable && !isIsolation));
+
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchLastHandover() {
+      if (!patient?.id) {
+        setLastHandoverDoctor(null);
+        return;
+      }
+      try {
+        const sbars = await db.sbarHandovers
+          .where('patientId')
+          .equals(patient.id)
+          .toArray();
+        
+        if (sbars && sbars.length > 0) {
+          sbars.sort((a, b) => new Date(b.outgoingDoctor?.signedAt || b.shiftDate || 0).getTime() - new Date(a.outgoingDoctor?.signedAt || a.shiftDate || 0).getTime());
+          const latest = sbars[0];
+          if (latest?.outgoingDoctor?.name && isMounted) {
+            setLastHandoverDoctor(latest.outgoingDoctor.name);
+            return;
+          }
+        }
+
+        if (isMounted) {
+          const attName = patient?.attendingPhysician?.name || '';
+          if (attName && !attName.includes('هشام طلعت')) {
+            setLastHandoverDoctor(attName);
+          } else {
+            setLastHandoverDoctor(null);
+          }
+        }
+      } catch (e) {
+        if (isMounted) setLastHandoverDoctor(null);
+      }
+    }
+    fetchLastHandover();
+    return () => { isMounted = false; };
+  }, [patient?.id, patient?.attendingPhysician?.name]);
 
   const handleClick = () => {
     if (isOccupied || isTransferPending || isUnavailable || isDecontaminating) {
@@ -40,11 +81,21 @@ export const BedMatrixCard: React.FC<BedMatrixCardProps> = ({
     }
   };
 
+  const patientName = patient
+    ? (lang === 'ar' ? (patient.fullNameAr || patient.fullNameEn) : (patient.fullNameEn || patient.fullNameAr))
+    : '';
+
+  const diagnosisText = patient
+    ? (lang === 'ar' 
+        ? (patient.primaryDiagnosisAr || patient.primaryDiagnosisEn) 
+        : (patient.primaryDiagnosisEn || patient.primaryDiagnosisAr))
+    : '';
+
   return (
     <div 
       onClick={handleClick}
       data-card-open={isSelected ? "true" : "false"}
-      className={`relative rounded-2xl border transition-all duration-200 overflow-hidden flex flex-col justify-between p-4 min-h-[120px] shadow-sm cursor-pointer hover:scale-[1.01] hover:shadow-md icu-card-interactive ${
+      className={`relative rounded-2xl border transition-all duration-200 overflow-hidden flex flex-col justify-between p-4 min-h-[135px] shadow-sm cursor-pointer hover:scale-[1.01] hover:shadow-md icu-card-interactive ${
         isSelected
           ? 'icu-card-active ring-2 ring-teal-500 shadow-xl border-teal-500 bg-slate-200/90 dark:bg-[#202f50]'
           : isUnavailable
@@ -124,16 +175,44 @@ export const BedMatrixCard: React.FC<BedMatrixCardProps> = ({
         </div>
       </div>
 
-      {/* Patient Name or Status Text */}
-      <div className="mt-4">
+      {/* Patient Name, Age Badge, Diagnosis & Handover Physician */}
+      <div className="mt-3.5 pt-2 border-t border-slate-200/60 dark:border-slate-800/80">
         {isOccupied || isTransferPending ? (
-          <div>
-            <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white truncate">
-              {patient?.fullNameAr || patient?.fullNameEn}
-              {patient?.age ? <span className="text-xs text-slate-500 dark:text-slate-400 font-normal ml-2">{patient.age}y</span> : ''}
-            </h2>
-            <div className="text-xs text-teal-700 dark:text-teal-300 truncate mt-0.5 font-medium">
-              {patient?.diagnosisAr || patient?.diagnosisEn || (lang === 'ar' ? 'بدون تشخيص' : 'No diagnosis')}
+          <div className="space-y-1.5">
+            {/* Patient Name + Distinctive Age Badge directly next to name */}
+            <div className="flex items-center justify-start gap-2.5 flex-wrap">
+              <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white leading-snug truncate">
+                {patientName || (lang === 'ar' ? 'مريض بدون اسم' : 'Unnamed Patient')}
+              </h2>
+              {patient?.age !== undefined && patient?.age !== null && (
+                <div 
+                  className="inline-flex items-center justify-center min-w-[2rem] h-6 px-2 rounded-full font-mono text-xs font-black bg-teal-100 text-teal-900 border border-teal-300 dark:bg-teal-950 dark:text-teal-300 dark:border-teal-500/50 shadow-sm shrink-0"
+                  title={lang === 'ar' ? `العمر: ${patient.age} سنة` : `Age: ${patient.age} years`}
+                >
+                  {patient.age}{lang === 'ar' ? 'س' : 'y'}
+                </div>
+              )}
+            </div>
+
+            {/* Diagnosis & Handover Doctor (Only if handover exists) */}
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs pt-0.5">
+              {/* Diagnosis */}
+              <div className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300 font-medium min-w-0 max-w-full">
+                <Stethoscope className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
+                <span className="truncate" title={diagnosisText}>
+                  {diagnosisText || (lang === 'ar' ? 'بدون تشخيص' : 'No diagnosis')}
+                </span>
+              </div>
+
+              {/* Handover Physician (Only shown if real handover signed) */}
+              {lastHandoverDoctor && (
+                <div className="flex items-center gap-1 text-slate-600 dark:text-slate-300 text-[11px] font-semibold shrink-0" title={lang === 'ar' ? `طبيب التسليم: ${lastHandoverDoctor}` : `Handover: ${lastHandoverDoctor}`}>
+                  <UserCheck className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                  <span className="truncate max-w-[150px]">
+                    {lastHandoverDoctor}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         ) : isDecontaminating ? (

@@ -3883,29 +3883,29 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                   {(showMoreSbars ? sbarList : sbarList.slice(0, 2)).map((sbar) => (
                   <div 
                     key={sbar.id}
-                    className="bg-[#070c18] border border-slate-800 p-4 rounded-xl space-y-3 shadow-md"
+                    className="bg-slate-50 border border-slate-200 text-slate-900 dark:bg-[#070c18] dark:border-slate-800 dark:text-white p-4 rounded-xl space-y-3 shadow-sm"
                   >
-                    <div className="flex items-center justify-between border-b border-slate-800/80 pb-2.5 flex-wrap gap-2">
+                    <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800/80 pb-2.5 flex-wrap gap-2">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className={`font-mono text-xs font-bold px-2 py-0.5 rounded border ${
                           sbar.shiftType === 'NIGHT' 
-                            ? 'bg-indigo-950 text-indigo-300 border-indigo-800' 
-                            : 'bg-amber-950 text-amber-300 border-amber-800'
+                            ? 'bg-indigo-100 text-indigo-900 border-indigo-300 dark:bg-indigo-950 dark:text-indigo-300 dark:border-indigo-800' 
+                            : 'bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800'
                         }`}>
                           {sbar.shiftType} SHIFT
                         </span>
-                        <span className="text-xs text-slate-300 font-mono font-bold">
+                        <span className="text-xs text-slate-700 dark:text-slate-300 font-mono font-bold">
                           {sbar.shiftDate} ({sbar.shiftStartTime} - {sbar.shiftEndTime})
                         </span>
-                        <span className="text-slate-600">•</span>
-                        <span className="text-xs text-teal-300">
+                        <span className="text-slate-400 dark:text-slate-600">•</span>
+                        <span className="text-xs text-teal-700 dark:text-teal-300 font-medium">
                           {lang === 'ar' ? 'المُسلِّم: ' : 'Outgoing: '}
-                          <strong className="text-white">{sbar.outgoingDoctor.name}</strong> ({sbar.outgoingDoctor.role})
+                          <strong className="text-slate-900 dark:text-white font-black">{sbar.outgoingDoctor.name}</strong> ({sbar.outgoingDoctor.role})
                         </span>
                         {sbar.incomingDoctor && (
-                          <span className="text-xs text-slate-400">
+                          <span className="text-xs text-slate-600 dark:text-slate-400">
                             → {lang === 'ar' ? 'المُستلِم: ' : 'Incoming: '}
-                            <strong className="text-slate-200">{sbar.incomingDoctor.name}</strong>
+                            <strong className="text-slate-900 dark:text-slate-200 font-bold">{sbar.incomingDoctor.name}</strong>
                           </span>
                         )}
                       </div>

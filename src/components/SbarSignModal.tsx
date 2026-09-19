@@ -249,13 +249,13 @@ export const SbarSignModal: React.FC<SbarSignModalProps> = ({
   // Set outgoing doctor default from logged-in user
   useEffect(() => {
     if (currentUser) {
-      setOutgoingDoctorName(currentUser.nameEn || currentUser.nameAr || 'Dr. On Duty');
+      setOutgoingDoctorName(currentUser.nameAr || currentUser.nameEn || '');
       setOutgoingDoctorRole(currentUser.role || StaffRole.SPECIALIST);
-      setOutgoingDoctorStaffId(currentUser.badgeId || currentUser.uid || 'DOC-101');
+      setOutgoingDoctorStaffId(currentUser.badgeId || currentUser.uid || '');
     } else {
-      setOutgoingDoctorName('Dr. On Duty');
+      setOutgoingDoctorName('');
       setOutgoingDoctorRole(StaffRole.SPECIALIST);
-      setOutgoingDoctorStaffId('DOC-101');
+      setOutgoingDoctorStaffId('');
     }
   }, [currentUser]);
 
@@ -693,34 +693,34 @@ export const SbarSignModal: React.FC<SbarSignModalProps> = ({
             {pendingHandover ? (
               <div className="space-y-4">
                 {/* Banner */}
-                <div className="p-3 rounded-xl bg-gradient-to-r from-amber-950/90 via-amber-900/40 to-[#070c18] border border-amber-500/50 shadow-md">
-                  <div className="flex items-start gap-2.5">
-                    <span className="w-7 h-7 rounded-md bg-amber-500 text-slate-950 flex items-center justify-center font-black shrink-0 mt-0.5">
-                      <CheckCircle2 className="w-4 h-4 stroke-[2.5]" />
+                <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-300 text-amber-950 shadow-sm dark:bg-gradient-to-r dark:from-amber-950/90 dark:via-amber-900/40 dark:to-[#070c18] dark:border-amber-500/50">
+                  <div className="flex items-start gap-3">
+                    <span className="w-8 h-8 rounded-lg bg-amber-600 text-white dark:bg-amber-500 dark:text-slate-950 flex items-center justify-center font-black shrink-0 mt-0.5 shadow">
+                      <CheckCircle2 className="w-5 h-5 stroke-[2.5]" />
                     </span>
                     <div className="flex flex-col gap-1 w-full">
                       {/* Row 1: Shift type & Doctor */}
-                      <h4 className="text-xs sm:text-sm font-extrabold text-amber-300 flex items-center gap-2 flex-wrap">
-                        <span>
+                      <h4 className="text-xs sm:text-sm font-black text-amber-900 dark:text-amber-300 flex items-center gap-2 flex-wrap">
+                        <span className="bg-amber-200/80 dark:bg-amber-900/60 text-amber-950 dark:text-amber-200 px-2 py-0.5 rounded text-xs font-bold">
                           {lang === 'ar' 
                             ? (pendingHandover.shiftType === 'NIGHT' ? 'تسليم مسائي' : 'تسليم صباحي') 
                             : `${pendingHandover.shiftType === 'NIGHT' ? 'Night' : 'Day'} Shift`}
                         </span>
-                        <span className="text-amber-500/50">|</span>
-                        <span className="text-amber-100/90 text-xs sm:text-sm">
-                          {lang === 'ar' ? `د. ${pendingHandover.outgoingDoctor.name}` : `Dr. ${pendingHandover.outgoingDoctor.name}`}
+                        <span className="text-amber-400 dark:text-amber-500/50">|</span>
+                        <span className="text-amber-950 font-black dark:text-amber-100 text-xs sm:text-sm">
+                          {lang === 'ar' ? `الطبيب المُسلِّم: د. ${pendingHandover.outgoingDoctor.name}` : `Outgoing Doctor: Dr. ${pendingHandover.outgoingDoctor.name}`}
                         </span>
                       </h4>
                       {/* Row 2: Date & Time (Foldable) */}
-                      <details className="text-xs font-mono text-amber-200/80 cursor-pointer">
-                        <summary className="outline-none">
-                          {lang === 'ar' ? 'عرض تفاصيل المناوبة' : 'Show shift details'}
+                      <details className="text-xs font-bold text-amber-800 dark:text-amber-200/80 cursor-pointer mt-0.5">
+                        <summary className="outline-none hover:underline">
+                          {lang === 'ar' ? 'عرض تفاصيل وتوقيت المناوبة' : 'Show shift details'}
                         </summary>
-                        <div className="flex items-center gap-2 mt-1">
-                          <Calendar className="w-3.5 h-3.5 opacity-70" />
+                        <div className="flex items-center gap-2 mt-1.5 text-xs font-mono bg-amber-100/90 dark:bg-black/40 p-2 rounded-lg border border-amber-200 dark:border-amber-900/40 text-amber-950 dark:text-amber-200">
+                          <Calendar className="w-3.5 h-3.5 opacity-80 text-amber-700 dark:text-amber-300" />
                           <span>{pendingHandover.shiftDate}</span>
-                          <span className="text-amber-500/50 mx-1">|</span>
-                          <Clock className="w-3.5 h-3.5 opacity-70" />
+                          <span className="text-amber-400 dark:text-amber-500/50 mx-1">|</span>
+                          <Clock className="w-3.5 h-3.5 opacity-80 text-amber-700 dark:text-amber-300" />
                           <span>{pendingHandover.shiftStartTime} - {pendingHandover.shiftEndTime}</span>
                         </div>
                       </details>
