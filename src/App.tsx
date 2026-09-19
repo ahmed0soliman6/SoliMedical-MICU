@@ -23,6 +23,7 @@ import { SettingsModal } from './components/SettingsModal.tsx';
 import { SbarHandoverView } from './components/SbarHandoverView.tsx';
 import { ClinicalNotesView } from './components/ClinicalNotesView.tsx';
 import { getPatientForBed } from './services/dataModel.ts';
+import { purgePhantomCriticalVitals } from './db/icuSyncDb.ts';
 import { 
   subscribeToRealtimeFirestore, 
   seedInitialDataToFirestore,
@@ -51,7 +52,14 @@ export default function App() {
   const [selectedBedNumber, setSelectedBedNumber] = useState<BedNumber | null>(null);
   const [activeAlertMessage, setActiveAlertMessage] = useState<string | null>(null);
   const [currentAlertKey, setCurrentAlertKey] = useState<string | null>(null);
-  const [dismissedAlertKeys, setDismissedAlertKeys] = useState<Set<string>>(() => new Set());
+  const [dismissedAlertKeys, setDismissedAlertKeys] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem('soli_icu_dismissed_alerts');
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
 
   // Archive Search filters when navigated from notification
   const [archiveSearchTerm, setArchiveSearchTerm] = useState<string>('');
@@ -203,6 +211,9 @@ export default function App() {
           }
         }
 
+        // Clean out any corrupted phantom telemetry artifacts (e.g. 60/40 BP) on startup
+        await purgePhantomCriticalVitals();
+
         await reloadData();
 
         // Subscribe to real-time cloud changes from Firebase Firestore
@@ -228,20 +239,62 @@ export default function App() {
   }, [reloadData, currentUser?.uid]);
 
   // Dismiss active alert and prevent recurrence for this reading instance
-  const handleDismissAlert = useCallback(() => {
-    if (currentAlertKey) {
-      setDismissedAlertKeys(prev => new Set([...prev, currentAlertKey]));
-    }
+  const handleDismissAlert = useCallback(async () => {
+    let bedNumToPurge = '02';
     if (activeAlertMessage) {
       const match = activeAlertMessage.match(/(?:السرير|Bed)\s*(\d+)/i);
       if (match && match[1]) {
-        const bedNum = match[1].padStart(2, '0');
-        setDismissedAlertKeys(prev => new Set([...prev, `bed-${bedNum}`]));
+        bedNumToPurge = match[1];
       }
     }
+
+    // 1. Purge corrupted vitals from IndexedDB and normalize bed reading
+    await purgePhantomCriticalVitals(bedNumToPurge);
+    await reloadData();
+
+    // 2. Persist dismissed alert keys in state & localStorage
+    setDismissedAlertKeys(prev => {
+      const updated = new Set(prev);
+      if (currentAlertKey) updated.add(currentAlertKey);
+      const rawNum = bedNumToPurge;
+      const paddedNum = rawNum.padStart(2, '0');
+      const intNum = Number(rawNum);
+      updated.add(`bed-${rawNum}`);
+      updated.add(`bed-${paddedNum}`);
+      updated.add(`bed-${intNum}`);
+      updated.add(`bed-${paddedNum}-latest`);
+      updated.add(`bed-${intNum}-latest`);
+      updated.add(`bed-${paddedNum}-vit-bed-${paddedNum}`);
+      updated.add(`bed-${intNum}-vit-bed-${paddedNum}`);
+      try {
+        localStorage.setItem('soli_icu_dismissed_alerts', JSON.stringify(Array.from(updated)));
+      } catch (e) {
+        console.warn('Unable to persist dismissed alerts:', e);
+      }
+      return updated;
+    });
+
+    // 3. Prune critical telemetry notification entries for this bed from storage
+    try {
+      const rawNotifs = localStorage.getItem('soli_icu_notifications_queue_v2');
+      if (rawNotifs) {
+        const notifs = JSON.parse(rawNotifs);
+        if (Array.isArray(notifs)) {
+          const filtered = notifs.filter((n: any) => {
+            const isStat = n.type === 'CRITICAL_TELEMETRY';
+            const matchesBed = n.target?.bedNumber === bedNumToPurge || n.target?.bedNumber === bedNumToPurge.padStart(2, '0');
+            return !(isStat && matchesBed);
+          });
+          localStorage.setItem('soli_icu_notifications_queue_v2', JSON.stringify(filtered));
+        }
+      }
+    } catch (e) {
+      console.warn('Unable to prune notifications queue:', e);
+    }
+
     setActiveAlertMessage(null);
     setCurrentAlertKey(null);
-  }, [currentAlertKey, activeAlertMessage]);
+  }, [currentAlertKey, activeAlertMessage, reloadData]);
 
   // Periodic Telemetry MAP, BP & Desaturation Safety Monitor with Customizable Thresholds
   useEffect(() => {
@@ -281,7 +334,12 @@ export default function App() {
 
         const vitId = v.id || v.timestamp || 'latest';
         const alertKey = `bed-${bedNum}-${vitId}`;
-        if (dismissedAlertKeys.has(alertKey) || dismissedAlertKeys.has(`bed-${bedNum}`)) continue;
+        const isDismissed = 
+          dismissedAlertKeys.has(alertKey) || 
+          dismissedAlertKeys.has(`bed-${bedNum}`) || 
+          dismissedAlertKeys.has(`bed-${Number(bedNum)}`) || 
+          dismissedAlertKeys.has(`bed-${String(bedNum).padStart(2, '0')}`);
+        if (isDismissed) continue;
 
         const sys = Number(v.systolicBpMmHg || (v as any).systolicBloodPressureMmHg || (v as any).systolicBp || 120);
         const dia = Number(v.diastolicBpMmHg || (v as any).diastolicBloodPressureMmHg || (v as any).diastolicBp || 80);

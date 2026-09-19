@@ -179,162 +179,164 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({ onOpenFu
   return (
     <div className="fixed bottom-6 left-6 sm:left-8 z-50 pointer-events-none select-none" dir={isRTL ? 'rtl' : 'ltr'}>
       <motion.div
-        drag
+        drag={!isOpen}
         dragMomentum={false}
         dragElastic={0.05}
         onDragEnd={handleDragEnd}
         animate={{ x: position.x, y: position.y }}
-        transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-        className="pointer-events-auto flex flex-col items-start gap-2"
+        transition={isOpen ? { duration: 0 } : { type: 'spring', damping: 30, stiffness: 300 }}
+        className="pointer-events-auto relative flex flex-col items-start"
       >
         {/* Quick Popup Floating Card when Open */}
         <AnimatePresence>
           {isOpen && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.88, y: 15 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.88, y: 15 }}
-              transition={{ duration: 0.2 }}
-              className="w-[92vw] sm:w-[380px] h-[520px] max-h-[80vh] bg-white dark:bg-[#081020] border border-slate-200 dark:border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col backdrop-blur-xl mb-2 text-slate-900 dark:text-slate-100"
-            >
-              {/* Header */}
-              <div className="p-3 bg-slate-100 dark:bg-[#0a1428] border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-teal-500/20 border border-teal-500/40 flex items-center justify-center text-teal-700 dark:text-teal-300">
-                    <MessageSquare className="w-4 h-4" />
+            <div className="absolute bottom-full left-0 mb-3 z-50 pointer-events-auto">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 4 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 4 }}
+                transition={{ duration: 0.12 }}
+                className="w-[92vw] sm:w-[380px] h-[500px] max-h-[75vh] bg-white dark:bg-[#081020] border border-slate-200 dark:border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col backdrop-blur-xl text-slate-900 dark:text-slate-100"
+              >
+                {/* Header */}
+                <div className="p-3 bg-slate-100 dark:bg-[#0a1428] border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-teal-500/20 border border-teal-500/40 flex items-center justify-center text-teal-700 dark:text-teal-300">
+                      <MessageSquare className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="text-xs font-bold text-slate-900 dark:text-white leading-tight">
+                        {lang === 'ar' ? 'الدردشة السريرية المباشرة' : 'Clinical Direct Chat'}
+                      </h3>
+                      <span className="text-[10px] text-teal-700 dark:text-teal-400 font-mono block">
+                        {getChatDisplayName(activeChat)}
+                      </span>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="text-xs font-bold text-slate-900 dark:text-white leading-tight">
-                      {lang === 'ar' ? 'الدردشة العائمة اللحظية' : 'Quick Floating Chat'}
-                    </h3>
-                    <span className="text-[10px] text-teal-700 dark:text-teal-400 font-mono block">
-                      {getChatDisplayName(activeChat)}
-                    </span>
-                  </div>
-                </div>
 
-                <div className="flex items-center gap-1">
-                  {onOpenFullChatPage && (
+                  <div className="flex items-center gap-1">
+                    {onOpenFullChatPage && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsOpen(false);
+                          onOpenFullChatPage();
+                        }}
+                        className="p-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 hover:text-slate-900 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 dark:hover:text-white transition-colors cursor-pointer"
+                        title={lang === 'ar' ? 'تكبير للشاشة الكاملة' : 'Maximize to full view'}
+                      >
+                        <Maximize2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                     <button
                       type="button"
-                      onClick={() => {
-                        setIsOpen(false);
-                        onOpenFullChatPage();
-                      }}
+                      onClick={() => setIsOpen(false)}
                       className="p-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 hover:text-slate-900 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 dark:hover:text-white transition-colors cursor-pointer"
-                      title={lang === 'ar' ? 'تكبير للشاشة الكاملة' : 'Maximize to full view'}
                     >
-                      <Maximize2 className="w-3.5 h-3.5" />
+                      <X className="w-3.5 h-3.5" />
                     </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setIsOpen(false)}
-                    className="p-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 hover:text-slate-900 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 dark:hover:text-white transition-colors cursor-pointer"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Chat Content Body */}
-              <div className="flex-1 flex flex-col min-h-0 bg-slate-50 dark:bg-[#060b14]">
-                {/* Horizontal Channel Selector */}
-                <div className="p-2 bg-slate-100 dark:bg-[#091122] border-b border-slate-200 dark:border-slate-800/80 flex items-center gap-1.5 overflow-x-auto custom-scrollbar">
-                  {chats.map((c) => {
-                    const isActive = c.id === activeChatId;
-                    const cUnread = currentUser?.uid ? (c.unreadCounts?.[currentUser.uid] || 0) : 0;
-                    return (
-                      <button
-                        key={c.id}
-                        onClick={() => {
-                          setActiveChatId(c.id);
-                          setMobileSelectedChat(true);
-                          if (currentUser?.uid) {
-                            markChatAsRead(c.id, currentUser.uid);
-                          }
-                        }}
-                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold shrink-0 transition-all cursor-pointer flex items-center gap-1.5 ${
-                          isActive
-                            ? 'bg-teal-600 text-white dark:bg-teal-500 dark:text-slate-950 shadow-sm'
-                            : 'bg-slate-200 hover:bg-slate-300 text-slate-700 dark:bg-slate-800/80 dark:hover:bg-slate-700 dark:text-slate-300'
-                        }`}
-                      >
-                        <span className="truncate max-w-[110px]">{getChatDisplayName(c)}</span>
-                        {cUnread > 0 && !isActive && (
-                          <span className="w-4 h-4 rounded-full bg-rose-500 text-white text-[9px] font-black flex items-center justify-center animate-pulse">
-                            {cUnread}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
+                  </div>
                 </div>
 
-                {/* Messages Stream */}
-                <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
-                  {messages.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-full text-slate-400 dark:text-slate-500 space-y-1 text-center py-6">
-                      <MessageSquare className="w-8 h-8 text-slate-400 dark:text-slate-600 stroke-1" />
-                      <p className="text-[11px]">
-                        {lang === 'ar' ? 'لا توجد رسائل سابقة في هذه القناة' : 'No messages in this stream'}
-                      </p>
-                    </div>
-                  ) : (
-                    messages.map((msg) => {
-                      const isMine = msg.senderUid === currentUser.uid;
-                      const formattedTime = new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
+                {/* Chat Content Body */}
+                <div className="flex-1 flex flex-col min-h-0 bg-slate-50 dark:bg-[#060b14]">
+                  {/* Horizontal Channel Selector */}
+                  <div className="p-2 bg-slate-100 dark:bg-[#091122] border-b border-slate-200 dark:border-slate-800/80 flex items-center gap-1.5 overflow-x-auto custom-scrollbar">
+                    {chats.map((c) => {
+                      const isActive = c.id === activeChatId;
+                      const cUnread = currentUser?.uid ? (c.unreadCounts?.[currentUser.uid] || 0) : 0;
                       return (
-                        <div 
-                          key={msg.id} 
-                          className={`flex flex-col ${isMine ? 'items-end' : 'items-start'}`}
+                        <button
+                          key={c.id}
+                          onClick={() => {
+                            setActiveChatId(c.id);
+                            setMobileSelectedChat(true);
+                            if (currentUser?.uid) {
+                              markChatAsRead(c.id, currentUser.uid);
+                            }
+                          }}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold shrink-0 transition-all cursor-pointer flex items-center gap-1.5 ${
+                            isActive
+                              ? 'bg-teal-600 text-white dark:bg-teal-500 dark:text-slate-950 shadow-sm'
+                              : 'bg-slate-200 hover:bg-slate-300 text-slate-700 dark:bg-slate-800/80 dark:hover:bg-slate-700 dark:text-slate-300'
+                          }`}
                         >
-                          <div className="flex items-center gap-1 mb-0.5 px-1 text-[10px]">
-                            <span className="font-semibold text-slate-700 dark:text-slate-300">{msg.senderName}</span>
-                            <span className="text-slate-400 dark:text-slate-500 text-[9px]">{formattedTime}</span>
-                          </div>
-
-                          <div className={`max-w-[85%] p-2.5 rounded-xl text-[11px] leading-relaxed shadow-sm ${
-                            isMine
-                              ? 'bg-teal-600 text-white rounded-br-none border border-teal-500/50'
-                              : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-bl-none border border-slate-200 dark:border-slate-700'
-                          }`}>
-                            <p className="whitespace-pre-wrap break-words">{msg.message}</p>
-                          </div>
-                        </div>
+                          <span className="truncate max-w-[110px]">{getChatDisplayName(c)}</span>
+                          {cUnread > 0 && !isActive && (
+                            <span className="w-4 h-4 rounded-full bg-rose-500 text-white text-[9px] font-black flex items-center justify-center animate-pulse">
+                              {cUnread}
+                            </span>
+                          )}
+                        </button>
                       );
-                    })
-                  )}
-                  <div ref={messagesEndRef} />
-                </div>
+                    })}
+                  </div>
 
-                {/* Input Bar */}
-                <form onSubmit={handleSendMessage} className="p-2 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-[#081020] flex items-center gap-1.5">
-                  <input
-                    type="text"
-                    value={inputText}
-                    onChange={(e) => setInputText(e.target.value)}
-                    placeholder={lang === 'ar' ? 'اكتب رسالتك السريرية...' : 'Type clinical note...'}
-                    className="flex-1 bg-slate-100 dark:bg-[#050912] border border-slate-300 dark:border-slate-700 focus:border-teal-500 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none placeholder-slate-400 dark:placeholder-slate-500"
-                  />
-                  <button
-                    type="submit"
-                    disabled={!inputText.trim() || isSending}
-                    className="p-2 rounded-xl bg-teal-600 hover:bg-teal-500 dark:bg-teal-500 dark:hover:bg-teal-400 disabled:opacity-40 text-white dark:text-slate-950 font-bold cursor-pointer transition-all shrink-0"
-                  >
-                    <Send className="w-4 h-4" />
-                  </button>
-                </form>
-              </div>
-            </motion.div>
+                  {/* Messages Stream */}
+                  <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
+                    {messages.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center h-full text-slate-400 dark:text-slate-500 space-y-1 text-center py-6">
+                        <MessageSquare className="w-8 h-8 text-slate-400 dark:text-slate-600 stroke-1" />
+                        <p className="text-[11px]">
+                          {lang === 'ar' ? 'لا توجد رسائل سابقة في هذه المحادثة' : 'No messages in this chat'}
+                        </p>
+                      </div>
+                    ) : (
+                      messages.map((msg) => {
+                        const isMine = msg.senderUid === currentUser.uid;
+                        const formattedTime = new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+                        return (
+                          <div 
+                            key={msg.id} 
+                            className={`flex flex-col ${isMine ? 'items-end' : 'items-start'}`}
+                          >
+                            <div className="flex items-center gap-1 mb-0.5 px-1 text-[10px]">
+                              <span className="font-semibold text-slate-700 dark:text-slate-300">{msg.senderName}</span>
+                              <span className="text-slate-400 dark:text-slate-500 text-[9px]">{formattedTime}</span>
+                            </div>
+
+                            <div className={`max-w-[85%] p-2.5 rounded-xl text-[11px] leading-relaxed shadow-sm ${
+                              isMine
+                                ? 'bg-teal-600 text-white rounded-br-none border border-teal-500/50'
+                                : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-bl-none border border-slate-200 dark:border-slate-700'
+                            }`}>
+                              <p className="whitespace-pre-wrap break-words">{msg.message}</p>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                    <div ref={messagesEndRef} />
+                  </div>
+
+                  {/* Input Bar */}
+                  <form onSubmit={handleSendMessage} className="p-2 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-[#081020] flex items-center gap-1.5">
+                    <input
+                      type="text"
+                      value={inputText}
+                      onChange={(e) => setInputText(e.target.value)}
+                      placeholder={lang === 'ar' ? 'اكتب رسالتك السريرية...' : 'Type clinical note...'}
+                      className="flex-1 bg-slate-100 dark:bg-[#050912] border border-slate-300 dark:border-slate-700 focus:border-teal-500 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none placeholder-slate-400 dark:placeholder-slate-500"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!inputText.trim() || isSending}
+                      className="p-2 rounded-xl bg-teal-600 hover:bg-teal-500 dark:bg-teal-500 dark:hover:bg-teal-400 disabled:opacity-40 text-white dark:text-slate-950 font-bold cursor-pointer transition-all shrink-0"
+                    >
+                      <Send className="w-4 h-4" />
+                    </button>
+                  </form>
+                </div>
+              </motion.div>
+            </div>
           )}
         </AnimatePresence>
 
         {/* Floating Action Button (FAB) */}
         <motion.button
-          whileHover={{ scale: 1.06 }}
-          whileTap={{ scale: 0.94 }}
+          whileHover={!isOpen ? { scale: 1.04 } : undefined}
+          whileTap={!isOpen ? { scale: 0.96 } : undefined}
           type="button"
           onClick={() => {
             setIsOpen(!isOpen);

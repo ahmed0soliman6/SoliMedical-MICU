@@ -90,18 +90,18 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
 
   return (
     <div className="w-full space-y-4 animate-in fade-in duration-300" dir={isRTL ? 'rtl' : 'ltr'}>
-      <div className="w-full max-w-6xl mx-auto bg-[#0c1426] border border-slate-700/80 rounded-2xl shadow-xl overflow-hidden">
+      <div className="w-full max-w-6xl mx-auto bg-white dark:bg-[#0c1426] border border-slate-200 dark:border-slate-700/80 rounded-2xl shadow-xl overflow-hidden transition-colors">
         {/* Header */}
-        <div className="px-5 py-4 bg-[#090f1d] border-b border-slate-800 flex items-center justify-between">
+        <div className="px-5 py-4 bg-slate-50 dark:bg-[#090f1d] border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-teal-500/10 border border-teal-500/30 flex items-center justify-center text-teal-400">
+            <div className="w-10 h-10 rounded-xl bg-teal-50 border border-teal-200 dark:bg-teal-500/10 dark:border-teal-500/30 flex items-center justify-center text-teal-600 dark:text-teal-400">
               <Search className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-white">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">
                 {lang === 'ar' ? 'أرشيف المرضى والبحث الموحد (MRN Master Index)' : 'MRN Master Archive & Patient Index'}
               </h3>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 {lang === 'ar' 
                   ? 'بحث فوري برقم الملف MRN، الاسم، آخر 4 أرقام، والتشخيص الطبي'
                   : 'Universal search by MRN, patient name, last 4 digits, and diagnosis'}
@@ -110,22 +110,22 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors"
+            className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800/80 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white flex items-center justify-center transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Filter and Search Bar */}
-        <div className="p-4 bg-[#080d19] border-b border-slate-800 space-y-3">
+        <div className="p-4 bg-slate-50/60 dark:bg-[#080d19] border-b border-slate-200 dark:border-slate-800 space-y-3">
           <div className="relative">
-            <Search className={`w-4 h-4 text-slate-400 absolute top-3 ${isRTL ? 'right-3.5' : 'left-3.5'}`} />
+            <Search className={`w-4 h-4 text-slate-400 dark:text-slate-500 absolute top-3 ${isRTL ? 'right-3.5' : 'left-3.5'}`} />
             <input
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder={lang === 'ar' ? "ابحث بالرقم الطبي MRN، اسم المريض بالعربي/الإنجليزي، آخر 4 أرقام، أو التشخيص..." : "Search by MRN, patient name, last 4 digits, or ICD-10 diagnosis..."}
-              className={`w-full bg-[#0f172a] border border-slate-700 rounded-xl py-2.5 text-xs text-white placeholder-slate-500 focus:border-teal-500 focus:outline-none ${isRTL ? 'pr-10 pl-4' : 'pl-10 pr-4'}`}
+              className={`w-full bg-white dark:bg-[#0f172a] border border-slate-300 dark:border-slate-700 rounded-xl py-2.5 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:border-teal-500 focus:outline-none shadow-sm ${isRTL ? 'pr-10 pl-4' : 'pl-10 pr-4'}`}
             />
           </div>
 
@@ -135,10 +135,10 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
                 <button
                   key={type}
                   onClick={() => setFilterType(type)}
-                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                     filterType === type
-                      ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40'
-                      : 'bg-slate-800/70 text-slate-400 hover:text-slate-200'
+                      ? 'bg-teal-50 border border-teal-400 text-teal-800 dark:bg-teal-500/20 dark:text-teal-300 dark:border-teal-500/40 shadow-sm'
+                      : 'bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 dark:bg-slate-800/70 dark:text-slate-400 dark:hover:text-slate-200 dark:border-transparent'
                   }`}
                 >
                   {type === 'ALL' && (lang === 'ar' ? 'الكل' : 'All Records')}
@@ -155,7 +155,7 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
         {/* Results List */}
         <div className="p-4 max-h-[60vh] overflow-y-auto space-y-2.5">
           {filteredPatients.length === 0 ? (
-            <div className="py-12 text-center text-slate-500 text-xs">
+            <div className="py-12 text-center text-slate-500 dark:text-slate-400 text-xs">
               {lang === 'ar' 
                 ? 'لا توجد نتائج مطابقة لبحثك في قاعدة البيانات المحلية.'
                 : 'No matching records found in the local database.'}
@@ -169,50 +169,50 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
               return (
                 <div
                   key={patient.id}
-                  className="bg-[#0f172a] hover:bg-[#131d35] border border-slate-800/90 rounded-xl p-3.5 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                  className="bg-white hover:bg-slate-50 dark:bg-[#0f172a] dark:hover:bg-[#131d35] border border-slate-200 dark:border-slate-800/90 rounded-xl p-3.5 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm"
                 >
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-bold text-white text-sm">
+                      <span className="font-bold text-slate-900 dark:text-white text-sm">
                         {patient.fullNameAr || patient.fullNameEn}
                       </span>
-                      <span className="font-mono text-xs text-teal-400 font-semibold px-2 py-0.5 rounded bg-teal-950/60 border border-teal-800/60">
+                      <span className="font-mono text-xs text-teal-700 dark:text-teal-400 font-semibold px-2 py-0.5 rounded bg-teal-50 dark:bg-teal-950/60 border border-teal-200 dark:border-teal-800/60">
                         #{patient.mrn}
                       </span>
                       {isActive && patient.currentBedId && (
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-700">
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-700">
                           {lang === 'ar' ? `منوم بسرير ${patient.currentBedId}` : `Admitted in Bed ${patient.currentBedId}`}
                         </span>
                       )}
                       {isDeceased && (
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900 text-slate-400 border border-slate-700">
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-300 dark:bg-slate-900 dark:text-slate-400 dark:border-slate-700">
                           {lang === 'ar' ? 'متوفى (أرشيف دائم للقراءة فقط)' : 'Deceased (Permanent Read-Only Archive)'}
                         </span>
                       )}
                       {isDischarged && (
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-800">
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-purple-50 text-purple-800 border border-purple-300 dark:bg-purple-950 dark:text-purple-300 dark:border-purple-800">
                           {lang === 'ar' ? 'نُقل للجناح / خرج' : 'Discharged / Step-Down'}
                         </span>
                       )}
                       {(patient.archiveStatus === 'ARCHIVED' || patient.archiveStatus === 'COLD_STORAGE') && (
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-800/80">
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-300 dark:bg-amber-950/80 dark:text-amber-300 dark:border-amber-800/80">
                           {lang === 'ar' ? 'مؤرشف دائم' : 'Archived Tier'}
                         </span>
                       )}
                       {(patient.nationalIdLast4 || patient.nationalId) && (
-                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-transparent">
                           ID: ****{patient.nationalIdLast4 || (patient.nationalId ? patient.nationalId.slice(-4) : '')}
                         </span>
                       )}
                     </div>
 
-                    <div className="text-xs text-slate-300">
+                    <div className="text-xs text-slate-600 dark:text-slate-300">
                       {lang === 'ar' 
                         ? (patient.primaryDiagnosisAr || patient.primaryDiagnosisEn) 
                         : (patient.primaryDiagnosisEn || patient.primaryDiagnosisAr)}
                     </div>
 
-                    <div className="text-[11px] text-slate-500 flex items-center gap-3 flex-wrap">
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-3 flex-wrap">
                       <span>{lang === 'ar' ? `العمر: ${patient.age} سنة` : `Age: ${patient.age} yo`}</span>
                       <span>•</span>
                       <span>{lang === 'ar' ? `كود الإنعاش: ${patient.codeStatus}` : `Code: ${patient.codeStatus}`}</span>
@@ -229,7 +229,7 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
                           onSelectPatientBed(patient.currentBedId!);
                           onClose();
                         }}
-                        className="px-3 py-1.5 rounded-lg bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 border border-teal-500/40 text-xs font-bold transition-all"
+                        className="px-3 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white dark:bg-teal-500/20 dark:hover:bg-teal-500/30 dark:text-teal-300 dark:border dark:border-teal-500/40 text-xs font-bold transition-all shadow-sm cursor-pointer"
                       >
                         {lang === 'ar' ? `فتح سرير ${patient.currentBedId}` : `Open Bed ${patient.currentBedId}`}
                       </button>

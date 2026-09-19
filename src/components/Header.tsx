@@ -15,6 +15,7 @@ import {
   X, 
   Volume2, 
   VolumeX, 
+  CheckCircle,
   CheckCircle2, 
   Sun, 
   Moon,
@@ -87,6 +88,7 @@ export const Header: React.FC<HeaderProps> = ({
   const { 
     notifications, 
     unreadCount, 
+    markAsRead,
     handleNotificationClick, 
     markAllAsRead, 
     deleteNotification, 
@@ -155,7 +157,7 @@ export const Header: React.FC<HeaderProps> = ({
     }, 3500);
   };
 
-  const hasActiveEmergency = !!activeAlertMessage || criticalCount > 0;
+  const hasActiveEmergency = !!activeAlertMessage;
   const totalAlertBadgeCount = unreadCount + (activeAlertMessage ? 1 : 0);
 
   return (
@@ -275,7 +277,7 @@ export const Header: React.FC<HeaderProps> = ({
                   <BellRing className="w-4 h-4 text-red-600 dark:text-red-400 animate-bounce" />
                   <span className="hidden sm:inline">{lang === 'ar' ? 'تنبيه طارئ' : 'Emergency Alert'}</span>
                   <span className="flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-[11px] font-black text-white shadow-md animate-pulse">
-                    {unreadCount > 0 ? unreadCount : (activeAlertMessage ? 1 : criticalCount)}
+                    {unreadCount > 0 ? unreadCount : 1}
                   </span>
                 </>
               ) : unreadCount > 0 ? (

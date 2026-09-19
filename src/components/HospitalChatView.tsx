@@ -43,8 +43,8 @@ export const HospitalChatView: React.FC = () => {
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
   const [isSending, setIsSending] = useState(false);
   
-  // Responsive mobile navigation state
-  const [showMobileChat, setShowMobileChat] = useState<boolean>(false);
+  // Responsive mobile navigation state - default to true so chat box appears directly
+  const [showMobileChat, setShowMobileChat] = useState<boolean>(true);
 
   // Floating Action Button visibility state
   const [isFloatingWidgetEnabled, setIsFloatingWidgetEnabled] = useState<boolean>(() => {
@@ -70,9 +70,10 @@ export const HospitalChatView: React.FC = () => {
     if (!currentUser?.uid) return;
     const unsub = subscribeToUserChats(currentUser.uid, (list) => {
       setChats(list);
-      // Default to first chat if current active is invalid
+      // Default to dept_general if current active is invalid
       if (list.length > 0 && !list.some(c => c.id === activeChatId)) {
-        setActiveChatId(list[0].id);
+        const generalChat = list.find(c => c.id === 'dept_general');
+        setActiveChatId(generalChat ? generalChat.id : list[0].id);
       }
     });
     return () => unsub();
@@ -203,16 +204,16 @@ export const HospitalChatView: React.FC = () => {
             <button
               type="button"
               onClick={handleToggleFloatingWidget}
-              className={`px-2.5 py-1.5 rounded-xl border text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+              className={`px-2.5 py-1.5 rounded-xl border text-[11px] font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm ${
                 isFloatingWidgetEnabled
                   ? 'bg-teal-100 text-teal-800 border-teal-300 dark:bg-teal-500/20 dark:text-teal-300 dark:border-teal-500/40 hover:bg-teal-200'
                   : 'bg-slate-200 text-slate-600 border-slate-300 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700 hover:text-slate-900 dark:hover:text-white'
               }`}
-              title={lang === 'ar' ? 'تفعيل/إلغاء الزر العائم' : 'Toggle Floating Button'}
+              title={lang === 'ar' ? 'تفعيل/إلغاء الزر العائم في الشاشات' : 'Toggle Floating Chat Button'}
             >
               <GripVertical className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">
-                {isFloatingWidgetEnabled ? (lang === 'ar' ? 'الزر العائم مفعّل' : 'FAB On') : (lang === 'ar' ? 'الزر العائم معطّل' : 'FAB Off')}
+              <span>
+                {isFloatingWidgetEnabled ? (lang === 'ar' ? 'الزر العائم (مُفعّل)' : 'FAB Active') : (lang === 'ar' ? 'الزر العائم (مُعطّل)' : 'FAB Off')}
               </span>
             </button>
 
@@ -227,60 +228,51 @@ export const HospitalChatView: React.FC = () => {
           </div>
         </div>
 
-        {/* Chat Channels List */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-1">
-          <div className="px-2 py-1 text-[11px] font-mono text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">
-            {lang === 'ar' ? 'القنوات الجماعية' : 'Department Channels'}
-          </div>
+        {/* Direct Conversations & Instant Team Chat */}
+        <div className="flex-1 overflow-y-auto p-3 space-y-2">
+          {/* Direct MICU Stream Trigger */}
+          <button
+            type="button"
+            onClick={() => {
+              setActiveChatId('dept_general');
+              setShowMobileChat(true);
+            }}
+            className={`w-full flex items-center justify-between p-3 rounded-xl text-left transition-all cursor-pointer ${
+              activeChatId === 'dept_general'
+                ? 'bg-teal-50 border border-teal-300 text-teal-950 font-semibold shadow-sm dark:bg-teal-500/20 dark:border-teal-500/50 dark:text-white'
+                : 'text-slate-700 hover:bg-slate-200/60 dark:text-slate-300 dark:hover:bg-slate-800/60 dark:hover:text-white border border-transparent'
+            }`}
+          >
+            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+              <div className={`p-2 rounded-lg shrink-0 ${activeChatId === 'dept_general' ? 'bg-teal-200 text-teal-800 dark:bg-teal-500/30 dark:text-teal-200' : 'bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>
+                <MessageSquare className="w-4 h-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-bold truncate">
+                  {lang === 'ar' ? 'الدردشة العامة للفريق' : 'General Team Chat'}
+                </p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                  {lang === 'ar' ? 'صندوق المحادثة الفورية وتنسيق الحالات' : 'Real-time care coordination'}
+                </p>
+              </div>
+            </div>
+          </button>
 
-          {chats.filter(c => c.type === 'DEPARTMENT').map((chat) => {
-            const isActive = chat.id === activeChatId;
-            const cUnread = currentUser?.uid ? (chat.unreadCounts?.[currentUser.uid] || 0) : 0;
-            return (
-              <button
-                key={chat.id}
-                onClick={() => {
-                  setActiveChatId(chat.id);
-                  setShowMobileChat(true);
-                  if (currentUser?.uid) {
-                    markChatAsRead(chat.id, currentUser.uid);
-                  }
-                }}
-                className={`w-full flex items-center justify-between p-3 rounded-xl text-left transition-all cursor-pointer ${
-                  isActive
-                    ? 'bg-teal-50 border border-teal-300 text-teal-950 font-semibold shadow-sm dark:bg-teal-500/20 dark:border-teal-500/50 dark:text-white'
-                    : 'text-slate-700 hover:bg-slate-200/60 dark:text-slate-300 dark:hover:bg-slate-800/60 dark:hover:text-white border border-transparent'
-                }`}
-              >
-                <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                  <div className={`p-2 rounded-lg shrink-0 ${isActive ? 'bg-teal-200 text-teal-800 dark:bg-teal-500/30 dark:text-teal-200' : 'bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>
-                    <Hash className="w-4 h-4" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-bold truncate">{getChatDisplayName(chat)}</p>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
-                      {chat.lastMessageSenderName ? `${chat.lastMessageSenderName}: ` : ''}
-                      {chat.lastMessage || (lang === 'ar' ? 'لا توجد رسائل بعد' : 'No messages yet')}
-                    </p>
-                  </div>
-                </div>
-
-                {cUnread > 0 && !isActive && (
-                  <span className="w-5 h-5 rounded-full bg-rose-500 text-white text-[10px] font-black flex items-center justify-center shrink-0 ml-2 animate-pulse">
-                    {cUnread}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-
-          <div className="pt-3 px-2 py-1 text-[11px] font-mono text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">
-            {lang === 'ar' ? 'المحادثات الخاصة 1-to-1' : 'Direct Messages'}
+          <div className="pt-2 px-2 py-1 text-[11px] font-mono text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider flex items-center justify-between">
+            <span>{lang === 'ar' ? 'المحادثات الخاصة مع المستخدمين' : 'Direct Staff Messages'}</span>
+            <button
+              type="button"
+              onClick={() => setIsNewChatModalOpen(true)}
+              className="text-teal-600 dark:text-teal-400 hover:underline text-[10px] font-bold flex items-center gap-1 cursor-pointer"
+            >
+              <Plus className="w-3 h-3" />
+              <span>{lang === 'ar' ? 'جديد' : 'New'}</span>
+            </button>
           </div>
 
           {chats.filter(c => c.type === 'DIRECT').length === 0 ? (
-            <div className="p-3 text-center text-slate-400 dark:text-slate-500 text-xs italic">
-              {lang === 'ar' ? 'لا توجد محادثات خاصة حالياً' : 'No direct chats yet'}
+            <div className="p-4 text-center text-slate-400 dark:text-slate-500 text-xs italic bg-slate-100/50 dark:bg-slate-900/30 rounded-xl border border-dashed border-slate-200 dark:border-slate-800">
+              {lang === 'ar' ? 'لا توجد محادثات خاصة حالياً. انقر على (+) لبدء محادثة سريرية مباشرة.' : 'No direct chats yet. Click (+) to message staff.'}
             </div>
           ) : (
             chats.filter(c => c.type === 'DIRECT').map((chat) => {
@@ -309,7 +301,7 @@ export const HospitalChatView: React.FC = () => {
                     <div className="min-w-0 flex-1">
                       <p className="text-xs font-bold truncate">{getChatDisplayName(chat)}</p>
                       <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
-                        {chat.lastMessage || ''}
+                        {chat.lastMessage || (lang === 'ar' ? 'لا توجد رسائل بعد' : 'No messages yet')}
                       </p>
                     </div>
                   </div>
@@ -327,18 +319,18 @@ export const HospitalChatView: React.FC = () => {
       </div>
 
       {/* Right Area: Messages View & Composer (Hidden on Mobile if Channel List is Active) */}
-      <div className={`flex-1 flex-col bg-slate-50 dark:bg-[#060b14] ${!showMobileChat ? 'hidden md:flex' : 'flex'}`}>
+      <div className={`flex-1 flex flex-col bg-slate-50 dark:bg-[#060b14] ${!showMobileChat ? 'hidden md:flex' : 'flex'}`}>
         {/* Active Chat Header */}
         <div className="p-3 sm:p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-white dark:bg-[#08101e]">
           <div className="flex items-center gap-2.5">
-            {/* Mobile Back Button */}
+            {/* Mobile Back Button to Private Chats */}
             <button
               type="button"
               onClick={() => setShowMobileChat(false)}
               className="md:hidden p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center gap-1 text-xs font-bold transition-colors cursor-pointer"
             >
               {isRTL ? <ArrowRight className="w-4 h-4" /> : <ArrowLeft className="w-4 h-4" />}
-              <span>{lang === 'ar' ? 'القنوات' : 'Channels'}</span>
+              <span>{lang === 'ar' ? 'المحادثات الخاصة' : 'Direct Staff'}</span>
             </button>
 
             <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-teal-500/20 border border-teal-500/40 flex items-center justify-center text-teal-700 dark:text-teal-300 shrink-0">
@@ -354,6 +346,21 @@ export const HospitalChatView: React.FC = () => {
               </p>
             </div>
           </div>
+
+          {/* If in direct 1-to-1 chat, provide button to return to General Chat */}
+          {activeChat.id !== 'dept_general' && (
+            <button
+              type="button"
+              onClick={() => {
+                setActiveChatId('dept_general');
+                setShowMobileChat(true);
+              }}
+              className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center gap-1.5 text-xs font-bold transition-colors cursor-pointer"
+            >
+              <MessageSquare className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+              <span className="hidden sm:inline">{lang === 'ar' ? 'الدردشة العامة' : 'Team Chat'}</span>
+            </button>
+          )}
         </div>
 
         {/* Messages Stream */}

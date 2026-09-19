@@ -29,10 +29,7 @@ const CHATS_COLLECTION = 'chats';
 const MESSAGES_COLLECTION = 'chatMessages';
 
 export const DEFAULT_DEPARTMENTS = [
-  { id: 'dept_general', nameEn: 'MICU Central Coordination', nameAr: 'تنسيق العناية المركزة العام', dept: 'ALL' },
-  { id: 'dept_physicians', nameEn: 'Physicians & Intensivists', nameAr: 'الأطباء واستشاريو الحالات الحرجة', dept: 'PHYSICIANS' },
-  { id: 'dept_nursing', nameEn: 'ICU Nursing & Bedside Team', nameAr: 'كادر التمريض السريري', dept: 'NURSING' },
-  { id: 'dept_allied', nameEn: 'Pharmacy & Respiratory Care', nameAr: 'الصيدلة الإكلينيكية والعلاج التنفسي', dept: 'ALLIED' },
+  { id: 'dept_general', nameEn: 'MICU Central Coordination', nameAr: 'القناة العامة - تنسيق العناية المركزة', dept: 'ALL' },
 ];
 
 /**
@@ -78,8 +75,11 @@ export function subscribeToUserChats(
     const list: ChatConversation[] = [];
     snapshot.forEach((d) => {
       const data = d.data() as ChatConversation;
-      // Show if it's a department channel OR if current user is in participant list
-      if (data.type === 'DEPARTMENT' || (data.participantUids && data.participantUids.includes(currentUid))) {
+      // Show if it's the main department channel OR if current user is in participant list
+      if (
+        (data.type === 'DEPARTMENT' && DEFAULT_DEPARTMENTS.some(dept => dept.id === data.id)) || 
+        (data.type === 'DIRECT' && data.participantUids && data.participantUids.includes(currentUid))
+      ) {
         list.push(data);
       }
     });
