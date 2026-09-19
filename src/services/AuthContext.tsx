@@ -108,66 +108,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           let resolvedUser: IcuUser | null = null;
           if (userSnap.exists()) {
             resolvedUser = userSnap.data() as IcuUser;
-          } else if (fbUser.email) {
-            // Fallback lookup by email
-            const q = query(collection(firestore, 'users'), where('email', '==', fbUser.email.toLowerCase()));
-            const snap = await getDocs(q);
-            if (!snap.empty) {
-              resolvedUser = snap.docs[0].data() as IcuUser;
-              if (resolvedUser) {
-                resolvedUser.uid = fbUser.uid;
-                await setDoc(doc(firestore, 'users', fbUser.uid), resolvedUser, { merge: true });
-              }
-            }
-          }
-
-          // Fallback 2: Check local Dexie DB
-          if (!resolvedUser) {
-            try {
-              const localUsers = await db.users.toArray();
-              const localMatched = localUsers.find(u => 
-                (u.email && u.email.toLowerCase() === (fbUser.email || '').toLowerCase()) ||
-                (u.uid && u.uid.toLowerCase() === fbUser.uid.toLowerCase())
-              );
-              if (localMatched) {
-                resolvedUser = { ...localMatched, uid: fbUser.uid };
-                await setDoc(doc(firestore, 'users', fbUser.uid), resolvedUser, { merge: true });
-              }
-            } catch (localErr) {
-              console.warn('Local users lookup warning:', localErr);
-            }
-          }
-
-          // Fallback 3: Auto-provision profile if user is authenticated in Firebase Auth
-          if (!resolvedUser && fbUser.email) {
-            const rawPrefix = fbUser.email.split('@')[0];
-            const autoUser: IcuUser = {
-              uid: fbUser.uid,
-              email: fbUser.email.toLowerCase(),
-              nameAr: fbUser.displayName || rawPrefix,
-              nameEn: fbUser.displayName || rawPrefix,
-              role: StaffRole.BEDSIDE_RN,
-              department: 'MICU',
-              badgeId: rawPrefix.toUpperCase(),
-              licenseNumber: `LIC-${Math.floor(100000 + Math.random() * 900000)}`,
-              isActive: true,
-              active: true,
-              isSuperAdmin: false,
-              createdAt: new Date().toISOString(),
-              lastLoginAt: new Date().toISOString(),
-              permissions: getDefaultPermissionsForRole(StaffRole.BEDSIDE_RN),
-            };
-            await setDoc(doc(firestore, 'users', fbUser.uid), autoUser, { merge: true });
-            await db.users.put(autoUser);
-            resolvedUser = autoUser;
           }
 
           if (resolvedUser && resolvedUser.isActive !== false && resolvedUser.active !== false) {
             resolvedUser.uid = fbUser.uid;
             setCurrentUser(resolvedUser);
             localStorage.setItem('soli_icu_active_user', JSON.stringify(resolvedUser));
+            // Keep local Dexie cache synchronized with Firestore SSOT
+            await db.users.put(resolvedUser);
           } else {
-            // User deleted or disabled in Firestore
+            // User deleted, non-existent, or deactivated in Firestore
             await firebaseSignOut(auth);
             setCurrentUser(null);
             localStorage.removeItem('soli_icu_active_user');
@@ -347,109 +297,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, message: 'فشل التحقق من هوية المستخدم في Firebase Auth.' };
     }
 
-    // 3. Load user record from Firestore users/{uid}
-    let user: IcuUser | null = null;
     try {
-      const userDocRef = doc(firestore, 'users', fbUser.uid);
-      const userSnap = await getDoc(userDocRef);
-      if (userSnap.exists()) {
-        user = userSnap.data() as IcuUser;
+      // 3. Load user record from Firestore users/{uid}
+      const userDoc = await getDoc(doc(firestore, 'users', fbUser.uid));
+
+      if (!userDoc.exists()) {
+        await firebaseSignOut(auth);
+        throw new Error('حساب المستخدم غير موجود في النظام');
       }
-    } catch (e) {
-      console.warn('Firestore user fetch error:', e);
-    }
 
-    // Fallback 1: search by email in Firestore if doc ID differed
-    if (!user && fbUser.email) {
-      try {
-        const q = query(collection(firestore, 'users'), where('email', '==', fbUser.email.toLowerCase()));
-        const snap = await getDocs(q);
-        if (!snap.empty) {
-          user = snap.docs[0].data() as IcuUser;
-          if (user) {
-            user.uid = fbUser.uid;
-            await setDoc(doc(firestore, 'users', fbUser.uid), user, { merge: true });
-          }
-        }
-      } catch (e) {
-        console.warn('Firestore email lookup error:', e);
+      const user = userDoc.data() as IcuUser;
+
+      // 5) الحساب المعطل
+      if (user.isActive === false || user.active === false) {
+        await firebaseSignOut(auth);
+        throw new Error('هذا الحساب غير مفعل');
       }
-    }
 
-    // Fallback 2: search local Dexie database
-    if (!user) {
-      try {
-        const localUsers = await db.users.toArray();
-        const localMatched = localUsers.find(u => 
-          (u.email && u.email.toLowerCase() === (fbUser.email || '').toLowerCase()) ||
-          (u.badgeId && u.badgeId.toLowerCase() === rawInput.toLowerCase()) ||
-          (u.uid && u.uid.toLowerCase() === fbUser.uid.toLowerCase())
-        );
-        if (localMatched) {
-          user = { ...localMatched, uid: fbUser.uid };
-          await setDoc(doc(firestore, 'users', fbUser.uid), user, { merge: true });
-        }
-      } catch (e) {
-        console.warn('Local users fallback lookup error:', e);
-      }
+      // Update last login timestamp and set active user
+      user.lastLoginAt = new Date().toISOString();
+      user.uid = fbUser.uid;
+      
+      await setDoc(doc(firestore, 'users', fbUser.uid), { lastLoginAt: user.lastLoginAt }, { merge: true });
+      await db.users.put(user);
+      
+      setCurrentUser(user);
+      localStorage.setItem('soli_icu_active_user', JSON.stringify(user));
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, message: err?.message || 'فشل تسجيل الدخول' };
     }
-
-    // Fallback 3: Auto-provision Firestore document if user is verified in Firebase Auth
-    if (!user) {
-      try {
-        const rawPrefix = (fbUser.email || rawInput).split('@')[0];
-        const defaultRole = StaffRole.BEDSIDE_RN;
-        const autoUser: IcuUser = {
-          uid: fbUser.uid,
-          email: fbUser.email || targetEmail,
-          nameAr: fbUser.displayName || rawPrefix,
-          nameEn: fbUser.displayName || rawPrefix,
-          role: defaultRole,
-          department: 'MICU',
-          badgeId: rawPrefix.toUpperCase(),
-          licenseNumber: `LIC-${Math.floor(100000 + Math.random() * 900000)}`,
-          isActive: true,
-          active: true,
-          isSuperAdmin: false,
-          pinCode: rawPass,
-          createdAt: new Date().toISOString(),
-          lastLoginAt: new Date().toISOString(),
-          permissions: getDefaultPermissionsForRole(defaultRole),
-        };
-        await setDoc(doc(firestore, 'users', fbUser.uid), autoUser, { merge: true });
-        await db.users.put(autoUser);
-        user = autoUser;
-      } catch (e) {
-        console.warn('Auto provision fallback notice:', e);
-      }
-    }
-
-    // 4. Reject if user does not exist in Firestore or is disabled
-    if (!user) {
-      await firebaseSignOut(auth);
-      return { 
-        success: false, 
-        message: 'بيانات المستخدم غير مسجلة في جدول مستخدمي المنظومة (Firestore users).' 
-      };
-    }
-
-    if (user.isActive === false || user.active === false) {
-      await firebaseSignOut(auth);
-      return { 
-        success: false, 
-        message: 'هذا الحساب معطل حالياً من قبل إدارة المستشفى.' 
-      };
-    }
-
-    // 5. Update last login timestamp and set active user
-    user.lastLoginAt = new Date().toISOString();
-    user.uid = fbUser.uid;
-    
-    setDoc(doc(firestore, 'users', fbUser.uid), { lastLoginAt: user.lastLoginAt }, { merge: true }).catch(() => {});
-    
-    setCurrentUser(user);
-    localStorage.setItem('soli_icu_active_user', JSON.stringify(user));
-    return { success: true };
   };
 
   // Login with Google (Firebase Auth)
@@ -461,54 +338,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       let matchedUser: IcuUser | null = null;
 
       // Fetch from Firestore
-      try {
-        const userDocRef = doc(firestore, 'users', fbUser.uid);
-        const userSnap = await getDoc(userDocRef);
-        if (userSnap.exists()) {
-          matchedUser = userSnap.data() as IcuUser;
-        } else if (fbUser.email) {
-          const q = query(collection(firestore, 'users'), where('email', '==', fbUser.email.toLowerCase()));
-          const snap = await getDocs(q);
-          if (!snap.empty) {
-            matchedUser = snap.docs[0].data() as IcuUser;
-            if (matchedUser) {
-              matchedUser.uid = fbUser.uid;
-              await setDoc(doc(firestore, 'users', fbUser.uid), matchedUser, { merge: true });
-            }
-          }
-        }
-      } catch (e) {
-        console.warn('Google login Firestore error:', e);
-      }
-
-      if (!matchedUser && fbUser.email) {
-        const rawPrefix = fbUser.email.split('@')[0];
-        const defaultRole = StaffRole.BEDSIDE_RN;
-        const autoUser: IcuUser = {
-          uid: fbUser.uid,
-          email: fbUser.email.toLowerCase(),
-          nameAr: fbUser.displayName || rawPrefix,
-          nameEn: fbUser.displayName || rawPrefix,
-          role: defaultRole,
-          department: 'MICU',
-          badgeId: rawPrefix.toUpperCase(),
-          licenseNumber: `LIC-${Math.floor(100000 + Math.random() * 900000)}`,
-          isActive: true,
-          active: true,
-          isSuperAdmin: false,
-          createdAt: new Date().toISOString(),
-          lastLoginAt: new Date().toISOString(),
-          permissions: getDefaultPermissionsForRole(defaultRole),
-        };
-        await setDoc(doc(firestore, 'users', fbUser.uid), autoUser, { merge: true });
-        await db.users.put(autoUser);
-        matchedUser = autoUser;
-      }
-
-      if (!matchedUser) {
+      const userDocRef = doc(firestore, 'users', fbUser.uid);
+      const userSnap = await getDoc(userDocRef);
+      if (!userSnap.exists()) {
         await firebaseSignOut(auth);
         return { success: false, message: 'حساب Google هذا غير مسجل في منظومة المستشفى.' };
       }
+      matchedUser = userSnap.data() as IcuUser;
 
       if (matchedUser.isActive === false || matchedUser.active === false) {
         await firebaseSignOut(auth);
@@ -518,7 +354,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       matchedUser.lastLoginAt = new Date().toISOString();
       matchedUser.uid = fbUser.uid;
       
-      setDoc(doc(firestore, 'users', fbUser.uid), { lastLoginAt: matchedUser.lastLoginAt }, { merge: true }).catch(() => {});
+      await setDoc(doc(firestore, 'users', fbUser.uid), { lastLoginAt: matchedUser.lastLoginAt }, { merge: true });
+      await db.users.put(matchedUser);
       
       setCurrentUser(matchedUser);
       localStorage.setItem('soli_icu_active_user', JSON.stringify(matchedUser));
@@ -701,11 +538,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!target) return { success: false, message: 'المستخدم غير موجود' };
 
     try {
-      await deleteUserAccount(uid);
+      const idToken = await auth.currentUser?.getIdToken();
+
+      const response = await fetch('/api/admin/users/delete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify({ targetUid: uid })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || 'فشل حذف المستخدم');
+      }
+
+      // Delete from Dexie (local cache)
+      await db.users.delete(uid);
+
       await refreshUsers();
       return { 
         success: true, 
-        message: 'تم حذف ملف المستخدم من Firestore. حذف حساب Firebase Authentication نهائياً يتطلب Backend موثوقاً.'
+        message: 'تم حذف المستخدم بنجاح.'
       };
     } catch (e: any) {
       return { 

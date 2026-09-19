@@ -478,25 +478,22 @@ export async function deleteUserWithToken(authHeader?: string, targetUid?: strin
 
     const nowIso = new Date().toISOString();
 
+    // 2) Delete from Firebase Auth first
     try {
       await auth.deleteUser(targetUid);
     } catch (authErr: any) {
       if (authErr?.code !== 'auth/user-not-found') {
-        const isPermissionDenied = authErr?.message?.includes('PERMISSION_DENIED') || authErr?.code === 7 || authErr?.message?.includes('credential');
-        if (isPermissionDenied) {
-          console.log('[deleteUserWithToken] Auth deletion offline (Emulating deletion in preview).');
-        } else {
-          throw new Error(`Firebase Auth delete failed: ${authErr?.message || authErr}`);
-        }
+        throw new Error(`Firebase Auth delete failed: ${authErr?.message || authErr}`);
       }
     }
 
+    // 3) Delete from Firestore collections 'users' and 'admins' after Firebase Auth success
     if (hasDbAccess) {
       try {
-        const targetRef = db.collection('users').doc(targetUid);
-        await targetRef.delete();
+        await db.collection('users').doc(targetUid).delete();
+        await db.collection('admins').doc(targetUid).delete();
       } catch (dbErr: any) {
-        throw new Error(`Firestore user delete failed: ${dbErr?.message || dbErr}`);
+        throw new Error(`Firestore user/admin delete failed: ${dbErr?.message || dbErr}`);
       }
     }
 
