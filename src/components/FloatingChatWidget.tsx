@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   MessageSquare, 
@@ -256,43 +257,32 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({ activeTa
 
   return (
     <>
-      {/* Outside Click / Backdrop Dismiss Overlay */}
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.15 }}
-            className="fixed inset-0 z-40 bg-black/20 backdrop-blur-[1px] pointer-events-auto cursor-pointer"
-            onClick={() => setIsOpen(false)}
-            title={lang === 'ar' ? 'اضغط لإغلاق الدردشة' : 'Click outside to close chat'}
-          />
-        )}
-      </AnimatePresence>
-
-      <div className="fixed bottom-6 left-6 sm:left-8 z-50 pointer-events-none select-none" dir={isRTL ? 'rtl' : 'ltr'}>
-        <motion.div
-          ref={fabRef}
-          drag={!isOpen}
-          dragMomentum={false}
-          dragElastic={0.05}
-          onDragEnd={handleDragEnd}
-          animate={{ x: position.x, y: position.y }}
-          transition={isOpen ? { duration: 0 } : { type: 'spring', damping: 30, stiffness: 300 }}
-          className="pointer-events-auto relative flex flex-col items-start"
-        >
-          {/* Messenger-style Clean Floating Window */}
+      {/* Messenger-style Floating Window Portal (Rendered at document.body level to avoid CSS transform container clipping) */}
+      {isOpen && typeof document !== 'undefined' && createPortal(
+        <div dir={isRTL ? 'rtl' : 'ltr'}>
+          {/* Outside Click / Backdrop Dismiss Overlay */}
           <AnimatePresence>
-            {isOpen && (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.92, y: 15 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.92, y: 15 }}
-                transition={{ duration: 0.18, ease: 'easeOut' }}
-                onClick={(e) => e.stopPropagation()}
-                className="fixed z-50 inset-x-3 bottom-20 sm:bottom-24 sm:inset-x-auto sm:left-auto sm:right-6 sm:w-[390px] h-[520px] max-h-[78vh] bg-white dark:bg-[#081020] border border-slate-200 dark:border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col backdrop-blur-xl text-slate-900 dark:text-slate-100 ring-1 ring-black/10 pointer-events-auto"
-              >
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="fixed inset-0 z-40 bg-black/25 backdrop-blur-[1px] pointer-events-auto cursor-pointer"
+              onClick={() => setIsOpen(false)}
+              title={lang === 'ar' ? 'اضغط لإغلاق الدردشة' : 'Click outside to close chat'}
+            />
+          </AnimatePresence>
+
+          {/* Floating Chat Modal Box */}
+          <AnimatePresence>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.93, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.93, y: 12 }}
+              transition={{ duration: 0.18, ease: 'easeOut' }}
+              onClick={(e) => e.stopPropagation()}
+              className="fixed z-50 bottom-20 sm:bottom-24 inset-x-3 sm:inset-x-auto sm:right-6 sm:w-[390px] w-[calc(100vw-24px)] h-[520px] max-h-[78vh] bg-white dark:bg-[#081020] border border-slate-200 dark:border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col backdrop-blur-xl text-slate-900 dark:text-slate-100 ring-1 ring-black/10 pointer-events-auto"
+            >
                 {/* Header */}
                 <div className="p-3 bg-slate-100 dark:bg-[#0a1428] border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
                   <div className="flex items-center gap-2 min-w-0">
@@ -512,11 +502,24 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({ activeTa
                   </form>
                 </div>
               </motion.div>
-          )}
-        </AnimatePresence>
+          </AnimatePresence>
+        </div>,
+        document.body
+      )}
 
-        {/* Floating Action Button (FAB) */}
-        <motion.button
+      {/* Floating Action Button (FAB) */}
+      <div className="fixed bottom-6 left-6 sm:left-8 z-50 pointer-events-none select-none" dir={isRTL ? 'rtl' : 'ltr'}>
+        <motion.div
+          ref={fabRef}
+          drag={!isOpen}
+          dragMomentum={false}
+          dragElastic={0.05}
+          onDragEnd={handleDragEnd}
+          animate={{ x: position.x, y: position.y }}
+          transition={isOpen ? { duration: 0 } : { type: 'spring', damping: 30, stiffness: 300 }}
+          className="pointer-events-auto relative flex flex-col items-start"
+        >
+          <motion.button
           whileHover={!isOpen ? { scale: 1.04 } : undefined}
           whileTap={!isOpen ? { scale: 0.96 } : undefined}
           type="button"
