@@ -358,7 +358,7 @@ export default function App() {
         const spo2 = Number(v.spo2Percent || (v as any).oxygenSaturationPercent || 98);
         const hr = Number(v.heartRateBpm || (v as any).pulseBpm || 75);
 
-        const isHypotensive = (sys < thresholds.minSystolicBp || dia < thresholds.minDiastolicBp || map < thresholds.minMap);
+        const isHypotensive = false; // Disabled per user request
         const isHypoxic = spo2 < thresholds.minSpo2;
         const isBrady = hr < thresholds.minHeartRate;
         const isTachy = hr > thresholds.maxHeartRate;

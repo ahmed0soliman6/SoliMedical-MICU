@@ -201,20 +201,7 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           )}
 
-          {/* STAT Critical Alerts */}
-          {settings.features.enableAcuityLevels && (
-            <div className="bg-red-50 dark:bg-[#0e172a] border border-red-200 dark:border-red-500/30 px-3 py-1.5 rounded-xl flex items-center gap-2">
-              <ShieldAlert className="w-4 h-4 text-red-500 dark:text-red-400 animate-bounce" />
-              <div className={isRTL ? 'text-right' : 'text-left'}>
-                <div className="text-[10px] text-red-600 dark:text-red-400 uppercase tracking-wider font-bold">
-                  {lang === 'ar' ? 'حالات حرجة STAT' : 'Critical STAT'}
-                </div>
-                <div className="text-xs font-mono font-bold text-red-700 dark:text-red-300">
-                  {criticalCount} {lang === 'ar' ? 'مريض' : 'Patients'}
-                </div>
-              </div>
-            </div>
-          )}
+
 
           {/* Firebase Realtime Cloud Live Indicator */}
           {settings.features.enableCloudSync && (

@@ -216,9 +216,10 @@ export function playGentleNotificationTone(type: NotificationType, ignoreMute: b
         break;
 
       case 'CRITICAL_TELEMETRY':
+        // Silent per user request to remove critical telemetry / stat alarm chime
+        break;
+
       default:
-        // Medical alert pulse
-        playPulseTone(ctx, 784.0, 0.16);
         break;
     }
   } catch (e) {
