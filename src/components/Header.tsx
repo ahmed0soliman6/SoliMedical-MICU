@@ -378,6 +378,7 @@ export const Header: React.FC<HeaderProps> = ({
                           onSelectBed?.(bNum);
                           onTabChange('beds');
                           setIsNotificationMenuOpen(false);
+                          if (onDismissAlert) onDismissAlert();
                         }
                       }}
                       className="p-3 bg-red-50 dark:bg-red-950/80 border border-red-300 dark:border-red-500/80 text-red-900 dark:text-red-200 rounded-xl space-y-2 animate-pulse shadow-sm cursor-pointer hover:bg-red-100 dark:hover:bg-red-900/90 transition-colors"
@@ -426,9 +427,7 @@ export const Header: React.FC<HeaderProps> = ({
                               handleNotificationClick(notif);
                               setIsNotificationMenuOpen(false);
                             }}
-                            className={`p-3 rounded-xl border transition-all relative flex flex-col gap-1.5 ${
-                              hasAction ? 'cursor-pointer' : ''
-                            } ${
+                            className={`p-3 rounded-xl border transition-all relative flex flex-col gap-1.5 cursor-pointer ${
                               isUnread
                                 ? 'bg-teal-50/70 dark:bg-teal-950/30 border-teal-300 dark:border-teal-500/40 hover:border-teal-500 shadow-sm'
                                 : 'bg-slate-50 dark:bg-[#070d1a] border-slate-200 dark:border-slate-800 hover:border-slate-700 opacity-80 hover:opacity-100'
@@ -454,6 +453,19 @@ export const Header: React.FC<HeaderProps> = ({
                                 <span className="text-[10px] text-slate-400 font-mono">
                                   {formatRelativeTime(notif.timestamp, lang)}
                                 </span>
+                                {isUnread && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      markAsRead(notif.id);
+                                    }}
+                                    className="p-1 text-teal-600 hover:text-teal-700 dark:text-teal-400 dark:hover:text-teal-300 rounded hover:bg-teal-100 dark:hover:bg-teal-900/50 transition-colors"
+                                    title={lang === 'ar' ? 'تحديد كمقروء' : 'Mark as read'}
+                                  >
+                                    <CheckCircle className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
                                 <button
                                   type="button"
                                   onClick={(e) => {
@@ -463,7 +475,7 @@ export const Header: React.FC<HeaderProps> = ({
                                   className="p-1 text-slate-400 hover:text-rose-500 rounded hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
                                   title={lang === 'ar' ? 'حذف' : 'Delete'}
                                 >
-                                  <Trash2 className="w-3 h-3" />
+                                  <Trash2 className="w-3.5 h-3.5" />
                                 </button>
                               </div>
                             </div>

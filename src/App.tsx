@@ -37,6 +37,7 @@ import { UserManagementModal } from './components/UserManagementModal.tsx';
 import { FullPageAdmission } from './components/FullPageAdmission.tsx';
 import { HospitalChatView } from './components/HospitalChatView.tsx';
 import { TopNotificationBanner } from './components/TopNotificationBanner.tsx';
+import { FloatingChatWidget } from './components/FloatingChatWidget.tsx';
 import { useAppNotifications } from './services/NotificationContext.tsx';
 import { AppNotificationTarget } from './types/notification.ts';
 
@@ -231,9 +232,16 @@ export default function App() {
     if (currentAlertKey) {
       setDismissedAlertKeys(prev => new Set([...prev, currentAlertKey]));
     }
+    if (activeAlertMessage) {
+      const match = activeAlertMessage.match(/(?:السرير|Bed)\s*(\d+)/i);
+      if (match && match[1]) {
+        const bedNum = match[1].padStart(2, '0');
+        setDismissedAlertKeys(prev => new Set([...prev, `bed-${bedNum}`]));
+      }
+    }
     setActiveAlertMessage(null);
     setCurrentAlertKey(null);
-  }, [currentAlertKey]);
+  }, [currentAlertKey, activeAlertMessage]);
 
   // Periodic Telemetry MAP, BP & Desaturation Safety Monitor with Customizable Thresholds
   useEffect(() => {
@@ -273,12 +281,15 @@ export default function App() {
 
         const vitId = v.id || v.timestamp || 'latest';
         const alertKey = `bed-${bedNum}-${vitId}`;
-        if (dismissedAlertKeys.has(alertKey)) continue;
+        if (dismissedAlertKeys.has(alertKey) || dismissedAlertKeys.has(`bed-${bedNum}`)) continue;
 
-        const sys = Number(v.systolicBloodPressureMmHg || (v as any).systolicBp || 120);
-        const dia = Number(v.diastolicBloodPressureMmHg || (v as any).diastolicBp || 80);
-        const map = Number(v.meanArterialPressureMmHg || Math.round((sys + 2 * dia) / 3));
-        const spo2 = Number(v.spo2Percent || v.oxygenSaturationPercent || 98);
+        const sys = Number(v.systolicBpMmHg || (v as any).systolicBloodPressureMmHg || (v as any).systolicBp || 120);
+        const dia = Number(v.diastolicBpMmHg || (v as any).diastolicBloodPressureMmHg || (v as any).diastolicBp || 80);
+        const calculatedMap = Math.round((sys + 2 * dia) / 3);
+        const rawMap = Number(v.meanArterialPressureMmHg || calculatedMap);
+        // Ensure MAP is clinically consistent with Sys/Dia (fallback to calculated if inconsistent or corrupted)
+        const map = (rawMap > 0 && Math.abs(rawMap - calculatedMap) <= 20) ? rawMap : calculatedMap;
+        const spo2 = Number(v.spo2Percent || (v as any).oxygenSaturationPercent || 98);
         const hr = Number(v.heartRateBpm || (v as any).pulseBpm || 75);
 
         const isHypotensive = (sys < thresholds.minSystolicBp || dia < thresholds.minDiastolicBp || map < thresholds.minMap);
@@ -632,6 +643,9 @@ export default function App() {
           onHandoverSigned={reloadData}
         />
       )}
+
+      {/* Global Real-Time Floating Chat Widget */}
+      <FloatingChatWidget onOpenFullChatPage={() => setActiveTab('chat')} />
     </div>
   );
 }

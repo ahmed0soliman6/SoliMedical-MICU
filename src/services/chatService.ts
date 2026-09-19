@@ -158,20 +158,85 @@ export async function sendChatMessage(
 
   await setDoc(msgRef, msg);
 
-  // Update chat last message preview
-  await updateDoc(chatRef, {
-    lastMessage: trimmed,
-    lastMessageAt: nowIso,
-    lastMessageSenderName: senderName,
-    [`unreadCounts.${senderUid}`]: 0,
-  }).catch(() => {
-    // In case doc structure requires set merge
-    setDoc(chatRef, {
+  // Update chat last message preview and increment unread count for other participants
+  try {
+    const chatSnap = await getDoc(chatRef);
+    const existingData = chatSnap.data() as ChatConversation | undefined;
+    const unreadCounts = { ...(existingData?.unreadCounts || {}) };
+
+    // Reset sender's unread count to 0, increment for everyone else
+    unreadCounts[senderUid] = 0;
+    
+    if (existingData?.participantUids && existingData.participantUids.length > 0) {
+      existingData.participantUids.forEach((uid) => {
+        if (uid !== senderUid) {
+          unreadCounts[uid] = (unreadCounts[uid] || 0) + 1;
+        }
+      });
+    }
+
+    await setDoc(chatRef, {
       lastMessage: trimmed,
       lastMessageAt: nowIso,
       lastMessageSenderName: senderName,
+      unreadCounts,
     }, { merge: true });
-  });
+  } catch (err) {
+    console.warn('Error updating chat lastMessage:', err);
+  }
+}
+
+/**
+ * Mark a conversation as read by the current user
+ */
+export async function markChatAsRead(chatId: string, userUid: string): Promise<void> {
+  if (!chatId || !userUid) return;
+  try {
+    const chatRef = doc(firestore, CHATS_COLLECTION, chatId);
+    
+    // Store in localStorage as instant offline fallback
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(`soli_chat_read_${chatId}_${userUid}`, new Date().toISOString());
+    }
+
+    await setDoc(chatRef, {
+      unreadCounts: {
+        [userUid]: 0
+      }
+    }, { merge: true });
+  } catch (err) {
+    console.warn('Error marking chat as read:', err);
+  }
+}
+
+/**
+ * Calculate total unread count for a user across all conversations
+ */
+export function calculateTotalUnreadCount(chats: ChatConversation[], userUid: string): number {
+  if (!chats || !userUid) return 0;
+  
+  let total = 0;
+  for (const chat of chats) {
+    const firestoreUnread = chat.unreadCounts?.[userUid] || 0;
+    
+    // Check localStorage fallback timestamp
+    let isReadLocally = false;
+    if (typeof window !== 'undefined') {
+      const readTs = localStorage.getItem(`soli_chat_read_${chat.id}_${userUid}`);
+      if (readTs && chat.lastMessageAt) {
+        const lastMsgTime = new Date(chat.lastMessageAt).getTime();
+        const localReadTime = new Date(readTs).getTime();
+        if (localReadTime >= lastMsgTime) {
+          isReadLocally = true;
+        }
+      }
+    }
+
+    if (!isReadLocally && firestoreUnread > 0) {
+      total += firestoreUnread;
+    }
+  }
+  return total;
 }
 
 /**
