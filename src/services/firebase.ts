@@ -53,6 +53,7 @@ import {
   InvestigationItem,
   PatientAntibiotic
 } from '../types/schema.ts';
+import { isAudioGloballyMuted } from './NotificationAudio.ts';
 import { db, initializeDatabaseSeed } from '../db/icuSyncDb.ts';
 
 // -------------------------------------------------------------
@@ -645,6 +646,10 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
 
 export function playIcuAlarmAudio(urgency: 'HIGH' | 'MEDIUM' = 'HIGH') {
   if (typeof window === 'undefined') return;
+  // Strict mute check: never play ICU alarm audio if muted globally
+  if (isAudioGloballyMuted()) {
+    return;
+  }
   try {
     const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
     if (!AudioCtx) return;
@@ -683,7 +688,9 @@ export function playIcuAlarmAudio(urgency: 'HIGH' | 'MEDIUM' = 'HIGH') {
 }
 
 export function triggerExternalCriticalNotification(title: string, body: string, bedNumber: string) {
-  playIcuAlarmAudio('HIGH');
+  if (!isAudioGloballyMuted()) {
+    playIcuAlarmAudio('HIGH');
+  }
 
   if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
     try {
@@ -774,33 +781,50 @@ export function subscribeToRealtimeFirestore(
     // 3. Subscribe to Real-Time Vitals with Alarm Checks
     const vitalsCol = collection(firestore, 'vitals');
     const vitalsQuery = query(vitalsCol, limit(100));
+    let isInitialVitalsSnapshot = true;
     const unsubVitals = onSnapshot(vitalsQuery, async (snapshot) => {
       const remoteVitals: TelemetryVitals[] = [];
+
+      // On initial snapshot connection, sync existing records silently without firing alarms on reload!
+      if (isInitialVitalsSnapshot) {
+        isInitialVitalsSnapshot = false;
+        snapshot.forEach((doc) => {
+          remoteVitals.push(doc.data() as TelemetryVitals);
+        });
+        if (remoteVitals.length > 0) {
+          await db.vitals.bulkPut(remoteVitals);
+          notifyUpdate();
+        }
+        return;
+      }
+
       snapshot.docChanges().forEach((change) => {
         if (change.type === 'added' || change.type === 'modified') {
           const v = change.doc.data() as TelemetryVitals;
           remoteVitals.push(v);
           
-          if (v.meanArterialPressureMmHg < 65) {
-            triggerExternalCriticalNotification(
-              'Severe Hypotension (MAP < 65 mmHg)',
-              `مريض السرير ${v.bedId}: الضغط الشرياني انخفض إلى ${v.meanArterialPressureMmHg} mmHg (${v.systolicBpMmHg}/${v.diastolicBpMmHg})`,
-              v.bedId
-            );
-            if (onCriticalAlarm) {
-              onCriticalAlarm({
-                bedNumber: v.bedId,
-                message: `انخفاض حرج في MAP (${v.meanArterialPressureMmHg} mmHg)`,
-                type: 'HEMODYNAMIC_STAT'
-              });
+          if (!isAudioGloballyMuted()) {
+            if (v.meanArterialPressureMmHg < 65) {
+              triggerExternalCriticalNotification(
+                'Severe Hypotension (MAP < 65 mmHg)',
+                `مريض السرير ${v.bedId}: الضغط الشرياني انخفض إلى ${v.meanArterialPressureMmHg} mmHg (${v.systolicBpMmHg}/${v.diastolicBpMmHg})`,
+                v.bedId
+              );
+              if (onCriticalAlarm) {
+                onCriticalAlarm({
+                  bedNumber: v.bedId,
+                  message: `انخفاض حرج في MAP (${v.meanArterialPressureMmHg} mmHg)`,
+                  type: 'HEMODYNAMIC_STAT'
+                });
+              }
             }
-          }
-          if (v.spo2Percent < 88) {
-            triggerExternalCriticalNotification(
-              'Hypoxemia Desaturation (SpO₂ < 88%)',
-              `مريض السرير ${v.bedId}: تشبع الأكسجين انخفض إلى ${v.spo2Percent}%`,
-              v.bedId
-            );
+            if (v.spo2Percent < 88) {
+              triggerExternalCriticalNotification(
+                'Hypoxemia Desaturation (SpO₂ < 88%)',
+                `مريض السرير ${v.bedId}: تشبع الأكسجين انخفض إلى ${v.spo2Percent}%`,
+                v.bedId
+              );
+            }
           }
         }
       });

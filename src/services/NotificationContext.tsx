@@ -1,7 +1,7 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { AppNotification, NotificationType, AppNotificationTarget } from '../types/notification.ts';
 import { useSystemSettings } from './SettingsContext.tsx';
-import { playGentleNotificationTone } from './NotificationAudio.ts';
+import { playGentleNotificationTone, isAudioGloballyMuted } from './NotificationAudio.ts';
 
 const NOTIFICATIONS_STORAGE_KEY = 'soli_icu_notifications_queue_v2';
 const MAX_NOTIFICATIONS = 20;
@@ -79,6 +79,23 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
+  // Single chime on reload/startup IF and ONLY IF there are unread notifications
+  const hasTriggeredStartupChimeRef = useRef(false);
+  useEffect(() => {
+    if (hasTriggeredStartupChimeRef.current) return;
+    hasTriggeredStartupChimeRef.current = true;
+
+    // Strict user rule: Only play ONE single notification chime on reload if there are unread notifications
+    // If unread is 0 or if muted, absolutely no sound should play!
+    const isMuted = settings.notifications.isMuted || isAudioGloballyMuted();
+    if (unreadCount > 0 && !isMuted && settings.notifications.masterAudio) {
+      const timer = setTimeout(() => {
+        playGentleNotificationTone('CRITICAL_TELEMETRY');
+      }, 700);
+      return () => clearTimeout(timer);
+    }
+  }, [unreadCount, settings.notifications.isMuted, settings.notifications.masterAudio]);
+
   const setNavigationHandler = useCallback((handler: (target: AppNotificationTarget) => void) => {
     setNavHandler(() => handler);
   }, []);
@@ -95,6 +112,22 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
       forceAudio = false,
     }: TriggerNotificationParams) => {
       const notifSettings = settings.notifications;
+      const isMuted = notifSettings.isMuted || isAudioGloballyMuted();
+
+      // Deduplicate rapid identical triggers within 6 seconds
+      const now = Date.now();
+      const isDuplicate = notifications.slice(0, 5).some((n) => {
+        const timeDiff = now - new Date(n.timestamp).getTime();
+        return (
+          timeDiff < 6000 &&
+          n.type === type &&
+          n.target?.bedNumber === target?.bedNumber &&
+          n.titleEn === titleEn
+        );
+      });
+      if (isDuplicate) {
+        return;
+      }
 
       // Determine which event key in settings this belongs to
       let eventKey: keyof typeof notifSettings.events = 'admission';
@@ -108,8 +141,9 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
       const eventConfig = notifSettings.events[eventKey] || { visual: true, audio: true };
 
       const shouldShowVisual = forceVisual || (notifSettings.masterVisual && eventConfig.visual);
+      // Strict mute: if muted, NEVER play audio!
       const shouldPlayAudio =
-        forceAudio || (notifSettings.masterAudio && !notifSettings.isMuted && eventConfig.audio);
+        !isMuted && (forceAudio || (notifSettings.masterAudio && eventConfig.audio));
 
       const newNotif: AppNotification = {
         id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -123,7 +157,7 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
         target,
       };
 
-      // 1. Play gentle audio tone
+      // 1. Play gentle audio tone (if not muted)
       if (shouldPlayAudio) {
         playGentleNotificationTone(type);
       }
@@ -133,13 +167,13 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
         setActiveBanner(newNotif);
       }
 
-      // 3. Add to notifications queue (Max 10 items, newest first, auto-prune)
+      // 3. Add to notifications queue (Max 20 items, newest first, auto-prune)
       setNotifications((prev) => {
         const updated = [newNotif, ...prev.filter((p) => p.id !== newNotif.id)];
         return updated.slice(0, MAX_NOTIFICATIONS);
       });
     },
-    [settings.notifications]
+    [settings.notifications, notifications]
   );
 
   const markAsRead = useCallback((id: string) => {

@@ -47,6 +47,8 @@ import { useTranslation } from '../services/i18n.ts';
 import { SystemFeatureFlags } from '../types/settings.ts';
 import { ClinicalOptionsManager } from './ClinicalOptionsManager.tsx';
 import { NotificationSettingsCard } from './NotificationSettingsCard.tsx';
+import { SoliLogo } from './SoliLogo.tsx';
+import { PWAInstallButton } from './PWAInstallButton.tsx';
 import { clearLocalBrowserDataAndSyncFromCloud, clearAllCloudAndLocalDataAndReset } from '../services/firebase.ts';
 
 interface SettingsModalProps {
@@ -518,6 +520,31 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
             >
               <X className="w-5 h-5 group-hover:rotate-90 transition-transform" />
             </button>
+          </div>
+        </div>
+
+        {/* PWA Standalone Web App Installation Banner */}
+        <div className="p-4 rounded-2xl bg-gradient-to-r from-teal-500/10 via-cyan-500/10 to-teal-500/5 border border-teal-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <SoliLogo className="w-12 h-12 shrink-0 drop-shadow-md" />
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                  {lang === 'ar' ? 'تطبيق Soli Medical MICU المستقل (PWA)' : 'Soli Medical MICU Standalone App (PWA)'}
+                </h3>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-800 dark:text-teal-300 font-mono font-bold border border-teal-500/30">
+                  PWA Ready
+                </span>
+              </div>
+              <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+                {lang === 'ar' 
+                  ? 'ثبّت النظام كتطبيق أصلي على الكمبيوتر، الهواتف الذكية، وأجهزة الآيباد اللوحية بشعار النظام الرسمي.' 
+                  : 'Install the system directly on PC, Mobile, and iPad with the official system logo icon.'}
+              </p>
+            </div>
+          </div>
+          <div className="shrink-0 self-end sm:self-center">
+            <PWAInstallButton variant="full" />
           </div>
         </div>
 

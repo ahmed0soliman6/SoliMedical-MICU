@@ -1,18 +1,208 @@
-import React from 'react';
+import React, { useId } from 'react';
 
 interface SoliLogoProps {
   className?: string;
   size?: number | string;
+  variant?: 'full' | 'monogram';
+  showText?: boolean;
 }
 
-export const SoliLogo: React.FC<SoliLogoProps> = ({ className = 'w-10 h-10', size }) => {
+export const SoliLogo: React.FC<SoliLogoProps> = ({ 
+  className = 'w-10 h-10', 
+  size,
+  variant = 'full',
+  showText = true 
+}) => {
+  const rawId = useId().replace(/:/g, '');
+  const idPrefix = `soli_${rawId}_`;
+
   const style = size ? { width: size, height: size } : undefined;
+
   return (
-    <img 
-      src="/logo.svg" 
-      alt="Soli Medical MICU Logo" 
-      className={`object-contain ${className}`}
+    <div 
+      className={`inline-flex items-center justify-center select-none ${className}`}
       style={style}
-    />
+      aria-label="Soli Medical MICU Logo"
+      role="img"
+    >
+      <svg 
+        viewBox="0 0 500 500" 
+        className="w-full h-full object-contain overflow-visible"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <defs>
+          {/* Background Gradient */}
+          <linearGradient id={`${idPrefix}bgGrad`} x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#0f223f" />
+            <stop offset="50%" stopColor="#091325" />
+            <stop offset="100%" stopColor="#040812" />
+          </linearGradient>
+
+          {/* Outer Glow Border */}
+          <linearGradient id={`${idPrefix}glowBorder`} x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.9" />
+            <stop offset="50%" stopColor="#14b8a6" stopOpacity="0.6" />
+            <stop offset="100%" stopColor="#0284c7" stopOpacity="0.3" />
+          </linearGradient>
+
+          {/* Glowing Heartbeat Neon Pulse Line */}
+          <linearGradient id={`${idPrefix}pulseTeal`} x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#06b6d4" />
+            <stop offset="35%" stopColor="#22d3ee" />
+            <stop offset="70%" stopColor="#14b8a6" />
+            <stop offset="100%" stopColor="#38bdf8" />
+          </linearGradient>
+
+          {/* Letter S Gradient */}
+          <linearGradient id={`${idPrefix}sGrad`} x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#ffffff" />
+            <stop offset="100%" stopColor="#cbd5e1" />
+          </linearGradient>
+
+          {/* Letter M Gradient */}
+          <linearGradient id={`${idPrefix}mGrad`} x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#38bdf8" />
+            <stop offset="100%" stopColor="#0284c7" />
+          </linearGradient>
+
+          {/* Inner divider line */}
+          <linearGradient id={`${idPrefix}lineGrad`} x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#38bdf8" stopOpacity="0" />
+            <stop offset="50%" stopColor="#38bdf8" stopOpacity="0.4" />
+            <stop offset="100%" stopColor="#38bdf8" stopOpacity="0" />
+          </linearGradient>
+
+          {/* Filters */}
+          <filter id={`${idPrefix}neonPulse`} x="-30%" y="-30%" width="160%" height="160%">
+            <feGaussianBlur stdDeviation="5" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+
+          <filter id={`${idPrefix}softGlow`} x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur stdDeviation="12" result="blur" />
+            <feComposite in="SourceGraphic" in2="blur" operator="over" />
+          </filter>
+
+          <filter id={`${idPrefix}badgeShadow`} x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="16" stdDeviation="22" floodColor="#00e5ff" floodOpacity="0.22" />
+            <feDropShadow dx="0" dy="4" stdDeviation="8" floodColor="#000000" floodOpacity="0.7" />
+          </filter>
+        </defs>
+
+        {/* Ambient Backdrop Glow */}
+        <circle cx="250" cy="210" r="190" fill="#14b8a6" opacity="0.12" filter={`url(#${idPrefix}softGlow)`} />
+
+        {/* Main Logo Squircle Badge Container */}
+        <g filter={`url(#${idPrefix}badgeShadow)`}>
+          <rect 
+            x="25" 
+            y="25" 
+            width="450" 
+            height="450" 
+            rx="96" 
+            fill={`url(#${idPrefix}bgGrad)`} 
+            stroke={`url(#${idPrefix}glowBorder)`} 
+            strokeWidth="3.5" 
+          />
+        </g>
+
+        {/* Subtle Hospital Telemetry Cross & Grid motif */}
+        <g opacity="0.14">
+          <line x1="250" y1="40" x2="250" y2="350" stroke="#38bdf8" strokeWidth="1.5" strokeDasharray="4 4" />
+          <line x1="45" y1="185" x2="455" y2="185" stroke="#38bdf8" strokeWidth="1.5" strokeDasharray="4 4" />
+          <circle cx="250" cy="185" r="140" fill="none" stroke="#38bdf8" strokeWidth="1.2" strokeDasharray="3 4" />
+        </g>
+
+        {/* GLYPH: S & M Monogram */}
+        <g id={`${idPrefix}sm-monogram`}>
+          {/* Letter 'S' */}
+          <path 
+            d="M 205 68 C 160 48, 70 60, 60 128 C 50 190, 195 198, 185 272 C 176 342, 92 355, 58 318" 
+            fill="none" 
+            stroke={`url(#${idPrefix}sGrad)`} 
+            strokeWidth="36" 
+            strokeLinecap="round" 
+            strokeLinejoin="round" 
+            opacity="0.96" 
+          />
+
+          {/* Letter 'M' */}
+          <path 
+            d="M 242 345 V 58 L 344 218 L 446 58 V 345" 
+            fill="none" 
+            stroke={`url(#${idPrefix}mGrad)`} 
+            strokeWidth="36" 
+            strokeLinecap="round" 
+            strokeLinejoin="round" 
+            opacity="0.65" 
+          />
+
+          {/* Intertwined Glowing ECG Telemetry Heartbeat Wave */}
+          <path 
+            d="M 32 200 H 125 L 152 142 L 178 268 L 214 90 L 245 338 L 278 126 L 305 246 L 335 180 L 362 200 H 468" 
+            fill="none" 
+            stroke={`url(#${idPrefix}pulseTeal)`} 
+            strokeWidth="13" 
+            strokeLinecap="round" 
+            strokeLinejoin="round" 
+            filter={`url(#${idPrefix}neonPulse)`} 
+          />
+
+          {/* Dynamic Pulse Glowing Nodes */}
+          <circle cx="245" cy="338" r="8" fill="#ffffff" filter={`url(#${idPrefix}neonPulse)`} />
+          <circle cx="214" cy="90" r="6" fill="#ffffff" filter={`url(#${idPrefix}neonPulse)`} />
+        </g>
+
+        {/* Divider Line */}
+        <line x1="60" y1="375" x2="440" y2="375" stroke={`url(#${idPrefix}lineGrad)`} strokeWidth="1.8" />
+
+        {/* Text inside the badge: Soli Medical MICU */}
+        {showText && (
+          <g textAnchor="middle">
+            <g transform="translate(250, 416)">
+              <text 
+                x="-44" 
+                y="6" 
+                textAnchor="middle" 
+                fontFamily="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" 
+                fontSize="26" 
+                fontWeight="800" 
+                letterSpacing="0.8" 
+                fill="#ffffff"
+              >
+                Soli Medical
+              </text>
+              <rect x="52" y="-19" width="86" height="32" rx="16" fill="#0d2b4a" stroke="#14b8a6" strokeWidth="1.8" />
+              <text 
+                x="95" 
+                y="3" 
+                textAnchor="middle" 
+                fontFamily="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" 
+                fontSize="14.5" 
+                fontWeight="900" 
+                letterSpacing="2.2" 
+                fill="#22d3ee"
+              >
+                MICU
+              </text>
+            </g>
+            <text 
+              x="250" 
+              y="452" 
+              fontFamily="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" 
+              fontSize="10.5" 
+              fontWeight="600" 
+              letterSpacing="2.4" 
+              fill="#94a3b8"
+            >
+              INTENSIVE CARE UNIT
+            </text>
+          </g>
+        )}
+      </svg>
+    </div>
   );
 };

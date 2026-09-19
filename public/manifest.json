@@ -1,18 +1,39 @@
 {
+  "id": "/",
   "name": "Soli Medical MICU (ICU-Sync)",
   "short_name": "ICU-Sync",
   "description": "Real-time MICU Central Station and Bedside Clinical Sync System",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#070d18",
-  "theme_color": "#0b1224",
   "orientation": "any",
+  "background_color": "#070d18",
+  "theme_color": "#070d18",
+  "categories": ["medical", "health", "productivity"],
   "icons": [
+    {
+      "src": "/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
     {
       "src": "/logo.svg",
       "sizes": "any",
       "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "purpose": "any"
     }
   ]
 }

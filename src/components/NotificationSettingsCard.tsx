@@ -86,7 +86,7 @@ export const NotificationSettingsCard: React.FC = () => {
   };
 
   const previewSound = (type: NotificationType) => {
-    playGentleNotificationTone(type);
+    playGentleNotificationTone(type, true);
   };
 
   const eventConfigs: {

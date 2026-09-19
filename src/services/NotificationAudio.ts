@@ -13,6 +13,36 @@ import { NotificationType } from '../types/notification.ts';
 
 let sharedAudioCtx: AudioContext | null = null;
 
+const SETTINGS_STORAGE_KEY = 'soli_medical_icu_settings_v1';
+
+/**
+ * Synchronously checks if audio notifications are muted globally by user settings
+ */
+export function isAudioGloballyMuted(): boolean {
+  if (typeof window === 'undefined') return true;
+  try {
+    const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      // If user explicitly muted notifications
+      if (parsed?.notifications?.isMuted === true) {
+        return true;
+      }
+      // If master audio chimes are turned OFF
+      if (parsed?.notifications?.masterAudio === false) {
+        return true;
+      }
+      // If audio alarms feature is turned OFF
+      if (parsed?.features?.enableAudioAlarms === false) {
+        return true;
+      }
+    }
+  } catch (e) {
+    console.warn('Error reading mute settings from storage:', e);
+  }
+  return false;
+}
+
 function getAudioContext(): AudioContext | null {
   if (typeof window === 'undefined') return null;
   try {
@@ -148,8 +178,12 @@ function playPulseTone(
   osc2.stop(t1 + 0.18);
 }
 
-export function playGentleNotificationTone(type: NotificationType): void {
+export function playGentleNotificationTone(type: NotificationType, ignoreMute: boolean = false): void {
   try {
+    if (!ignoreMute && isAudioGloballyMuted()) {
+      return;
+    }
+
     const ctx = getAudioContext();
     if (!ctx) return;
 

@@ -25,6 +25,7 @@ import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
 import { useAuth } from '../services/AuthContext.tsx';
 import { SoliLogo } from './SoliLogo.tsx';
+import { PWAInstallButton } from './PWAInstallButton.tsx';
 import { getPatientForBed } from '../services/dataModel.ts';
 
 interface SidebarProps {
@@ -305,6 +306,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
           {isRTL ? <ChevronLeft className="w-4 h-4 text-slate-400 shrink-0" /> : <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />}
         </button>
+
+        {/* PWA Cross-Platform Install Action */}
+        <div className="pt-2">
+          <PWAInstallButton variant="sidebar" />
+        </div>
       </div>
 
       {/* User Profile Footer */}

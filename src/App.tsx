@@ -12,6 +12,7 @@ import {
 import { UserPlus } from 'lucide-react';
 import { Header } from './components/Header.tsx';
 import { Sidebar } from './components/Sidebar.tsx';
+import { SoliLogo } from './components/SoliLogo.tsx';
 import { BedMatrixCard } from './components/BedMatrixCard.tsx';
 import { BedsideFlowsheet } from './components/BedsideFlowsheet.tsx';
 import { AddVitalsModal } from './components/AddVitalsModal.tsx';
@@ -189,40 +190,47 @@ export default function App() {
         return;
       }
       try {
-        // 1. Try pulling fresh cloud data from Firestore first
-        const hasCloudData = await pullCloudDataToLocalDb();
-        if (!hasCloudData) {
-          const bedCount = await db.beds.count();
-          if (bedCount === 0) {
-            console.log('Initializing 6 vacant beds...');
-            const cleanBeds: BedRecord[] = ['01', '02', '03', '04', '05', '06'].map((num, idx) => ({
-              id: num,
-              unitId: 'MICU-MAIN',
-              bedNumber: num as BedNumber,
-              bayName: `Critical Care Bay ${num}`,
-              isActive: true,
-              displayOrder: idx,
-              status: idx === 5 ? BedStatus.UNAVAILABLE : BedStatus.VACANT,
-              currentPatientId: null,
-              activePatientId: null,
-              lastCleanedAt: new Date().toISOString()
-            }));
-            await db.beds.bulkPut(cleanBeds);
-          }
+        // 1. Instant local IndexedDB load: verify beds and seed if brand new
+        const bedCount = await db.beds.count();
+        if (bedCount === 0) {
+          console.log('Initializing 6 vacant beds in local DB...');
+          const cleanBeds: BedRecord[] = ['01', '02', '03', '04', '05', '06'].map((num, idx) => ({
+            id: num,
+            unitId: 'MICU-MAIN',
+            bedNumber: num as BedNumber,
+            bayName: `Critical Care Bay ${num}`,
+            isActive: true,
+            displayOrder: idx,
+            status: idx === 5 ? BedStatus.UNAVAILABLE : BedStatus.VACANT,
+            currentPatientId: null,
+            activePatientId: null,
+            lastCleanedAt: new Date().toISOString()
+          }));
+          await db.beds.bulkPut(cleanBeds);
         }
 
         // Clean out any corrupted phantom telemetry artifacts (e.g. 60/40 BP) on startup
         await purgePhantomCriticalVitals();
 
+        // 2. Instant First-Paint: render full clinical interface immediately
         await reloadData();
+        setIsReady(true);
 
-        // Subscribe to real-time cloud changes from Firebase Firestore
+        // 3. Background Cloud Reconcile: pull fresh Firestore data asynchronously without freezing screen
+        (async () => {
+          try {
+            await pullCloudDataToLocalDb();
+            await reloadData();
+          } catch (cloudErr) {
+            console.warn('Background cloud sync notice:', cloudErr);
+          }
+        })();
+
+        // 4. Subscribe to ongoing real-time cloud changes from Firebase Firestore
         unsubscribeFirestore = subscribeToRealtimeFirestore(async () => {
           console.log('Firestore cloud delta received. Synchronizing local state...');
           await reloadData();
         });
-
-        setIsReady(true);
       } catch (e) {
         console.warn('System initialization warning (running in offline/local fallback):', e);
         setIsReady(true);
@@ -443,12 +451,44 @@ export default function App() {
 
   if (!isReady || isAuthLoading) {
     return (
-      <div className="min-h-screen bg-slate-100 text-teal-600 dark:bg-[#070d18] dark:text-teal-400 flex flex-col items-center justify-center space-y-4">
-        <div className="w-12 h-12 rounded-2xl bg-teal-500/20 border border-teal-500/40 flex items-center justify-center animate-spin">
-          <span className="w-6 h-6 border-2 border-teal-500 dark:border-teal-400 border-t-transparent rounded-full"></span>
-        </div>
-        <div className="text-sm font-bold font-mono tracking-widest text-slate-600 dark:text-slate-300">
-          INITIALIZING SOLI MEDICAL MICU (FIREBASE REAL-TIME CLOUD SYNC)...
+      <div 
+        className="min-h-screen bg-[#070d18] text-slate-100 flex flex-col items-center justify-center p-6 relative overflow-hidden select-none" 
+        dir={isRTL ? 'rtl' : 'ltr'}
+      >
+        {/* Ambient background glow effects */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-cyan-500/10 rounded-full blur-2xl pointer-events-none" />
+
+        <div className="relative z-10 flex flex-col items-center max-w-sm w-full text-center space-y-5">
+          {/* Prominent Official Logo with Animated Ambient Pulse */}
+          <div className="relative">
+            <div className="absolute inset-0 rounded-3xl bg-teal-400/20 blur-xl animate-pulse" />
+            <SoliLogo className="w-24 h-24 sm:w-28 sm:h-28 drop-shadow-2xl relative z-10 animate-in zoom-in-90 duration-300" />
+          </div>
+
+          <div className="space-y-1.5">
+            <h1 className="text-lg sm:text-xl font-black tracking-tight text-white flex items-center justify-center gap-2">
+              <span>SOLI MEDICAL</span>
+              <span className="px-2 py-0.5 rounded-md bg-teal-500/20 border border-teal-500/40 text-teal-300 text-xs font-mono font-bold">
+                MICU
+              </span>
+            </h1>
+            <p className="text-xs font-medium text-slate-400">
+              {lang === 'ar' ? 'محطة العناية المركزة والمزامنة السريرية اللحظية' : 'Intensive Care Unit Clinical Telemetry Station'}
+            </p>
+          </div>
+
+          {/* High-tech Glowing Progress Bar */}
+          <div className="w-full bg-slate-800/80 rounded-full h-2 overflow-hidden border border-slate-700/60 p-0.5 shadow-inner">
+            <div className="h-full bg-gradient-to-r from-teal-500 via-cyan-400 to-teal-400 rounded-full animate-[pulse_1.5s_ease-in-out_infinite] w-3/4 shadow-[0_0_12px_rgba(20,184,166,0.6)]" />
+          </div>
+
+          <div className="flex items-center gap-2 font-mono text-[11px] text-teal-400 font-semibold tracking-wider">
+            <span className="w-2 h-2 rounded-full bg-teal-400 animate-ping inline-block" />
+            <span>
+              {lang === 'ar' ? 'جاري تجهيز محطة العناية والمزامنة اللحظية...' : 'INITIALIZING BEDSIDE TELEMETRY SYNC...'}
+            </span>
+          </div>
         </div>
       </div>
     );

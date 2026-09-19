@@ -36,6 +36,8 @@ import { useTranslation } from '../services/i18n.ts';
 import { getPatientForBed } from '../services/dataModel.ts';
 import { useAppNotifications } from '../services/NotificationContext.tsx';
 import { AppNotification } from '../types/notification.ts';
+import { SoliLogo } from './SoliLogo.tsx';
+import { PWAInstallButton } from './PWAInstallButton.tsx';
 
 interface HeaderProps {
   beds: BedRecord[];
@@ -182,6 +184,23 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 dark:bg-emerald-400 animate-pulse" title={lang === 'ar' ? 'النظام يعمل بكفاءة' : 'System Operational'}></span>
           </div>
+
+          {/* Prominent Soli Medical Brand Logo & Title on Header */}
+          <div 
+            onClick={onOpenSidebar}
+            className="flex items-center gap-2 cursor-pointer group py-0.5 select-none"
+            title={lang === 'ar' ? 'شعار سولي ميديكال - انقر لفتح القائمة' : 'Soli Medical - Click to toggle sidebar'}
+          >
+            <SoliLogo className="w-7 h-7 sm:w-8 sm:h-8 flex-shrink-0 drop-shadow-sm group-hover:scale-105 transition-transform" />
+            <div className="flex flex-col">
+              <span className="text-xs sm:text-sm font-black tracking-tight text-slate-900 dark:text-white leading-none">
+                {lang === 'ar' ? 'سولي ميديكال' : 'SOLI MEDICAL'}
+              </span>
+              <span className="text-[9px] sm:text-[10px] font-mono text-teal-600 dark:text-teal-400 font-bold leading-none mt-0.5">
+                MICU SYNC
+              </span>
+            </div>
+          </div>
         </div>
 
         {/* Live Metrics Ticker (Desktop & Tablet) */}
@@ -232,8 +251,11 @@ export const Header: React.FC<HeaderProps> = ({
           )}
         </div>
 
-        {/* Action Controls: Search, Theme Toggle, Alerts & Settings */}
+        {/* Action Controls: Search, PWA Install, Theme Toggle, Alerts & Settings */}
         <div className="flex items-center gap-2 sm:gap-2.5 relative">
+          {/* PWA Install Button (Cross-platform) */}
+          <PWAInstallButton variant="compact" />
+
           {/* Universal Search Icon Button */}
           {settings.features.enableArchiveSearch && (
             <button
@@ -249,6 +271,32 @@ export const Header: React.FC<HeaderProps> = ({
               <Search className="w-4 h-4 text-teal-600 dark:text-teal-400 group-hover:scale-110 transition-transform flex-shrink-0" />
             </button>
           )}
+
+          {/* Quick Mute / Unmute Button directly in Header */}
+          <button
+            type="button"
+            onClick={() => updateNotificationSettings({ isMuted: !settings.notifications.isMuted })}
+            className={`p-2 rounded-xl border text-xs font-semibold transition-all active:scale-95 shadow-sm cursor-pointer flex items-center gap-1.5 ${
+              settings.notifications.isMuted
+                ? 'bg-amber-500/15 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/40 hover:bg-amber-500/25 ring-1 ring-amber-500/30'
+                : 'bg-white hover:bg-slate-100 dark:bg-[#0b1325] dark:hover:bg-[#111d38] border-slate-200 dark:border-slate-700/80 text-slate-600 dark:text-slate-300'
+            }`}
+            title={settings.notifications.isMuted 
+              ? (lang === 'ar' ? 'التنبيهات الصوتية مكتومة حالياً (انقر لإلغاء الكتم)' : 'Sounds are currently muted (Click to unmute)') 
+              : (lang === 'ar' ? 'كتم كافة التنبيهات الصوتية' : 'Mute all sounds')}
+            aria-label="Toggle mute"
+          >
+            {settings.notifications.isMuted ? (
+              <>
+                <VolumeX className="w-4 h-4 text-amber-500" />
+                <span className="hidden xl:inline text-[11px] font-bold text-amber-600 dark:text-amber-400">
+                  {lang === 'ar' ? 'مكتوم' : 'Muted'}
+                </span>
+              </>
+            ) : (
+              <Volume2 className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+            )}
+          </button>
 
           {/* Integrated Notification & Alert Center Bell with Popover */}
           <div className="relative" ref={notifMenuRef}>

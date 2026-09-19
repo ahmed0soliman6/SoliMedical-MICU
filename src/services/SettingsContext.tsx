@@ -119,6 +119,7 @@ export const SettingsProvider = ({ children }: { children: ReactNode }) => {
         },
         lastUpdated: new Date().toISOString(),
       };
+      saveSettingsToStorage(updated);
       return updated;
     });
   };
@@ -137,6 +138,7 @@ export const SettingsProvider = ({ children }: { children: ReactNode }) => {
         },
         lastUpdated: new Date().toISOString(),
       };
+      saveSettingsToStorage(updated);
       return updated;
     });
   };
@@ -151,6 +153,7 @@ export const SettingsProvider = ({ children }: { children: ReactNode }) => {
         },
         lastUpdated: new Date().toISOString(),
       };
+      saveSettingsToStorage(updated);
       return updated;
     });
   };
