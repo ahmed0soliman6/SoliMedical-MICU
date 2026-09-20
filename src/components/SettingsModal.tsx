@@ -388,6 +388,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
       icon: Cloud,
       color: 'text-teal-400',
     },
+    {
+      key: 'enableExitProtection',
+      category: 'alerts',
+      labelAr: 'حماية منع الخروج العرضي (Accidental Exit Guard)',
+      labelEn: 'Accidental Exit Protection',
+      descriptionAr: 'تنبيه المستخدم وطلب التأكيد عند محاولة الرجوع بالمتصفح أو مغادرة المنظومة بالخطأ لحماية شاشات المراقبة السريرية الحية.',
+      descriptionEn: 'Intercept accidental browser back exits with a confirmation modal to protect active telemetry monitoring.',
+      icon: ShieldAlert,
+      color: 'text-amber-400',
+    },
   ];
 
   const sections = [
@@ -413,8 +423,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
       id: 'alerts',
       labelAr: 'الإنذارات، الإشعارات والمزامنة السحابية',
       labelEn: 'Alarms & Cloud Infrastructure',
-      badgeAr: '3 ميزات',
-      badgeEn: '3 Features',
+      badgeAr: '4 ميزات',
+      badgeEn: '4 Features',
       icon: BellRing,
       items: featureItems.filter(f => f.category === 'alerts')
     },

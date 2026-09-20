@@ -137,7 +137,21 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
   const { currentUser } = useAuth();
   const { triggerNotification } = useAppNotifications();
   
-  const [activeTab, setActiveTab] = useState<'all' | 'paperFlowsheet' | 'labs' | 'antibiotics' | 'investigations' | 'vitals' | 'vent' | 'pumps' | 'fluids' | 'sbar' | 'notes' | 'disposition' | 'labTemplates'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'paperFlowsheet' | 'labs' | 'antibiotics' | 'investigations' | 'vitals' | 'vent' | 'pumps' | 'fluids' | 'sbar' | 'notes' | 'disposition' | 'labTemplates'>(() => {
+    try {
+      const saved = localStorage.getItem('soli_icu_flowsheet_tab');
+      if (saved && ['all', 'paperFlowsheet', 'labs', 'antibiotics', 'investigations', 'vitals', 'vent', 'pumps', 'fluids', 'sbar', 'notes', 'disposition', 'labTemplates'].includes(saved)) {
+        return saved as any;
+      }
+    } catch {}
+    return 'all';
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('soli_icu_flowsheet_tab', activeTab);
+    } catch {}
+  }, [activeTab]);
   const [isPatientCardCollapsed, setIsPatientCardCollapsed] = useState<boolean>(true);
   const [isDispositionCardCollapsed, setIsDispositionCardCollapsed] = useState<boolean>(true);
   const [isHistoryCardCollapsed, setIsHistoryCardCollapsed] = useState<boolean>(true);

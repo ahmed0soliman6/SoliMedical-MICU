@@ -21,11 +21,12 @@ export interface SystemFeatureFlags {
   enableCodeStatus: boolean;          // حالة الإنعاش القلبي الرئوي (Code Status: Full CPR / DNR)
   enableSha256Addendums: boolean;     // البصمات المشفرة SHA-256 للملاحظات
 
-  // Alerts & Network Sync
+  // Alerts, Safety & Network Sync
   enableAudioAlarms: boolean;         // الإنذارات الصوتية الطبية IEC 60601-1-8
   enablePushNotifications: boolean;   // إشعارات الأندرويد والنظام الخارجية
   enableCloudSync: boolean;           // المزامنة السحابية اللحظية Firebase
   enableMortalityAutoPurge: boolean;  // بروتوكول الأرشفة التلقائية بعد 72 ساعة
+  enableExitProtection: boolean;      // حماية منع الخروج العرضي من المنظومة عند الرجوع بالمتصفح
 }
 
 export interface UnitCustomization {
@@ -423,6 +424,7 @@ export const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
     enablePushNotifications: true,
     enableCloudSync: true,
     enableMortalityAutoPurge: true,
+    enableExitProtection: true,
   },
   notifications: DEFAULT_NOTIFICATION_SETTINGS,
   unit: {

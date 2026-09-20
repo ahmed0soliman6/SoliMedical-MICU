@@ -27,7 +27,12 @@ import {
   ChevronUp,
   Clock,
   LogOut,
-  ShieldCheck
+  ShieldCheck,
+  ArrowRight,
+  ArrowLeft,
+  Wifi,
+  WifiOff,
+  CloudOff
 } from 'lucide-react';
 import { BedRecord, PatientDossier, BedNumber } from '../types/schema.ts';
 import { requestNotificationPermission, playIcuAlarmAudio } from '../services/firebase.ts';
@@ -51,6 +56,8 @@ interface HeaderProps {
   onTabChange: (tab: string) => void;
   activeAlertMessage?: string | null;
   onDismissAlert?: () => void;
+  canGoBack?: boolean;
+  onGoBack?: () => void;
 }
 
 const formatRelativeTime = (isoString: string, lang: 'ar' | 'en') => {
@@ -82,6 +89,8 @@ export const Header: React.FC<HeaderProps> = ({
   onTabChange,
   activeAlertMessage,
   onDismissAlert,
+  canGoBack,
+  onGoBack,
 }) => {
   const { settings, updateSettings, updateNotificationSettings, toggleTheme } = useSystemSettings();
   const { t, lang, setLanguage, isRTL } = useTranslation();
@@ -106,6 +115,39 @@ export const Header: React.FC<HeaderProps> = ({
   const [isNotificationMenuOpen, setIsNotificationMenuOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const notifMenuRef = useRef<HTMLDivElement>(null);
+
+  // Live Interactive Connection Status (Online / Offline)
+  const [isOnline, setIsOnline] = useState<boolean>(() => {
+    return typeof navigator !== 'undefined' ? navigator.onLine : true;
+  });
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      const msg = lang === 'ar' 
+        ? '✅ تم استعادة الاتصال بالإنترنت والمزامنة السحابية اللحظية (Firebase)' 
+        : '✅ Internet connection restored - Cloud sync online';
+      setSyncToastMessage(msg);
+      setTimeout(() => setSyncToastMessage(null), 4000);
+    };
+
+    const handleOffline = () => {
+      setIsOnline(false);
+      const msg = lang === 'ar' 
+        ? '⚠️ انقطع الاتصال بالإنترنت! المنظومة تعمل بوضع عدم الاتصال (Offline Resilience) محلياً لحفظ كافة البيانات' 
+        : '⚠️ Connection lost! Operating in local resilient offline mode (Dexie)';
+      setSyncToastMessage(msg);
+      setTimeout(() => setSyncToastMessage(null), 5000);
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [lang]);
 
   const INITIAL_VISIBLE_COUNT = 6;
   const displayedNotifications = isExpanded ? notifications : notifications.slice(0, INITIAL_VISIBLE_COUNT);
@@ -148,16 +190,29 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   const handleCloudSyncClick = () => {
-    if (onTriggerCloudSync) {
-      onTriggerCloudSync();
+    const currentOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+    setIsOnline(currentOnline);
+
+    if (currentOnline) {
+      if (onTriggerCloudSync) {
+        onTriggerCloudSync();
+      }
+      const msg = lang === 'ar' 
+        ? '✅ الاتصال السحابي نشط: المزامنة اللحظية مع Firebase Firestore تعمل بكفاءة' 
+        : '✅ Cloud Connection Active: Realtime sync with Firebase Firestore is running smoothly';
+      setSyncToastMessage(msg);
+      setTimeout(() => {
+        setSyncToastMessage(null);
+      }, 3500);
+    } else {
+      const msg = lang === 'ar' 
+        ? '⚠️ غير متصل بالإنترنت! المنظومة تعمل بنظام التخزين المحلي الفوري (Dexie) لحفظ كافة البيانات السريرية بأمان' 
+        : '⚠️ Offline! System operates in local offline resilience mode (Dexie) - no data will be lost';
+      setSyncToastMessage(msg);
+      setTimeout(() => {
+        setSyncToastMessage(null);
+      }, 4500);
     }
-    const msg = lang === 'ar' 
-      ? '✅ الاتصال السحابي نشط: المزامنة اللحظية مع Firebase Firestore تعمل بكفاءة' 
-      : '✅ Cloud Connection Active: Realtime sync with Firebase Firestore is running smoothly';
-    setSyncToastMessage(msg);
-    setTimeout(() => {
-      setSyncToastMessage(null);
-    }, 3500);
   };
 
   const hasActiveEmergency = !!activeAlertMessage;
@@ -166,23 +221,43 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header className="sticky top-0 z-40 bg-white/95 dark:bg-[#0a1122]/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800/80 px-2.5 sm:px-6 py-2 shadow-sm dark:shadow-lg transition-colors">
       <div className="max-w-[1600px] mx-auto flex items-center justify-between gap-2">
-        {/* Left Side: Sidebar Navigation Toggle & Live Status Indicator */}
-        <div className="flex items-center gap-3">
+        {/* Left Side: Navigation Controls (Menu & Back) & Live Status */}
+        <div className="flex items-center gap-2 sm:gap-2.5">
           {/* Hamburger Menu Button for Mobile/Tablet */}
           <button
             onClick={onOpenSidebar}
-            className="md:hidden flex items-center gap-2 px-3 py-1.5 sm:py-2 rounded-xl bg-slate-100 dark:bg-[#0f172a] hover:bg-teal-50 dark:hover:bg-teal-950/50 hover:border-teal-500/60 border border-slate-300 dark:border-slate-700 text-teal-700 dark:text-teal-400 transition-all active:scale-95 shadow-sm cursor-pointer"
+            className="md:hidden flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-slate-100 dark:bg-[#0f172a] hover:bg-teal-50 dark:hover:bg-teal-950/50 hover:border-teal-500/60 border border-slate-300 dark:border-slate-700 text-teal-700 dark:text-teal-400 transition-all active:scale-95 shadow-sm cursor-pointer"
             title={lang === 'ar' ? 'القائمة الجانبية والصفحات' : 'Open Sidebar & Navigation'}
             aria-label="Toggle navigation menu"
           >
             <Menu className="w-5 h-5" />
-            <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
+            <span className="text-xs font-bold text-slate-700 dark:text-slate-200 hidden xs:inline">
               {lang === 'ar' ? 'القائمة' : 'Menu'}
             </span>
           </button>
 
+          {/* Back Button (زر الرجوع) - Located directly next to the menu dropdown button */}
+          <button
+            type="button"
+            id="header-back-btn"
+            onClick={onGoBack}
+            disabled={!canGoBack}
+            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl border text-xs font-bold transition-all active:scale-95 shadow-sm cursor-pointer ${
+              canGoBack
+                ? 'bg-teal-50 hover:bg-teal-100 dark:bg-teal-950/70 dark:hover:bg-teal-900/90 border-teal-400 dark:border-teal-500/70 text-teal-800 dark:text-teal-200 ring-1 ring-teal-500/20 shadow-teal-500/10'
+                : 'bg-slate-100 dark:bg-[#0f172a] border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-600 opacity-50 cursor-not-allowed'
+            }`}
+            title={lang === 'ar' ? 'الرجوع للصفحة السابقة / الكونسول المركزي (Back)' : 'Go back to previous page / Central Console'}
+            aria-label={lang === 'ar' ? 'رجوع' : 'Back'}
+          >
+            {isRTL ? <ArrowRight className="w-4 h-4 shrink-0" /> : <ArrowLeft className="w-4 h-4 shrink-0" />}
+            <span className="font-bold">
+              {lang === 'ar' ? 'رجوع' : 'Back'}
+            </span>
+          </button>
+
           {/* Active System Indicator Dot */}
-          <div className="flex items-center gap-2">
+          <div className="hidden sm:flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 dark:bg-emerald-400 animate-pulse" title={lang === 'ar' ? 'النظام يعمل بكفاءة' : 'System Operational'}></span>
           </div>
         </div>
@@ -204,26 +279,74 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           )}
 
-
-
-          {/* Firebase Realtime Cloud Live Indicator */}
+          {/* Interactive Online/Offline Connection Status Button (Desktop) */}
           {settings.features.enableCloudSync && (
             <button
+              type="button"
+              id="header-connection-status-btn-desktop"
               onClick={handleCloudSyncClick}
-              className="bg-slate-100 hover:bg-teal-50 dark:bg-[#0e172a] dark:hover:bg-teal-950/60 border border-slate-200 hover:border-teal-400 dark:border-teal-500/40 dark:hover:border-teal-400 px-3 py-1.5 rounded-xl flex items-center gap-2 shadow-sm transition-all active:scale-95 group cursor-pointer"
-              title={lang === 'ar' ? 'حالة المزامنة السحابية: متصل بـ Firebase Firestore. انقر لإجراء فحص وتحديث' : 'Cloud Sync: Online (Firebase). Click to verify status'}
+              className={`border px-3 py-1.5 rounded-xl flex items-center gap-2 shadow-sm transition-all active:scale-95 group cursor-pointer text-xs font-bold ${
+                isOnline
+                  ? 'bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 border-emerald-300 dark:border-emerald-700/60 text-emerald-800 dark:text-emerald-300'
+                  : 'bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/80 dark:hover:bg-rose-900/90 border-rose-400 dark:border-rose-600 text-rose-800 dark:text-rose-200 ring-2 ring-rose-500/40 animate-pulse'
+              }`}
+              title={
+                isOnline
+                  ? (lang === 'ar' ? '✅ متصل: الاتصال بالشبكة والمزامنة السحابية اللحظية (Firebase) نشطة. انقر للتحديث' : '✅ Online: Connected to Network & Firebase Cloud Sync active. Click to verify')
+                  : (lang === 'ar' ? '🚨 غير متصل: انقطع الاتصال بالإنترنت! المنظومة تعمل بوضع عدم الاتصال (Offline Dexie) محلياً لحماية البيانات' : '🚨 Offline: Internet connection disconnected! System operates in local offline resilience mode (Dexie)')
+              }
             >
-              <Cloud className="w-4 h-4 text-teal-600 dark:text-teal-400 group-hover:scale-110 transition-transform flex-shrink-0" />
-              <div className="flex items-center gap-1.5 font-mono text-xs font-bold text-teal-700 dark:text-teal-300">
-                <span className="w-2 h-2 rounded-full bg-teal-500 dark:bg-teal-400 animate-ping inline-block"></span>
-                <span>{lang === 'ar' ? 'متصل' : 'Online'}</span>
-              </div>
+              {isOnline ? (
+                <>
+                  <Wifi className="w-4 h-4 text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform flex-shrink-0" />
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 dark:bg-emerald-400 animate-ping inline-block"></span>
+                  <span className="font-mono">{lang === 'ar' ? 'متصل' : 'Online'}</span>
+                </>
+              ) : (
+                <>
+                  <WifiOff className="w-4 h-4 text-rose-600 dark:text-rose-400 animate-bounce flex-shrink-0" />
+                  <span className="w-2 h-2 rounded-full bg-rose-600 dark:bg-rose-400 animate-ping inline-block"></span>
+                  <span className="font-mono text-rose-700 dark:text-rose-300 font-extrabold">{lang === 'ar' ? 'غير متصل' : 'Offline'}</span>
+                </>
+              )}
             </button>
           )}
         </div>
 
-        {/* Action Controls: Search, Theme Toggle, Alerts & Settings */}
+        {/* Action Controls: Mobile Connection Indicator, Search, Alerts & Settings */}
         <div className="flex items-center gap-2 sm:gap-2.5 relative">
+          {/* Mobile Connection Indicator */}
+          {settings.features.enableCloudSync && (
+            <button
+              type="button"
+              id="header-connection-status-btn-mobile"
+              onClick={handleCloudSyncClick}
+              className={`md:hidden border px-2.5 py-1.5 rounded-xl flex items-center gap-1.5 shadow-sm transition-all active:scale-95 text-xs font-bold ${
+                isOnline
+                  ? 'bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 border-emerald-300 dark:border-emerald-700/60 text-emerald-800 dark:text-emerald-300'
+                  : 'bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/80 dark:hover:bg-rose-900/90 border-rose-400 dark:border-rose-600 text-rose-800 dark:text-rose-200 ring-2 ring-rose-500/40 animate-pulse'
+              }`}
+              title={
+                isOnline
+                  ? (lang === 'ar' ? '✅ متصل: انقر للتحديث' : '✅ Online: Click to sync')
+                  : (lang === 'ar' ? '🚨 غير متصل: يعمل محلياً' : '🚨 Offline: Local mode')
+              }
+            >
+              {isOnline ? (
+                <>
+                  <Wifi className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping inline-block"></span>
+                  <span className="font-mono text-[11px]">{lang === 'ar' ? 'متصل' : 'Online'}</span>
+                </>
+              ) : (
+                <>
+                  <WifiOff className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400 animate-bounce flex-shrink-0" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-600 animate-ping inline-block"></span>
+                  <span className="font-mono text-[11px] text-rose-700 dark:text-rose-300 font-extrabold">{lang === 'ar' ? 'غير متصل' : 'Offline'}</span>
+                </>
+              )}
+            </button>
+          )}
           {/* Universal Search Icon Button */}
           {settings.features.enableArchiveSearch && (
             <button

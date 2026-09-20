@@ -40,8 +40,60 @@ import { FullPageAdmission } from './components/FullPageAdmission.tsx';
 import { HospitalChatView } from './components/HospitalChatView.tsx';
 import { TopNotificationBanner } from './components/TopNotificationBanner.tsx';
 import { FloatingChatWidget } from './components/FloatingChatWidget.tsx';
+import { ExitConfirmationModal } from './components/ExitConfirmationModal.tsx';
 import { useAppNotifications } from './services/NotificationContext.tsx';
 import { AppNotificationTarget } from './types/notification.ts';
+
+type NavigationTab = 'beds' | 'sbar' | 'notes' | 'search' | 'users' | 'settings' | 'chat';
+
+const VALID_TABS: NavigationTab[] = ['beds', 'sbar', 'notes', 'search', 'users', 'settings', 'chat'];
+const VALID_BEDS: BedNumber[] = [
+  BedNumber.BED_01,
+  BedNumber.BED_02,
+  BedNumber.BED_03,
+  BedNumber.BED_04,
+  BedNumber.BED_05,
+  BedNumber.BED_06
+];
+
+const getInitialNavigationState = (): { tab: NavigationTab; bed: BedNumber | null } => {
+  try {
+    if (typeof window !== 'undefined') {
+      // 1. Check URL hash first (e.g., #tab=beds&bed=06 or #bed-06 or #settings)
+      const hash = window.location.hash.replace(/^#/, '');
+      if (hash) {
+        const urlParams = new URLSearchParams(hash.includes('=') ? hash : `tab=${hash}`);
+        const tabParam = urlParams.get('tab') as NavigationTab | null;
+        const bedParam = urlParams.get('bed') as BedNumber | null;
+
+        if (tabParam && VALID_TABS.includes(tabParam)) {
+          return {
+            tab: tabParam,
+            bed: bedParam && VALID_BEDS.includes(bedParam) ? bedParam : null
+          };
+        }
+        if (hash.startsWith('bed-')) {
+          const bedNum = hash.replace('bed-', '') as BedNumber;
+          if (VALID_BEDS.includes(bedNum)) {
+            return { tab: 'beds', bed: bedNum };
+          }
+        }
+      }
+
+      // 2. Fall back to localStorage so user stays on current page on reload
+      const savedTab = localStorage.getItem('soli_icu_active_tab') as NavigationTab | null;
+      const savedBed = localStorage.getItem('soli_icu_selected_bed') as BedNumber | null;
+
+      const tab = (savedTab && VALID_TABS.includes(savedTab)) ? savedTab : 'beds';
+      const bed = (savedBed && VALID_BEDS.includes(savedBed)) ? savedBed : null;
+
+      return { tab, bed };
+    }
+  } catch (err) {
+    console.warn('Failed to read initial navigation state:', err);
+  }
+  return { tab: 'beds', bed: null };
+};
 
 export default function App() {
   const { t, lang, isRTL } = useTranslation();
@@ -49,8 +101,10 @@ export default function App() {
   const { settings } = useSystemSettings();
   const { setNavigationHandler, triggerNotification } = useAppNotifications();
   const [isReady, setIsReady] = useState(false);
-  const [activeTab, setActiveTab] = useState<'beds' | 'sbar' | 'notes' | 'search' | 'users' | 'settings' | 'chat'>('beds');
-  const [selectedBedNumber, setSelectedBedNumber] = useState<BedNumber | null>(null);
+
+  // Robust persistent navigation state across reloads
+  const [activeTab, setActiveTab] = useState<NavigationTab>(() => getInitialNavigationState().tab);
+  const [selectedBedNumber, setSelectedBedNumber] = useState<BedNumber | null>(() => getInitialNavigationState().bed);
   const [activeAlertMessage, setActiveAlertMessage] = useState<string | null>(null);
   const [currentAlertKey, setCurrentAlertKey] = useState<string | null>(null);
   const [dismissedAlertKeys, setDismissedAlertKeys] = useState<Set<string>>(() => {
@@ -61,6 +115,113 @@ export default function App() {
       return new Set();
     }
   });
+
+  // Sync navigation state with localStorage and URL hash on changes
+  useEffect(() => {
+    try {
+      localStorage.setItem('soli_icu_active_tab', activeTab);
+      if (selectedBedNumber) {
+        localStorage.setItem('soli_icu_selected_bed', selectedBedNumber);
+      } else {
+        localStorage.removeItem('soli_icu_selected_bed');
+      }
+
+      const hash = selectedBedNumber 
+        ? `tab=${activeTab}&bed=${selectedBedNumber}` 
+        : `tab=${activeTab}`;
+      if (window.location.hash !== `#${hash}`) {
+        window.history.replaceState(null, '', `#${hash}`);
+      }
+    } catch (err) {
+      console.warn('Failed to persist navigation state:', err);
+    }
+  }, [activeTab, selectedBedNumber]);
+
+  // Exit protection state & guard ref
+  const [isExitConfirmationOpen, setIsExitConfirmationOpen] = useState(false);
+  const isExitingRef = useRef(false);
+
+  // Guard against accidental website exit when pressing Back at root screen
+  useEffect(() => {
+    if (!settings.features.enableExitProtection) return;
+
+    // Push an initial root barrier state if not already present
+    if (activeTab === 'beds' && selectedBedNumber === null) {
+      if (!window.history.state || window.history.state.guard !== 'soli_icu_root') {
+        window.history.pushState({ guard: 'soli_icu_root' }, '', window.location.href);
+      }
+    }
+
+    const handlePopStateGuard = () => {
+      if (isExitingRef.current) return;
+
+      // If we are at the root level and user presses Back
+      if (activeTab === 'beds' && selectedBedNumber === null) {
+        // Push state back to prevent leaving
+        window.history.pushState({ guard: 'soli_icu_root' }, '', window.location.href);
+        // Show the exit confirmation modal
+        setIsExitConfirmationOpen(true);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopStateGuard);
+    return () => {
+      window.removeEventListener('popstate', handlePopStateGuard);
+    };
+  }, [activeTab, selectedBedNumber, settings.features.enableExitProtection]);
+
+  // Tab close / window reload protection
+  useEffect(() => {
+    if (!settings.features.enableExitProtection) return;
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isExitingRef.current) return;
+      e.preventDefault();
+      e.returnValue = '';
+      return '';
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [settings.features.enableExitProtection]);
+
+  const handleConfirmExit = useCallback(() => {
+    isExitingRef.current = true;
+    setIsExitConfirmationOpen(false);
+    // Trigger navigation away
+    window.history.go(-2);
+  }, []);
+
+  // Support browser back/forward buttons and hash navigation
+  useEffect(() => {
+    const handleLocationChange = () => {
+      const nav = getInitialNavigationState();
+      setActiveTab(nav.tab);
+      setSelectedBedNumber(nav.bed);
+    };
+
+    window.addEventListener('popstate', handleLocationChange);
+    window.addEventListener('hashchange', handleLocationChange);
+    return () => {
+      window.removeEventListener('popstate', handleLocationChange);
+      window.removeEventListener('hashchange', handleLocationChange);
+    };
+  }, []);
+
+  // Back button calculation & action
+  const canGoBack = selectedBedNumber !== null || activeTab !== 'beds';
+
+  const handleGoBack = useCallback(() => {
+    if (selectedBedNumber !== null) {
+      setSelectedBedNumber(null);
+    } else if (activeTab !== 'beds') {
+      setActiveTab('beds');
+    } else if (window.history.length > 1) {
+      window.history.back();
+    }
+  }, [selectedBedNumber, activeTab]);
 
   // Archive Search filters when navigated from notification
   const [archiveSearchTerm, setArchiveSearchTerm] = useState<string>('');
@@ -590,6 +751,8 @@ export default function App() {
           }}
           activeAlertMessage={activeAlertMessage}
           onDismissAlert={handleDismissAlert}
+          canGoBack={canGoBack}
+          onGoBack={handleGoBack}
         />
 
         {/* Main Canvas View - Renders Selected Full Page */}
@@ -770,6 +933,13 @@ export default function App() {
       <FloatingChatWidget 
         activeTab={activeTab} 
         onOpenFullChatPage={() => setActiveTab('chat')} 
+      />
+
+      {/* Accidental Exit Guard Modal */}
+      <ExitConfirmationModal
+        isOpen={isExitConfirmationOpen}
+        onStay={() => setIsExitConfirmationOpen(false)}
+        onConfirmExit={handleConfirmExit}
       />
     </div>
   );
