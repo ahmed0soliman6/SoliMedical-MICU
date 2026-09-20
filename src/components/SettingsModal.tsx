@@ -41,10 +41,13 @@ import {
   Loader2,
   CloudOff,
   Bell,
-  Wrench
+  Wrench,
+  MessageSquare
 } from 'lucide-react';
 import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
+import { useAuth } from '../services/AuthContext.tsx';
+import { StaffRole } from '../types/schema.ts';
 import { SystemFeatureFlags } from '../types/settings.ts';
 import { ClinicalOptionsManager } from './ClinicalOptionsManager.tsx';
 import { NotificationSettingsCard } from './NotificationSettingsCard.tsx';
@@ -63,6 +66,10 @@ interface SettingsModalProps {
 export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onOpenUserManagement, onBedUpdated }) => {
   const { settings, toggleFeature, updateSettings, resetToDefaults } = useSystemSettings();
   const { t, lang, setLanguage, isRTL } = useTranslation();
+  const { currentUser } = useAuth();
+  
+  // Only system admin or super admin can see and trigger cloud reset / purge
+  const isAdmin = currentUser?.role === StaffRole.ADMIN || currentUser?.isSuperAdmin === true;
   
   // All cards are folded/collapsed by default (مطوية أسفل بعضها)
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
@@ -191,12 +198,32 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
     {
       key: 'enableArchiveSearch',
       category: 'modules',
-      labelAr: 'البحث في الأرشيف الطبي (MRN Archive)',
+      labelAr: 'أرشيف المرضى والبحث الطبي (MRN Patient Archive)',
       labelEn: 'Patient & MRN Archive Search',
-      descriptionAr: 'محرك بحث متقدم برقم الملف الطبي (MRN) أو اسم المريض.',
-      descriptionEn: 'Fast historical query by Medical Record Number (MRN) or name.',
+      descriptionAr: 'محرك بحث متقدم وسجل أرشيف المرضى الدائم برقم الملف الطبي (MRN) أو الاسم.',
+      descriptionEn: 'Fast historical query and permanent clinical archive by Medical Record Number (MRN) or patient name.',
       icon: Search,
       color: 'text-blue-400',
+    },
+    {
+      key: 'enableClinicalChat',
+      category: 'modules',
+      labelAr: 'الدردشة والاتصال السريري (Clinical Team Chat)',
+      labelEn: 'Clinical Team Chat & Consultations',
+      descriptionAr: 'قناة المحادثات والتواصل اللحظي الآمن بين أطباء وتمريض العناية المركزة.',
+      descriptionEn: 'Real-time encrypted messaging channel between ICU clinical staff and physicians.',
+      icon: MessageSquare,
+      color: 'text-cyan-400',
+    },
+    {
+      key: 'enableSystemSettingsPage',
+      category: 'modules',
+      labelAr: 'لوحة إعدادات وتخصيص النظام (System Settings)',
+      labelEn: 'System Settings & Customization',
+      descriptionAr: 'التحكم في إظهار أو إخفاء زر وقائمة الإعدادات والتخصيصات العامة.',
+      descriptionEn: 'Control the visibility of system settings and configuration shortcuts.',
+      icon: Sliders,
+      color: 'text-amber-400',
     },
     {
       key: 'enableAdmissions',
@@ -726,40 +753,54 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                                   </button>
                                 </div>
 
-                                {/* 2. Reset All Cloud and Local Data */}
-                                <div className="p-5 rounded-2xl bg-white dark:bg-[#060a14] border border-rose-200 dark:border-rose-500/30 hover:border-rose-400 dark:hover:border-rose-500/50 transition-all flex flex-col justify-between gap-4 shadow-sm">
-                                  <div>
-                                    <div className="flex items-center gap-2.5 text-rose-700 dark:text-rose-400 font-bold mb-2">
-                                      <Trash2 className="w-5 h-5" />
-                                      <h4 className="text-sm">
-                                        {lang === 'ar' ? 'حذف البيانات من السحابة والمتصفح والبدء من جديد' : 'Purge All Cloud & Browser Data (Fresh Start)'}
-                                      </h4>
+                                {/* 2. Reset All Cloud and Local Data (Restricted to System Admin Only) */}
+                                {isAdmin ? (
+                                  <div className="p-5 rounded-2xl bg-white dark:bg-[#060a14] border border-rose-200 dark:border-rose-500/30 hover:border-rose-400 dark:hover:border-rose-500/50 transition-all flex flex-col justify-between gap-4 shadow-sm">
+                                    <div>
+                                      <div className="flex items-center gap-2.5 text-rose-700 dark:text-rose-400 font-bold mb-2">
+                                        <Trash2 className="w-5 h-5" />
+                                        <h4 className="text-sm">
+                                          {lang === 'ar' ? 'حذف البيانات من السحابة والمتصفح والبدء من جديد (خاص بمدير النظام)' : 'Purge All Cloud & Browser Data (Admin Only)'}
+                                        </h4>
+                                      </div>
+                                      <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                                        {lang === 'ar'
+                                          ? 'تنبيه هام: يحذف كافة سجلات المرضى والأسِرّة نهائياً من فايربيس والمتصفح، ويعيد تشغيل المنظومة ببيانات طبية سريرية حقيقية للبدء من جديد.'
+                                          : 'WARNING: Permanently deletes all patient records from Firestore Cloud and local browser cache, resetting the unit with clean, real clinical ICU datasets.'}
+                                      </p>
                                     </div>
-                                    <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                                    <button
+                                      type="button"
+                                      onClick={() => setConfirmModalType('RESET_CLOUD')}
+                                      disabled={isSyncingLocal || isResettingCloud}
+                                      className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-500/20 dark:hover:bg-rose-500/30 text-rose-800 dark:text-rose-300 border border-rose-300 dark:border-rose-500/40 text-xs font-extrabold transition-all cursor-pointer disabled:opacity-50"
+                                    >
+                                      {isResettingCloud ? (
+                                        <>
+                                          <Loader2 className="w-4 h-4 animate-spin" />
+                                          <span>{lang === 'ar' ? 'جاري حذف السحابة وتصفير النظام...' : 'Purging Cloud & Resetting...'}</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <CloudOff className="w-4 h-4" />
+                                          <span>{lang === 'ar' ? 'حذف البيانات من السحابة والمتصفح والبدء من جديد' : 'Delete All Cloud & Local Data'}</span>
+                                        </>
+                                      )}
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800 flex flex-col justify-center gap-2 text-slate-500 dark:text-slate-400">
+                                    <div className="flex items-center gap-2 text-xs font-bold text-slate-600 dark:text-slate-300">
+                                      <ShieldCheck className="w-4 h-4 text-teal-500" />
+                                      <span>{lang === 'ar' ? 'صلاحيات الحذف السحابي مقيدة' : 'Cloud Purge Restricted'}</span>
+                                    </div>
+                                    <p className="text-[11px] leading-relaxed">
                                       {lang === 'ar'
-                                        ? 'تنبيه هام: يحذف كافة سجلات المرضى والأسِرّة نهائياً من فايربيس والمتصفح، ويعيد تشغيل المنظومة ببيانات طبية سريرية حقيقية للبدء من جديد.'
-                                        : 'WARNING: Permanently deletes all patient records from Firestore Cloud and local browser cache, resetting the unit with clean, real clinical ICU datasets.'}
+                                        ? 'إجراءات مسح السحابة وإعادة تصفير النظام متاحة حصرياً لحساب مدير النظام (System Administrator).'
+                                        : 'Cloud purge and system reset operations are strictly restricted to System Administrators.'}
                                     </p>
                                   </div>
-                                  <button
-                                    type="button"
-                                    onClick={() => setConfirmModalType('RESET_CLOUD')}
-                                    disabled={isSyncingLocal || isResettingCloud}
-                                    className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-500/20 dark:hover:bg-rose-500/30 text-rose-800 dark:text-rose-300 border border-rose-300 dark:border-rose-500/40 text-xs font-extrabold transition-all cursor-pointer disabled:opacity-50"
-                                  >
-                                    {isResettingCloud ? (
-                                      <>
-                                        <Loader2 className="w-4 h-4 animate-spin" />
-                                        <span>{lang === 'ar' ? 'جاري حذف السحابة وتصفير النظام...' : 'Purging Cloud & Resetting...'}</span>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <CloudOff className="w-4 h-4" />
-                                        <span>{lang === 'ar' ? 'حذف البيانات من السحابة والمتصفح والبدء من جديد' : 'Delete All Cloud & Local Data'}</span>
-                                      </>
-                                    )}
-                                  </button>
-                                </div>
+                                )}
                               </div>
 
                               {/* Confirmation Modal Overlay */}

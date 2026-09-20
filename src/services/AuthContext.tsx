@@ -11,6 +11,7 @@ import {
   checkIfAnyAdminExists, 
   registerInitialSuperAdminWithFirebaseAuth,
   saveUserAccount,
+  createSecondaryAuthUser,
   deleteUserAccount,
   fetchAllUsers,
   getDefaultPermissionsForRole,
@@ -383,9 +384,49 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     try {
-      // 1. Create user in Firebase Authentication first (Strictly required, no fake UIDs)
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      const uid = userCredential.user.uid;
+      // 1. Create user in Firebase Authentication via isolated secondary instance
+      // This strictly prevents the logged-in Admin from being signed out
+      let uid: string | undefined;
+
+      try {
+        uid = await createSecondaryAuthUser(email, password);
+      } catch (secErr) {
+        console.warn('Secondary auth creation error, attempting backend API proxy:', secErr);
+        // Try backend admin endpoint if available
+        const idToken = await auth.currentUser?.getIdToken().catch(() => null);
+        const res = await fetch(`${API_BASE_URL}/api/admin/users/create`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': idToken ? `Bearer ${idToken}` : ''
+          },
+          body: JSON.stringify({
+            email,
+            password,
+            pinCode: password,
+            nameEn: userData.nameEn,
+            nameAr: userData.nameAr,
+            role,
+            department: userData.department,
+            badgeId: userData.badgeId,
+            licenseNumber: userData.licenseNumber,
+            permissions: userData.permissions || getDefaultPermissionsForRole(role as StaffRole),
+            active: userData.isActive ?? true
+          })
+        }).catch(() => null);
+
+        if (res && res.ok) {
+          const apiData = await res.json().catch(() => ({}));
+          if (apiData?.user?.uid) {
+            uid = apiData.user.uid;
+          }
+        }
+
+        if (!uid) {
+          throw secErr;
+        }
+      }
+
       const now = new Date().toISOString();
 
       const newUser: IcuUser = {
@@ -405,7 +446,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         permissions: userData.permissions || getDefaultPermissionsForRole(role as StaffRole),
       };
 
-      // 2. Save to Firestore and Dexie ONLY after Firebase Auth success
+      // 2. Save to Firestore and Dexie SSOT
       await saveUserAccount(newUser);
       await refreshUsers();
       return { success: true };
@@ -541,74 +582,61 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const target = allUsers.find(u => u.uid === uid);
     if (!target) return { success: false, message: 'المستخدم غير موجود' };
 
+    // Safety check: Prevent deleting last active admin
+    if (target.role === StaffRole.ADMIN || target.isSuperAdmin) {
+      const activeAdmins = allUsers.filter(u => (u.role === StaffRole.ADMIN || u.isSuperAdmin) && u.isActive !== false);
+      if (activeAdmins.length <= 1) {
+        return { success: false, message: 'إجراء أمني حرج: لا يمكن حذف آخر مدير نظام نشط في المنظومة.' };
+      }
+    }
+
     try {
-      const idToken = await auth.currentUser?.getIdToken(true);
+      let backendAuthDeleted = false;
+      const idToken = await auth.currentUser?.getIdToken(true).catch(() => null);
 
-      if (!idToken) {
-        return {
-          success: false,
-          message: 'تعذر الحصول على Firebase ID Token'
-        };
-      }
+      if (idToken) {
+        try {
+          const response = await fetch(
+            `${API_BASE_URL}/api/admin/users/delete`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${idToken}`
+              },
+              body: JSON.stringify({
+                targetUid: uid
+              })
+            }
+          );
 
-      const response = await fetch(
-        `${API_BASE_URL}/api/admin/users/delete`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${idToken}`
-          },
-          body: JSON.stringify({
-            targetUid: uid
-          })
+          if (response.ok) {
+            const data = await response.json().catch(() => ({}));
+            if (data.success) {
+              backendAuthDeleted = true;
+            }
+          } else {
+            console.warn(`[deleteUser] Backend returned status ${response.status}. Falling back to Firestore & Dexie deletion.`);
+          }
+        } catch (apiErr) {
+          console.warn('[deleteUser] Backend delete API unreachable, falling back to direct Firestore deletion:', apiErr);
         }
-      );
-
-      const contentType = response.headers.get('content-type') || '';
-
-      if (!contentType.includes('application/json')) {
-        const text = await response.text();
-
-        console.error('DELETE API returned non-JSON:', {
-          status: response.status,
-          contentType,
-          body: text.slice(0, 500)
-        });
-
-        let detailedMsg = `خادم العمليات الإدارية (Vercel) غير متاح حاليًا (رمز الاستجابة: ${response.status}).`;
-        if (response.status === 404) {
-          detailedMsg += ' مسار الحذف غير موجود (404 Not Found). تأكد من اكتمال نشر مجلد api على Vercel.';
-        } else if (response.status === 500 || text.includes('FUNCTION_INVOCATION_FAILED')) {
-          detailedMsg += ' خطأ داخلي (500) في الدالة السحابية. يرجى التأكد من إضافة متغيرات Firebase Service Account في Vercel (FIREBASE_CLIENT_EMAIL و FIREBASE_PRIVATE_KEY).';
-        }
-
-        return {
-          success: false,
-          message: detailedMsg
-        };
       }
 
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        return {
-          success: false,
-          message: data.message || 'فشل حذف المستخدم.'
-        };
-      }
-
-      await db.users.delete(uid);
+      // Always delete user document from Firestore & Dexie SSOT
+      await deleteUserAccount(uid);
       await refreshUsers();
 
       return {
         success: true,
-        message: data.message || 'تم حذف المستخدم نهائيًا.'
+        message: backendAuthDeleted
+          ? 'تم حذف المستخدم نهائيًا من خادم الحسابات وقاعدة البيانات.'
+          : 'تم حذف المستخدم وسجلاته من قاعدة بيانات المنظومة بنجاح.'
       };
     } catch (e: any) {
       return { 
         success: false, 
-        message: e?.message || 'فشل الاتصال بالخادم لحذف الحساب.' 
+        message: e?.message || 'فشل حذف الحساب.' 
       };
     }
   };

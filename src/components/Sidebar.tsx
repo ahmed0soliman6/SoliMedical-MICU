@@ -274,40 +274,44 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
 
         {/* 5. Hospital Clinical Chat */}
-        <button
-          onClick={() => handleSelectTab('chat')}
-          className={`w-full flex items-center justify-between p-3 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-            activeTab === 'chat'
-              ? 'bg-teal-50 dark:bg-teal-500/20 text-teal-850 dark:text-teal-300 border border-teal-300 dark:border-teal-500/40 shadow-sm font-bold'
-              : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white'
-          }`}
-        >
-          <div className="flex items-center gap-3 truncate">
-            <div className={`p-2 rounded-lg ${activeTab === 'chat' ? 'bg-teal-100 dark:bg-teal-500/30 text-teal-800 dark:text-teal-200' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}>
-              <MessageSquare className="w-4 h-4" />
+        {settings.features.enableClinicalChat !== false && (
+          <button
+            onClick={() => handleSelectTab('chat')}
+            className={`w-full flex items-center justify-between p-3 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+              activeTab === 'chat'
+                ? 'bg-teal-50 dark:bg-teal-500/20 text-teal-850 dark:text-teal-300 border border-teal-300 dark:border-teal-500/40 shadow-sm font-bold'
+                : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <div className="flex items-center gap-3 truncate">
+              <div className={`p-2 rounded-lg ${activeTab === 'chat' ? 'bg-teal-100 dark:bg-teal-500/30 text-teal-800 dark:text-teal-200' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}>
+                <MessageSquare className="w-4 h-4" />
+              </div>
+              <span className="truncate">{lang === 'ar' ? 'الدردشة السريرية (Chat)' : 'Hospital Clinical Chat'}</span>
             </div>
-            <span className="truncate">{lang === 'ar' ? 'الدردشة السريرية (Chat)' : 'Hospital Clinical Chat'}</span>
-          </div>
-          {isRTL ? <ChevronLeft className="w-4 h-4 text-slate-400 shrink-0" /> : <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />}
-        </button>
+            {isRTL ? <ChevronLeft className="w-4 h-4 text-slate-400 shrink-0" /> : <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />}
+          </button>
+        )}
 
         {/* 6. System Settings */}
-        <button
-          onClick={() => handleSelectTab('settings')}
-          className={`w-full flex items-center justify-between p-3 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-            activeTab === 'settings'
-              ? 'bg-teal-50 dark:bg-teal-500/20 text-teal-850 dark:text-teal-300 border border-teal-300 dark:border-teal-500/40 shadow-sm font-bold'
-              : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white'
-          }`}
-        >
-          <div className="flex items-center gap-3 truncate">
-            <div className={`p-2 rounded-lg ${activeTab === 'settings' ? 'bg-teal-100 dark:bg-teal-500/30 text-teal-800 dark:text-teal-200' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}>
-              <Sliders className="w-4 h-4" />
+        {settings.features.enableSystemSettingsPage !== false && (
+          <button
+            onClick={() => handleSelectTab('settings')}
+            className={`w-full flex items-center justify-between p-3 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+              activeTab === 'settings'
+                ? 'bg-teal-50 dark:bg-teal-500/20 text-teal-850 dark:text-teal-300 border border-teal-300 dark:border-teal-500/40 shadow-sm font-bold'
+                : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <div className="flex items-center gap-3 truncate">
+              <div className={`p-2 rounded-lg ${activeTab === 'settings' ? 'bg-teal-100 dark:bg-teal-500/30 text-teal-800 dark:text-teal-200' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}>
+                <Sliders className="w-4 h-4" />
+              </div>
+              <span className="truncate">{lang === 'ar' ? 'إعدادات وتخصيص النظام' : t('settings')}</span>
             </div>
-            <span className="truncate">{lang === 'ar' ? 'إعدادات وتخصيص النظام' : t('settings')}</span>
-          </div>
-          {isRTL ? <ChevronLeft className="w-4 h-4 text-slate-400 shrink-0" /> : <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />}
-        </button>
+            {isRTL ? <ChevronLeft className="w-4 h-4 text-slate-400 shrink-0" /> : <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />}
+          </button>
+        )}
       </div>
 
       {/* User Profile Footer */}

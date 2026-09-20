@@ -1,9 +1,11 @@
 export interface SystemFeatureFlags {
-  // Main Views & Tabs
+  // Main Views, Navigation & Pages (تخصيصات صفحات وقوائم النظام)
   enableBedMatrix: boolean;          // لوحة الأسرة الستة (6-Bed Grid)
   enableSbarHandover: boolean;        // تسليم المناوبات SBAR
   enableClinicalNotes: boolean;       // الملاحظات الطبية المشفرة
   enableArchiveSearch: boolean;       // البحث في الأرشيف الطبي
+  enableClinicalChat: boolean;        // الدردشة السريرية المباشرة (Clinical Chat)
+  enableSystemSettingsPage: boolean;  // إعدادات وتخصيص النظام (System Settings)
   enableAdmissions: boolean;          // إدخال مرضى جدد
 
   // Bedside & Flowsheet Modules
@@ -406,6 +408,8 @@ export const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
     enableSbarHandover: true,
     enableClinicalNotes: true,
     enableArchiveSearch: true,
+    enableClinicalChat: true,
+    enableSystemSettingsPage: true,
     enableAdmissions: true,
     enableTelemetryVitals: true,
     enableVentilatorParameters: true,

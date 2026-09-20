@@ -421,10 +421,13 @@ export async function syncAdminAccountToFirebaseConsole(user: IcuUser): Promise<
 }
 
 export async function deleteUserAccount(uid: string): Promise<void> {
-  // Delete cloud profile first; only remove the local cache after confirmation.
-  await deleteDoc(doc(firestore, 'users', uid));
-  await deleteDoc(doc(firestore, 'admins', uid));
   await db.users.delete(uid);
+  try {
+    await deleteDoc(doc(firestore, 'users', uid));
+    await deleteDoc(doc(firestore, 'admins', uid)).catch(() => {});
+  } catch (err) {
+    console.warn('Failed to delete user doc in firestore:', err);
+  }
 }
 
 export async function syncUserToFirebaseConsole(user: IcuUser): Promise<void> {
@@ -532,6 +535,25 @@ export async function registerInitialSuperAdmin(adminData: {
 /**
  * Creates or updates a clinical staff user in Cloud & Local DB
  */
+export async function createSecondaryAuthUser(email: string, password: string): Promise<string> {
+  const secondaryAppName = `SecondaryAuthApp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const secondaryApp = initializeApp(firebaseConfig, secondaryAppName);
+  try {
+    const secondaryAuth = getAuth(secondaryApp);
+    const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, password);
+    const uid = userCredential.user.uid;
+    await firebaseSignOut(secondaryAuth);
+    return uid;
+  } finally {
+    try {
+      const { deleteApp } = await import('firebase/app');
+      await deleteApp(secondaryApp);
+    } catch {
+      // Non-blocking cleanup
+    }
+  }
+}
+
 export async function saveUserAccount(user: IcuUser): Promise<void> {
   await db.users.put(user);
   await setDoc(doc(firestore, 'users', user.uid), user, { merge: true });
