@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import { runAdminDiagnosticCheck } from '../../src/server/adminOperations';
+import { runAdminDiagnosticCheck } from '../_lib/adminOperations';
 
 interface VercelReq extends IncomingMessage {
   body?: any;

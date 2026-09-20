@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import { adminPasswordRecovery } from '../../../src/server/adminOperations';
+import { adminPasswordRecovery } from '../../_lib/adminOperations';
 
 interface VercelReq extends IncomingMessage {
   body?: any;

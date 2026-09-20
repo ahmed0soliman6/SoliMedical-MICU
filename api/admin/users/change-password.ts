@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import { adminChangeUserPassword } from '../../../src/server/adminOperations';
+import { adminChangeUserPassword } from '../../_lib/adminOperations';
 
 interface VercelReq extends IncomingMessage {
   body?: any;

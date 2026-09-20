@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import { deleteUserWithToken } from '../../../src/server/adminOperations';
+import { deleteUserWithToken } from '../../_lib/adminOperations';
 
 interface VercelReq extends IncomingMessage {
   body?: any;
