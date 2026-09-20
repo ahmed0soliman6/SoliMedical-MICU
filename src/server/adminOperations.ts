@@ -22,9 +22,27 @@ import path from 'path';
 let adminApp: App | undefined;
 let firestoreDb: Firestore | undefined;
 let authAdmin: Auth | undefined;
-const hasGoogleCredentials = Boolean(
-  process.env.GOOGLE_APPLICATION_CREDENTIALS || (process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY)
-);
+
+export function hasGoogleCredentials(): boolean {
+  return Boolean(
+    process.env.GOOGLE_APPLICATION_CREDENTIALS || 
+    (process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY) ||
+    process.env.FIREBASE_SERVICE_ACCOUNT ||
+    process.env.GOOGLE_SERVICE_ACCOUNT_JSON
+  );
+}
+
+function sanitizePrivateKey(rawKey?: string): string | undefined {
+  if (!rawKey) return undefined;
+  let cleanKey = rawKey.trim();
+  // Remove wrapping quotes if present
+  if ((cleanKey.startsWith('"') && cleanKey.endsWith('"')) || (cleanKey.startsWith("'") && cleanKey.endsWith("'"))) {
+    cleanKey = cleanKey.slice(1, -1);
+  }
+  // Replace escaped newlines (both \\n and \n strings)
+  cleanKey = cleanKey.replace(/\\n/g, '\n').replace(/\\r/g, '');
+  return cleanKey;
+}
 
 // Lazy Firebase Admin SDK initialization supporting Vercel environment variables and Cloud Run
 export function getAdminApp(): { app: App; db: Firestore; auth: Auth } {
@@ -40,8 +58,8 @@ export function getAdminApp(): { app: App; db: Firestore; auth: Auth } {
   }
 
   const projectId = process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID || 'solimedical-micu';
-  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-  let privateKey = process.env.FIREBASE_PRIVATE_KEY;
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL?.trim();
+  const privateKey = sanitizePrivateKey(process.env.FIREBASE_PRIVATE_KEY);
   const serviceAccountRaw = process.env.FIREBASE_SERVICE_ACCOUNT || process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
 
   let credential;
@@ -58,17 +76,11 @@ export function getAdminApp(): { app: App; db: Firestore; auth: Auth } {
 
   // Option 2: Individual variables
   if (!credential && clientEmail && privateKey) {
-    let cleanKey = privateKey.trim();
-    if ((cleanKey.startsWith('"') && cleanKey.endsWith('"')) || (cleanKey.startsWith("'") && cleanKey.endsWith("'"))) {
-      cleanKey = cleanKey.slice(1, -1);
-    }
-    cleanKey = cleanKey.replace(/\\n/g, '\n');
-
     try {
       credential = cert({
         projectId,
         clientEmail,
-        privateKey: cleanKey,
+        privateKey,
       });
     } catch (certErr) {
       console.error('[Firebase Admin] cert error:', certErr);
@@ -189,7 +201,7 @@ export async function verifyAdminCallerToken(authHeader?: string): Promise<{ isA
   try {
     let callerUid: string | undefined;
 
-    if (hasGoogleCredentials) {
+    if (hasGoogleCredentials()) {
       try {
         const { auth } = requireAdminServices();
         const decodedToken = await auth.verifyIdToken(token);
@@ -212,7 +224,7 @@ export async function verifyAdminCallerToken(authHeader?: string): Promise<{ isA
     let isCallerAdmin = true;
     let isCallerActive = true;
 
-    if (firestoreDb && hasGoogleCredentials) {
+    if (firestoreDb && hasGoogleCredentials()) {
       try {
         const { db } = requireAdminServices();
         const callerDoc = await db.collection('users').doc(callerUid).get();
