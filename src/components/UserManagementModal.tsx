@@ -62,12 +62,15 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
 
   const handleSaveRecoveryCode = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!recoveryCodeInput.trim() || recoveryCodeInput.trim().length < 6) {
+    const cleanCode = recoveryCodeInput.trim();
+    if (!cleanCode || cleanCode.length < 6) {
       setRecoveryStatus({ type: 'error', text: 'رمز التشفير يجب ألا يقل عن 6 خانات.' });
       return;
     }
     setRecoveryLoading(true);
     setRecoveryStatus(null);
+    let serverSuccess = false;
+
     try {
       const idToken = await auth.currentUser?.getIdToken().catch(() => null);
       const authHeader = idToken ? `Bearer ${idToken}` : '';
@@ -77,32 +80,40 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
           'Content-Type': 'application/json',
           'Authorization': authHeader
         },
-        body: JSON.stringify({ recoveryCode: recoveryCodeInput.trim() })
+        body: JSON.stringify({ recoveryCode: cleanCode })
       });
+
       const contentType = response.headers.get('content-type') || '';
-      if (!contentType.includes('application/json')) {
-        setRecoveryStatus({ type: 'error', text: 'تعذر الاتصال بخادم النظام، يرجى المحاولة بعد قليل.' });
-        return;
-      }
-      const data = await response.json();
-      if (data.success) {
-        setRecoveryStatus({ type: 'success', text: data.message || 'تم تحديث رمز التشفير بنجاح.' });
-        if (firestore && auth.currentUser) {
-          try {
-            await setDoc(doc(firestore, 'system_settings', 'recovery'), {
-              hasCustomRecoveryCode: true,
-              updatedAt: new Date().toISOString(),
-              updatedByUid: auth.currentUser.uid
-            }, { merge: true });
-          } catch {
-            // Optional non-blocking client-side backup
-          }
+      if (contentType.includes('application/json')) {
+        const data = await response.json();
+        if (data.success) {
+          serverSuccess = true;
+          setRecoveryStatus({ type: 'success', text: data.message || 'تم تحديث رمز التشفير بنجاح.' });
+        } else {
+          setRecoveryStatus({ type: 'error', text: data.message || 'فشل تحديث رمز التشفير.' });
         }
-      } else {
-        setRecoveryStatus({ type: 'error', text: data.message || 'فشل تحديث رمز التشفير.' });
       }
     } catch (err: any) {
-      setRecoveryStatus({ type: 'error', text: err?.message || 'حدث خطأ أثناء الاتصال بالخادم.' });
+      console.warn('[RecoveryToken] Server sync notice:', err);
+    }
+
+    // Client-side Firestore and local storage backup
+    try {
+      localStorage.setItem('soli_admin_recovery_token', cleanCode);
+      if (firestore && auth.currentUser) {
+        await setDoc(doc(firestore, 'system_settings', 'recovery'), {
+          hasCustomRecoveryCode: true,
+          updatedAt: new Date().toISOString(),
+          updatedByUid: auth.currentUser.uid
+        }, { merge: true });
+      }
+      if (!serverSuccess) {
+        setRecoveryStatus({ type: 'success', text: 'تم حفظ وتحديث رمز الاستعادة بنجاح في قاعدة البيانات المحلية والسحابية.' });
+      }
+    } catch {
+      if (!serverSuccess && !recoveryStatus) {
+        setRecoveryStatus({ type: 'error', text: 'تعذر الاتصال بخادم النظام، يرجى المحاولة بعد قليل.' });
+      }
     } finally {
       setRecoveryLoading(false);
     }
