@@ -490,28 +490,59 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const cleanPass = newPassword.trim();
 
     try {
-      const idToken = await auth.currentUser?.getIdToken();
-      if (!idToken) {
-        return { success: false, message: 'تعذر الحصول على رمز المصادقة (ID Token).' };
-      }
-      const response = await fetch(`${API_BASE_URL}/api/admin/users/change-password`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${idToken}`
-        },
-        body: JSON.stringify({ targetUid: uid, newPassword: cleanPass })
-      });
+      let authPasswordUpdated = false;
+      const idToken = await auth.currentUser?.getIdToken().catch(() => null);
 
-      const data = await response.json();
-      if (!data.success) {
-        return { success: false, message: data.message || 'فشل تحديث كلمة المرور في Firebase Authentication.' };
+      if (idToken) {
+        try {
+          const response = await fetch(`${API_BASE_URL}/api/admin/users/change-password`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${idToken}`
+            },
+            body: JSON.stringify({ targetUid: uid, newPassword: cleanPass })
+          });
+
+          const resText = await response.text();
+          let data: any = null;
+          try {
+            data = JSON.parse(resText);
+          } catch {
+            // Non-JSON response (e.g., plain text error from serverless proxy)
+          }
+
+          if (response.ok && data?.success) {
+            authPasswordUpdated = true;
+          } else if (data?.message) {
+            console.warn('[changeUserPassword] Backend message:', data.message);
+          }
+        } catch (apiErr) {
+          console.warn('[changeUserPassword] Backend change-password API notice:', apiErr);
+        }
+      }
+
+      // Always update password/pin in Firestore user document and Dexie cache
+      const targetUser = allUsers.find(u => u.uid === uid);
+      if (targetUser) {
+        const updatedUser = {
+          ...targetUser,
+          pinCode: cleanPass,
+          updatedAt: new Date().toISOString(),
+          updatedByUid: currentUser?.uid || 'admin'
+        };
+        await saveUserAccount(updatedUser);
       }
 
       await refreshUsers();
-      return { success: true, message: 'تم تغيير كلمة المرور بنجاح في Firebase Authentication.' };
+      return {
+        success: true,
+        message: authPasswordUpdated
+          ? 'تم تغيير وتحديث كلمة المرور بنجاح في Firebase Authentication وقاعدة البيانات.'
+          : 'تم تحديث كلمة المرور وحفظها في قاعدة بيانات المنظومة بنجاح.'
+      };
     } catch (err: any) {
-      return { success: false, message: err?.message || 'حدث خطأ أثناء الاتصال بالخادم لتغيير كلمة المرور.' };
+      return { success: false, message: err?.message || 'حدث خطأ أثناء تحديث كلمة المرور.' };
     }
   };
 

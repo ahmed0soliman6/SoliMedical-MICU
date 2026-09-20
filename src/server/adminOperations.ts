@@ -23,25 +23,79 @@ let adminApp: App | undefined;
 let firestoreDb: Firestore | undefined;
 let authAdmin: Auth | undefined;
 
+function sanitizePemKey(key: string): string {
+  let clean = key.trim();
+  // Remove wrapping single or double quotes
+  if ((clean.startsWith('"') && clean.endsWith('"')) || (clean.startsWith("'") && clean.endsWith("'"))) {
+    clean = clean.slice(1, -1).trim();
+  }
+  // Replace literal '\n' characters with actual newlines and strip CR
+  clean = clean.replace(/\\n/g, '\n').replace(/\\r/g, '');
+
+  // If header is missing, add standard RSA/EC private key header
+  if (!clean.includes('-----BEGIN PRIVATE KEY-----')) {
+    clean = `-----BEGIN PRIVATE KEY-----\n${clean}\n-----END PRIVATE KEY-----`;
+  }
+
+  if (!clean.endsWith('\n')) {
+    clean += '\n';
+  }
+  return clean;
+}
+
+function parseServiceAccountCredentials(): { projectId?: string; clientEmail?: string; privateKey?: string } | null {
+  // Option 1: Full JSON string in FIREBASE_SERVICE_ACCOUNT or GOOGLE_SERVICE_ACCOUNT_JSON
+  const rawJson = process.env.FIREBASE_SERVICE_ACCOUNT || process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+  if (rawJson) {
+    try {
+      const parsed = typeof rawJson === 'string' ? JSON.parse(rawJson) : rawJson;
+      if (parsed.client_email && parsed.private_key) {
+        return {
+          projectId: parsed.project_id,
+          clientEmail: parsed.client_email,
+          privateKey: sanitizePemKey(parsed.private_key)
+        };
+      }
+    } catch (e) {
+      console.warn('[Firebase Admin] JSON parse error in service account:', e);
+    }
+  }
+
+  // Option 2: Check if FIREBASE_PRIVATE_KEY is itself a full JSON object (common user paste pattern)
+  const rawKey = process.env.FIREBASE_PRIVATE_KEY?.trim();
+  if (rawKey && rawKey.startsWith('{') && rawKey.endsWith('}')) {
+    try {
+      const parsed = JSON.parse(rawKey);
+      if (parsed.client_email && parsed.private_key) {
+        return {
+          projectId: parsed.project_id || process.env.FIREBASE_PROJECT_ID,
+          clientEmail: parsed.client_email,
+          privateKey: sanitizePemKey(parsed.private_key)
+        };
+      }
+    } catch {
+      // Not valid JSON, continue with raw PEM
+    }
+  }
+
+  // Option 3: Standard FIREBASE_CLIENT_EMAIL + FIREBASE_PRIVATE_KEY
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL?.trim();
+  if (clientEmail && rawKey) {
+    return {
+      projectId: process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID || 'solimedical-micu',
+      clientEmail,
+      privateKey: sanitizePemKey(rawKey)
+    };
+  }
+
+  return null;
+}
+
 export function hasGoogleCredentials(): boolean {
   return Boolean(
     process.env.GOOGLE_APPLICATION_CREDENTIALS || 
-    (process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY) ||
-    process.env.FIREBASE_SERVICE_ACCOUNT ||
-    process.env.GOOGLE_SERVICE_ACCOUNT_JSON
+    parseServiceAccountCredentials()
   );
-}
-
-function sanitizePrivateKey(rawKey?: string): string | undefined {
-  if (!rawKey) return undefined;
-  let cleanKey = rawKey.trim();
-  // Remove wrapping quotes if present
-  if ((cleanKey.startsWith('"') && cleanKey.endsWith('"')) || (cleanKey.startsWith("'") && cleanKey.endsWith("'"))) {
-    cleanKey = cleanKey.slice(1, -1);
-  }
-  // Replace escaped newlines (both \\n and \n strings)
-  cleanKey = cleanKey.replace(/\\n/g, '\n').replace(/\\r/g, '');
-  return cleanKey;
 }
 
 // Lazy Firebase Admin SDK initialization supporting Vercel environment variables and Cloud Run
@@ -50,42 +104,21 @@ export function getAdminApp(): { app: App; db: Firestore; auth: Auth } {
     return { app: adminApp, db: firestoreDb, auth: authAdmin };
   }
 
-  if (getApps().length > 0) {
-    adminApp = getApp();
-    firestoreDb = getFirestore(adminApp);
-    authAdmin = getAuth(adminApp);
-    return { app: adminApp, db: firestoreDb, auth: authAdmin };
-  }
-
-  const projectId = process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID || 'solimedical-micu';
-  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL?.trim();
-  const privateKey = sanitizePrivateKey(process.env.FIREBASE_PRIVATE_KEY);
-  const serviceAccountRaw = process.env.FIREBASE_SERVICE_ACCOUNT || process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+  const creds = parseServiceAccountCredentials();
+  const projectId = creds?.projectId || process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID || 'solimedical-micu';
 
   let credential;
-
-  // Option 1: Full JSON string of service account
-  if (serviceAccountRaw) {
-    try {
-      const parsed = typeof serviceAccountRaw === 'string' ? JSON.parse(serviceAccountRaw) : serviceAccountRaw;
-      credential = cert(parsed);
-    } catch (e) {
-      console.warn('[Firebase Admin] Failed to parse FIREBASE_SERVICE_ACCOUNT JSON:', e);
-    }
-  }
-
-  // Option 2: Individual variables
-  if (!credential && clientEmail && privateKey) {
+  if (creds?.clientEmail && creds?.privateKey) {
     try {
       credential = cert({
         projectId,
-        clientEmail,
-        privateKey,
+        clientEmail: creds.clientEmail,
+        privateKey: creds.privateKey
       });
     } catch (certErr) {
       console.error('[Firebase Admin] cert error:', certErr);
     }
-  } else if (!credential && process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+  } else if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
     try {
       credential = applicationDefault();
     } catch (e) {
@@ -93,10 +126,16 @@ export function getAdminApp(): { app: App; db: Firestore; auth: Auth } {
     }
   }
 
-  adminApp = initializeApp({
-    ...(credential ? { credential } : {}),
-    projectId,
-  });
+  const existingApps = getApps();
+  if (existingApps.length > 0) {
+    adminApp = existingApps[0];
+  } else {
+    adminApp = initializeApp({
+      ...(credential ? { credential } : {}),
+      projectId,
+    });
+  }
+
   firestoreDb = getFirestore(adminApp);
   authAdmin = getAuth(adminApp);
 
