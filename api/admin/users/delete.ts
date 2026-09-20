@@ -90,7 +90,9 @@ export default async function handler(req: VercelReq, res: VercelRes) {
 
     const statusCode = result.success
       ? 200
-      : (result.message.includes('Permission Denied') || result.message.includes('Access denied') ? 403 : 400);
+      : (result.message.includes('Permission Denied') || result.message.includes('Access denied') || result.message.includes('صلاحية') 
+          ? 403 
+          : 500);
 
     return sendJson(res, statusCode, result);
   } catch (err: any) {

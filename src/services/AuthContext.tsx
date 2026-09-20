@@ -596,7 +596,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await refreshUsers();
   };
 
-  // Delete User Account
+  // Delete User Account (Strict: Firebase Authentication is Primary; No Firestore-only fallback)
   const deleteUser = async (uid: string): Promise<{ success: boolean; message?: string }> => {
     const canDelete = currentUser?.isSuperAdmin || 
       currentUser?.role === StaffRole.ADMIN || 
@@ -611,7 +611,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     const target = allUsers.find(u => u.uid === uid);
-    if (!target) return { success: false, message: 'المستخدم غير موجود' };
+    if (!target) return { success: false, message: 'المستخدم غير موجود في النظام' };
 
     // Safety check: Prevent deleting last active admin
     if (target.role === StaffRole.ADMIN || target.isSuperAdmin) {
@@ -622,52 +622,62 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     try {
-      let backendAuthDeleted = false;
       const idToken = await auth.currentUser?.getIdToken(true).catch(() => null);
-
-      if (idToken) {
-        try {
-          const response = await fetch(
-            `${API_BASE_URL}/api/admin/users/delete`,
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${idToken}`
-              },
-              body: JSON.stringify({
-                targetUid: uid
-              })
-            }
-          );
-
-          if (response.ok) {
-            const data = await response.json().catch(() => ({}));
-            if (data.success) {
-              backendAuthDeleted = true;
-            }
-          } else {
-            console.warn(`[deleteUser] Backend returned status ${response.status}. Falling back to Firestore & Dexie deletion.`);
-          }
-        } catch (apiErr) {
-          console.warn('[deleteUser] Backend delete API unreachable, falling back to direct Firestore deletion:', apiErr);
-        }
+      if (!idToken) {
+        return { 
+          success: false, 
+          message: 'تعذر الحصول على رمز مصادقة المدير (ID Token). يرجى التأكد من تسجيل الدخول والمحاولة مرة أخرى.' 
+        };
       }
 
-      // Always delete user document from Firestore & Dexie SSOT
-      await deleteUserAccount(uid);
+      const response = await fetch(
+        `${API_BASE_URL}/api/admin/users/delete`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${idToken}`
+          },
+          body: JSON.stringify({
+            targetUid: uid
+          })
+        }
+      );
+
+      const resText = await response.text();
+      let data: any = null;
+      try {
+        data = JSON.parse(resText);
+      } catch {
+        // Non-JSON response (e.g. Vercel 500 error page)
+      }
+
+      if (!response.ok || !data?.success) {
+        const errorMsg = data?.message || (response.status === 500 
+          ? 'فشل حذف المستخدم من Firebase Authentication (خطأ 500 في خادم الإدارة). يرجى التأكد من إعداد متغيرات بيئة Firebase Admin في Vercel.'
+          : `فشل حذف الحساب من خادم الحسابات (HTTP ${response.status}). لم يتم حذف بيانات المستخدم.`);
+        
+        // STRICT: Abort immediately without deleting Firestore or Dexie
+        return {
+          success: false,
+          message: errorMsg
+        };
+      }
+
+      // ONLY AFTER Firebase Authentication deletion succeeds on the server:
+      // The server has already removed users/{uid} and admins/{uid} from Firestore.
+      // Update local Dexie database and refresh state.
+      await db.users.delete(uid);
       await refreshUsers();
 
       return {
         success: true,
-        message: backendAuthDeleted
-          ? 'تم حذف المستخدم نهائيًا من خادم الحسابات وقاعدة البيانات.'
-          : 'تم حذف المستخدم وسجلاته من قاعدة بيانات المنظومة بنجاح.'
+        message: data.message || 'تم حذف المستخدم نهائيًا من Firebase Authentication وقاعدة البيانات بنجاح.'
       };
     } catch (e: any) {
       return { 
         success: false, 
-        message: e?.message || 'فشل حذف الحساب.' 
+        message: e?.message || 'تعذر الاتصال بخادم الحذف الإداري. لم يتم إجراء أي تعديل على الحساب.' 
       };
     }
   };

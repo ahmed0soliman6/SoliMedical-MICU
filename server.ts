@@ -305,7 +305,8 @@ import {
   adminPasswordRecovery,
   adminSetRecoveryCode,
   adminArchivePatient,
-  adminArchiveSweep
+  adminArchiveSweep,
+  runAdminDiagnosticCheck
 } from './src/server/adminOperations';
 
 app.post('/api/admin/users/create', async (req, res) => {
@@ -338,12 +339,15 @@ app.post('/api/admin/users/delete', async (req, res) => {
     const authHeader = req.headers.authorization;
     const { targetUid, reason } = req.body;
     if (!targetUid) {
-      return res.status(200).json({ success: false, message: 'Missing targetUid.' });
+      return res.status(400).json({ success: false, message: 'Missing targetUid.' });
     }
     const result = await deleteUserWithToken(authHeader, targetUid, reason);
-    return res.status(200).json(result);
+    const statusCode = result.success
+      ? 200
+      : (result.message.includes('Permission Denied') || result.message.includes('Access denied') || result.message.includes('صلاحية') ? 403 : 500);
+    return res.status(statusCode).json(result);
   } catch (err: any) {
-    return res.status(200).json({ success: false, message: err?.message || 'Internal server error.' });
+    return res.status(500).json({ success: false, message: err?.message || 'Internal server error.' });
   }
 });
 
@@ -379,6 +383,31 @@ app.post('/api/admin/recovery/set', async (req, res) => {
     return res.status(200).json(result);
   } catch (err: any) {
     return res.status(200).json({ success: false, message: err?.message || 'Internal server error.' });
+  }
+});
+
+// Diagnostic check endpoint for Firebase Admin & Auth
+app.all('/api/admin/diagnostics', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const result = await runAdminDiagnosticCheck(authHeader);
+    if (result.adminInitialized && result.authConnection) {
+      return res.status(200).json({
+        adminInitialized: true,
+        authConnection: true
+      });
+    }
+    const statusCode = result.error?.includes('Access denied') || result.error?.includes('Unauthorized') ? 403 : 500;
+    return res.status(statusCode).json(result);
+  } catch (err: any) {
+    const cleanErr = String(err?.message || err)
+      .replace(/-----BEGIN[\s\S]+?-----END[^\n]+(?:\n|$)/g, '[REDACTED_KEY]')
+      .replace(/(?:privateKey|private_key)["']?\s*:\s*["'][^"']+["']/gi, 'private_key:"[REDACTED]"');
+    return res.status(500).json({
+      adminInitialized: false,
+      authConnection: false,
+      error: cleanErr
+    });
   }
 });
 

@@ -115,15 +115,21 @@ export function getAdminApp(): { app: App; db: Firestore; auth: Auth } {
         clientEmail: creds.clientEmail,
         privateKey: creds.privateKey
       });
-    } catch (certErr) {
-      console.error('[Firebase Admin] cert error:', certErr);
+    } catch (certErr: any) {
+      console.error('[Firebase Admin] Certificate initialization error:', certErr?.message || certErr);
+      throw new Error(`Firebase Admin SDK certificate initialization failed: ${certErr?.message || 'Invalid certificate format'}`);
     }
   } else if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
     try {
       credential = applicationDefault();
-    } catch (e) {
-      console.warn('[Firebase Admin] applicationDefault credential notice:', e);
+    } catch (e: any) {
+      console.warn('[Firebase Admin] applicationDefault credential notice:', e?.message || e);
     }
+  }
+
+  if (!credential) {
+    console.error('[Firebase Admin] Initialization failed: No valid credentials found (FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY).');
+    throw new Error('Firebase Admin SDK is not configured with valid service account credentials in environment variables (FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY).');
   }
 
   const existingApps = getApps();
@@ -131,7 +137,7 @@ export function getAdminApp(): { app: App; db: Firestore; auth: Auth } {
     adminApp = existingApps[0];
   } else {
     adminApp = initializeApp({
-      ...(credential ? { credential } : {}),
+      credential,
       projectId,
     });
   }
@@ -510,8 +516,8 @@ export async function disableUserWithToken(authHeader?: string, targetUid?: stri
  * PERMANENT DELETE USER:
  * - Verified via Authorization: Bearer <ID Token>
  * - Prevents deleting the last remaining active ADMIN
- * - Deletes user from Firebase Auth
- * - Deletes users/{uid} document
+ * - Step 1: Deletes user from Firebase Authentication (MANDATORY & PRIMARY)
+ * - Step 2: ONLY after Auth deletion succeeds, deletes users/{uid} & admins/{uid} from Firestore
  * - Strictly protects patient medical records and audit history (NONE are deleted)
  * - Logs to immutable audit ledger
  */
@@ -529,13 +535,28 @@ export async function deleteUserWithToken(authHeader?: string, targetUid?: strin
 
   const cleanTargetUid = targetUid.trim();
 
+  // Safe Log: Start of deletion
+  console.log(`[Admin Delete] Target UID: ${cleanTargetUid} | Action: Start user permanent deletion requested by Admin: ${callerUid}`);
+
   // Safety check 1: Caller cannot delete their own active account
   if (callerUid === cleanTargetUid) {
     return { success: false, message: 'لا يمكنك حذف حسابك الحالي أثناء تسجيل الدخول منه.' };
   }
 
   try {
-    const { db, auth } = requireAdminServices();
+    let adminServices: { db: Firestore; auth: Auth };
+    try {
+      adminServices = requireAdminServices();
+      console.log(`[Admin Delete] Target UID: ${cleanTargetUid} | Firebase Admin SDK initialized successfully.`);
+    } catch (initErr: any) {
+      console.error(`[Admin Delete] Target UID: ${cleanTargetUid} | Firebase Admin SDK initialization failed:`, initErr?.message || initErr);
+      return {
+        success: false,
+        message: `فشل تهيئة Firebase Admin SDK: ${initErr?.message || 'بيانات الاعتماد غير متوفرة'}. يرجى التحقق من متغيرات البيئة في Vercel.`
+      };
+    }
+
+    const { db, auth } = adminServices;
 
     // Safety check 2: Prevent deletion of the last remaining active Administrator
     try {
@@ -558,27 +579,33 @@ export async function deleteUserWithToken(authHeader?: string, targetUid?: strin
         }
       }
     } catch (checkErr: any) {
-      console.warn('[deleteUserWithToken] Admin safety count warning:', checkErr?.message || checkErr);
+      console.warn('[Admin Delete] Admin safety count warning:', checkErr?.message || checkErr);
     }
 
     // Step 1: Real and permanent deletion from Firebase Authentication via Firebase Admin SDK
     // This MUST succeed before touching Firestore. If it fails, abort immediately.
     try {
       await auth.deleteUser(cleanTargetUid);
+      console.log(`[Admin Delete] Target UID: ${cleanTargetUid} | auth.deleteUser succeeded in Firebase Authentication.`);
     } catch (authErr: any) {
-      console.error('[deleteUserWithToken] Firebase Auth deletion failed:', authErr);
-      return {
-        success: false,
-        message: `فشل حذف المستخدم من Firebase Authentication: ${authErr?.message || authErr}`
-      };
+      if (authErr?.code === 'auth/user-not-found') {
+        console.log(`[Admin Delete] Target UID: ${cleanTargetUid} | User already not present in Firebase Authentication (auth/user-not-found). Proceeding with Firestore cleanup.`);
+      } else {
+        console.error(`[Admin Delete] Target UID: ${cleanTargetUid} | auth.deleteUser failed in Firebase Authentication:`, authErr?.message || authErr);
+        return {
+          success: false,
+          message: `فشل حذف المستخدم من Firebase Authentication: ${authErr?.message || authErr}`
+        };
+      }
     }
 
     // Step 2: ONLY after Firebase Authentication deletion succeeds, delete from Firestore
     try {
       await db.collection('users').doc(cleanTargetUid).delete();
       await db.collection('admins').doc(cleanTargetUid).delete();
+      console.log(`[Admin Delete] Target UID: ${cleanTargetUid} | Firestore documents (users & admins) deleted successfully.`);
     } catch (dbErr: any) {
-      console.error('[deleteUserWithToken] Firestore user/admin delete warning:', dbErr);
+      console.error(`[Admin Delete] Target UID: ${cleanTargetUid} | Firestore documents deletion failed:`, dbErr?.message || dbErr);
       return {
         success: false,
         message: `تم حذف المستخدم من Firebase Auth بنجاح، لكن تعذر إكمال حذف سجلات Firestore: ${dbErr?.message || dbErr}`
@@ -593,14 +620,15 @@ export async function deleteUserWithToken(authHeader?: string, targetUid?: strin
         id: auditId,
         timestamp: nowIso,
         eventType: 'USER_DELETED_PERMANENTLY',
-        description: `Staff account ${cleanTargetUid} was permanently deleted by Admin ${callerUid}. Medical records and historical audit entries remain intact.`,
+        description: `Staff account ${cleanTargetUid} was permanently deleted by Admin ${callerUid} from Firebase Authentication and Firestore. Medical records and historical audit entries remain intact.`,
         callerUid,
         deletedUid: cleanTargetUid,
         reason: reason || 'Administrative removal',
         isImmutable: true,
+        systemGenerated: true,
       });
     } catch (auditErr) {
-      console.warn('[deleteUserWithToken] Audit log writing notice:', auditErr);
+      console.warn('[Admin Delete] Audit log writing notice:', auditErr);
     }
 
     return {
@@ -608,7 +636,7 @@ export async function deleteUserWithToken(authHeader?: string, targetUid?: strin
       message: 'تم حذف المستخدم نهائيًا من Firebase Authentication وقاعدة البيانات بنجاح.',
     };
   } catch (error: any) {
-    console.error('[deleteUserWithToken] Unexpected error during deletion:', error);
+    console.error(`[Admin Delete] Target UID: ${cleanTargetUid} | Unexpected error:`, error?.message || error);
     return {
       success: false,
       message: error?.message || 'حدث خطأ غير متوقع أثناء حذف المستخدم.'
@@ -1024,5 +1052,81 @@ export async function adminSetRecoveryCode(authHeader: string | undefined, recov
     return { success: true, message: 'تم تحديث رمز التشفير بنجاح في النظام.' };
   } catch (err: any) {
     return { success: false, message: err?.message || 'فشل تحديث رمز التشفير.' };
+  }
+}
+
+/**
+ * Diagnostic check to verify Firebase Admin SDK configuration and Authentication connection in Production (e.g. Vercel)
+ * STRICT: Redacts all private keys, passwords, and secrets from responses.
+ */
+export async function runAdminDiagnosticCheck(authHeader?: string): Promise<{
+  adminInitialized: boolean;
+  authConnection: boolean;
+  error?: string;
+}> {
+  // Verify authorization if header is provided
+  const authCheck = await verifyAdminCallerToken(authHeader);
+  if (!authCheck.isAdmin) {
+    return {
+      adminInitialized: false,
+      authConnection: false,
+      error: authCheck.error || 'Access denied: Admin ID Token is required to run diagnostics.'
+    };
+  }
+
+  // 1. Check environment variables presence
+  const hasProj = Boolean(process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID);
+  const hasEmail = Boolean(process.env.FIREBASE_CLIENT_EMAIL);
+  const hasKey = Boolean(
+    process.env.FIREBASE_PRIVATE_KEY || 
+    process.env.FIREBASE_SERVICE_ACCOUNT || 
+    process.env.GOOGLE_SERVICE_ACCOUNT_JSON || 
+    process.env.GOOGLE_APPLICATION_CREDENTIALS
+  );
+
+  if (!hasProj || !hasEmail || !hasKey) {
+    const missing: string[] = [];
+    if (!hasProj) missing.push('FIREBASE_PROJECT_ID');
+    if (!hasEmail) missing.push('FIREBASE_CLIENT_EMAIL');
+    if (!hasKey) missing.push('FIREBASE_PRIVATE_KEY');
+    return {
+      adminInitialized: false,
+      authConnection: false,
+      error: `Missing required environment variables: ${missing.join(', ')}`
+    };
+  }
+
+  // 2. Test Firebase Admin SDK initialization
+  let auth: Auth;
+  try {
+    const adminServices = requireAdminServices();
+    auth = adminServices.auth;
+  } catch (initErr: any) {
+    const safeError = String(initErr?.message || initErr)
+      .replace(/-----BEGIN[\s\S]+?-----END[^\n]+(?:\n|$)/g, '[REDACTED_KEY]')
+      .replace(/(?:privateKey|private_key)["']?\s*:\s*["'][^"']+["']/gi, 'private_key:"[REDACTED]"');
+    return {
+      adminInitialized: false,
+      authConnection: false,
+      error: `Firebase Admin initialization failed: ${safeError}`
+    };
+  }
+
+  // 3. Test Firebase Authentication live connection
+  try {
+    await auth.listUsers(1);
+    return {
+      adminInitialized: true,
+      authConnection: true
+    };
+  } catch (authErr: any) {
+    const safeError = String(authErr?.message || authErr)
+      .replace(/-----BEGIN[\s\S]+?-----END[^\n]+(?:\n|$)/g, '[REDACTED_KEY]')
+      .replace(/(?:privateKey|private_key)["']?\s*:\s*["'][^"']+["']/gi, 'private_key:"[REDACTED]"');
+    return {
+      adminInitialized: true,
+      authConnection: false,
+      error: `Firebase Auth connection failed: ${safeError}`
+    };
   }
 }
