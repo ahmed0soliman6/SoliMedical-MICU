@@ -14,6 +14,7 @@ import {
 import { useAuth } from '../services/AuthContext.tsx';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '../services/firebase.ts';
+import { API_BASE_URL } from '../config/api.ts';
 
 import { SoliLogo } from './SoliLogo.tsx';
 
@@ -67,7 +68,7 @@ export const LoginScreen: React.FC = () => {
     setForgotMsg(null);
 
     try {
-      const response = await fetch('/api/admin/recovery', {
+      const response = await fetch(`${API_BASE_URL}/api/admin/recovery`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

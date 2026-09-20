@@ -28,6 +28,7 @@ import { useTranslation } from '../services/i18n.ts';
 import { StaffRole, IcuUser, UserPermissions } from '../types/schema.ts';
 import { getDefaultPermissionsForRole, auth, firestore } from '../services/firebase.ts';
 import { doc, setDoc } from 'firebase/firestore';
+import { API_BASE_URL } from '../config/api.ts';
 
 interface UserManagementModalProps {
   isOpen: boolean;
@@ -70,7 +71,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
     try {
       const idToken = await auth.currentUser?.getIdToken().catch(() => null);
       const authHeader = idToken ? `Bearer ${idToken}` : '';
-      const response = await fetch('/api/admin/recovery/set', {
+      const response = await fetch(`${API_BASE_URL}/api/admin/recovery/set`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

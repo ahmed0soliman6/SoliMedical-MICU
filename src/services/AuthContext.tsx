@@ -576,10 +576,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           body: text.slice(0, 500)
         });
 
+        let detailedMsg = `خادم العمليات الإدارية (Vercel) غير متاح حاليًا (رمز الاستجابة: ${response.status}).`;
+        if (response.status === 404) {
+          detailedMsg += ' مسار الحذف غير موجود (404 Not Found). تأكد من اكتمال نشر مجلد api على Vercel.';
+        } else if (response.status === 500 || text.includes('FUNCTION_INVOCATION_FAILED')) {
+          detailedMsg += ' خطأ داخلي (500) في الدالة السحابية. يرجى التأكد من إضافة متغيرات Firebase Service Account في Vercel (FIREBASE_CLIENT_EMAIL و FIREBASE_PRIVATE_KEY).';
+        }
+
         return {
           success: false,
-          message:
-            'خادم العمليات الإدارية غير متاح حاليًا. لم يتم حذف المستخدم.'
+          message: detailedMsg
         };
       }
 

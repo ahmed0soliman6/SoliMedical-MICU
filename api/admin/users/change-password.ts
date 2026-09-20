@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import { deleteUserWithToken } from '../../../src/server/adminOperations';
+import { adminChangeUserPassword } from '../../../src/server/adminOperations';
 
 interface VercelReq extends IncomingMessage {
   body?: any;
@@ -48,13 +48,11 @@ async function parseJsonBody(req: any): Promise<any> {
       }
     });
     req.on('error', () => resolve({}));
-    // Timeout safeguard so the promise never hangs if Vercel already consumed the stream
     setTimeout(() => resolve({}), 2000);
   });
 }
 
 export default async function handler(req: VercelReq, res: VercelRes) {
-  // CORS Configuration for frontend clients (including GitHub Pages & preview instances)
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,POST');
@@ -79,22 +77,17 @@ export default async function handler(req: VercelReq, res: VercelRes) {
 
     const body = await parseJsonBody(req);
     const targetUid = body?.targetUid;
-    const reason = body?.reason;
+    const newPassword = body?.newPassword;
 
-    if (!targetUid || typeof targetUid !== 'string' || !targetUid.trim()) {
-      return sendJson(res, 400, { success: false, message: 'Missing targetUid in request body.' });
+    if (!targetUid || !newPassword) {
+      return sendJson(res, 400, { success: false, message: 'Missing targetUid or newPassword in request body.' });
     }
 
-    // Call core admin operation (deletes from Firebase Auth first, then Firestore)
-    const result = await deleteUserWithToken(authHeader, targetUid.trim(), reason);
-
-    const statusCode = result.success
-      ? 200
-      : (result.message.includes('Permission Denied') || result.message.includes('Access denied') ? 403 : 400);
-
+    const result = await adminChangeUserPassword(authHeader, targetUid, newPassword);
+    const statusCode = result.success ? 200 : 400;
     return sendJson(res, statusCode, result);
   } catch (err: any) {
-    console.error('[Vercel Function /api/admin/users/delete] Internal Error:', err);
+    console.error('[Vercel Function /api/admin/users/change-password] Internal Error:', err);
     return sendJson(res, 500, { success: false, message: err?.message || 'Internal Server Error' });
   }
 }

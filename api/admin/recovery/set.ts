@@ -1,9 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import { deleteUserWithToken } from '../../../src/server/adminOperations';
+import { adminSetRecoveryCode } from '../../../src/server/adminOperations';
 
 interface VercelReq extends IncomingMessage {
   body?: any;
-  query?: Record<string, string | string[]>;
   headers: Record<string, string | string[] | undefined>;
   method?: string;
 }
@@ -37,24 +36,16 @@ async function parseJsonBody(req: any): Promise<any> {
 
   return new Promise((resolve) => {
     let data = '';
-    req.on('data', (chunk: any) => {
-      data += chunk;
-    });
+    req.on('data', (chunk: any) => { data += chunk; });
     req.on('end', () => {
-      try {
-        resolve(data ? JSON.parse(data) : {});
-      } catch {
-        resolve({});
-      }
+      try { resolve(data ? JSON.parse(data) : {}); } catch { resolve({}); }
     });
     req.on('error', () => resolve({}));
-    // Timeout safeguard so the promise never hangs if Vercel already consumed the stream
     setTimeout(() => resolve({}), 2000);
   });
 }
 
 export default async function handler(req: VercelReq, res: VercelRes) {
-  // CORS Configuration for frontend clients (including GitHub Pages & preview instances)
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,POST');
@@ -78,23 +69,17 @@ export default async function handler(req: VercelReq, res: VercelRes) {
     }
 
     const body = await parseJsonBody(req);
-    const targetUid = body?.targetUid;
-    const reason = body?.reason;
+    const { newRecoveryCode } = body || {};
 
-    if (!targetUid || typeof targetUid !== 'string' || !targetUid.trim()) {
-      return sendJson(res, 400, { success: false, message: 'Missing targetUid in request body.' });
+    if (!newRecoveryCode || typeof newRecoveryCode !== 'string' || newRecoveryCode.trim().length < 8) {
+      return sendJson(res, 400, { success: false, message: 'رمز الاستعادة الجديد يجب ألا يقل عن 8 أحرف/أرقام.' });
     }
 
-    // Call core admin operation (deletes from Firebase Auth first, then Firestore)
-    const result = await deleteUserWithToken(authHeader, targetUid.trim(), reason);
-
-    const statusCode = result.success
-      ? 200
-      : (result.message.includes('Permission Denied') || result.message.includes('Access denied') ? 403 : 400);
-
+    const result = await adminSetRecoveryCode(authHeader, newRecoveryCode);
+    const statusCode = result.success ? 200 : 400;
     return sendJson(res, statusCode, result);
   } catch (err: any) {
-    console.error('[Vercel Function /api/admin/users/delete] Internal Error:', err);
+    console.error('[Vercel Function /api/admin/recovery/set] Error:', err);
     return sendJson(res, 500, { success: false, message: err?.message || 'Internal Server Error' });
   }
 }
