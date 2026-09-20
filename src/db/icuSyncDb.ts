@@ -841,8 +841,8 @@ export async function ensureBedPatientSync(): Promise<void> {
       if (b.status === BedStatus.OCCUPIED) {
         b.status = BedStatus.VACANT;
         modified = true;
-      } else if (b.status === BedStatus.DECONTAMINATING || b.status === BedStatus.UNAVAILABLE) {
-        // Auto-expire decontamination or unassigned status after 30 minutes
+      } else if (b.status === BedStatus.DECONTAMINATING) {
+        // Auto-expire decontamination status after 30 minutes
         const cleanedTime = b.lastCleanedAt ? new Date(b.lastCleanedAt).getTime() : 0;
         const thirtyMinutesMs = 30 * 60 * 1000;
         if (!b.lastCleanedAt || (Date.now() - cleanedTime) >= thirtyMinutesMs) {

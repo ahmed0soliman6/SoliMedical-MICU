@@ -40,13 +40,15 @@ import {
   RefreshCw,
   Loader2,
   CloudOff,
-  Bell
+  Bell,
+  Wrench
 } from 'lucide-react';
 import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
 import { SystemFeatureFlags } from '../types/settings.ts';
 import { ClinicalOptionsManager } from './ClinicalOptionsManager.tsx';
 import { NotificationSettingsCard } from './NotificationSettingsCard.tsx';
+import { BedOperationsSettingsCard } from './BedOperationsSettingsCard.tsx';
 import { SoliLogo } from './SoliLogo.tsx';
 import { PWAInstallButton } from './PWAInstallButton.tsx';
 import { clearLocalBrowserDataAndSyncFromCloud, clearAllCloudAndLocalDataAndReset } from '../services/firebase.ts';
@@ -55,9 +57,10 @@ interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   onOpenUserManagement: () => void;
+  onBedUpdated?: () => void;
 }
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onOpenUserManagement }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onOpenUserManagement, onBedUpdated }) => {
   const { settings, toggleFeature, updateSettings, resetToDefaults } = useSystemSettings();
   const { t, lang, setLanguage, isRTL } = useTranslation();
   
@@ -443,6 +446,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
       isCustom: true
     },
     {
+      id: 'bedOperations',
+      labelAr: 'إدارة تشغيل وصيانة الأسِرّة (وضع خارج الخدمة / تفعيل)',
+      labelEn: 'Bed Operations & Maintenance (Out of Service / Reactivate)',
+      badgeAr: '6 أسِرّة',
+      badgeEn: '6 Beds',
+      icon: Wrench,
+      isCustom: true
+    },
+    {
       id: 'unit',
       labelAr: 'بيانات الوحدة والمناوبة السريرية',
       labelEn: 'ICU Unit & Shift Configuration',
@@ -653,6 +665,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                             <div className="mt-2">
                               <ClinicalOptionsManager />
                             </div>
+                          ) : section.id === 'bedOperations' ? (
+                            <BedOperationsSettingsCard onBedUpdated={onBedUpdated} />
                           ) : section.id === 'databaseGov' ? (
                             <div className="space-y-4 mt-2">
                               {dbActionResult && (

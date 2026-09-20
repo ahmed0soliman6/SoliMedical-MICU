@@ -23,8 +23,8 @@ import { ArchiveSearchModal } from './components/ArchiveSearchModal.tsx';
 import { SettingsModal } from './components/SettingsModal.tsx';
 import { SbarHandoverView } from './components/SbarHandoverView.tsx';
 import { ClinicalNotesView } from './components/ClinicalNotesView.tsx';
-import { getPatientForBed } from './services/dataModel.ts';
-import { purgePhantomCriticalVitals } from './db/icuSyncDb.ts';
+import { getPatientForBed, toggleBedOperationalStatus } from './services/dataModel.ts';
+import { purgePhantomCriticalVitals, ensureBedPatientSync } from './db/icuSyncDb.ts';
 import { 
   subscribeToRealtimeFirestore, 
   seedInitialDataToFirestore,
@@ -138,6 +138,7 @@ export default function App() {
   // Load local Dexie data into state
   const reloadData = useCallback(async () => {
     try {
+      await ensureBedPatientSync();
       const bList = await db.beds.orderBy('bedNumber').toArray();
       const pList = await db.patients.toArray();
       setBeds(bList);
@@ -179,6 +180,28 @@ export default function App() {
       console.error('Error reloading local ICU database:', err);
     }
   }, []);
+
+  // Quick toggle bed operational status (Vacant <-> Unavailable/Maintenance)
+  const handleToggleBedStatus = async (bedNumber: BedNumber) => {
+    try {
+      const res = await toggleBedOperationalStatus(bedNumber);
+      if (res.success) {
+        await reloadData();
+        triggerNotification({
+          type: 'BED_STATUS_CHANGE',
+          titleAr: 'تحديث حالة السرير التشغيلية',
+          titleEn: 'Bed Operational Status',
+          messageAr: res.message,
+          messageEn: res.message,
+          target: { action: 'OPEN_BED', bedNumber },
+        });
+      } else {
+        alert(res.message);
+      }
+    } catch (err: any) {
+      console.error('Failed to toggle bed status:', err);
+    }
+  };
 
   // Initialize App, Local DB & Firebase Sync
   useEffect(() => {
@@ -595,6 +618,7 @@ export default function App() {
               isOpen={true}
               onClose={() => setActiveTab('beds')}
               onOpenUserManagement={() => setActiveTab('users')}
+              onBedUpdated={reloadData}
             />
           ) : activeTab === 'chat' ? (
             <HospitalChatView />

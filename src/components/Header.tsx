@@ -95,7 +95,10 @@ export const Header: React.FC<HeaderProps> = ({
     clearAllNotifications 
   } = useAppNotifications();
 
-  const occupiedBedsCount = (beds || []).filter(b => b && b.status === 'OCCUPIED').length;
+  const occupiedBedsCount = (beds || []).filter(b => {
+    if (!b) return false;
+    return b.status === 'OCCUPIED' || b.status === 'ISOLATION' || !!getPatientForBed(b, patients);
+  }).length;
   const criticalCount = (patients || []).filter(p => p && p.patientStatus === 'ACTIVE_ICU' && p.acuityLevel === 'CRITICAL_STAT').length;
   
   const [notificationPermission, setNotificationPermission] = useState<string>('default');

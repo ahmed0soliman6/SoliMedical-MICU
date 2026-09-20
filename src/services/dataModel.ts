@@ -969,3 +969,50 @@ export function getPatientForBed(
 
   return null;
 }
+
+/**
+ * Toggle bed operational service status between VACANT and UNAVAILABLE (Maintenance / Out of service)
+ */
+export async function toggleBedOperationalStatus(
+  bedNumber: BedNumber
+): Promise<{ success: boolean; newStatus: BedStatus; message: string }> {
+  const cleanBedNumber = String(bedNumber) as BedNumber;
+  const currentBed = await db.beds.get(cleanBedNumber);
+  if (!currentBed) {
+    return { success: false, newStatus: BedStatus.VACANT, message: 'السرير غير موجود في النظام.' };
+  }
+
+  // Safety check: Cannot set bed out of service if active patient is present
+  const allPatients = await db.patients.toArray();
+  const activePatient = getPatientForBed(currentBed, allPatients);
+  if (activePatient && currentBed.status !== BedStatus.UNAVAILABLE) {
+    return { 
+      success: false, 
+      newStatus: currentBed.status, 
+      message: 'لا يمكن وضع السرير خارج الخدمة أثناء وجود مريض نشط عليه. يرجى تخريج المريض أو نقله أولاً.' 
+    };
+  }
+
+  const nextStatus = currentBed.status === BedStatus.UNAVAILABLE ? BedStatus.VACANT : BedStatus.UNAVAILABLE;
+  const updatedBed: BedRecord = {
+    ...currentBed,
+    status: nextStatus,
+    lastCleanedAt: nextStatus === BedStatus.VACANT ? new Date().toISOString() : currentBed.lastCleanedAt,
+  };
+
+  await db.beds.put(updatedBed);
+
+  try {
+    await syncBedToCloud(updatedBed);
+  } catch (err) {
+    console.warn('Sync bed status to cloud notice:', err);
+  }
+
+  return {
+    success: true,
+    newStatus: nextStatus,
+    message: nextStatus === BedStatus.UNAVAILABLE
+      ? `تم وضع السرير ${cleanBedNumber} خارج الخدمة (تحت الصيانة/التعقيم).`
+      : `تمت إعادة السرير ${cleanBedNumber} إلى الخدمة وأصبح متاحاً لاستقبال المرضى.`
+  };
+}

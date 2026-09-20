@@ -8,7 +8,7 @@ import {
 import { db } from '../db/icuSyncDb.ts';
 import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
-import { Stethoscope, UserCheck, Activity } from 'lucide-react';
+import { Stethoscope, UserCheck, Activity, Wrench } from 'lucide-react';
 
 interface BedMatrixCardProps {
   bed: BedRecord;
@@ -28,10 +28,11 @@ export const BedMatrixCard: React.FC<BedMatrixCardProps> = ({
   const { lang } = useTranslation();
   const [lastHandoverDoctor, setLastHandoverDoctor] = useState<string | null>(null);
   
-  const isIsolation = !!patient && (bed.status === BedStatus.ISOLATION || (bed.isolation?.isIsolated ?? false));
-  const isUnavailable = bed.status === BedStatus.UNAVAILABLE;
-  const isOccupied = (bed.status === BedStatus.OCCUPIED || isIsolation) && !!patient;
-  const isTransferPending = bed.status === BedStatus.TRANSFER_PENDING && !!patient;
+  const hasPatient = !!patient;
+  const isIsolation = hasPatient && (bed.status === BedStatus.ISOLATION || (bed.isolation?.isIsolated ?? false));
+  const isUnavailable = bed.status === BedStatus.UNAVAILABLE && !hasPatient;
+  const isOccupied = hasPatient && !isUnavailable;
+  const isTransferPending = bed.status === BedStatus.TRANSFER_PENDING && hasPatient;
 
   // Check decontamination timer (max 30 minutes = 1800000ms)
   const lastCleanedTime = bed.lastCleanedAt ? new Date(bed.lastCleanedAt).getTime() : 0;
@@ -40,8 +41,8 @@ export const BedMatrixCard: React.FC<BedMatrixCardProps> = ({
   const isDeconExpired = !bed.lastCleanedAt || elapsedMs >= thirtyMinMs;
   const remainingMinutes = Math.max(0, Math.ceil((thirtyMinMs - elapsedMs) / 60000));
 
-  const isDecontaminating = bed.status === BedStatus.DECONTAMINATING && !isDeconExpired;
-  const isVacant = (bed.status === BedStatus.VACANT || (!patient && !isDecontaminating && !isUnavailable && !isIsolation));
+  const isDecontaminating = !hasPatient && bed.status === BedStatus.DECONTAMINATING && !isDeconExpired;
+  const isVacant = !hasPatient && !isUnavailable && !isDecontaminating && !isIsolation;
 
   useEffect(() => {
     let isMounted = true;
@@ -149,37 +150,39 @@ export const BedMatrixCard: React.FC<BedMatrixCardProps> = ({
         </div>
 
         {/* Dynamic Status Label */}
-        <div className="text-xs font-bold px-2 py-0.5 rounded-md font-mono">
-          {isIsolation && (
-            <span className="bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-600/70 px-1.5 py-0.5 rounded">
-              {lang === 'ar' ? 'عزل' : 'Isolation'}
-            </span>
-          )}
-          {isUnavailable && (
-            <span className="bg-red-100 text-red-800 border border-red-300 dark:bg-red-950 dark:text-red-300 dark:border-red-800 px-1.5 py-0.5 rounded">
-              {lang === 'ar' ? 'غير متاح' : 'Unavailable'}
-            </span>
-          )}
-          {isTransferPending && (
-            <span className="bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-700 px-1.5 py-0.5 rounded">
-              {lang === 'ar' ? 'نقل معلق' : 'Transfer Pending'}
-            </span>
-          )}
-          {isDecontaminating && (
-            <span className="bg-purple-100 text-purple-800 border border-purple-300 dark:bg-purple-950 dark:text-purple-300 dark:border-purple-800 px-1.5 py-0.5 rounded">
-              {lang === 'ar' ? 'تطهير' : 'Cleaning'}
-            </span>
-          )}
-          {isVacant && (
-            <span className="bg-slate-100 text-slate-600 border border-slate-300 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700 px-1.5 py-0.5 rounded">
-              {lang === 'ar' ? 'شاغر' : 'Vacant'}
-            </span>
-          )}
-          {isOccupied && !isIsolation && (
-            <span className="bg-teal-100 text-teal-800 border border-teal-300 dark:bg-teal-950 dark:text-teal-300 dark:border-teal-800 px-1.5 py-0.5 rounded">
-              {lang === 'ar' ? 'مشغول' : 'Occupied'}
-            </span>
-          )}
+        <div className="flex items-center gap-1.5">
+          <div className="text-xs font-bold px-2 py-0.5 rounded-md font-mono">
+            {isIsolation && (
+              <span className="bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-600/70 px-1.5 py-0.5 rounded">
+                {lang === 'ar' ? 'عزل' : 'Isolation'}
+              </span>
+            )}
+            {isUnavailable && (
+              <span className="bg-red-100 text-red-800 border border-red-300 dark:bg-red-950 dark:text-red-300 dark:border-red-800 px-1.5 py-0.5 rounded">
+                {lang === 'ar' ? 'غير متاح' : 'Unavailable'}
+              </span>
+            )}
+            {isTransferPending && (
+              <span className="bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-700 px-1.5 py-0.5 rounded">
+                {lang === 'ar' ? 'نقل معلق' : 'Transfer Pending'}
+              </span>
+            )}
+            {isDecontaminating && (
+              <span className="bg-purple-100 text-purple-800 border border-purple-300 dark:bg-purple-950 dark:text-purple-300 dark:border-purple-800 px-1.5 py-0.5 rounded">
+                {lang === 'ar' ? 'تطهير' : 'Cleaning'}
+              </span>
+            )}
+            {isVacant && (
+              <span className="bg-slate-100 text-slate-600 border border-slate-300 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700 px-1.5 py-0.5 rounded">
+                {lang === 'ar' ? 'شاغر' : 'Vacant'}
+              </span>
+            )}
+            {isOccupied && !isIsolation && (
+              <span className="bg-teal-100 text-teal-800 border border-teal-300 dark:bg-teal-950 dark:text-teal-300 dark:border-teal-800 px-1.5 py-0.5 rounded">
+                {lang === 'ar' ? 'مشغول' : 'Occupied'}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -231,8 +234,9 @@ export const BedMatrixCard: React.FC<BedMatrixCardProps> = ({
             </span>
           </div>
         ) : isUnavailable ? (
-          <div className="text-xs font-semibold text-red-600 dark:text-red-400">
-            {lang === 'ar' ? 'خارج الخدمة حالياً' : 'Bed Out of Service'}
+          <div className="text-xs font-semibold text-red-600 dark:text-red-400 flex items-center gap-1.5">
+            <Wrench className="w-3.5 h-3.5 shrink-0" />
+            <span>{lang === 'ar' ? 'خارج الخدمة حالياً (صيانة / تعقيم)' : 'Out of Service (Maintenance)'}</span>
           </div>
         ) : (
           <div className="text-xs font-semibold text-teal-600 dark:text-teal-500/80">

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, UserPlus, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, UserPlus, CheckCircle2, AlertTriangle, Wrench, Power } from 'lucide-react';
 import { 
   BedNumber, 
   BedStatus, 
@@ -12,7 +12,7 @@ import {
   BedRecord,
   PatientDossier
 } from '../types/schema.ts';
-import { admitPatient, calculateIdealBodyWeight } from '../services/dataModel.ts';
+import { admitPatient, calculateIdealBodyWeight, toggleBedOperationalStatus } from '../services/dataModel.ts';
 import { searchExistingPatients, PatientCandidateMatch } from '../services/operations.ts';
 import { useTranslation } from '../services/i18n.ts';
 import { db } from '../db/icuSyncDb.ts';
@@ -80,6 +80,7 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
 
   const targetBedRecord = bedsList.find(b => b.bedNumber === targetBed);
   const isTargetOccupied = !initialPatient && !!targetBedRecord && (targetBedRecord.status === BedStatus.OCCUPIED || !!targetBedRecord.currentPatientId);
+  const isTargetUnavailable = !initialPatient && !!targetBedRecord && targetBedRecord.status === BedStatus.UNAVAILABLE;
   const occupyingPatient = isTargetOccupied && targetBedRecord?.currentPatientId
     ? patientsList.find(p => p.id === targetBedRecord.currentPatientId)
     : null;
@@ -98,7 +99,7 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
   const [primaryDiagnosisAr, setPrimaryDiagnosisAr] = useState<string>('');
   const [primaryDiagnosisEn, setPrimaryDiagnosisEn] = useState<string>('');
   const [allergiesInput, setAllergiesInput] = useState<string>('None Known');
-  const [isolation, setIsolation] = useState<string>('Standard Precautions');
+  const [isolation, setIsolation] = useState<string>('');
   const [candidateMatches, setCandidateMatches] = useState<PatientCandidateMatch[]>([]);
   const [selectedExistingPatient, setSelectedExistingPatient] = useState<PatientCandidateMatch | null>(null);
   const [isSearchingCandidates, setIsSearchingCandidates] = useState<boolean>(false);
@@ -133,9 +134,14 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
         setAllergiesInput('None Known');
       }
       if (initialPatient.isolationPrecautions && initialPatient.isolationPrecautions.length > 0) {
-        setIsolation(initialPatient.isolationPrecautions[0]);
+        const first = initialPatient.isolationPrecautions[0];
+        if (first && !first.toLowerCase().includes('standard') && first !== 'None') {
+          setIsolation(first);
+        } else {
+          setIsolation('');
+        }
       } else {
-        setIsolation('Standard Precautions');
+        setIsolation('');
       }
     }
   }, [initialPatient?.id]);
@@ -287,7 +293,7 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
           primaryDiagnosisAr: primaryDiagnosisAr.trim(),
           primaryDiagnosisEn: primaryDiagnosisEn.trim() || primaryDiagnosisAr.trim(),
           allergies: allergiesList,
-          isolationPrecautions: isolation ? [isolation] : [],
+          isolationPrecautions: isolation && isolation.trim() !== '' && !isolation.toLowerCase().includes('standard') ? [isolation.trim()] : [],
           updatedAt: new Date().toISOString(),
         };
 
@@ -343,7 +349,7 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
           role: StaffRole.LEAD_RN,
         },
         allergies: allergiesList,
-        isolationPrecautions: isolation ? [isolation] : [],
+        isolationPrecautions: isolation && isolation.trim() !== '' && !isolation.toLowerCase().includes('standard') ? [isolation.trim()] : [],
         initialVitals: (initialHr || initialMap || initialSpo2 || initialFio2) ? {
           heartRateBpm: initialHr ? parseEnglishInt(initialHr) : 80,
           systolicBpMmHg: initialMap ? Math.round(parseEnglishFloat(initialMap) + 25) : 120,
@@ -372,8 +378,9 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
         }
       });
 
-      // Trigger Isolation Notification if isolation was selected
-      if (isolation) {
+      // Trigger Isolation Notification ONLY if a real active isolation precaution was chosen
+      const hasActiveIsolation = isolation && isolation.trim() !== '' && !isolation.toLowerCase().includes('standard') && isolation !== 'NONE' && isolation !== 'لا يوجد عزل';
+      if (hasActiveIsolation) {
         triggerNotification({
           type: 'ISOLATION_CHANGE',
           titleEn: `Isolation Precautions - Bed ${targetBed}`,
@@ -427,6 +434,25 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
                   ? `السرير ${targetBed} مخصص حالياً للمريض ${occupyingPatient?.fullNameAr || occupyingPatient?.fullNameEn || ''} (${occupyingPatient?.mrn || ''}). يرجى اختيار سرير شاغر آخر من القائمة في الأعلى أو نقل الحالة الحالية أولاً.`
                   : `Bed ${targetBed} is occupied by ${occupyingPatient?.fullNameAr || occupyingPatient?.fullNameEn || 'patient'} (${occupyingPatient?.mrn || ''}). Please switch to a vacant bed from the selector above or transfer/discharge the current patient first.`}
               </p>
+            </div>
+          </div>
+        )}
+
+        {/* Bed Out of Service Notice (If target bed is UNAVAILABLE) */}
+        {isTargetUnavailable && (
+          <div className="p-4 rounded-xl bg-rose-950/30 border border-rose-500/40 flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-start gap-3">
+              <Wrench className="w-5 h-5 text-rose-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <strong className="text-rose-300 block text-xs">
+                  {lang === 'ar' ? `السرير ${targetBed} مسجل خارج الخدمة حالياً (صيانة / تعقيم)` : `Bed ${targetBed} is Currently Out of Service`}
+                </strong>
+                <p className="text-slate-300 mt-0.5 text-[11px]">
+                  {lang === 'ar'
+                    ? `هذا السرير مسجل حالياً تحت أعمال الصيانة أو التطهير. لتفعيل السرير أو تغيير حالته التشغيلية، يرجى استخدام بطاقة "إدارة تشغيل وصيانة الأسِرّة" في شاشة الإعدادات.`
+                    : `This bed is currently marked out of service (maintenance / decontamination). To reactivate it, please use the "Bed Operations & Maintenance" card in Settings.`}
+                </p>
+              </div>
             </div>
           </div>
         )}
@@ -732,14 +758,20 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
 
             <div>
               <label className="text-[11px] text-slate-300 font-semibold block mb-1">
-                {lang === 'ar' ? 'احتياطات العزل الطبي الوقائي' : 'Isolation & Infection Control Precautions'}
+                {lang === 'ar' ? 'احتياطات العزل الطبي الوقائي (في حال وجود عزل)' : 'Isolation & Infection Control Precautions (If Any)'}
               </label>
-              <input
-                type="text"
+              <select
                 value={isolation}
                 onChange={(e) => setIsolation(e.target.value)}
-                className="w-full bg-[#070c18] border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-teal-500 focus:outline-none text-xs"
-              />
+                className="w-full bg-[#070c18] border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-teal-500 focus:outline-none text-xs cursor-pointer"
+              >
+                <option value="">{lang === 'ar' ? 'لا يوجد عزل طبي (احتياطات قياسية عادية)' : 'No Clinical Isolation (Standard Precautions)'}</option>
+                <option value="Contact Precautions">{lang === 'ar' ? 'عزل تلامسي (Contact Precautions)' : 'Contact Precautions'}</option>
+                <option value="Droplet Precautions">{lang === 'ar' ? 'عزل رذاذي (Droplet Precautions)' : 'Droplet Precautions'}</option>
+                <option value="Airborne Precautions">{lang === 'ar' ? 'عزل هوائي سالب الضغط (Airborne Precautions)' : 'Airborne Precautions'}</option>
+                <option value="Protective Isolation">{lang === 'ar' ? 'عزل مناعي وقائي (Protective / Reverse Isolation)' : 'Protective Isolation'}</option>
+                <option value="Contact + Airborne Precautions">{lang === 'ar' ? 'عزل تلامسي وهوائي مزدوج (Contact + Airborne)' : 'Contact + Airborne Precautions'}</option>
+              </select>
             </div>
           </div>
 

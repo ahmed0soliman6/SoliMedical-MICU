@@ -104,7 +104,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }
   };
 
-  const occupiedBedsCount = (beds || []).filter((b) => b && b.status === 'OCCUPIED').length;
+  const occupiedBedsCount = (beds || []).filter((b) => {
+    if (!b) return false;
+    return b.status === 'OCCUPIED' || b.status === 'ISOLATION' || !!getPatientForBed(b, patients);
+  }).length;
 
   const toggleLanguage = () => {
     const nextLang = lang === 'en' ? 'ar' : 'en';
