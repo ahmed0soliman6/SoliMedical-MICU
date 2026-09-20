@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { API_BASE_URL } from '../config/api.ts';
 import { 
   IcuUser, 
   StaffRole, 
@@ -449,11 +450,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     try {
       const idToken = await auth.currentUser?.getIdToken();
-      const response = await fetch('/api/admin/users/change-password', {
+      if (!idToken) {
+        return { success: false, message: 'تعذر الحصول على رمز المصادقة (ID Token).' };
+      }
+      const response = await fetch(`${API_BASE_URL}/api/admin/users/change-password`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${idToken || 'legacy_' + (currentUser?.uid || 'admin')}`
+          'Authorization': `Bearer ${idToken}`
         },
         body: JSON.stringify({ targetUid: uid, newPassword: cleanPass })
       });
@@ -538,30 +542,62 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!target) return { success: false, message: 'المستخدم غير موجود' };
 
     try {
-      const idToken = await auth.currentUser?.getIdToken();
+      const idToken = await auth.currentUser?.getIdToken(true);
 
-      const response = await fetch('/api/admin/users/delete', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${idToken}`
-        },
-        body: JSON.stringify({ targetUid: uid })
-      });
-
-      const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        throw new Error(result.message || 'فشل حذف المستخدم');
+      if (!idToken) {
+        return {
+          success: false,
+          message: 'تعذر الحصول على Firebase ID Token'
+        };
       }
 
-      // Delete from Dexie (local cache)
-      await db.users.delete(uid);
+      const response = await fetch(
+        `${API_BASE_URL}/api/admin/users/delete`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${idToken}`
+          },
+          body: JSON.stringify({
+            targetUid: uid
+          })
+        }
+      );
 
+      const contentType = response.headers.get('content-type') || '';
+
+      if (!contentType.includes('application/json')) {
+        const text = await response.text();
+
+        console.error('DELETE API returned non-JSON:', {
+          status: response.status,
+          contentType,
+          body: text.slice(0, 500)
+        });
+
+        return {
+          success: false,
+          message:
+            'خادم العمليات الإدارية غير متاح حاليًا. لم يتم حذف المستخدم.'
+        };
+      }
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        return {
+          success: false,
+          message: data.message || 'فشل حذف المستخدم.'
+        };
+      }
+
+      await db.users.delete(uid);
       await refreshUsers();
-      return { 
-        success: true, 
-        message: 'تم حذف المستخدم بنجاح.'
+
+      return {
+        success: true,
+        message: data.message || 'تم حذف المستخدم نهائيًا.'
       };
     } catch (e: any) {
       return { 

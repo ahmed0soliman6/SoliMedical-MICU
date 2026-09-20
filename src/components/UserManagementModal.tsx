@@ -69,7 +69,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
     setRecoveryStatus(null);
     try {
       const idToken = await auth.currentUser?.getIdToken().catch(() => null);
-      const authHeader = idToken ? `Bearer ${idToken}` : (currentUser?.uid ? `Bearer legacy_${currentUser.uid}` : 'Bearer legacy_admin');
+      const authHeader = idToken ? `Bearer ${idToken}` : '';
       const response = await fetch('/api/admin/recovery/set', {
         method: 'POST',
         headers: {
@@ -268,12 +268,16 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
     const q = (searchQuery || '').toLowerCase();
     const nameAr = (u.nameAr || '').toLowerCase();
     const nameEn = (u.nameEn || '').toLowerCase();
+    const displayName = ((u as any).displayName || '').toLowerCase();
+    const username = ((u as any).username || '').toLowerCase();
     const email = (u.email || '').toLowerCase();
     const badgeId = (u.badgeId || '').toLowerCase();
 
     const matchesSearch = 
       nameAr.includes(q) ||
       nameEn.includes(q) ||
+      displayName.includes(q) ||
+      username.includes(q) ||
       email.includes(q) ||
       badgeId.includes(q);
     const matchesRole = roleFilter === 'ALL' || u.role === roleFilter;
@@ -576,11 +580,22 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
                               ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40'
                               : 'bg-blue-500/20 text-blue-300 border border-blue-500/40'
                           }`}>
-                            {user.nameEn.slice(0, 2).toUpperCase()}
+                            {(
+                              user.nameEn ||
+                              user.nameAr ||
+                              user.displayName ||
+                              user.username ||
+                              user.email ||
+                              'U'
+                            ).slice(0, 2).toUpperCase()}
                           </div>
                           <div>
                             <div className="flex items-center gap-1.5">
-                              <span className="text-xs font-bold text-white">{lang === 'ar' ? user.nameAr : user.nameEn}</span>
+                              <span className="text-xs font-bold text-white">
+                                {lang === 'ar'
+                                  ? (user.nameAr || user.nameEn || user.displayName || user.username || user.email)
+                                  : (user.nameEn || user.nameAr || user.displayName || user.username || user.email)}
+                              </span>
                               {user.isSuperAdmin && (
                                 <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[9px] font-bold">
                                   ADMIN
@@ -726,7 +741,9 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
               </div>
               <div>
                 <h3 className="text-base font-bold text-white">
-                  {lang === 'ar' ? `تأكيد حذف حساب المستخدم: ${userToDelete.nameAr || userToDelete.nameEn}` : `Confirm Deleting User: ${userToDelete.nameEn}`}
+                  {lang === 'ar'
+                    ? `تأكيد حذف حساب المستخدم: ${userToDelete.nameAr || userToDelete.nameEn || userToDelete.displayName || userToDelete.username || userToDelete.email}`
+                    : `Confirm Deleting User: ${userToDelete.nameEn || userToDelete.nameAr || userToDelete.displayName || userToDelete.username || userToDelete.email}`}
                 </h3>
                 <p className="text-xs text-slate-400 mt-1">
                   {userToDelete.email} • {userToDelete.role}
@@ -780,7 +797,10 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
                   {lang === 'ar' ? `تغيير كلمة السر للمستخدم:` : 'Change Password for User:'}
                 </h3>
                 <p className="text-xs text-teal-300 font-bold font-mono mt-0.5">
-                  {lang === 'ar' ? userToChangePassword.nameAr : userToChangePassword.nameEn} ({userToChangePassword.badgeId})
+                  {lang === 'ar'
+                    ? (userToChangePassword.nameAr || userToChangePassword.nameEn || userToChangePassword.displayName || userToChangePassword.username || userToChangePassword.email)
+                    : (userToChangePassword.nameEn || userToChangePassword.nameAr || userToChangePassword.displayName || userToChangePassword.username || userToChangePassword.email)}{' '}
+                  ({userToChangePassword.badgeId})
                 </p>
               </div>
             </div>
