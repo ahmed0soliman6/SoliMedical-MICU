@@ -14,6 +14,20 @@ export enum BedNumber {
   BED_04 = '04',
   BED_05 = '05',
   BED_06 = '06',
+  BED_07 = '07',
+  BED_08 = '08',
+  BED_09 = '09',
+  BED_10 = '10',
+  BED_11 = '11',
+  BED_12 = '12',
+  BED_13 = '13',
+  BED_14 = '14',
+  BED_15 = '15',
+  BED_16 = '16',
+  BED_17 = '17',
+  BED_18 = '18',
+  BED_19 = '19',
+  BED_20 = '20',
 }
 
 export enum BedStatus {

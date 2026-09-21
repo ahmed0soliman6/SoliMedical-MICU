@@ -30,7 +30,7 @@ import {
   signInAnonymously,
   User as FirebaseUser
 } from 'firebase/auth';
-import firebaseConfig from '../../firebase-applet-config.json';
+import { firebaseConfig } from './firebase/config.ts';
 import { 
   BedRecord, 
   BedNumber,
