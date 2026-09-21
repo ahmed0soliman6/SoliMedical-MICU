@@ -170,23 +170,6 @@ export default function App() {
     };
   }, [activeTab, selectedBedNumber, settings.features.enableExitProtection]);
 
-  // Tab close / window reload protection
-  useEffect(() => {
-    if (!settings.features.enableExitProtection) return;
-
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (isExitingRef.current) return;
-      e.preventDefault();
-      e.returnValue = '';
-      return '';
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-    };
-  }, [settings.features.enableExitProtection]);
-
   const handleConfirmExit = useCallback(() => {
     isExitingRef.current = true;
     setIsExitConfirmationOpen(false);
