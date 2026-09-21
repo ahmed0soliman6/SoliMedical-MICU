@@ -23,11 +23,7 @@ import { useTranslation } from '../services/i18n.ts';
 import { compressImageForOcr } from '../services/imageCompression.ts';
 import { 
   scanInvestigationImage, 
-  ScannedInvestigationResponse,
-  generateSampleCxrReport,
-  generateSampleCtBrainReport,
-  generateSampleEcgReport,
-  generateSampleEchoReport
+  ScannedInvestigationResponse
 } from '../services/aiInvestigationService.ts';
 import { InvestigationItem } from '../types/schema.ts';
 
@@ -208,28 +204,6 @@ export const AiInvestigationScannerModal: React.FC<AiInvestigationScannerModalPr
     }
   };
 
-  const loadSample = (type: 'CXR' | 'CT' | 'ECG' | 'ECHO') => {
-    let sampleDataUrl = '';
-    let modalityHint = 'Chest X-Ray';
-    if (type === 'CXR') {
-      sampleDataUrl = generateSampleCxrReport();
-      modalityHint = 'Chest X-Ray';
-    } else if (type === 'CT') {
-      sampleDataUrl = generateSampleCtBrainReport();
-      modalityHint = 'CT';
-    } else if (type === 'ECG') {
-      sampleDataUrl = generateSampleEcgReport();
-      modalityHint = 'ECG';
-    } else if (type === 'ECHO') {
-      sampleDataUrl = generateSampleEchoReport();
-      modalityHint = 'Echo';
-    }
-    setExpectedModality(modalityHint);
-    setSelectedImage(sampleDataUrl);
-    setSelectedImageMime('image/svg+xml');
-    processImageWithAI(sampleDataUrl, 'image/svg+xml', modalityHint);
-  };
-
   const processImageWithAI = async (
     image: string,
     mimeType: string,
@@ -366,7 +340,7 @@ export const AiInvestigationScannerModal: React.FC<AiInvestigationScannerModalPr
         {/* Content Body */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
           
-          {/* Top Bar: Mode Selectors & Clinical Sample Quick Buttons */}
+          {/* Top Bar: Mode Selectors */}
           <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl bg-slate-900/80 border border-slate-800">
             <div className="flex items-center gap-2">
               <button
@@ -382,7 +356,7 @@ export const AiInvestigationScannerModal: React.FC<AiInvestigationScannerModalPr
                 }`}
               >
                 <Upload className="w-3.5 h-3.5" />
-                <span>{lang === 'ar' ? 'رفع ملف / صورة' : 'Upload Image'}</span>
+                <span>{lang === 'ar' ? 'انقر أو ارفع ملف / صورة' : 'Click or Upload Image'}</span>
               </button>
 
               <button
@@ -398,50 +372,7 @@ export const AiInvestigationScannerModal: React.FC<AiInvestigationScannerModalPr
                 }`}
               >
                 <Camera className="w-3.5 h-3.5" />
-                <span>{lang === 'ar' ? 'تصوير بالكاميرا' : 'Live Camera'}</span>
-              </button>
-            </div>
-
-            {/* Quick Demo Samples */}
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-[11px] font-mono text-slate-400">
-                {lang === 'ar' ? 'نماذج تجريبية سريعة:' : 'Demo Reports:'}
-              </span>
-              <button
-                type="button"
-                onClick={() => loadSample('CXR')}
-                disabled={isAnalyzing}
-                className="px-2.5 py-1 rounded-lg bg-sky-950/80 hover:bg-sky-900 border border-sky-600/40 text-sky-300 text-[11px] font-bold transition-all cursor-pointer active:scale-95 disabled:opacity-50"
-                title="Chest X-Ray AP Portable Report (ARDS/Infiltrates)"
-              >
-                CXR (أشعة صدر)
-              </button>
-              <button
-                type="button"
-                onClick={() => loadSample('CT')}
-                disabled={isAnalyzing}
-                className="px-2.5 py-1 rounded-lg bg-teal-950/80 hover:bg-teal-900 border border-teal-600/40 text-teal-300 text-[11px] font-bold transition-all cursor-pointer active:scale-95 disabled:opacity-50"
-                title="CT Brain Non-Contrast Report"
-              >
-                CT Brain (مقطعية)
-              </button>
-              <button
-                type="button"
-                onClick={() => loadSample('ECG')}
-                disabled={isAnalyzing}
-                className="px-2.5 py-1 rounded-lg bg-rose-950/80 hover:bg-rose-900 border border-rose-600/40 text-rose-300 text-[11px] font-bold transition-all cursor-pointer active:scale-95 disabled:opacity-50"
-                title="12-Lead Diagnostic ECG Printout"
-              >
-                12-Lead ECG
-              </button>
-              <button
-                type="button"
-                onClick={() => loadSample('ECHO')}
-                disabled={isAnalyzing}
-                className="px-2.5 py-1 rounded-lg bg-purple-950/80 hover:bg-purple-900 border border-purple-600/40 text-purple-300 text-[11px] font-bold transition-all cursor-pointer active:scale-95 disabled:opacity-50"
-                title="Bedside POCUS & Echocardiography"
-              >
-                POCUS / Echo
+                <span>{lang === 'ar' ? 'تشغيل الكاميرا للتصوير' : 'Live Camera'}</span>
               </button>
             </div>
           </div>
