@@ -18,7 +18,8 @@ import {
   GripVertical,
   Maximize2,
   Menu,
-  X
+  X,
+  Trash2
 } from 'lucide-react';
 import { useAuth } from '../services/AuthContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
@@ -30,6 +31,8 @@ import {
   getOrCreateDirectChat, 
   ensureDefaultDepartmentChats,
   markChatAsRead,
+  deleteChatMessage,
+  cleanupOldMessages,
   DEFAULT_DEPARTMENTS 
 } from '../services/chatService.ts';
 
@@ -105,6 +108,23 @@ export const HospitalChatView: React.FC = () => {
     if (typeof window !== 'undefined') {
       localStorage.setItem('soli_show_floating_chat_widget', String(nextState));
       window.dispatchEvent(new CustomEvent('soli_toggle_floating_chat', { detail: { visible: nextState } }));
+    }
+  };
+
+  // Run automatic cleanup of old chat messages (older than 3 months) on mount
+  useEffect(() => {
+    cleanupOldMessages();
+  }, []);
+
+  const handleDeleteMessage = async (messageId: string) => {
+    const confirmMsg = lang === 'ar' 
+      ? 'هل أنت متأكد من رغبتك في حذف هذه الرسالة؟' 
+      : 'Are you sure you want to delete this message?';
+    if (!window.confirm(confirmMsg)) return;
+    try {
+      await deleteChatMessage(messageId);
+    } catch (err) {
+      console.warn('Failed to delete message:', err);
     }
   };
 
@@ -327,15 +347,32 @@ export const HospitalChatView: React.FC = () => {
         {/* Active Chat Header */}
         <div className="p-3 sm:p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-white dark:bg-[#08101e]">
           <div className="flex items-center gap-2.5">
-            {/* Mobile Back Button to Private Chats */}
-            <button
-              type="button"
-              onClick={() => setShowMobileChat(false)}
-              className="md:hidden p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center gap-1 text-xs font-bold transition-colors cursor-pointer"
-            >
-              {isRTL ? <ArrowRight className="w-4 h-4" /> : <ArrowLeft className="w-4 h-4" />}
-              <span>{lang === 'ar' ? 'المحادثات الخاصة' : 'Direct Staff'}</span>
-            </button>
+            {/* Mobile Back Button to Private Chats replaced by Floating Chat Toggle on General Chat, or General Chat button on Private Chat */}
+            {activeChatId === 'dept_general' ? (
+              <button
+                type="button"
+                onClick={handleToggleFloatingWidget}
+                className="md:hidden px-2.5 py-1.5 rounded-xl border text-[11px] font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm bg-teal-100 text-teal-800 border-teal-300 dark:bg-teal-500/20 dark:text-teal-300 dark:border-teal-500/40 hover:bg-teal-200"
+                title={lang === 'ar' ? 'تفعيل/إلغاء الزر العائم في الشاشات' : 'Toggle Floating Chat Button'}
+              >
+                <GripVertical className="w-3.5 h-3.5" />
+                <span>
+                  {isFloatingWidgetEnabled ? (lang === 'ar' ? 'الزر العائم (مُفعّل)' : 'FAB Active') : (lang === 'ar' ? 'الزر العائم (مُعطّل)' : 'FAB Off')}
+                </span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveChatId('dept_general');
+                  setShowMobileChat(true);
+                }}
+                className="md:hidden p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center gap-1.5 text-xs font-bold transition-colors cursor-pointer"
+              >
+                <MessageSquare className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                <span>{lang === 'ar' ? 'الدردشة العامة' : 'General Chat'}</span>
+              </button>
+            )}
 
             <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-teal-500/20 border border-teal-500/40 flex items-center justify-center text-teal-700 dark:text-teal-300 shrink-0">
               {activeChat.type === 'DEPARTMENT' ? <Building className="w-4 h-4 sm:w-5 sm:h-5" /> : <User className="w-4 h-4 sm:w-5 sm:h-5" />}
@@ -462,12 +499,14 @@ export const HospitalChatView: React.FC = () => {
           ) : (
             messages.map((msg) => {
               const isMine = msg.senderUid === currentUser?.uid;
+              const isAdminUser = currentUser?.role === 'ADMIN' || currentUser?.isSuperAdmin === true;
+              const canDelete = isAdminUser || isMine;
               const formattedTime = new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
               return (
                 <div 
                   key={msg.id} 
-                  className={`flex flex-col ${isMine ? 'items-end' : 'items-start'}`}
+                  className={`flex flex-col ${isMine ? 'items-end' : 'items-start'} group`}
                 >
                   <div className="flex items-center gap-1.5 mb-1 px-1 text-[11px]">
                     <span className="font-semibold text-slate-700 dark:text-slate-300">{msg.senderName}</span>
@@ -479,12 +518,36 @@ export const HospitalChatView: React.FC = () => {
                     <span className="text-slate-400 dark:text-slate-500 text-[10px]">{formattedTime}</span>
                   </div>
 
-                  <div className={`max-w-[88%] sm:max-w-lg p-3 rounded-2xl text-xs leading-relaxed shadow-sm ${
-                    isMine
-                      ? 'bg-teal-600 text-white rounded-br-none border border-teal-500/50'
-                      : 'bg-white dark:bg-slate-800/90 text-slate-800 dark:text-slate-100 rounded-bl-none border border-slate-200 dark:border-slate-700'
-                  }`}>
-                    <p className="whitespace-pre-wrap break-words">{msg.message}</p>
+                  <div className="flex items-center gap-2 max-w-[88%] sm:max-w-lg">
+                    {isMine && canDelete && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteMessage(msg.id)}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 hover:text-rose-600 cursor-pointer shrink-0"
+                        title={lang === 'ar' ? 'حذف الرسالة' : 'Delete Message'}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+
+                    <div className={`p-3 rounded-2xl text-xs leading-relaxed shadow-sm flex-1 ${
+                      isMine
+                        ? 'bg-teal-600 text-white rounded-br-none border border-teal-500/50'
+                        : 'bg-white dark:bg-slate-800/90 text-slate-800 dark:text-slate-100 rounded-bl-none border border-slate-200 dark:border-slate-700'
+                    }`}>
+                      <p className="whitespace-pre-wrap break-words">{msg.message}</p>
+                    </div>
+
+                    {!isMine && canDelete && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteMessage(msg.id)}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 hover:text-rose-600 cursor-pointer shrink-0"
+                        title={lang === 'ar' ? 'حذف الرسالة' : 'Delete Message'}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
               );

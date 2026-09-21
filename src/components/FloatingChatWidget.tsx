@@ -529,26 +529,30 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({ activeTa
               markChatAsRead(activeChatId, currentUser.uid);
             }
           }}
-          className={`relative group flex items-center gap-2 px-3.5 py-3 rounded-full shadow-2xl border backdrop-blur-xl transition-all cursor-grab active:cursor-grabbing ${
+          className={`relative group flex items-center gap-1.5 px-3 py-2 rounded-full shadow-lg border-2 backdrop-blur-md transition-all duration-200 opacity-85 hover:opacity-100 cursor-grab active:cursor-grabbing ${
             isOpen
-              ? 'bg-teal-600 text-white border-teal-400 ring-4 ring-teal-500/30 dark:bg-teal-500 dark:text-slate-950 dark:border-teal-300'
+              ? 'bg-teal-600/90 text-white border-teal-400/80 ring-2 ring-teal-500/20 dark:bg-teal-500/90 dark:text-slate-950 dark:border-teal-300/80'
               : unreadCount > 0
-              ? 'bg-rose-600 text-white border-rose-400 ring-4 ring-rose-500/40 animate-bounce'
-              : 'bg-white text-teal-800 hover:bg-teal-50 hover:text-teal-950 border-2 border-teal-500/80 shadow-xl ring-2 ring-teal-500/20 dark:bg-[#0a1428]/95 dark:text-teal-300 dark:hover:bg-teal-950/80 dark:hover:text-white dark:border-teal-500/60 dark:ring-teal-500/20'
+              ? 'bg-rose-600/95 text-white border-rose-400/80 ring-2 ring-rose-500/30'
+              : 'bg-white/75 text-teal-800 hover:bg-white border-teal-500/50 shadow-md ring-1 ring-teal-500/10 dark:bg-[#0a1428]/75 dark:text-teal-300 dark:hover:bg-[#0a1428] dark:border-teal-500/50'
           }`}
           title={lang === 'ar' ? 'زر الدردشة السريرية العائم (اسحب لتحريكه)' : 'Floating Clinical Chat (Drag to move)'}
         >
-          <GripVertical className="w-3.5 h-3.5 text-slate-400 opacity-60 group-hover:opacity-100 transition-opacity" />
-          <MessageSquare className="w-5 h-5 shrink-0" />
-          <span className="hidden sm:inline text-xs font-bold leading-none">
-            {lang === 'ar' ? 'الدردشة السريرية' : 'Chat'}
-          </span>
-
-          {/* Dynamic Unread Badge Counter */}
-          {unreadCount > 0 && (
-            <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1.5 rounded-full bg-rose-500 text-white text-[10px] font-black flex items-center justify-center border-2 border-white dark:border-[#081020] shadow-md animate-pulse">
-              {unreadCount}
-            </span>
+          {unreadCount > 0 ? (
+            <div className="flex items-center gap-1.5 px-0.5">
+              <MessageSquare className="w-4 h-4 shrink-0 text-white animate-pulse" />
+              <span className="text-[11px] font-black bg-white/20 text-white px-1.5 py-0.5 rounded-full animate-pulse">
+                {unreadCount}
+              </span>
+            </div>
+          ) : (
+            <>
+              <GripVertical className="w-3.5 h-3.5 text-slate-400 opacity-60 group-hover:opacity-100 transition-opacity" />
+              <MessageSquare className="w-4 h-4 shrink-0" />
+              <span className="hidden sm:inline text-xs font-bold leading-none">
+                {lang === 'ar' ? 'الدردشة' : 'Chat'}
+              </span>
+            </>
           )}
         </motion.button>
       </motion.div>

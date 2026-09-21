@@ -296,7 +296,7 @@ service cloud.firestore {
       allow read: if isActiveUser();
       allow create: if isActiveUser() && request.resource.data.senderUid == request.auth.uid;
       allow update: if isActiveUser() && request.auth.uid == resource.data.senderUid;
-      allow delete: if isAdmin();
+      allow delete: if isAdmin() || (isActiveUser() && resource.data.senderUid == request.auth.uid);
     }
 
     // Audit Logs (Immutable ledger)

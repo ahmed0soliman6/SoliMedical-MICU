@@ -19,6 +19,7 @@ import {
   serverTimestamp, 
   arrayUnion, 
   increment,
+  deleteDoc,
   Unsubscribe 
 } from 'firebase/firestore';
 import { firestore, setDoc, updateDoc } from './firebase.ts';
@@ -270,4 +271,42 @@ export async function getOrCreateDirectChat(
   }
 
   return directId;
+}
+
+/**
+ * Deletes a chat message from Firestore
+ */
+export async function deleteChatMessage(messageId: string): Promise<void> {
+  if (!messageId) return;
+  const docRef = doc(firestore, MESSAGES_COLLECTION, messageId);
+  await deleteDoc(docRef);
+}
+
+/**
+ * Periodically deletes chat messages that are older than 3 months (90 days)
+ */
+export async function cleanupOldMessages(): Promise<number> {
+  try {
+    const colRef = collection(firestore, MESSAGES_COLLECTION);
+    const ninetyDaysAgo = new Date();
+    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+    const limitIso = ninetyDaysAgo.toISOString();
+
+    const q = query(colRef, where('createdAt', '<', limitIso));
+    const snapshot = await getDocs(q);
+
+    let deletedCount = 0;
+    for (const docSnap of snapshot.docs) {
+      await deleteDoc(docSnap.ref);
+      deletedCount++;
+    }
+    
+    if (deletedCount > 0) {
+      console.log(`[Chat CleanUp] Cleaned up ${deletedCount} clinical messages older than 90 days.`);
+    }
+    return deletedCount;
+  } catch (err) {
+    console.warn('Error during old messages cleanup:', err);
+    return 0;
+  }
 }
