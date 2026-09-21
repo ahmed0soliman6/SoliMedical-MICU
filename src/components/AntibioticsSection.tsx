@@ -696,6 +696,7 @@ interface AntibioticsSectionProps {
     nameAr?: string;
     role?: string;
   };
+  readOnly?: boolean;
 }
 
 export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
@@ -706,6 +707,7 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
   labResults,
   onDataUpdated,
   currentUser,
+  readOnly = false,
 }) => {
   const { lang, isRTL } = useTranslation();
   const { currentUser: authUser, user: authContextUser } = useAuth();
@@ -1121,13 +1123,15 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
           {/* Card Action Bar: Add Antibiotic Button & Responsive Filters */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 bg-[#070c18] border border-slate-800/80 p-2.5 rounded-xl">
             {/* Add Antibiotic Button positioned cleanly below header */}
-            <button
-              onClick={() => handleOpenAddModal()}
-              className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-md shadow-amber-500/20 transition-all cursor-pointer w-full sm:w-auto"
-            >
-              <Plus className="w-4 h-4" />
-              <span>{lang === 'ar' ? 'إضافة مضاد حيوي' : 'Add Antibiotic'}</span>
-            </button>
+            {!readOnly && (
+              <button
+                onClick={() => handleOpenAddModal()}
+                className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-md shadow-amber-500/20 transition-all cursor-pointer w-full sm:w-auto"
+              >
+                <Plus className="w-4 h-4" />
+                <span>{lang === 'ar' ? 'إضافة مضاد حيوي' : 'Add Antibiotic'}</span>
+              </button>
+            )}
 
             {/* Quick Filter Tabs for Mobile & Desktop */}
             <div className="flex items-center bg-slate-900 border border-slate-700/80 rounded-xl p-1 text-xs font-medium w-full sm:w-auto">
@@ -1391,53 +1395,55 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                         ) : null}
                       </div>
 
-                      <div className="flex items-center gap-1">
-                        {isActive && (
-                          <>
-                            <button
-                              onClick={() => handleUpdateStatus(abx, 'PAUSED')}
-                              className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-yellow-950 text-yellow-400 hover:border-yellow-700 border border-slate-700 text-[11px] transition-all cursor-pointer"
-                              title={lang === 'ar' ? 'إيقاف مؤقت' : 'Pause'}
-                            >
-                              <PauseCircle className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => handleUpdateStatus(abx, 'COMPLETED')}
-                              className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-emerald-950 text-emerald-400 hover:border-emerald-700 border border-slate-700 text-[11px] transition-all cursor-pointer flex items-center gap-1"
-                              title={lang === 'ar' ? 'إكمال الكورس' : 'Mark Completed'}
-                            >
-                              <CheckCircle2 className="w-3.5 h-3.5" />
-                              <span className="hidden sm:inline">{lang === 'ar' ? 'إكمال' : 'Complete'}</span>
-                            </button>
-                          </>
-                        )}
+                      {!readOnly && (
+                        <div className="flex items-center gap-1">
+                          {isActive && (
+                            <>
+                              <button
+                                onClick={() => handleUpdateStatus(abx, 'PAUSED')}
+                                className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-yellow-950 text-yellow-400 hover:border-yellow-700 border border-slate-700 text-[11px] transition-all cursor-pointer"
+                                title={lang === 'ar' ? 'إيقاف مؤقت' : 'Pause'}
+                              >
+                                <PauseCircle className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleUpdateStatus(abx, 'COMPLETED')}
+                                className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-emerald-950 text-emerald-400 hover:border-emerald-700 border border-slate-700 text-[11px] transition-all cursor-pointer flex items-center gap-1"
+                                title={lang === 'ar' ? 'إكمال الكورس' : 'Mark Completed'}
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <span className="hidden sm:inline">{lang === 'ar' ? 'إكمال' : 'Complete'}</span>
+                              </button>
+                            </>
+                          )}
 
-                        {isPaused && (
+                          {isPaused && (
+                            <button
+                              onClick={() => handleUpdateStatus(abx, 'ACTIVE')}
+                              className="px-2 py-1 rounded-lg bg-emerald-900/50 text-emerald-300 border border-emerald-700 text-[11px] transition-all cursor-pointer flex items-center gap-1"
+                            >
+                              <PlayCircle className="w-3.5 h-3.5" />
+                              <span>{lang === 'ar' ? 'استئناف' : 'Resume'}</span>
+                            </button>
+                          )}
+
                           <button
-                            onClick={() => handleUpdateStatus(abx, 'ACTIVE')}
-                            className="px-2 py-1 rounded-lg bg-emerald-900/50 text-emerald-300 border border-emerald-700 text-[11px] transition-all cursor-pointer flex items-center gap-1"
+                            onClick={() => handleOpenEditModal(abx)}
+                            className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[11px] transition-all cursor-pointer flex items-center gap-1"
+                            title={lang === 'ar' ? 'تعديل' : 'Edit'}
                           >
-                            <PlayCircle className="w-3.5 h-3.5" />
-                            <span>{lang === 'ar' ? 'استئناف' : 'Resume'}</span>
+                            <Edit3 className="w-3.5 h-3.5" />
                           </button>
-                        )}
 
-                        <button
-                          onClick={() => handleOpenEditModal(abx)}
-                          className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[11px] transition-all cursor-pointer flex items-center gap-1"
-                          title={lang === 'ar' ? 'تعديل' : 'Edit'}
-                        >
-                          <Edit3 className="w-3.5 h-3.5" />
-                        </button>
-
-                        <button
-                          onClick={() => handleDelete(abx)}
-                          className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-400 border border-slate-700 hover:border-rose-800 text-[11px] transition-all cursor-pointer"
-                          title={lang === 'ar' ? 'حذف' : 'Delete'}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+                          <button
+                            onClick={() => handleDelete(abx)}
+                            className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-400 border border-slate-700 hover:border-rose-800 text-[11px] transition-all cursor-pointer"
+                            title={lang === 'ar' ? 'حذف' : 'Delete'}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );

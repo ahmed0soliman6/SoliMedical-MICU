@@ -103,6 +103,7 @@ interface BedsideFlowsheetProps {
   onOpenAddAddendum: (noteId: string, author: string) => void;
   onOpenSbarSign: () => void;
   onDataUpdated: () => void;
+  readOnly?: boolean;
 }
 
 const formatNumericDate = (dateVal?: string | Date | number): string => {
@@ -131,6 +132,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
   onOpenAddAddendum,
   onOpenSbarSign,
   onDataUpdated,
+  readOnly = false,
 }) => {
   const { settings } = useSystemSettings();
   const { t, lang, isRTL } = useTranslation();
@@ -1152,8 +1154,24 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
 
   return (
     <div className="space-y-4 animate-in fade-in duration-200">
+      {readOnly && (
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex items-center gap-3 text-amber-300">
+          <ShieldAlert className="w-5 h-5 text-amber-400 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <h4 className="text-sm font-extrabold font-sans">
+              {lang === 'ar' ? 'سجل طبي تاريخي مؤرشف (للقراءة فقط)' : 'HISTORICAL CLINICAL DOSSIER (READ-ONLY)'}
+            </h4>
+            <p className="text-[11px] text-amber-200/80 mt-0.5">
+              {lang === 'ar' 
+                ? 'ملف هذا المريض مؤرشف ومغلق بالكامل. كافة عمليات التعديل أو التوقيع معطلة وقيد الحماية.'
+                : 'This patient record is archived and completely closed. All modifications, signatures, and notes are protected and disabled.'}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Quick Bed Switcher Bar (Direct Single-Click Page Navigation) */}
-      {allBeds.length > 0 && onSelectBed && (
+      {allBeds.length > 0 && onSelectBed && !readOnly && (
         <div className="bg-white dark:bg-[#0a1224] border border-slate-200 dark:border-slate-800/80 rounded-xl px-3 py-2 flex items-center gap-1.5 overflow-x-auto shadow-sm">
           <button
             onClick={onBack}
@@ -1287,17 +1305,20 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
               )}
 
               {/* Handover SBAR Sign Button */}
-              <button
-                onClick={onOpenSbarSign}
-                className="flex-1 min-w-[130px] flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-slate-950 text-xs font-black transition-all shadow-md shadow-teal-500/20 active:scale-98 cursor-pointer"
-                title={lang === 'ar' ? 'تسليم SBAR السريري' : 'SBAR Handover Sign'}
-              >
-                <ShieldCheck className="w-4 h-4 stroke-[2.5] shrink-0" />
-                <span>{lang === 'ar' ? 'تسليم SBAR' : 'SBAR Sign'}</span>
-                <span className="px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[10px] font-black font-mono shadow-sm">
-                  {sbarList.length}
-                </span>
-              </button>
+               {/* Handover SBAR Sign Button */}
+               {!readOnly && (
+                 <button
+                   onClick={onOpenSbarSign}
+                   className="flex-1 min-w-[130px] flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-slate-950 text-xs font-black transition-all shadow-md shadow-teal-500/20 active:scale-98 cursor-pointer"
+                   title={lang === 'ar' ? 'تسليم SBAR السريري' : 'SBAR Handover Sign'}
+                 >
+                   <ShieldCheck className="w-4 h-4 stroke-[2.5] shrink-0" />
+                   <span>{lang === 'ar' ? 'تسليم SBAR' : 'SBAR Sign'}</span>
+                   <span className="px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[10px] font-black font-mono shadow-sm">
+                     {sbarList.length}
+                   </span>
+                 </button>
+               )}
             </div>
           );
         })()}
@@ -1470,7 +1491,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                     </span>
 
                     {/* Edit Button - ONLY visible when expanded */}
-                    {!isDemographicsCardCollapsed && (
+                    {!isDemographicsCardCollapsed && !readOnly && (
                       <button
                         type="button"
                         onClick={(e) => {
@@ -1618,7 +1639,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
 
               {!isHistoryCardCollapsed && (
                 <>
-                  {!isHistoryEditing && (
+                  {!isHistoryEditing && !readOnly && (
                     <div className="flex justify-end pb-1">
                       <button
                         type="button"
@@ -1860,13 +1881,15 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                     <Clock className="w-4 h-4 text-teal-400" />
                     <span>{lang === 'ar' ? 'سجل العلامات الحيوية التاريخية (Telemetry Trajectory)' : 'Telemetry History Trajectory'}</span>
                   </h3>
-                  <button
-                    onClick={onOpenAddVitals}
-                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-teal-500/20 text-teal-300 text-xs font-bold cursor-pointer hover:bg-teal-500/30 transition-all"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>{lang === 'ar' ? 'إضافة قراءة جديدة' : 'Add Reading'}</span>
-                  </button>
+                  {!readOnly && (
+                    <button
+                      onClick={onOpenAddVitals}
+                      className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-teal-500/20 text-teal-300 text-xs font-bold cursor-pointer hover:bg-teal-500/30 transition-all"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>{lang === 'ar' ? 'إضافة قراءة جديدة' : 'Add Reading'}</span>
+                    </button>
+                  )}
                 </div>
 
                 <div className="overflow-x-auto">
@@ -1915,18 +1938,20 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                                 <span className="text-slate-400 text-[11px] font-sans truncate max-w-[110px]">
                                   {v.recordedBy?.name || (lang === 'ar' ? 'الكادر الطبي' : 'Staff')}
                                 </span>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setSelectedVitalForEdit(v);
-                                    setIsEditVitalsModalOpen(true);
-                                  }}
-                                  className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-teal-500/10 hover:bg-teal-500/20 text-teal-300 border border-teal-500/30 text-[10px] font-bold transition-all cursor-pointer shadow-xs active:scale-95 whitespace-nowrap"
-                                  title={lang === 'ar' ? 'تعديل القراءة الحيوية' : 'Edit vital reading'}
-                                >
-                                  <Edit3 className="w-3 h-3" />
-                                  <span>{lang === 'ar' ? 'تعديل' : 'Edit'}</span>
-                                </button>
+                                {!readOnly && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedVitalForEdit(v);
+                                      setIsEditVitalsModalOpen(true);
+                                    }}
+                                    className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-teal-500/10 hover:bg-teal-500/20 text-teal-300 border border-teal-500/30 text-[10px] font-bold transition-all cursor-pointer shadow-xs active:scale-95 whitespace-nowrap"
+                                    title={lang === 'ar' ? 'تعديل القراءة الحيوية' : 'Edit vital reading'}
+                                  >
+                                    <Edit3 className="w-3 h-3" />
+                                    <span>{lang === 'ar' ? 'تعديل' : 'Edit'}</span>
+                                  </button>
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -2103,7 +2128,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
 
                             {/* Hover Actions: Lock / Edit / Delete */}
                             <div className="flex items-center justify-center gap-1.5 mt-2 pt-1 border-t border-slate-800/80">
-                              {isAuthor ? (
+                              {isAuthor && !readOnly ? (
                                 <>
                                   <button
                                     onClick={() => handleStartEditLabColumn(lab)}
@@ -3004,6 +3029,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                   loadBedsideData();
                   onDataUpdated();
                 }}
+                readOnly={readOnly}
               />
             </div>
           )}
@@ -3023,6 +3049,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
             loadBedsideData();
             onDataUpdated();
           }}
+          readOnly={readOnly}
         />
       )}
 
@@ -3083,6 +3110,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                   loadBedsideData();
                   onDataUpdated();
                 }}
+                readOnly={readOnly}
               />
             </div>
           )}
@@ -4073,7 +4101,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {onOpenAddClinicalNote && !isPaperNotesCardCollapsed && (
+              {onOpenAddClinicalNote && !isPaperNotesCardCollapsed && !readOnly && (
                 <button
                   type="button"
                   onClick={(e) => {
@@ -4119,12 +4147,14 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                       <span className="text-[10px] font-mono text-teal-400 px-2 py-0.5 rounded bg-teal-950/60 border border-teal-800/60">
                         SHA-256: {note.cryptographicHash ? note.cryptographicHash.slice(0, 10) : 'HASH'}...
                       </span>
-                      <button
-                        onClick={() => onOpenAddAddendum(note.id, note.authorName)}
-                        className="px-2.5 py-1 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 text-xs font-bold transition-all"
-                      >
-                        + {lang === 'ar' ? 'إلحاق ملحق (Addendum)' : 'Add Addendum'}
-                      </button>
+                      {!readOnly && (
+                        <button
+                          onClick={() => onOpenAddAddendum(note.id, note.authorName)}
+                          className="px-2.5 py-1 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 text-xs font-bold transition-all"
+                        >
+                          + {lang === 'ar' ? 'إلحاق ملحق (Addendum)' : 'Add Addendum'}
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -4174,7 +4204,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       )}
 
       {/* Tab 7: Disposition */}
-      {(activeTab === 'disposition' || activeTab === 'all') && (
+      {(activeTab === 'disposition' || activeTab === 'all') && !readOnly && (
         <div 
           data-expanded={!isPaperDispCardCollapsed ? "true" : "false"}
           className="icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-4 border transition-all"

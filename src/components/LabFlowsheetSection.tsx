@@ -43,6 +43,7 @@ interface LabFlowsheetSectionProps {
   labResults: LabResultItem[];
   onLabAdded: () => void;
   onOpenCustomizePanels?: () => void;
+  readOnly?: boolean;
 }
 
 const COMMON_LAB_PRESETS = [
@@ -230,6 +231,7 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
   labResults,
   onLabAdded,
   onOpenCustomizePanels,
+  readOnly = false,
 }) => {
   const { lang, isRTL } = useTranslation();
   const { currentUser } = useAuth();
@@ -625,24 +627,26 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
             </h3>
 
             {/* زر إضافة تحليل جديد بجوار سجل التحاليل لتقليل المساحة الرأسية */}
-            <button
-              type="button"
-              onClick={() => {
-                setFormTestName('Hb');
-                handlePresetSelect('Hb');
-                setFormValue('');
-                setFormNotes('');
-                setIsAddModalOpen(true);
-              }}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs transition-all shadow-sm active:scale-95 cursor-pointer whitespace-nowrap"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>{lang === 'ar' ? 'إضافة تحليل جديد' : 'Add Lab'}</span>
-            </button>
+            {!readOnly && (
+              <button
+                type="button"
+                onClick={() => {
+                  setFormTestName('Hb');
+                  handlePresetSelect('Hb');
+                  setFormValue('');
+                  setFormNotes('');
+                  setIsAddModalOpen(true);
+                }}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs transition-all shadow-sm active:scale-95 cursor-pointer whitespace-nowrap"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>{lang === 'ar' ? 'إضافة تحليل جديد' : 'Add Lab'}</span>
+              </button>
+            )}
           </div>
         </div>
 
-        {settings.features.enableAiLabScanner && (
+        {settings.features.enableAiLabScanner && !readOnly && (
           <div className="flex items-center gap-1 bg-slate-900/80 p-1 rounded-xl border border-slate-800 overflow-x-auto max-w-full">
             <button
               type="button"
@@ -1095,28 +1099,32 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 flex-wrap">
-                <button
-                  type="button"
-                  onClick={() => {
-                    handleOpenAddForTest(selectedTestName);
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shrink-0"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>{lang === 'ar' ? 'إضافة قراءة جديدة' : 'Add Reading'}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    triggerDeleteLabType(selectedTestName);
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-95 shrink-0"
-                  title={lang === 'ar' ? 'حذف هذا التحليل بالكامل' : 'Delete this lab type completely'}
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>{lang === 'ar' ? 'حذف بالكامل' : 'Delete All'}</span>
-                </button>
+              {!readOnly && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleOpenAddForTest(selectedTestName);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shrink-0"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>{lang === 'ar' ? 'إضافة قراءة جديدة' : 'Add Reading'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      triggerDeleteLabType(selectedTestName);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-95 shrink-0"
+                    title={lang === 'ar' ? 'حذف هذا التحليل بالكامل' : 'Delete this lab type completely'}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>{lang === 'ar' ? 'حذف بالكامل' : 'Delete All'}</span>
+                  </button>
+                </div>
+              )}
+              <div className="flex items-center gap-2 ml-auto rtl:ml-0 rtl:mr-auto">
                 <button
                   onClick={() => setSelectedTestName(null)}
                   className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors shrink-0"

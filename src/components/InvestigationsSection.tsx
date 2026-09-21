@@ -33,6 +33,7 @@ interface InvestigationsSectionProps {
   bedNumber: string;
   investigations: InvestigationItem[];
   onInvestigationAdded: () => void;
+  readOnly?: boolean;
 }
 
 const MODALITY_PRESETS = [
@@ -65,6 +66,7 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
   bedNumber,
   investigations,
   onInvestigationAdded,
+  readOnly = false,
 }) => {
   const { lang, isRTL } = useTranslation();
   const { currentUser } = useAuth();
@@ -293,16 +295,18 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
       {/* Sleek Action Bar inside Card */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 p-2.5 bg-[#070c18] rounded-xl border border-slate-800/80">
         <div className="flex items-center gap-2 flex-wrap">
-          <button
-            type="button"
-            onClick={() => handleOpenAddModal('Chest X-Ray')}
-            className="flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shadow-md shadow-teal-500/20 transition-all cursor-pointer active:scale-95"
-          >
-            <Plus className="w-4 h-4" />
-            <span>{lang === 'ar' ? 'إضافة فحص / تقرير' : 'Add Investigation'}</span>
-          </button>
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={() => handleOpenAddModal('Chest X-Ray')}
+              className="flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shadow-md shadow-teal-500/20 transition-all cursor-pointer active:scale-95"
+            >
+              <Plus className="w-4 h-4" />
+              <span>{lang === 'ar' ? 'إضافة فحص / تقرير' : 'Add Investigation'}</span>
+            </button>
+          )}
 
-          {settings.features.enableAiInvestigationScanner !== false && (
+          {settings.features.enableAiInvestigationScanner !== false && !readOnly && (
             <button
               type="button"
               onClick={() => setIsAiScanModalOpen(true)}
@@ -386,24 +390,28 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
                     </span>
 
                     {/* Edit Button */}
-                    <button
-                      type="button"
-                      onClick={() => handleOpenEditModal(inv)}
-                      className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded-lg bg-slate-800 hover:bg-slate-700 text-teal-300 hover:text-white border border-slate-700/80 transition-all cursor-pointer shadow-sm active:scale-95"
-                      title={lang === 'ar' ? 'تعديل التقرير والفحص' : 'Edit Report & Details'}
-                    >
-                      <Pencil className="w-3 h-3" />
-                      <span>{lang === 'ar' ? 'تعديل' : 'Edit'}</span>
-                    </button>
+                    {!readOnly && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditModal(inv)}
+                          className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded-lg bg-slate-800 hover:bg-slate-700 text-teal-300 hover:text-white border border-slate-700/80 transition-all cursor-pointer shadow-sm active:scale-95"
+                          title={lang === 'ar' ? 'تعديل التقرير والفحص' : 'Edit Report & Details'}
+                        >
+                          <Pencil className="w-3 h-3" />
+                          <span>{lang === 'ar' ? 'تعديل' : 'Edit'}</span>
+                        </button>
 
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(inv)}
-                      className="p-1 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-md transition-colors"
-                      title={lang === 'ar' ? 'حذف الفحص' : 'Delete'}
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(inv)}
+                          className="p-1 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-md transition-colors"
+                          title={lang === 'ar' ? 'حذف الفحص' : 'Delete'}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
 

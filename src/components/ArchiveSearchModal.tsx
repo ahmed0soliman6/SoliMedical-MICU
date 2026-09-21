@@ -15,6 +15,7 @@ interface ArchiveSearchModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSelectPatientBed: (bedNumber: BedNumber) => void;
+  onViewReadOnlyPatient: (patient: PatientDossier) => void;
   initialSearchTerm?: string;
   initialFilterType?: 'ALL' | 'ACTIVE_ICU' | 'DISCHARGED' | 'ARCHIVED' | 'DECEASED';
 }
@@ -37,6 +38,7 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
   isOpen,
   onClose,
   onSelectPatientBed,
+  onViewReadOnlyPatient,
   initialSearchTerm = '',
   initialFilterType = 'ALL',
 }) => {
@@ -276,7 +278,7 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
                   </div>
 
                   {/* Actions */}
-                  <div className="flex items-center gap-2 flex-shrink-0">
+                  <div className="flex items-center gap-2 flex-shrink-0 font-sans">
                     {isActive && patient.currentBedId && (
                       <button
                         onClick={() => {
@@ -286,6 +288,18 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
                         className="px-3 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white dark:bg-teal-500/20 dark:hover:bg-teal-500/30 dark:text-teal-300 dark:border dark:border-teal-500/40 text-xs font-bold transition-all shadow-sm cursor-pointer"
                       >
                         {lang === 'ar' ? `فتح سرير ${patient.currentBedId}` : `Open Bed ${patient.currentBedId}`}
+                      </button>
+                    )}
+
+                    {!isActive && (
+                      <button
+                        onClick={() => {
+                          onViewReadOnlyPatient(patient);
+                          onClose();
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white dark:bg-indigo-500/20 dark:hover:bg-indigo-500/30 dark:text-indigo-300 dark:border dark:border-indigo-500/40 text-xs font-bold transition-all shadow-sm cursor-pointer"
+                      >
+                        {lang === 'ar' ? 'ملف للقراءة فقط' : 'Read-Only File'}
                       </button>
                     )}
 

@@ -231,6 +231,7 @@ export default function App() {
   const [clinicalNoteTarget, setClinicalNoteTarget] = useState<{ bedNumber?: BedNumber; patientId: string; patientName: string } | null>(null);
   const [isSbarModalOpen, setIsSbarModalOpen] = useState(false);
   const [sbarTarget, setSbarTarget] = useState<{ bedNumber: BedNumber; patientId: string; patientName: string; diagnosis: string; codeStatus: any } | null>(null);
+  const [readOnlyPatient, setReadOnlyPatient] = useState<PatientDossier | null>(null);
 
   useEffect(() => {
     setNavigationHandler((target: AppNotificationTarget) => {
@@ -676,6 +677,7 @@ export default function App() {
         onClose={() => setIsSidebarOpen(false)}
         activeTab={activeTab}
         onTabChange={(tab) => {
+          setReadOnlyPatient(null);
           if (tab === 'beds') {
             setSelectedBedNumber(null);
             setActiveTab('beds');
@@ -686,10 +688,12 @@ export default function App() {
         }}
         onOpenAdmission={handleSmartAdmission}
         onOpenSearch={() => {
+          setReadOnlyPatient(null);
           setActiveTab('search');
           setIsSidebarOpen(false);
         }}
         onOpenSettings={() => {
+          setReadOnlyPatient(null);
           setActiveTab('settings');
           setIsSidebarOpen(false);
         }}
@@ -740,7 +744,27 @@ export default function App() {
 
         {/* Main Canvas View - Renders Selected Full Page */}
         <main className="flex-1 max-w-[1600px] w-full mx-auto p-3 sm:p-6 space-y-5">
-          {activeTab === 'search' ? (
+          {readOnlyPatient ? (
+            <BedsideFlowsheet
+              key={`readonly-${readOnlyPatient.id}`}
+              bed={{
+                bedNumber: (readOnlyPatient.bedNumber || 'ARCHIVED') as any,
+                status: 'OCCUPIED',
+                occupiedPatientId: readOnlyPatient.id,
+                isolation: { isIsolated: false }
+              }}
+              patient={readOnlyPatient}
+              allBeds={[]}
+              allPatients={[]}
+              onBack={() => setReadOnlyPatient(null)}
+              onOpenAddVitals={() => {}}
+              onOpenAddClinicalNote={() => {}}
+              onOpenAddAddendum={() => {}}
+              onOpenSbarSign={() => {}}
+              onDataUpdated={() => {}}
+              readOnly={true}
+            />
+          ) : activeTab === 'search' ? (
             <ArchiveSearchModal
               isOpen={true}
               initialSearchTerm={archiveSearchTerm}
@@ -752,6 +776,9 @@ export default function App() {
               onSelectPatientBed={(bNum) => {
                 setSelectedBedNumber(bNum);
                 setActiveTab('beds');
+              }}
+              onViewReadOnlyPatient={(p) => {
+                setReadOnlyPatient(p);
               }}
             />
           ) : activeTab === 'users' ? (
