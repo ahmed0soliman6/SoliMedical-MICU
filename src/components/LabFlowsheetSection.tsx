@@ -7,6 +7,9 @@ import {
   Minus, 
   ChevronRight, 
   ChevronDown, 
+  ChevronUp,
+  Activity,
+  Droplet,
   Clock, 
   User, 
   Calendar, 
@@ -74,6 +77,71 @@ const formatNumericDate = (dateVal?: string | Date | number): string => {
   } catch {
     return '—';
   }
+};
+
+const getCategoryForTest = (testName: string, items: LabResultItem[]): 'ABG' | 'CBC' | 'Chemistry' | 'INR' | 'Other' => {
+  const norm = (testName || '').toLowerCase().trim();
+  const cat = (items[0]?.category || '').toLowerCase().trim();
+
+  // 1. ABG (غازات الدم الشرياني)
+  if (
+    cat === 'abg' ||
+    norm.startsWith('abg') ||
+    norm === 'ph' || norm.startsWith('ph ') || norm.includes(' ph') ||
+    norm === 'pco2' || norm.includes('pco2') ||
+    norm === 'po2' || norm.includes('po2') ||
+    norm === 'hco3' || norm.includes('hco3') ||
+    norm.includes('base excess') || norm === 'be' ||
+    norm === 'cthb' || norm.includes('p/f') ||
+    norm.includes('lactate') || norm === 'lac' ||
+    norm === 'so2' || norm === 'sao2'
+  ) {
+    return 'ABG';
+  }
+
+  // 2. CBC (صورة الدم الكاملة)
+  if (
+    cat === 'cbc' ||
+    norm.startsWith('cbc') ||
+    norm === 'wbc' || norm.includes('wbc') ||
+    norm === 'hb' || norm === 'hg' || norm.includes('hemoglobin') ||
+    norm === 'hct' || norm.includes('hematocrit') ||
+    norm === 'plt' || norm.includes('platelet') ||
+    norm.includes('neutrophil') || norm.includes('lymphocyte') ||
+    norm.includes('monocyte') || norm.includes('eosinophil') ||
+    norm.includes('basophil') || norm.includes('mcv') || norm.includes('mch') || norm.includes('rdw') ||
+    norm.includes('anemia')
+  ) {
+    return 'CBC';
+  }
+
+  // 3. INR & Coagulation (السيولة وتخثر الدم)
+  if (
+    cat === 'coagulation' || cat === 'inr' ||
+    norm === 'inr' || norm.includes('inr') ||
+    norm === 'pt' || norm.includes('prothrombin') ||
+    norm === 'ptt' || norm === 'aptt' ||
+    norm.includes('fibrinogen') || norm.includes('d-dimer') ||
+    norm.includes('act')
+  ) {
+    return 'INR';
+  }
+
+  // 4. Chemistry / Biochemistry & Electrolytes (كيمياء الدم والأملاح ووظائف الكلى والكبد)
+  if (
+    cat === 'biochemistry' || cat === 'electrolytes' || cat === 'chemistry' || cat === 'renal' || cat === 'liver' ||
+    norm.includes('creat') || norm.includes('urea') || norm.includes('bun') ||
+    norm.includes('sodium') || norm === 'na' || norm.includes(' na') ||
+    norm.includes('potassium') || norm === 'k' || norm.includes(' k') ||
+    norm.includes('chloride') || norm.includes('calcium') || norm.includes('magnesium') ||
+    norm.includes('alt') || norm.includes('ast') || norm.includes('bilirubin') || norm.includes('albumin') ||
+    norm.includes('crp') || norm.includes('procalcitonin') || norm.includes('glucose') || norm.includes('rbs') || norm.includes('troponin') ||
+    norm.includes('ck') || norm.includes('ldh')
+  ) {
+    return 'Chemistry';
+  }
+
+  return 'Other';
 };
 
 export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
@@ -151,6 +219,42 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [quickAddTest, setQuickAddTest] = useState<string | null>(null);
   const [quickAddValue, setQuickAddValue] = useState<string>('');
+
+  // Collapsible category cards in main flowsheet
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
+    ABG: false,
+    CBC: false,
+    Chemistry: false,
+    INR: false,
+    Other: false,
+  });
+
+  const toggleSection = (sec: string) => {
+    setCollapsedSections(prev => ({
+      ...prev,
+      [sec]: !prev[sec]
+    }));
+  };
+
+  const collapseAllSections = () => {
+    setCollapsedSections({
+      ABG: true,
+      CBC: true,
+      Chemistry: true,
+      INR: true,
+      Other: true,
+    });
+  };
+
+  const expandAllSections = () => {
+    setCollapsedSections({
+      ABG: false,
+      CBC: false,
+      Chemistry: false,
+      INR: false,
+      Other: false,
+    });
+  };
 
   // Delete & Edit states
   const [deleteConfirmTest, setDeleteConfirmTest] = useState<string | null>(null);
@@ -522,14 +626,14 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
         </div>
       )}
 
-      {/* Lab Trend Cards Grid */}
+      {/* Categorized Collapsible Lab Flowsheet View */}
       {testKeys.length === 0 ? (
         <div className="p-8 text-center bg-slate-900/40 rounded-xl border border-dashed border-slate-800 space-y-3">
           <FlaskConical className="w-8 h-8 text-slate-600 mx-auto" />
           <p className="text-xs text-slate-400">
-            {lang === 'ar' 
-              ? 'لم يتم تسجيل أي تحاليل لهذا المريض حتى الآن. اضغط على "إضافة تحليل جديد" للبدء.' 
-              : 'No laboratory tests recorded yet. Click "Add Lab Result" to start.'}
+            {lang === "ar" 
+              ? "لم يتم تسجيل أي تحاليل لهذا المريض حتى الآن. اضغط على \"إضافة تحليل جديد\" للبدء." 
+              : "No laboratory tests recorded yet. Click \"Add Lab Result\" to start."}
           </p>
           <div className="flex flex-wrap items-center justify-center gap-1.5 pt-1">
             {dynamicPresets.slice(0, 8).map(p => (
@@ -545,178 +649,328 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {testKeys.map((testName) => {
-            const items = groupedLabs.get(testName) || [];
-            const latest = items[items.length - 1];
-            const previous = items.length > 1 ? items[items.length - 2] : null;
+        <div className="space-y-3.5">
+          {/* Categories Quick Controls: Expand / Collapse All */}
+          <div className="flex items-center justify-between gap-2 px-1 flex-wrap">
+            <div className="flex items-center gap-1.5 text-xs text-slate-400">
+              <span>{lang === "ar" ? "أقسام التحاليل المصنفة:" : "Categorized Lab Panels:"}</span>
+              <span className="font-mono text-teal-400 font-bold">{testKeys.length}</span>
+              <span>{lang === "ar" ? "تحليل مسجل" : "active tests"}</span>
+            </div>
 
-            // Trend calculation
-            const latestNum = parseFloat(latest.value);
-            const prevNum = previous ? parseFloat(previous.value) : null;
-            let trend: 'UP' | 'DOWN' | 'EQUAL' | 'NONE' = 'NONE';
-            if (!isNaN(latestNum) && prevNum !== null && !isNaN(prevNum)) {
-              if (latestNum > prevNum) trend = 'UP';
-              else if (latestNum < prevNum) trend = 'DOWN';
-              else trend = 'EQUAL';
-            }
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={expandAllSections}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 text-[11px] border border-slate-800 transition-colors cursor-pointer"
+                title={lang === "ar" ? "فتح وتوسيع كافة الأقسام" : "Expand all panels"}
+              >
+                <ChevronDown className="w-3.5 h-3.5 text-teal-400" />
+                <span>{lang === "ar" ? "فتح الكل" : "Expand All"}</span>
+              </button>
 
-            // Progression chain: e.g. "5 > 7 > 8.5 > 8"
-            const trendChain = items.map(it => it.value);
+              <button
+                type="button"
+                onClick={collapseAllSections}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 text-[11px] border border-slate-800 transition-colors cursor-pointer"
+                title={lang === "ar" ? "طي وإخفاء تفاصيل كافة الأقسام" : "Collapse all panels"}
+              >
+                <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
+                <span>{lang === "ar" ? "طي الكل" : "Collapse All"}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Render Categories */}
+          {([
+            {
+              id: "ABG" as const,
+              nameAr: "غازات الدم الشرياني (ABG)",
+              nameEn: "Arterial Blood Gas (ABG)",
+              icon: Activity,
+              headerBg: "bg-emerald-950/30 hover:bg-emerald-950/50",
+              border: "border-emerald-500/40",
+              accentText: "text-emerald-300",
+              badgeBg: "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30",
+            },
+            {
+              id: "CBC" as const,
+              nameAr: "صورة الدم الكاملة (CBC)",
+              nameEn: "Complete Blood Count (CBC)",
+              icon: Droplet,
+              headerBg: "bg-rose-950/30 hover:bg-rose-950/50",
+              border: "border-rose-500/40",
+              accentText: "text-rose-300",
+              badgeBg: "bg-rose-500/20 text-rose-300 border border-rose-500/30",
+            },
+            {
+              id: "Chemistry" as const,
+              nameAr: "كيمياء الدم والأملاح (Chemistry & Electrolytes)",
+              nameEn: "Chemistry & Electrolytes",
+              icon: FlaskConical,
+              headerBg: "bg-cyan-950/30 hover:bg-cyan-950/50",
+              border: "border-cyan-500/40",
+              accentText: "text-cyan-300",
+              badgeBg: "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30",
+            },
+            {
+              id: "INR" as const,
+              nameAr: "السيولة وتخثر الدم (INR & Coagulation)",
+              nameEn: "Coagulation Profile (INR / PT / PTT)",
+              icon: Sparkles,
+              headerBg: "bg-amber-950/30 hover:bg-amber-950/50",
+              border: "border-amber-500/40",
+              accentText: "text-amber-300",
+              badgeBg: "bg-amber-500/20 text-amber-300 border border-amber-500/30",
+            },
+            {
+              id: "Other" as const,
+              nameAr: "تحاليل ومزارع أخرى (Other Tests)",
+              nameEn: "Other & Specialized Tests",
+              icon: FileText,
+              headerBg: "bg-slate-900/50 hover:bg-slate-900/70",
+              border: "border-slate-700/60",
+              accentText: "text-slate-300",
+              badgeBg: "bg-slate-800 text-slate-300 border border-slate-700/50",
+            },
+          ]).map((cat) => {
+            const categoryTestKeys = testKeys.filter(tKey => {
+              const items = groupedLabs.get(tKey) || [];
+              return getCategoryForTest(tKey, items) === cat.id;
+            });
+
+            if (categoryTestKeys.length === 0) return null;
+
+            const isCollapsed = Boolean(collapsedSections[cat.id]);
+            const Icon = cat.icon;
 
             return (
-              <div
-                key={testName}
-                onClick={() => setSelectedTestName(testName)}
-                className="group p-3.5 rounded-xl bg-[#0d1527] hover:bg-[#111c34] border border-slate-800 hover:border-teal-500/60 transition-all cursor-pointer shadow-md flex flex-col justify-between"
+              <div 
+                key={cat.id} 
+                className={"rounded-2xl border transition-all duration-200 overflow-hidden " + cat.border + " bg-[#070c18]/90 shadow-md"}
               >
-                <div>
-                  {/* Top Bar: Name, Unit, and Total Count + Green Quick Add "+" Button */}
-                  <div className="flex items-center justify-between gap-2 mb-2">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {/* زر "+" باللون الأخضر لإضافة التحليل بسرعة */}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (quickAddTest === testName) {
-                            setQuickAddTest(null);
-                            setQuickAddValue('');
-                          } else {
-                            setQuickAddTest(testName);
-                            setQuickAddValue('');
-                          }
-                        }}
-                        className="w-6 h-6 rounded-lg bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 flex items-center justify-center font-bold shadow-sm transition-all cursor-pointer shrink-0"
-                        title={lang === 'ar' ? `إضافة سريعة لقراءة ${testName}` : `Quick add ${testName}`}
-                      >
-                        <Plus className="w-4 h-4 stroke-[3]" />
-                      </button>
-
-                      <span className="font-bold text-sm text-white group-hover:text-teal-300 transition-colors">
-                        {testName}
-                      </span>
-                      {latest.unit && (
-                        <span className="text-[11px] text-slate-400 font-mono">
-                          ({latest.unit})
-                        </span>
-                      )}
-                      {latest.category && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800/80 text-slate-400 font-mono">
-                          {latest.category}
-                        </span>
-                      )}
+                {/* Collapsible Card Header */}
+                <div
+                  onClick={() => toggleSection(cat.id)}
+                  className={"p-3.5 flex items-center justify-between gap-3 cursor-pointer transition-colors select-none " + cat.headerBg}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className={"w-8 h-8 rounded-xl flex items-center justify-center " + cat.badgeBg}>
+                      <Icon className="w-4 h-4" />
                     </div>
-
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] text-slate-400 font-mono">
-                        {items.length} {lang === 'ar' ? 'قراءات' : 'readings'}
-                      </span>
-                      <ChevronRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-teal-400 group-hover:translate-x-0.5 rtl:group-hover:-translate-x-0.5 transition-transform" />
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className={"text-xs sm:text-sm font-bold " + cat.accentText}>
+                          {lang === "ar" ? cat.nameAr : cat.nameEn}
+                        </h4>
+                        <span className={"text-[10px] font-mono font-bold px-2 py-0.5 rounded-full " + cat.badgeBg}>
+                          {categoryTestKeys.length} {lang === "ar" ? "تحليل" : "tests"}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 truncate max-w-md mt-0.5 font-mono">
+                        {categoryTestKeys.join(" • ")}
+                      </p>
                     </div>
                   </div>
 
-                  {/* Inline Quick Add Input Box */}
-                  {quickAddTest === testName && (
-                    <div 
-                      onClick={(e) => e.stopPropagation()} 
-                      className="flex items-center gap-1.5 p-2 rounded-lg bg-emerald-950/90 border border-emerald-500/60 mb-2.5 shadow-md animate-in fade-in zoom-in-95 duration-150"
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-[11px] text-slate-400 hidden sm:inline font-mono">
+                      {isCollapsed ? (lang === "ar" ? "انقر للفتح" : "Click to expand") : (lang === "ar" ? "انقر للطي" : "Click to collapse")}
+                    </span>
+                    <button
+                      type="button"
+                      className="w-7 h-7 rounded-lg bg-slate-900/80 hover:bg-slate-800 text-slate-300 flex items-center justify-center transition-colors"
                     >
-                      <span className="text-[11px] text-emerald-300 font-bold whitespace-nowrap">
-                        {lang === 'ar' ? 'قيمة جديدة:' : 'New Value:'}
-                      </span>
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        autoFocus
-                        placeholder={latest.unit ? `e.g. 1.8 (${latest.unit})` : 'e.g. 1.8'}
-                        value={quickAddValue}
-                        onChange={(e) => setQuickAddValue(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            handleQuickSubmit(testName, latest);
-                          } else if (e.key === 'Escape') {
-                            setQuickAddTest(null);
-                            setQuickAddValue('');
-                          }
-                        }}
-                        className="flex-1 bg-[#070c18] border border-emerald-500/50 rounded px-2 py-1 text-white font-mono text-xs focus:outline-none focus:ring-1 focus:ring-emerald-400"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleQuickSubmit(testName, latest)}
-                        disabled={isSaving || !quickAddValue.trim()}
-                        className="px-2.5 py-1 rounded bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-bold text-xs flex items-center gap-1 cursor-pointer transition-colors shadow-sm"
-                        title={lang === 'ar' ? 'حفظ فوري' : 'Save instantly'}
-                      >
-                        <Check className="w-3.5 h-3.5 stroke-[3]" />
-                        <span>{lang === 'ar' ? 'حفظ' : 'Save'}</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setQuickAddTest(null);
-                          setQuickAddValue('');
-                        }}
-                        className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  )}
+                      {isCollapsed ? (
+                        <ChevronDown className="w-4 h-4 text-slate-400" />
+                      ) : (
+                        <ChevronUp className="w-4 h-4 text-teal-400" />
+                      )}
+                    </button>
+                  </div>
+                </div>
 
-                  {/* Flow progression: e.g. "5 > 7 > 8.5 > 8" */}
-                  <div className="p-2.5 rounded-lg bg-slate-950/70 border border-slate-800/80 mb-2.5 overflow-x-auto">
-                    <div className="flex items-center gap-1.5 flex-wrap font-mono text-xs font-bold text-slate-300">
-                      {trendChain.map((val, idx) => {
-                        const isLast = idx === trendChain.length - 1;
+                {/* Collapsible Body (Trend Cards Grid) */}
+                {!isCollapsed && (
+                  <div className="p-3 sm:p-4 border-t border-slate-800/80 bg-slate-950/50 animate-in fade-in duration-200">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {categoryTestKeys.map((testName) => {
+                        const items = groupedLabs.get(testName) || [];
+                        const latest = items[items.length - 1];
+                        const previous = items.length > 1 ? items[items.length - 2] : null;
+
+                        // Trend calculation
+                        const latestNum = parseFloat(latest.value);
+                        const prevNum = previous ? parseFloat(previous.value) : null;
+                        let trend: "UP" | "DOWN" | "EQUAL" | "NONE" = "NONE";
+                        if (!isNaN(latestNum) && prevNum !== null && !isNaN(prevNum)) {
+                          if (latestNum > prevNum) trend = "UP";
+                          else if (latestNum < prevNum) trend = "DOWN";
+                          else trend = "EQUAL";
+                        }
+
+                        // Progression chain: e.g. "5 > 7 > 8.5 > 8"
+                        const trendChain = items.map(it => it.value);
+
                         return (
-                          <React.Fragment key={idx}>
-                            <span className={`px-2 py-0.5 rounded ${
-                              isLast 
-                                ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 shadow-sm' 
-                                : 'text-slate-400'
-                            }`}>
-                              {val || (lang === 'ar' ? 'معلق' : 'Pending')}
-                            </span>
-                            {!isLast && (
-                              <span className="text-slate-600 font-bold select-none">&gt;</span>
-                            )}
-                          </React.Fragment>
+                          <div
+                            key={testName}
+                            onClick={() => setSelectedTestName(testName)}
+                            className="group p-3.5 rounded-xl bg-[#0d1527] hover:bg-[#111c34] border border-slate-800 hover:border-teal-500/60 transition-all cursor-pointer shadow-md flex flex-col justify-between"
+                          >
+                            <div>
+                              {/* Top Bar: Name, Unit, and Total Count + Green Quick Add "+" Button */}
+                              <div className="flex items-center justify-between gap-2 mb-2">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  {/* زر "+" باللون الأخضر لإضافة التحليل بسرعة */}
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (quickAddTest === testName) {
+                                        setQuickAddTest(null);
+                                        setQuickAddValue("");
+                                      } else {
+                                        setQuickAddTest(testName);
+                                        setQuickAddValue("");
+                                      }
+                                    }}
+                                    className="w-6 h-6 rounded-lg bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 flex items-center justify-center font-bold shadow-sm transition-all cursor-pointer shrink-0"
+                                    title={lang === "ar" ? `إضافة سريعة لقراءة ${testName}` : `Quick add ${testName}`}
+                                  >
+                                    <Plus className="w-4 h-4 stroke-[3]" />
+                                  </button>
+
+                                  <span className="font-bold text-sm text-white group-hover:text-teal-300 transition-colors font-mono">
+                                    {testName}
+                                  </span>
+                                  {latest.unit && (
+                                    <span className="text-[11px] text-slate-400 font-mono">
+                                      ({latest.unit})
+                                    </span>
+                                  )}
+                                  {latest.category && (
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800/80 text-slate-400 font-mono">
+                                      {latest.category}
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[10px] text-slate-400 font-mono">
+                                    {items.length} {lang === "ar" ? "قراءات" : "readings"}
+                                  </span>
+                                  <ChevronRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-teal-400 group-hover:translate-x-0.5 rtl:group-hover:-translate-x-0.5 transition-transform" />
+                                </div>
+                              </div>
+
+                              {/* Inline Quick Add Input Box */}
+                              {quickAddTest === testName && (
+                                <div 
+                                  onClick={(e) => e.stopPropagation()} 
+                                  className="flex items-center gap-1.5 p-2 rounded-lg bg-emerald-950/90 border border-emerald-500/60 mb-2.5 shadow-md animate-in fade-in zoom-in-95 duration-150"
+                                >
+                                  <span className="text-[11px] text-emerald-300 font-bold whitespace-nowrap">
+                                    {lang === "ar" ? "قيمة جديدة:" : "New Value:"}
+                                  </span>
+                                  <input
+                                    type="text"
+                                    inputMode="decimal"
+                                    autoFocus
+                                    placeholder={latest.unit ? `e.g. 1.8 (${latest.unit})` : "e.g. 1.8"}
+                                    value={quickAddValue}
+                                    onChange={(e) => setQuickAddValue(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") {
+                                        e.preventDefault();
+                                        handleQuickSubmit(testName, latest);
+                                      } else if (e.key === "Escape") {
+                                        setQuickAddTest(null);
+                                        setQuickAddValue("");
+                                      }
+                                    }}
+                                    className="flex-1 bg-[#070c18] border border-emerald-500/50 rounded px-2 py-1 text-white font-mono text-xs focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => handleQuickSubmit(testName, latest)}
+                                    disabled={isSaving || !quickAddValue.trim()}
+                                    className="px-2.5 py-1 rounded bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-bold text-xs flex items-center gap-1 cursor-pointer transition-colors shadow-sm"
+                                    title={lang === "ar" ? "حفظ فوري" : "Save instantly"}
+                                  >
+                                    <Check className="w-3.5 h-3.5 stroke-[3]" />
+                                    <span>{lang === "ar" ? "حفظ" : "Save"}</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setQuickAddTest(null);
+                                      setQuickAddValue("");
+                                    }}
+                                    className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              )}
+
+                              {/* Flow progression: e.g. "5 > 7 > 8.5 > 8" */}
+                              <div className="p-2.5 rounded-lg bg-slate-950/70 border border-slate-800/80 mb-2.5 overflow-x-auto">
+                                <div className="flex items-center gap-1.5 flex-wrap font-mono text-xs font-bold text-slate-300">
+                                  {trendChain.map((val, idx) => {
+                                    const isLast = idx === trendChain.length - 1;
+                                    return (
+                                      <React.Fragment key={idx}>
+                                        <span className={`px-2 py-0.5 rounded ${
+                                          isLast 
+                                            ? "bg-teal-500/20 text-teal-300 border border-teal-500/40 shadow-sm" 
+                                            : "text-slate-400"
+                                        }`}>
+                                          {val || (lang === "ar" ? "معلق" : "Pending")}
+                                        </span>
+                                        {!isLast && (
+                                          <span className="text-slate-600 font-bold select-none">&gt;</span>
+                                        )}
+                                      </React.Fragment>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Footer details: Only Trend indicator and date/time */}
+                            <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1.5 border-t border-slate-800/50">
+                              <div className="flex items-center gap-1.5 font-mono">
+                                {trend === "UP" && (
+                                  <span className="text-amber-400 flex items-center gap-1 text-[10px] font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">
+                                    <TrendingUp className="w-3 h-3 text-amber-400" />
+                                    <span>{lang === "ar" ? "مؤشر تصاعدي" : "Rising trend"}</span>
+                                  </span>
+                                )}
+                                {trend === "DOWN" && (
+                                  <span className="text-blue-400 flex items-center gap-1 text-[10px] font-bold bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/30">
+                                    <TrendingDown className="w-3 h-3 text-blue-400" />
+                                    <span>{lang === "ar" ? "مؤشر تنازلي" : "Declining trend"}</span>
+                                  </span>
+                                )}
+                                {trend === "EQUAL" && (
+                                  <span className="text-slate-400 flex items-center gap-1 text-[10px] bg-slate-800/80 px-2 py-0.5 rounded border border-slate-700/50">
+                                    <Minus className="w-3 h-3 text-slate-400" />
+                                    <span>{lang === "ar" ? "مؤشر مستقر" : "Stable"}</span>
+                                  </span>
+                                )}
+                              </div>
+
+                              <span className="text-slate-500 font-mono text-[10px]">
+                                {formatNumericDate(latest.timestamp)} {new Date(latest.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                              </span>
+                            </div>
+                          </div>
                         );
                       })}
                     </div>
                   </div>
-                </div>
-
-                {/* Footer details: Only Trend indicator and date/time (Normal range completely removed as requested) */}
-                <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1.5 border-t border-slate-800/50">
-                  <div className="flex items-center gap-1.5 font-mono">
-                    {trend === 'UP' && (
-                      <span className="text-amber-400 flex items-center gap-1 text-[10px] font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">
-                        <TrendingUp className="w-3 h-3 text-amber-400" />
-                        <span>{lang === 'ar' ? 'مؤشر تصاعدي' : 'Rising trend'}</span>
-                      </span>
-                    )}
-                    {trend === 'DOWN' && (
-                      <span className="text-blue-400 flex items-center gap-1 text-[10px] font-bold bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/30">
-                        <TrendingDown className="w-3 h-3 text-blue-400" />
-                        <span>{lang === 'ar' ? 'مؤشر تنازلي' : 'Declining trend'}</span>
-                      </span>
-                    )}
-                    {trend === 'EQUAL' && (
-                      <span className="text-slate-400 flex items-center gap-1 text-[10px] bg-slate-800/80 px-2 py-0.5 rounded border border-slate-700/50">
-                        <Minus className="w-3 h-3 text-slate-400" />
-                        <span>{lang === 'ar' ? 'مؤشر مستقر' : 'Stable'}</span>
-                      </span>
-                    )}
-                  </div>
-
-                  <span className="text-slate-500 font-mono text-[10px]">
-                    {formatNumericDate(latest.timestamp)} {new Date(latest.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                </div>
+                )}
               </div>
             );
           })}

@@ -85,21 +85,6 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
-  // 4 Collapsible Cards State - Default collapsed (مطوية افتراضياً)
-  const [collapsedCards, setCollapsedCards] = useState<Record<string, boolean>>({
-    ABG: true,
-    CBC: true,
-    Chemistry: true,
-    INR: true,
-  });
-
-  const toggleCard = (cardKey: string) => {
-    setCollapsedCards(prev => ({
-      ...prev,
-      [cardKey]: !prev[cardKey]
-    }));
-  };
-
   // File input ref for unified capture / upload box
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -130,12 +115,6 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
     setScannedResult(null);
     setEditableFields({});
     setSaveSuccess(false);
-    setCollapsedCards({
-      ABG: true,
-      CBC: true,
-      Chemistry: true,
-      INR: true,
-    });
   };
 
   const startCamera = async () => {
@@ -368,23 +347,29 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
     }));
   };
 
-  // Helper to trigger direct saving automatically
-  const triggerAutoSave = async (updatedFields: Record<string, string>, updatedItems: Array<any>) => {
-    if (!onDirectSave) return;
-    try {
-      await onDirectSave({
-        fields: updatedFields,
-        items: updatedItems,
-        timestamp: sampleDate,
-        summaryEn: scannedResult?.summaryEn || '',
-        summaryAr: scannedResult?.summaryAr || '',
-      });
-    } catch (err) {
-      console.warn('Auto-save after parameter deletion failed:', err);
-    }
+  // Change value for a detailed item
+  const handleItemValueChange = (index: number, newValue: string) => {
+    if (!scannedResult || !scannedResult.items) return;
+    const updatedItems = [...scannedResult.items];
+    const target = updatedItems[index];
+    if (!target) return;
+    updatedItems[index] = {
+      ...target,
+      value: newValue,
+    };
+    setScannedResult({
+      ...scannedResult,
+      items: updatedItems,
+    });
+
+    const key = target.testName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    setEditableFields(prev => ({
+      ...prev,
+      [key]: newValue,
+    }));
   };
 
-  // Delete a specific extracted field and auto-save the remaining values
+  // Delete a specific extracted field (IN-MEMORY ONLY, NO AUTOSAVE!)
   const handleDeleteField = (key: string) => {
     const updated = { ...editableFields };
     delete updated[key];
@@ -402,20 +387,31 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
         items: updatedItems
       });
     }
-
-    // Auto-save the remaining parameters
-    triggerAutoSave(updated, updatedItems);
   };
 
-  // Delete an item from the detailed list and auto-save
+  // Delete an item from the detailed list (IN-MEMORY ONLY, NO AUTOSAVE!)
   const handleDeleteDetailedItem = (index: number) => {
     if (!scannedResult || !scannedResult.items) return;
+    const itemToDelete = scannedResult.items[index];
     const updatedItems = scannedResult.items.filter((_, idx) => idx !== index);
+
+    // Clean up from editableFields as well
+    const updatedFields = { ...editableFields };
+    if (itemToDelete) {
+      const keyToDelete = itemToDelete.testName.toLowerCase().replace(/[^a-z0-9]/g, '');
+      delete updatedFields[keyToDelete];
+      Object.keys(updatedFields).forEach(k => {
+        if (k.toLowerCase() === itemToDelete.testName.toLowerCase()) {
+          delete updatedFields[k];
+        }
+      });
+    }
+
     setScannedResult({
       ...scannedResult,
       items: updatedItems
     });
-    triggerAutoSave(editableFields, updatedItems);
+    setEditableFields(updatedFields);
   };
 
   const handleApplyToOpenForm = () => {
@@ -813,681 +809,81 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
                   </div>
                 </div>
 
-                {/* 4 Collapsible Cards (Col 8) */}
+                {/* Extracted Parameters Review Panel (Col 8) */}
                 <div className="lg:col-span-8 space-y-3">
-                  
-                  {/* CARD 1: ABG Card (Collapsible, default collapsed) */}
-                  <div className="rounded-xl border border-violet-800/50 bg-[#070c18] overflow-hidden transition-all shadow-md">
-                    <div 
-                      onClick={() => toggleCard('ABG')}
-                      className="p-3 bg-violet-950/30 hover:bg-violet-950/50 flex items-center justify-between cursor-pointer border-b border-violet-800/30 select-none transition-colors"
-                    >
-                      <div className="flex items-center gap-2">
-                        <Activity className="w-4 h-4 text-violet-400" />
-                        <h4 className="text-xs font-bold text-violet-300 font-mono">
-                          ABG {lang === 'ar' ? '(غازات الدم الشرياني)' : '(Arterial Blood Gas)'}
-                        </h4>
-                        <span className="text-[10px] bg-violet-500/20 text-violet-300 px-2 py-0.5 rounded-full font-mono">
-                          pH, pCO2, pO2, HCO3, Lac, P/F
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1.5 text-violet-400 text-xs">
-                        <span className="text-[11px]">{collapsedCards.ABG ? (lang === 'ar' ? 'فتح' : 'Expand') : (lang === 'ar' ? 'طي' : 'Collapse')}</span>
-                        {collapsedCards.ABG ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+                  <div className="border border-slate-800 rounded-xl p-4 bg-[#070c18] space-y-3.5 shadow-lg">
+                    {/* Header */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-800">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                          <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                            {lang === "ar" ? "التحاليل والنتائج المستخرجة" : "Extracted Lab Parameters"}
+                          </h4>
+                          <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-teal-500/20 text-teal-300 font-mono font-bold">
+                            {(scannedResult.items || []).length} {lang === "ar" ? "تحليل" : "tests"}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+                          {lang === "ar" 
+                            ? "راجع النتائج أو احذف ما لا تريده بالضغط على أيقونة السلة 🗑️. لن يتم حفظ أي قيمة إلا بعد النقر على زر تأكيد وحفظ فوري بالأسفل." 
+                            : "Review values or remove unwanted parameters with 🗑️. Nothing will be saved until you click Confirm & Save Directly below."}
+                        </p>
                       </div>
                     </div>
 
-                    {!collapsedCards.ABG && (
-                      <div className="p-3 space-y-3">
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs">
-                          {/* pH */}
-                          {'ph' in editableFields && (
-                            <div className="bg-slate-900/70 p-2 rounded-lg border border-slate-800 relative group">
-                              <div className="flex items-center justify-between mb-1">
-                                <label className="text-[10px] text-slate-400 font-bold">pH</label>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteField('ph')}
-                                  className="text-slate-500 hover:text-rose-400 p-0.5 transition-colors cursor-pointer"
-                                  title={lang === 'ar' ? 'حذف هذه القيمة وحفظ الباقي تلقائياً' : 'Delete parameter & auto-save'}
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
-                              </div>
-                              <input
-                                type="text"
-                                value={editableFields.ph || ''}
-                                onChange={(e) => handleFieldChange('ph', e.target.value)}
-                                className="w-full bg-[#0b1224] border border-violet-500/40 rounded-lg p-1.5 text-xs text-white font-mono font-bold text-center"
-                              />
-                            </div>
-                          )}
-
-                          {/* pCO2 */}
-                          {'pco2' in editableFields && (
-                            <div className="bg-slate-900/70 p-2 rounded-lg border border-slate-800 relative group">
-                              <div className="flex items-center justify-between mb-1">
-                                <label className="text-[10px] text-slate-400 font-bold">pCO2 (mmHg)</label>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteField('pco2')}
-                                  className="text-slate-500 hover:text-rose-400 p-0.5 transition-colors cursor-pointer"
-                                  title={lang === 'ar' ? 'حذف هذه القيمة وحفظ الباقي تلقائياً' : 'Delete parameter & auto-save'}
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
-                              </div>
-                              <input
-                                type="text"
-                                value={editableFields.pco2 || ''}
-                                onChange={(e) => handleFieldChange('pco2', e.target.value)}
-                                className="w-full bg-[#0b1224] border border-violet-500/40 rounded-lg p-1.5 text-xs text-white font-mono font-bold text-center"
-                              />
-                            </div>
-                          )}
-
-                          {/* pO2 */}
-                          {'po2' in editableFields && (
-                            <div className="bg-slate-900/70 p-2 rounded-lg border border-slate-800 relative group">
-                              <div className="flex items-center justify-between mb-1">
-                                <label className="text-[10px] text-slate-400 font-bold">pO2 (mmHg)</label>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteField('po2')}
-                                  className="text-slate-500 hover:text-rose-400 p-0.5 transition-colors cursor-pointer"
-                                  title={lang === 'ar' ? 'حذف هذه القيمة وحفظ الباقي تلقائياً' : 'Delete parameter & auto-save'}
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
-                              </div>
-                              <input
-                                type="text"
-                                value={editableFields.po2 || ''}
-                                onChange={(e) => handleFieldChange('po2', e.target.value)}
-                                className="w-full bg-[#0b1224] border border-violet-500/40 rounded-lg p-1.5 text-xs text-white font-mono font-bold text-center"
-                              />
-                            </div>
-                          )}
-
-                          {/* HCO3 */}
-                          {'hco3' in editableFields && (
-                            <div className="bg-slate-900/70 p-2 rounded-lg border border-slate-800 relative group">
-                              <div className="flex items-center justify-between mb-1">
-                                <label className="text-[10px] text-slate-400 font-bold">HCO3 (mmol/L)</label>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteField('hco3')}
-                                  className="text-slate-500 hover:text-rose-400 p-0.5 transition-colors cursor-pointer"
-                                  title={lang === 'ar' ? 'حذف هذه القيمة وحفظ الباقي تلقائياً' : 'Delete parameter & auto-save'}
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
-                              </div>
-                              <input
-                                type="text"
-                                value={editableFields.hco3 || ''}
-                                onChange={(e) => handleFieldChange('hco3', e.target.value)}
-                                className="w-full bg-[#0b1224] border border-violet-500/40 rounded-lg p-1.5 text-xs text-white font-mono font-bold text-center"
-                              />
-                            </div>
-                          )}
-
-                          {/* Lactate */}
-                          {'lactate' in editableFields && (
-                            <div className="bg-slate-900/70 p-2 rounded-lg border border-slate-800 relative group">
-                              <div className="flex items-center justify-between mb-1">
-                                <label className="text-[10px] text-red-400 font-bold">Lactate</label>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteField('lactate')}
-                                  className="text-slate-500 hover:text-rose-400 p-0.5 transition-colors cursor-pointer"
-                                  title={lang === 'ar' ? 'حذف هذه القيمة وحفظ الباقي تلقائياً' : 'Delete parameter & auto-save'}
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
-                              </div>
-                              <input
-                                type="text"
-                                value={editableFields.lactate || ''}
-                                onChange={(e) => handleFieldChange('lactate', e.target.value)}
-                                className="w-full bg-[#0b1224] border border-red-500/50 rounded-lg p-1.5 text-xs text-red-400 font-mono font-bold text-center"
-                              />
-                            </div>
-                          )}
-
-                          {/* P/F Ratio */}
-                          {'pf' in editableFields && (
-                            <div className="bg-slate-900/70 p-2 rounded-lg border border-slate-800 relative group">
-                              <div className="flex items-center justify-between mb-1">
-                                <label className="text-[10px] text-slate-400 font-bold">P/F Ratio</label>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteField('pf')}
-                                  className="text-slate-500 hover:text-rose-400 p-0.5 transition-colors cursor-pointer"
-                                  title={lang === 'ar' ? 'حذف هذه القيمة وحفظ الباقي تلقائياً' : 'Delete parameter & auto-save'}
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
-                              </div>
-                              <input
-                                type="text"
-                                value={editableFields.pf || ''}
-                                onChange={(e) => handleFieldChange('pf', e.target.value)}
-                                className="w-full bg-[#0b1224] border border-violet-500/40 rounded-lg p-1.5 text-xs text-white font-mono font-bold text-center"
-                              />
-                            </div>
-                          )}
-                        </div>
+                    {/* Parameters Grid or Empty message */}
+                    {(!scannedResult.items || scannedResult.items.length === 0) ? (
+                      <div className="p-8 text-center text-slate-500 text-xs border border-dashed border-slate-800/80 rounded-xl">
+                        {lang === "ar" ? "تم حذف كافة البنود أو لم يتم استخراج أي قيم صالحة." : "All items have been removed or no valid values extracted."}
                       </div>
-                    )}
-                  </div>
-
-                  {/* CARD 2: CBC Card (Collapsible, default collapsed) */}
-                  <div className="rounded-xl border border-teal-800/50 bg-[#070c18] overflow-hidden transition-all shadow-md">
-                    <div 
-                      onClick={() => toggleCard('CBC')}
-                      className="p-3 bg-teal-950/30 hover:bg-teal-950/50 flex items-center justify-between cursor-pointer border-b border-teal-800/30 select-none transition-colors"
-                    >
-                      <div className="flex items-center gap-2">
-                        <Droplet className="w-4 h-4 text-teal-400" />
-                        <h4 className="text-xs font-bold text-teal-300 font-mono">
-                          CBC {lang === 'ar' ? '(صورة الدم الكاملة)' : '(Complete Blood Count)'}
-                        </h4>
-                        <span className="text-[10px] bg-teal-500/20 text-teal-300 px-2 py-0.5 rounded-full font-mono">
-                          WBC, Hb, Hct, PLT
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1.5 text-teal-400 text-xs">
-                        <span className="text-[11px]">{collapsedCards.CBC ? (lang === 'ar' ? 'فتح' : 'Expand') : (lang === 'ar' ? 'طي' : 'Collapse')}</span>
-                        {collapsedCards.CBC ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
-                      </div>
-                    </div>
-
-                    {!collapsedCards.CBC && (
-                      <div className="p-3 space-y-3">
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
-                          {/* WBC */}
-                          {'wbc' in editableFields && (
-                            <div className="bg-slate-900/70 p-2 rounded-lg border border-slate-800 relative group">
-                              <div className="flex items-center justify-between mb-1">
-                                <label className="text-[10px] text-slate-400 font-bold">WBCs (k/uL)</label>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteField('wbc')}
-                                  className="text-slate-500 hover:text-rose-400 p-0.5 transition-colors cursor-pointer"
-                                  title={lang === 'ar' ? 'حذف هذه القيمة وحفظ الباقي تلقائياً' : 'Delete parameter & auto-save'}
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
-                              </div>
-                              <input
-                                type="text"
-                                value={editableFields.wbc || ''}
-                                onChange={(e) => handleFieldChange('wbc', e.target.value)}
-                                className="w-full bg-[#0b1224] border border-teal-500/40 rounded-lg p-1.5 text-xs text-white font-mono font-bold text-center"
-                              />
-                            </div>
-                          )}
-
-                          {/* Hb */}
-                          {'hb' in editableFields && (
-                            <div className="bg-slate-900/70 p-2 rounded-lg border border-slate-800 relative group">
-                              <div className="flex items-center justify-between mb-1">
-                                <label className="text-[10px] text-slate-400 font-bold">Hb (g/dL)</label>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteField('hb')}
-                                  className="text-slate-500 hover:text-rose-400 p-0.5 transition-colors cursor-pointer"
-                                  title={lang === 'ar' ? 'حذف هذه القيمة وحفظ الباقي تلقائياً' : 'Delete parameter & auto-save'}
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
-                              </div>
-                              <input
-                                type="text"
-                                value={editableFields.hb || ''}
-                                onChange={(e) => handleFieldChange('hb', e.target.value)}
-                                className="w-full bg-[#0b1224] border border-teal-500/40 rounded-lg p-1.5 text-xs text-white font-mono font-bold text-center"
-                              />
-                            </div>
-                          )}
-
-                          {/* Hct */}
-                          {'hct' in editableFields && (
-                            <div className="bg-slate-900/70 p-2 rounded-lg border border-slate-800 relative group">
-                              <div className="flex items-center justify-between mb-1">
-                                <label className="text-[10px] text-slate-400 font-bold">Hematocrit Hct (%)</label>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteField('hct')}
-                                  className="text-slate-500 hover:text-rose-400 p-0.5 transition-colors cursor-pointer"
-                                  title={lang === 'ar' ? 'حذف هذه القيمة وحفظ الباقي تلقائياً' : 'Delete parameter & auto-save'}
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
-                              </div>
-                              <input
-                                type="text"
-                                value={editableFields.hct || ''}
-                                onChange={(e) => handleFieldChange('hct', e.target.value)}
-                                className="w-full bg-[#0b1224] border border-teal-500/40 rounded-lg p-1.5 text-xs text-white font-mono font-bold text-center"
-                              />
-                            </div>
-                          )}
-
-                          {/* Platelets */}
-                          {'plt' in editableFields && (
-                            <div className="bg-slate-900/70 p-2 rounded-lg border border-slate-800 relative group">
-                              <div className="flex items-center justify-between mb-1">
-                                <label className="text-[10px] text-slate-400 font-bold">Platelets PLT (k/uL)</label>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteField('plt')}
-                                  className="text-slate-500 hover:text-rose-400 p-0.5 transition-colors cursor-pointer"
-                                  title={lang === 'ar' ? 'حذف هذه القيمة وحفظ الباقي تلقائياً' : 'Delete parameter & auto-save'}
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
-                              </div>
-                              <input
-                                type="text"
-                                value={editableFields.plt || ''}
-                                onChange={(e) => handleFieldChange('plt', e.target.value)}
-                                className="w-full bg-[#0b1224] border border-teal-500/40 rounded-lg p-1.5 text-xs text-white font-mono font-bold text-center"
-                              />
-                            </div>
-                          )}
-
-                          {/* Differential */}
-                          {'diff' in editableFields && (
-                            <div className="col-span-2 bg-slate-900/70 p-2 rounded-lg border border-slate-800 relative group">
-                              <div className="flex items-center justify-between mb-1">
-                                <label className="text-[10px] text-slate-400 font-bold">{lang === 'ar' ? 'العد التفريقي' : 'WBC Differential'}</label>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteField('diff')}
-                                  className="text-slate-500 hover:text-rose-400 p-0.5 transition-colors cursor-pointer"
-                                  title={lang === 'ar' ? 'حذف هذه القيمة وحفظ الباقي تلقائياً' : 'Delete parameter & auto-save'}
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
-                              </div>
-                              <input
-                                type="text"
-                                value={editableFields.diff || ''}
-                                onChange={(e) => handleFieldChange('diff', e.target.value)}
-                                className="w-full bg-[#0b1224] border border-slate-800 rounded-lg p-1.5 text-xs text-white font-mono"
-                              />
-                            </div>
-                          )}
-
-                          {/* Anemia Type */}
-                          {'typeAnemia' in editableFields && (
-                            <div className="col-span-2 bg-slate-900/70 p-2 rounded-lg border border-slate-800 relative group">
-                              <div className="flex items-center justify-between mb-1">
-                                <label className="text-[10px] text-slate-400 font-bold">{lang === 'ar' ? 'نوع الأنيميا' : 'Anemia Morphology'}</label>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteField('typeAnemia')}
-                                  className="text-slate-500 hover:text-rose-400 p-0.5 transition-colors cursor-pointer"
-                                  title={lang === 'ar' ? 'حذف هذه القيمة وحفظ الباقي تلقائياً' : 'Delete parameter & auto-save'}
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
-                              </div>
-                              <input
-                                type="text"
-                                value={editableFields.typeAnemia || ''}
-                                onChange={(e) => handleFieldChange('typeAnemia', e.target.value)}
-                                className="w-full bg-[#0b1224] border border-slate-800 rounded-lg p-1.5 text-xs text-white font-mono"
-                              />
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* CARD 3: Chemistry Card (Collapsible, default collapsed) */}
-                  <div className="rounded-xl border border-cyan-800/50 bg-[#070c18] overflow-hidden transition-all shadow-md">
-                    <div 
-                      onClick={() => toggleCard('Chemistry')}
-                      className="p-3 bg-cyan-950/30 hover:bg-cyan-950/50 flex items-center justify-between cursor-pointer border-b border-cyan-800/30 select-none transition-colors"
-                    >
-                      <div className="flex items-center gap-2">
-                        <Sliders className="w-4 h-4 text-cyan-400" />
-                        <h4 className="text-xs font-bold text-cyan-300 font-mono">
-                          Chemistry {lang === 'ar' ? '(الكيمياء الحيوية والأملاح ووظائف الأعضاء)' : '(Biochemistry & Electrolytes)'}
-                        </h4>
-                        <span className="text-[10px] bg-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded-full font-mono">
-                          Na, K, Creat, Urea, Liver, Ions
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1.5 text-cyan-400 text-xs">
-                        <span className="text-[11px]">{collapsedCards.Chemistry ? (lang === 'ar' ? 'فتح' : 'Expand') : (lang === 'ar' ? 'طي' : 'Collapse')}</span>
-                        {collapsedCards.Chemistry ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
-                      </div>
-                    </div>
-
-                    {!collapsedCards.Chemistry && (
-                      <div className="p-3 space-y-3">
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
-                          {/* Sodium Na */}
-                          {'na' in editableFields && (
-                            <div className="bg-slate-900/70 p-2 rounded-lg border border-slate-800 relative group">
-                              <div className="flex items-center justify-between mb-1">
-                                <label className="text-[10px] text-slate-400 font-bold">Sodium Na</label>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteField('na')}
-                                  className="text-slate-500 hover:text-rose-400 p-0.5 transition-colors cursor-pointer"
-                                  title={lang === 'ar' ? 'حذف هذه القيمة وحفظ الباقي تلقائياً' : 'Delete parameter & auto-save'}
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
-                              </div>
-                              <input
-                                type="text"
-                                value={editableFields.na || ''}
-                                onChange={(e) => handleFieldChange('na', e.target.value)}
-                                className="w-full bg-[#0b1224] border border-cyan-500/40 rounded-lg p-1.5 text-xs text-white font-mono font-bold text-center"
-                              />
-                            </div>
-                          )}
-
-                          {/* Potassium K */}
-                          {'k' in editableFields && (
-                            <div className="bg-slate-900/70 p-2 rounded-lg border border-slate-800 relative group">
-                              <div className="flex items-center justify-between mb-1">
-                                <label className="text-[10px] text-slate-400 font-bold">Potassium K</label>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteField('k')}
-                                  className="text-slate-500 hover:text-rose-400 p-0.5 transition-colors cursor-pointer"
-                                  title={lang === 'ar' ? 'حذف هذه القيمة وحفظ الباقي تلقائياً' : 'Delete parameter & auto-save'}
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
-                              </div>
-                              <input
-                                type="text"
-                                value={editableFields.k || ''}
-                                onChange={(e) => handleFieldChange('k', e.target.value)}
-                                className="w-full bg-[#0b1224] border border-cyan-500/40 rounded-lg p-1.5 text-xs text-white font-mono font-bold text-center"
-                              />
-                            </div>
-                          )}
-
-                          {/* Creatinine */}
-                          {'creat' in editableFields && (
-                            <div className="bg-slate-900/70 p-2 rounded-lg border border-slate-800 relative group">
-                              <div className="flex items-center justify-between mb-1">
-                                <label className="text-[10px] text-slate-400 font-bold">Creatinine</label>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteField('creat')}
-                                  className="text-slate-500 hover:text-rose-400 p-0.5 transition-colors cursor-pointer"
-                                  title={lang === 'ar' ? 'حذف هذه القيمة وحفظ الباقي تلقائياً' : 'Delete parameter & auto-save'}
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
-                              </div>
-                              <input
-                                type="text"
-                                value={editableFields.creat || ''}
-                                onChange={(e) => handleFieldChange('creat', e.target.value)}
-                                className="w-full bg-[#0b1224] border border-cyan-500/40 rounded-lg p-1.5 text-xs text-white font-mono font-bold text-center"
-                              />
-                            </div>
-                          )}
-
-                          {/* Urea */}
-                          {'urea' in editableFields && (
-                            <div className="bg-slate-900/70 p-2 rounded-lg border border-slate-800 relative group">
-                              <div className="flex items-center justify-between mb-1">
-                                <label className="text-[10px] text-slate-400 font-bold">Urea</label>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteField('urea')}
-                                  className="text-slate-500 hover:text-rose-400 p-0.5 transition-colors cursor-pointer"
-                                  title={lang === 'ar' ? 'حذف هذه القيمة وحفظ الباقي تلقائياً' : 'Delete parameter & auto-save'}
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
-                              </div>
-                              <input
-                                type="text"
-                                value={editableFields.urea || ''}
-                                onChange={(e) => handleFieldChange('urea', e.target.value)}
-                                className="w-full bg-[#0b1224] border border-cyan-500/40 rounded-lg p-1.5 text-xs text-white font-mono font-bold text-center"
-                              />
-                            </div>
-                          )}
-
-                          {/* Calcium Ca */}
-                          {'ca' in editableFields && (
-                            <div className="bg-slate-900/70 p-2 rounded-lg border border-slate-800 relative group">
-                              <div className="flex items-center justify-between mb-1">
-                                <label className="text-[10px] text-slate-400 font-bold">Calcium (Ca)</label>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteField('ca')}
-                                  className="text-slate-500 hover:text-rose-400 p-0.5 transition-colors cursor-pointer"
-                                  title={lang === 'ar' ? 'حذف هذه القيمة وحفظ الباقي تلقائياً' : 'Delete parameter & auto-save'}
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
-                              </div>
-                              <input
-                                type="text"
-                                value={editableFields.ca || ''}
-                                onChange={(e) => handleFieldChange('ca', e.target.value)}
-                                className="w-full bg-[#0b1224] border border-cyan-500/40 rounded-lg p-1.5 text-xs text-white font-mono font-bold text-center"
-                              />
-                            </div>
-                          )}
-
-                          {/* Magnesium Mg */}
-                          {'mg' in editableFields && (
-                            <div className="bg-slate-900/70 p-2 rounded-lg border border-slate-800 relative group">
-                              <div className="flex items-center justify-between mb-1">
-                                <label className="text-[10px] text-slate-400 font-bold">Magnesium (Mg)</label>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteField('mg')}
-                                  className="text-slate-500 hover:text-rose-400 p-0.5 transition-colors cursor-pointer"
-                                  title={lang === 'ar' ? 'حذف هذه القيمة وحفظ الباقي تلقائياً' : 'Delete parameter & auto-save'}
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
-                              </div>
-                              <input
-                                type="text"
-                                value={editableFields.mg || ''}
-                                onChange={(e) => handleFieldChange('mg', e.target.value)}
-                                className="w-full bg-[#0b1224] border border-cyan-500/40 rounded-lg p-1.5 text-xs text-white font-mono font-bold text-center"
-                              />
-                            </div>
-                          )}
-
-                          {/* Total Bilirubin */}
-                          {'totalBili' in editableFields && (
-                            <div className="bg-slate-900/70 p-2 rounded-lg border border-slate-800 relative group">
-                              <div className="flex items-center justify-between mb-1">
-                                <label className="text-[10px] text-slate-400 font-bold">Total Bilirubin</label>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteField('totalBili')}
-                                  className="text-slate-500 hover:text-rose-400 p-0.5 transition-colors cursor-pointer"
-                                  title={lang === 'ar' ? 'حذف هذه القيمة وحفظ الباقي تلقائياً' : 'Delete parameter & auto-save'}
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
-                              </div>
-                              <input
-                                type="text"
-                                value={editableFields.totalBili || ''}
-                                onChange={(e) => handleFieldChange('totalBili', e.target.value)}
-                                className="w-full bg-[#0b1224] border border-cyan-500/40 rounded-lg p-1.5 text-xs text-white font-mono font-bold text-center"
-                              />
-                            </div>
-                          )}
-
-                          {/* Albumin */}
-                          {'alb' in editableFields && (
-                            <div className="bg-slate-900/70 p-2 rounded-lg border border-slate-800 relative group">
-                              <div className="flex items-center justify-between mb-1">
-                                <label className="text-[10px] text-slate-400 font-bold">Albumin</label>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteField('alb')}
-                                  className="text-slate-500 hover:text-rose-400 p-0.5 transition-colors cursor-pointer"
-                                  title={lang === 'ar' ? 'حذف هذه القيمة وحفظ الباقي تلقائياً' : 'Delete parameter & auto-save'}
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
-                              </div>
-                              <input
-                                type="text"
-                                value={editableFields.alb || ''}
-                                onChange={(e) => handleFieldChange('alb', e.target.value)}
-                                className="w-full bg-[#0b1224] border border-cyan-500/40 rounded-lg p-1.5 text-xs text-white font-mono font-bold text-center"
-                              />
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* CARD 4: INR Card (Collapsible, default collapsed, contains only INR values) */}
-                  <div className="rounded-xl border border-rose-800/50 bg-[#070c18] overflow-hidden transition-all shadow-md">
-                    <div 
-                      onClick={() => toggleCard('INR')}
-                      className="p-3 bg-rose-950/30 hover:bg-rose-950/50 flex items-center justify-between cursor-pointer border-b border-rose-800/30 select-none transition-colors"
-                    >
-                      <div className="flex items-center gap-2">
-                        <Activity className="w-4 h-4 text-rose-400" />
-                        <h4 className="text-xs font-bold text-rose-300 font-mono">
-                          INR {lang === 'ar' ? '(سيولة الدم وتخثر الدم)' : '(Coagulation Profile / INR)'}
-                        </h4>
-                        <span className="text-[10px] bg-rose-500/20 text-rose-300 px-2 py-0.5 rounded-full font-mono">
-                          INR, PT, PTT
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1.5 text-rose-400 text-xs">
-                        <span className="text-[11px]">{collapsedCards.INR ? (lang === 'ar' ? 'فتح' : 'Expand') : (lang === 'ar' ? 'طي' : 'Collapse')}</span>
-                        {collapsedCards.INR ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
-                      </div>
-                    </div>
-
-                    {!collapsedCards.INR && (
-                      <div className="p-3 space-y-3">
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
-                          {/* INR Field */}
-                          {'inr' in editableFields && (
-                            <div className="bg-slate-900/70 p-2.5 rounded-lg border border-rose-800/40 relative group">
-                              <div className="flex items-center justify-between mb-1">
-                                <label className="text-xs text-rose-400 font-bold font-mono">INR (Ratio)</label>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteField('inr')}
-                                  className="text-slate-500 hover:text-rose-400 p-0.5 transition-colors cursor-pointer"
-                                  title={lang === 'ar' ? 'حذف هذه القيمة وحفظ الباقي تلقائياً' : 'Delete parameter & auto-save'}
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                              <input
-                                type="text"
-                                value={editableFields.inr || ''}
-                                onChange={(e) => handleFieldChange('inr', e.target.value)}
-                                className="w-full bg-[#0b1224] border border-rose-500/40 rounded-lg p-2 text-sm text-white font-mono font-black text-center"
-                              />
-                            </div>
-                          )}
-
-                          {/* PT Seconds */}
-                          {'pt' in editableFields && (
-                            <div className="bg-slate-900/70 p-2.5 rounded-lg border border-slate-800 relative group">
-                              <div className="flex items-center justify-between mb-1">
-                                <label className="text-[10px] text-slate-400 font-bold font-mono">PT (sec)</label>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteField('pt')}
-                                  className="text-slate-500 hover:text-rose-400 p-0.5 transition-colors cursor-pointer"
-                                  title={lang === 'ar' ? 'حذف هذه القيمة وحفظ الباقي تلقائياً' : 'Delete parameter & auto-save'}
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
-                              </div>
-                              <input
-                                type="text"
-                                value={editableFields.pt || ''}
-                                onChange={(e) => handleFieldChange('pt', e.target.value)}
-                                className="w-full bg-[#0b1224] border border-slate-700 rounded-lg p-1.5 text-xs text-white font-mono font-bold text-center"
-                              />
-                            </div>
-                          )}
-
-                          {/* PTT Seconds */}
-                          {'ptt' in editableFields && (
-                            <div className="bg-slate-900/70 p-2.5 rounded-lg border border-slate-800 relative group">
-                              <div className="flex items-center justify-between mb-1">
-                                <label className="text-[10px] text-slate-400 font-bold font-mono">PTT / aPTT (sec)</label>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteField('ptt')}
-                                  className="text-slate-500 hover:text-rose-400 p-0.5 transition-colors cursor-pointer"
-                                  title={lang === 'ar' ? 'حذف هذه القيمة وحفظ الباقي تلقائياً' : 'Delete parameter & auto-save'}
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
-                              </div>
-                              <input
-                                type="text"
-                                value={editableFields.ptt || ''}
-                                onChange={(e) => handleFieldChange('ptt', e.target.value)}
-                                className="w-full bg-[#0b1224] border border-slate-700 rounded-lg p-1.5 text-xs text-white font-mono font-bold text-center"
-                              />
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Detailed Extracted Parameters with Delete Buttons */}
-                  {scannedResult.items && scannedResult.items.length > 0 && (
-                    <div className="border border-slate-800 rounded-xl p-3 bg-slate-900/40">
-                      <div className="text-[11px] font-bold text-slate-400 mb-2 flex items-center justify-between">
-                        <span>{lang === 'ar' ? 'سجل البنود المقروءة تفصيلياً (مع زر الحذف السريع):' : 'All Extracted Line Items (with Quick Delete):'}</span>
-                        <span className="text-[10px] text-slate-500 font-mono">
-                          {scannedResult.items.length} {lang === 'ar' ? 'بند' : 'parameters'}
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-[460px] overflow-y-auto pr-1">
                         {scannedResult.items.map((item, idx) => (
-                          <div key={idx} className="bg-slate-900/80 p-2 rounded-lg border border-slate-800 text-[11px] flex items-center justify-between group hover:border-slate-700 transition-colors">
-                            <span className="font-bold text-slate-300 truncate max-w-[120px]">{item.testName}</span>
+                          <div 
+                            key={idx} 
+                            className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 hover:border-slate-700 transition-all flex items-center justify-between gap-2 shadow-sm group"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-bold text-xs text-white truncate max-w-[130px] font-mono">
+                                  {item.testName}
+                                </span>
+                                {item.unit && (
+                                  <span className="text-[10px] text-slate-400 font-mono">
+                                    ({item.unit})
+                                  </span>
+                                )}
+                              </div>
+                              {item.category && item.category !== "Other" && (
+                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-teal-400/80 font-mono mt-0.5 inline-block">
+                                  {item.category}
+                                </span>
+                              )}
+                            </div>
+
                             <div className="flex items-center gap-1.5 shrink-0">
-                              <span className="font-mono font-bold text-teal-300">{item.value}</span>
-                              <span className="text-[10px] text-slate-400">{item.unit}</span>
+                              <input
+                                type="text"
+                                value={item.value}
+                                onChange={(e) => handleItemValueChange(idx, e.target.value)}
+                                className="w-20 bg-[#0b1224] border border-teal-500/40 rounded-lg px-2 py-1 text-xs text-teal-300 font-mono font-bold text-center focus:outline-none focus:border-teal-400"
+                                placeholder="0.0"
+                              />
                               <button
                                 type="button"
                                 onClick={() => handleDeleteDetailedItem(idx)}
-                                className="text-slate-500 hover:text-rose-400 p-1 rounded hover:bg-rose-950/40 transition-colors cursor-pointer ml-1"
-                                title={lang === 'ar' ? 'حذف البند وحفظ الباقي تلقائياً' : 'Delete item & auto-save remaining'}
+                                className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-950/40 transition-colors cursor-pointer"
+                                title={lang === "ar" ? "حذف هذا التحليل من المسودة" : "Remove parameter from scan draft"}
                               >
-                                <Trash2 className="w-3.5 h-3.5" />
+                                <Trash2 className="w-4 h-4" />
                               </button>
                             </div>
                           </div>
                         ))}
                       </div>
-                    </div>
-                  )}
-
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
