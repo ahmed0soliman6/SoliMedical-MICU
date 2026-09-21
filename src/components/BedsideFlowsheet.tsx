@@ -3045,6 +3045,10 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <span className="hidden sm:inline-flex items-center gap-1 text-[11px] px-2.5 py-0.5 rounded-lg bg-teal-500/10 text-teal-300 border border-teal-500/20 font-medium">
+                <Sparkles className="w-3 h-3 text-teal-400" />
+                <span>{lang === 'ar' ? 'مسح ذكي متاح' : 'AI Scan Ready'}</span>
+              </span>
               <button
                 type="button"
                 onClick={(e) => {
@@ -3066,6 +3070,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
             <div className="space-y-4 animate-in fade-in duration-300">
               <InvestigationsSection
                 patientId={patient.id}
+                patientName={patient.fullNameAr || patient.fullNameEn}
                 bedNumber={bed.bedNumber}
                 investigations={investigations}
                 onInvestigationAdded={() => {

@@ -14,7 +14,9 @@ import {
   Image as ImageIcon,
   Pencil,
   Trash2,
-  Edit3
+  Edit3,
+  Sparkles,
+  Camera
 } from 'lucide-react';
 import { InvestigationItem } from '../types/schema.ts';
 import { useTranslation } from '../services/i18n.ts';
@@ -22,9 +24,11 @@ import { useAuth } from '../services/AuthContext.tsx';
 import { db } from '../db/icuSyncDb.ts';
 import { doc, deleteDoc } from 'firebase/firestore';
 import { firestore, setDoc } from '../services/firebase.ts';
+import { AiInvestigationScannerModal } from './AiInvestigationScannerModal.tsx';
 
 interface InvestigationsSectionProps {
   patientId: string;
+  patientName?: string;
   bedNumber: string;
   investigations: InvestigationItem[];
   onInvestigationAdded: () => void;
@@ -56,6 +60,7 @@ const formatNumericDate = (dateVal?: string | Date | number): string => {
 
 export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
   patientId,
+  patientName,
   bedNumber,
   investigations,
   onInvestigationAdded,
@@ -64,6 +69,7 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
   const { currentUser } = useAuth();
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isAiScanModalOpen, setIsAiScanModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<InvestigationItem | null>(null);
 
   // Form states
@@ -76,6 +82,62 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
   const [isSaving, setIsSaving] = useState(false);
 
   const patientInvestigations = (investigations || []).filter(inv => inv && inv.patientId === patientId);
+
+  const handleApplyFromAi = (data: {
+    modality: string;
+    testName: string;
+    status: 'ORDERED' | 'RESULTED' | 'REPORTED';
+    timestamp: string;
+    resultReport: string;
+    notes?: string;
+  }) => {
+    setEditingItem(null);
+    setModality(data.modality);
+    setTestName(data.testName);
+    setStatus(data.status);
+    try {
+      const d = new Date(data.timestamp);
+      if (!isNaN(d.getTime())) {
+        const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+        setTimestamp(local);
+      } else {
+        setTimestamp(new Date().toISOString().slice(0, 16));
+      }
+    } catch {
+      setTimestamp(new Date().toISOString().slice(0, 16));
+    }
+    setResultReport(data.resultReport);
+    setNotes(data.notes || '');
+    setIsAddModalOpen(true);
+  };
+
+  const handleDirectSaveFromAi = async (data: Omit<InvestigationItem, 'id'>) => {
+    const invId = `inv-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+    const userDisplay = currentUser?.nameAr || currentUser?.nameEn || currentUser?.email || 'الطبيب المناوب';
+    const newRecord: InvestigationItem = {
+      ...data,
+      id: invId,
+      patientId,
+      bedNumber,
+      recordedByName: `${userDisplay} (AI OCR)`,
+      recordedByStaffId: currentUser?.badgeId || currentUser?.uid,
+    };
+
+    // 1. Dexie local database
+    await db.investigations.put(newRecord);
+
+    // 2. Firestore SSOT
+    try {
+      const docRef = doc(firestore, 'medical_records', invId);
+      await setDoc(docRef, {
+        ...newRecord,
+        recordType: 'INVESTIGATION',
+        createdAt: Date.now(),
+      });
+    } catch (cloudErr) {
+      console.warn('Firestore investigation sync error:', cloudErr);
+    }
+  };
 
   const handleModalityChange = (m: string) => {
     setModality(m);
@@ -228,14 +290,26 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
     <div className="space-y-4">
       {/* Sleek Action Bar inside Card */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 p-2.5 bg-[#070c18] rounded-xl border border-slate-800/80">
-        <button
-          type="button"
-          onClick={() => handleOpenAddModal('Chest X-Ray')}
-          className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shadow-md shadow-teal-500/20 transition-all cursor-pointer active:scale-95"
-        >
-          <Plus className="w-4 h-4" />
-          <span>{lang === 'ar' ? 'إضافة فحص / تقرير' : 'Add Investigation / Report'}</span>
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={() => handleOpenAddModal('Chest X-Ray')}
+            className="flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shadow-md shadow-teal-500/20 transition-all cursor-pointer active:scale-95"
+          >
+            <Plus className="w-4 h-4" />
+            <span>{lang === 'ar' ? 'إضافة فحص / تقرير' : 'Add Investigation'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsAiScanModalOpen(true)}
+            className="flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-teal-500 via-cyan-500 to-teal-400 hover:from-teal-400 hover:to-cyan-300 text-slate-950 font-bold text-xs shadow-md shadow-teal-500/25 transition-all cursor-pointer active:scale-95"
+            title={lang === 'ar' ? 'مسح ضوئي ذكي لتقارير الأشعة وتخطيط القلب والسونار بالذكاء الاصطناعي' : 'AI Smart Scan for Radiology, CXR, CT, ECG, and POCUS'}
+          >
+            <Sparkles className="w-4 h-4 text-slate-950 animate-pulse" />
+            <span>{lang === 'ar' ? 'مسح ضوئي ذكي (AI Scanner)' : 'AI Smart Scan'}</span>
+          </button>
+        </div>
 
         <div className="flex items-center justify-between sm:justify-end gap-2 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-xs font-mono text-slate-300">
           <span className="text-slate-400 text-[11px]">{lang === 'ar' ? 'عدد الفحوصات المسجلة:' : 'Recorded Studies:'}</span>
@@ -254,8 +328,16 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
               ? 'لا توجد فحوصات أو أشعات مسجلة لهذا المريض بعد.' 
               : 'No radiology or investigations recorded for this patient.'}
           </p>
-          <div className="flex flex-wrap items-center justify-center gap-1.5 pt-1">
-            {MODALITY_PRESETS.slice(0, 6).map(m => (
+          <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => setIsAiScanModalOpen(true)}
+              className="px-3.5 py-1.5 text-xs font-bold rounded-xl bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 border border-teal-500/40 transition-all cursor-pointer flex items-center gap-1.5"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>{lang === 'ar' ? 'المسح الضوئي الذكي بالذكاء الاصطناعي' : 'AI Smart Scan Report'}</span>
+            </button>
+            {MODALITY_PRESETS.slice(0, 5).map(m => (
               <button
                 key={m.id}
                 type="button"
@@ -407,6 +489,20 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
               </button>
             </div>
 
+            <div className="px-5 pt-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAddModalOpen(false);
+                  setIsAiScanModalOpen(true);
+                }}
+                className="w-full flex items-center justify-center gap-2 p-2.5 rounded-xl bg-gradient-to-r from-teal-500/15 via-cyan-500/15 to-teal-500/15 border border-teal-500/30 hover:border-teal-400 text-teal-300 hover:text-white text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-[0.99]"
+              >
+                <Sparkles className="w-4 h-4 text-teal-400 animate-pulse" />
+                <span>{lang === 'ar' ? 'هل تملك صورة للتقرير أو الفحص؟ اضغط للمسح الذكي بالـ AI' : 'Have report photo? Click for AI Smart OCR Scan'}</span>
+              </button>
+            </div>
+
             <form onSubmit={handleSave} className="p-5 space-y-4 overflow-y-auto">
               {/* Modality Selector */}
               <div>
@@ -532,6 +628,17 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
           </div>
         </div>
       )}
+      {/* AI Smart Investigation / Radiology Scanner Modal */}
+      <AiInvestigationScannerModal
+        isOpen={isAiScanModalOpen}
+        onClose={() => setIsAiScanModalOpen(false)}
+        patientId={patientId}
+        patientName={patientName}
+        bedNumber={bedNumber}
+        onApplyToForm={handleApplyFromAi}
+        onDirectSave={handleDirectSaveFromAi}
+        onInvestigationAdded={onInvestigationAdded}
+      />
     </div>
   );
 };

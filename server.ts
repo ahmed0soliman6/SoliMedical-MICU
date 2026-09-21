@@ -316,6 +316,182 @@ Always respond in strictly valid JSON format.`,
   }
 });
 
+// AI Investigation & Radiology OCR Scanner Endpoints (supporting both /api/scan-investigation and /api/ai/scan-investigation)
+app.get(['/api/scan-investigation', '/api/ai/scan-investigation'], (req, res) => {
+  res.json({
+    service: 'AI Investigation & Radiology Scanner API',
+    status: 'active',
+    supportedMethods: ['POST'],
+    endpoints: ['/api/scan-investigation', '/api/ai/scan-investigation'],
+    timestamp: new Date().toISOString(),
+  });
+});
+
+app.post(['/api/scan-investigation', '/api/ai/scan-investigation'], async (req, res) => {
+  try {
+    const { imageBase64, expectedModality = 'ANY' } = req.body;
+
+    if (!imageBase64 || typeof imageBase64 !== 'string') {
+      return res.status(400).json({ success: false, error: 'Missing imageBase64 data in request body.' });
+    }
+
+    const mimeMatch = imageBase64.match(/^data:([a-zA-Z0-9/+-]+);base64,/);
+    const mimeType = mimeMatch ? mimeMatch[1] : (req.body.mimeType || 'image/jpeg');
+    const cleanBase64 = imageBase64.replace(/^data:[a-zA-Z0-9/+-]+;base64,/, '').trim();
+
+    if (!cleanBase64) {
+      return res.status(400).json({ success: false, error: 'Empty image payload after removing data URL header.' });
+    }
+
+    const ai = getGenAI();
+
+    const systemPrompt = `You are an expert ICU Clinical Radiologist and Critical Care Specialist.
+Your task is to analyze the provided medical image, which is either:
+1. A radiology or diagnostic report printout (Chest X-Ray report, CT scan report, MRI report, Ultrasound/POCUS report, Echocardiogram report, 12-Lead ECG strip/report, or pathology/microbiology report).
+2. A direct diagnostic radiographic image or monitor capture (CXR film, CT slices, bedside ultrasound/POCUS clip/photo, 12-lead ECG rhythm strip).
+
+Expected modality hint from clinician: ${expectedModality}
+
+Extract and structure the data precisely according to the JSON schema:
+- modality: MUST be one of ["Chest X-Ray", "CT", "MRI", "Ultrasound", "ECG", "Echo", "Other"]
+- testName: Specific clinical study name (e.g. "Portable CXR (AP View)", "CT Brain Non-Contrast", "Transthoracic Echocardiogram (TTE)", "12-Lead ECG", "Bedside Lung & Abdominal Ultrasound")
+- status: "REPORTED" or "RESULTED"
+- timestamp: Valid ISO-8601 string if a date/time is detected on the report or film. If no date found, use current ISO time.
+- resultReport: Complete, coherent, professional clinical findings and radiological impression. Format clearly with "FINDINGS:" and "IMPRESSION:". Highlight acute ICU findings (e.g. endotracheal tube distance above carina, CVC tip position, pneumothorax, pulmonary edema, consolidation/infiltrates, acute intracranial hemorrhage, midline shift, ischemia, ventricular ejection fraction, pericardial effusion).
+- notes: Short practical notes (e.g., "Bedside portable study", "Compared with baseline", "Urgent alert communicated to ICU team").
+- summaryAr: High-clarity medical Arabic summary.
+- summaryEn: Concise English clinical summary.
+- confidence: Confidence level between 0.50 and 1.00.
+- hasCriticalFinding: true if there is an emergent finding requiring immediate intervention.
+- criticalFindingText: Description of the critical finding if present, or empty string.
+
+Ensure strict medical terminology and zero hallucination. If text is partially blurred, transcribe the legible clinical facts accurately.`;
+
+    const modelsToTry = [
+      'gemini-2.5-flash',
+      'gemini-1.5-flash',
+      'gemini-3.8-flash',
+      'gemini-3.1-flash-lite',
+    ];
+
+    const generationConfig = {
+      systemInstruction: systemPrompt,
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          modality: { type: Type.STRING },
+          testName: { type: Type.STRING },
+          status: { type: Type.STRING },
+          timestamp: { type: Type.STRING },
+          resultReport: { type: Type.STRING },
+          notes: { type: Type.STRING },
+          summaryAr: { type: Type.STRING },
+          summaryEn: { type: Type.STRING },
+          confidence: { type: Type.NUMBER },
+          hasCriticalFinding: { type: Type.BOOLEAN },
+          criticalFindingText: { type: Type.STRING },
+        },
+        required: ['modality', 'testName', 'status', 'resultReport', 'summaryEn', 'summaryAr'],
+      },
+    };
+
+    const contentParts: any[] = [];
+    if (mimeType === 'image/svg+xml' || cleanBase64.startsWith('PHN2Zy') || cleanBase64.startsWith('PD94bW')) {
+      let svgText = '';
+      try {
+        svgText = Buffer.from(cleanBase64, 'base64').toString('utf-8');
+      } catch {
+        svgText = cleanBase64;
+      }
+      contentParts.push({
+        text: `Here is the diagnostic study report in SVG format:\n${svgText}`,
+      });
+    } else {
+      contentParts.push({
+        inlineData: {
+          data: cleanBase64,
+          mimeType: mimeType || 'image/jpeg',
+        },
+      });
+    }
+    contentParts.push({
+      text: 'Analyze this diagnostic study or report. Extract modality, test name, findings, impression, timestamp, and clinical summaries.',
+    });
+
+    let response: any = null;
+    let lastError: any = null;
+
+    for (const modelName of modelsToTry) {
+      try {
+        response = await ai.models.generateContent({
+          model: modelName,
+          contents: {
+            parts: contentParts,
+          },
+          config: generationConfig,
+        });
+
+        if (response && response.text) {
+          break;
+        }
+      } catch (err: any) {
+        lastError = err;
+        console.warn(`[API /api/scan-investigation] Model ${modelName} failed:`, err?.message || err);
+      }
+    }
+
+    if (!response || !response.text) {
+      throw lastError || new Error('All AI models failed to return a response for investigation image.');
+    }
+
+    let parsedData: any;
+    try {
+      parsedData = JSON.parse(response.text);
+    } catch {
+      const jsonMatch = response.text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        parsedData = JSON.parse(jsonMatch[0]);
+      } else {
+        throw new Error('Invalid JSON received from Gemini AI model');
+      }
+    }
+
+    // Sanitize modality
+    const validModalities = ['Chest X-Ray', 'CT', 'MRI', 'Ultrasound', 'ECG', 'Echo', 'Other'];
+    if (!validModalities.includes(parsedData.modality)) {
+      const mUpper = (parsedData.modality || '').toUpperCase();
+      if (mUpper.includes('CHEST') || mUpper.includes('X-RAY') || mUpper.includes('CXR')) parsedData.modality = 'Chest X-Ray';
+      else if (mUpper.includes('CT') || mUpper.includes('COMPUTED')) parsedData.modality = 'CT';
+      else if (mUpper.includes('MRI') || mUpper.includes('MAGNETIC')) parsedData.modality = 'MRI';
+      else if (mUpper.includes('ECHO')) parsedData.modality = 'Echo';
+      else if (mUpper.includes('ULTRA') || mUpper.includes('US') || mUpper.includes('POCUS') || mUpper.includes('SONO')) parsedData.modality = 'Ultrasound';
+      else if (mUpper.includes('ECG') || mUpper.includes('EKG')) parsedData.modality = 'ECG';
+      else parsedData.modality = 'Other';
+    }
+
+    if (!parsedData.status || !['ORDERED', 'RESULTED', 'REPORTED'].includes(parsedData.status)) {
+      parsedData.status = 'REPORTED';
+    }
+
+    if (!parsedData.timestamp || isNaN(new Date(parsedData.timestamp).getTime())) {
+      parsedData.timestamp = new Date().toISOString();
+    }
+
+    return res.json({
+      success: true,
+      data: parsedData,
+    });
+  } catch (error: any) {
+    const errMsg = error?.message || 'Failed to analyze investigation image with Gemini AI';
+    console.error('[API /api/scan-investigation] Error:', error);
+    return res.status(500).json({
+      success: false,
+      error: errMsg,
+    });
+  }
+});
+
 // ----------------------------------------------------------------------------
 // Admin User Management Operations (Server-Side SSOT & Firebase Admin)
 // ----------------------------------------------------------------------------

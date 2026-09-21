@@ -17,6 +17,7 @@ export interface SystemFeatureFlags {
   enableLabFlowsheet: boolean;        // جدول ومسار التحاليل المتسلسلة التراكمية
   enableInvestigations: boolean;      // الفحوصات والأشعات وتصوير الموجات الصوتية
   enableAiLabScanner: boolean;        // التعرف البصري الذكي وقراءة التحاليل بالذكاء الاصطناعي (ABG & CBC OCR)
+  enableAiInvestigationScanner: boolean; // التعرف البصري الذكي وقراءة تقارير الأشعة والفحوصات (AI Radiology & Investigation OCR)
   enableBedTransferAndSwap: boolean;  // إجراءات نقل المرضى وتبديل الأسِرّة الآمنة
   enableBedIsolationControls: boolean;// إدارة العزل الطبي وحالة السرير
   enableAcuityLevels: boolean;        // تصنيفات الخطورة السريرية (Acuity Badges)
@@ -419,6 +420,7 @@ export const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
     enableLabFlowsheet: true,
     enableInvestigations: true,
     enableAiLabScanner: true,
+    enableAiInvestigationScanner: true,
     enableBedTransferAndSwap: true,
     enableBedIsolationControls: true,
     enableAcuityLevels: true,
