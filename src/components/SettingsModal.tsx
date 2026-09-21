@@ -54,7 +54,6 @@ import { ClinicalOptionsManager } from './ClinicalOptionsManager.tsx';
 import { NotificationSettingsCard } from './NotificationSettingsCard.tsx';
 import { BedOperationsSettingsCard } from './BedOperationsSettingsCard.tsx';
 import { SoliLogo } from './SoliLogo.tsx';
-import { PWAInstallButton } from './PWAInstallButton.tsx';
 import { clearLocalBrowserDataAndSyncFromCloud, clearAllCloudAndLocalDataAndReset } from '../services/firebase.ts';
 
 interface SettingsModalProps {
@@ -583,31 +582,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
           </div>
         </div>
 
-        {/* PWA Standalone Web App Installation Banner */}
-        <div className="p-4 rounded-2xl bg-gradient-to-r from-teal-500/10 via-cyan-500/10 to-teal-500/5 border border-teal-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <SoliLogo className="w-12 h-12 shrink-0 drop-shadow-md" />
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                  {lang === 'ar' ? 'تطبيق Soli Medical MICU المستقل (PWA)' : 'Soli Medical MICU Standalone App (PWA)'}
-                </h3>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-800 dark:text-teal-300 font-mono font-bold border border-teal-500/30">
-                  PWA Ready
-                </span>
-              </div>
-              <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
-                {lang === 'ar' 
-                  ? 'ثبّت النظام كتطبيق أصلي على الكمبيوتر، الهواتف الذكية، وأجهزة الآيباد اللوحية بشعار النظام الرسمي.' 
-                  : 'Install the system directly on PC, Mobile, and iPad with the official system logo icon.'}
-              </p>
-            </div>
-          </div>
-          <div className="shrink-0 self-end sm:self-center">
-            <PWAInstallButton variant="full" />
-          </div>
-        </div>
-
         {/* Collapsible Cards Stacked Vertically (البطاقات أسفل بعضها وتكون مطوية) */}
         <div className="space-y-4">
           {sections.map((section) => {
@@ -955,15 +929,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
         </div>
 
         {/* Restore System Defaults Footer */}
-        <div className="pt-6 mt-4 border-t border-slate-200 dark:border-slate-800/80 flex justify-center">
+        <div className="pt-6 mt-4 border-t border-slate-200 dark:border-slate-800/80 flex flex-col items-center gap-3">
           <button
             type="button"
             onClick={resetToDefaults}
-            className="flex items-center gap-2 px-6 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:text-amber-700 dark:hover:text-amber-400 hover:border-amber-300 dark:hover:border-amber-500/30 transition-all text-xs font-bold cursor-pointer group shadow-sm"
+            className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:text-amber-700 dark:hover:text-amber-400 hover:border-amber-300 dark:hover:border-amber-500/30 transition-all text-xs font-bold cursor-pointer group shadow-sm"
           >
             <RotateCcw className="w-4 h-4 group-hover:rotate-180 transition-transform duration-500" />
             <span>{lang === 'ar' ? 'استعادة إعدادات المصنع الافتراضية' : 'Restore System Factory Defaults'}</span>
           </button>
+          <div className="text-[11px] font-mono font-medium text-slate-400 dark:text-slate-500 tracking-wider">
+            Soli Medical MICU (ICU-Sync) • v4.3.0
+          </div>
         </div>
       </div>
     </div>

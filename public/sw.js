@@ -1,6 +1,6 @@
 // Soli Medical MICU (ICU-Sync) Service Worker
-// Release Version: v4.2.0 (Updated on every revision to force browsers to detect and activate latest build)
-const SW_VERSION = 'v4.2.0';
+// Release Version: v4.3.0 (Updated on every revision to force browsers to detect and activate latest build)
+const SW_VERSION = 'v4.3.0';
 const CACHE_NAME = `soli-icu-sync-${SW_VERSION}`;
 
 const PRECACHE_ASSETS = [
