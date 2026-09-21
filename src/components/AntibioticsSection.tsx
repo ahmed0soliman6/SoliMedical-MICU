@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Pill, 
   Plus, 
@@ -20,9 +20,13 @@ import {
   Sparkles, 
   ShieldAlert, 
   Info,
-  Timer
+  Timer,
+  Calculator,
+  Zap,
+  RotateCcw,
+  Check
 } from 'lucide-react';
-import { PatientAntibiotic, PatientDossier, BedRecord, BedNumber } from '../types/schema.ts';
+import { PatientAntibiotic, PatientDossier, BedRecord, BedNumber, LabResultItem, Gender } from '../types/schema.ts';
 import { AntibioticPreset, SystemSettings } from '../types/settings.ts';
 import { useTranslation } from '../services/i18n.ts';
 import { db } from '../db/icuSyncDb.ts';
@@ -195,11 +199,493 @@ export const getAvailableDosesForDrug = (drugName: string, presets: AntibioticPr
   return ['250 mg', '500 mg', '750 mg', '1 g', '1.5 g', '2 g', '3 g', '4.5 g'];
 };
 
+/**
+ * Cockcroft-Gault Equation for Creatinine Clearance (CrCl):
+ * Males: CrCl (mL/min) = ((140 - Age) * Weight_kg) / (72 * Serum_Creatinine_mg_dL)
+ * Females: CrCl (mL/min) = Result * 0.85
+ */
+export function calculateCockcroftGault(
+  age: number,
+  weightKg: number,
+  gender: string | Gender,
+  creatinineMgDl: number
+): number | null {
+  if (!age || age <= 0 || !weightKg || weightKg <= 0 || !creatinineMgDl || creatinineMgDl <= 0) {
+    return null;
+  }
+  const isFemale = String(gender).toUpperCase() === 'FEMALE' || String(gender).toUpperCase() === 'أنثى';
+  let crCl = ((140 - age) * weightKg) / (72 * creatinineMgDl);
+  if (isFemale) {
+    crCl *= 0.85;
+  }
+  return Math.round(crCl * 10) / 10;
+}
+
+export interface RenalDosingRecommendation {
+  drugMatch: string;
+  category: string;
+  crClRange: string;
+  recommendedDose?: string;
+  recommendedFrequency?: string;
+  note: string;
+  requiresAdjustment: boolean;
+  severityLevel: 'NORMAL' | 'MILD' | 'MODERATE' | 'SEVERE' | 'ESRD';
+}
+
+/**
+ * Clinical Renal Dosing Matrix for Standard ICU Antimicrobials
+ */
+export function evaluateRenalDosingMatrix(
+  drugName: string,
+  crCl: number | null
+): RenalDosingRecommendation | null {
+  if (!drugName) return null;
+  const norm = drugName.toLowerCase().trim();
+
+  // Meropenem / Meronem / ميرونام
+  if (norm.includes('meropenem') || norm.includes('meronem') || norm.includes('ميرونام') || norm.includes('ميروبينيم')) {
+    if (crCl === null) {
+      return {
+        drugMatch: 'Meropenem',
+        category: 'Beta-Lactam / Carbapenem',
+        crClRange: 'CrCl Pending',
+        recommendedDose: '1 g',
+        recommendedFrequency: 'Q8H',
+        note: 'Standard dose: 1 g Q8H. Awaiting creatinine for CrCl adjustment.',
+        requiresAdjustment: false,
+        severityLevel: 'NORMAL',
+      };
+    }
+    if (crCl > 50) {
+      return {
+        drugMatch: 'Meropenem',
+        category: 'Beta-Lactam / Carbapenem',
+        crClRange: 'CrCl > 50 mL/min',
+        recommendedDose: '1 g',
+        recommendedFrequency: 'Q8H',
+        note: `CrCl ${crCl} mL/min: Normal renal function (1 g Q8H - No adjustment needed)`,
+        requiresAdjustment: false,
+        severityLevel: 'NORMAL',
+      };
+    } else if (crCl >= 26) {
+      return {
+        drugMatch: 'Meropenem',
+        category: 'Beta-Lactam / Carbapenem',
+        crClRange: 'CrCl 26–50 mL/min',
+        recommendedDose: '500 mg',
+        recommendedFrequency: 'Q12H',
+        note: `Dose adjusted for CrCl ${crCl} mL/min: 500 mg Q12H instead of Q8H`,
+        requiresAdjustment: true,
+        severityLevel: 'MODERATE',
+      };
+    } else if (crCl >= 10) {
+      return {
+        drugMatch: 'Meropenem',
+        category: 'Beta-Lactam / Carbapenem',
+        crClRange: 'CrCl 10–25 mL/min',
+        recommendedDose: '500 mg',
+        recommendedFrequency: 'Q12H',
+        note: `Dose adjusted for CrCl ${crCl} mL/min: 500 mg Q12H instead of Q8H`,
+        requiresAdjustment: true,
+        severityLevel: 'SEVERE',
+      };
+    } else {
+      return {
+        drugMatch: 'Meropenem',
+        category: 'Beta-Lactam / Carbapenem',
+        crClRange: 'CrCl < 10 mL/min',
+        recommendedDose: '500 mg',
+        recommendedFrequency: 'Q24H',
+        note: `Dose adjusted for CrCl ${crCl} mL/min: 500 mg Q24H instead of Q8H`,
+        requiresAdjustment: true,
+        severityLevel: 'ESRD',
+      };
+    }
+  }
+
+  // Levofloxacin / Tavanic / ليفوفلوكساسين
+  if (norm.includes('levofloxacin') || norm.includes('tavanic') || norm.includes('ليفوفلوكساسين') || norm.includes('تافانيك')) {
+    if (crCl === null || crCl >= 50) {
+      return {
+        drugMatch: 'Levofloxacin',
+        category: 'Fluoroquinolones',
+        crClRange: 'CrCl ≥ 50 mL/min',
+        recommendedDose: '500 mg',
+        recommendedFrequency: 'Q24H',
+        note: crCl ? `CrCl ${crCl} mL/min: Standard dose 500 mg Q24H (No adjustment needed)` : 'Standard dose: 500 mg Q24H',
+        requiresAdjustment: false,
+        severityLevel: 'NORMAL',
+      };
+    } else if (crCl >= 20) {
+      return {
+        drugMatch: 'Levofloxacin',
+        category: 'Fluoroquinolones',
+        crClRange: 'CrCl 20–49 mL/min',
+        recommendedDose: '250 mg',
+        recommendedFrequency: 'Q24H',
+        note: `Dose adjusted for CrCl ${crCl} mL/min: 250 mg Q24H (or 500 mg Q48H) instead of 500 mg Q24H`,
+        requiresAdjustment: true,
+        severityLevel: 'MODERATE',
+      };
+    } else {
+      return {
+        drugMatch: 'Levofloxacin',
+        category: 'Fluoroquinolones',
+        crClRange: 'CrCl < 20 mL/min',
+        recommendedDose: '250 mg',
+        recommendedFrequency: 'Q48H',
+        note: `Dose adjusted for CrCl ${crCl} mL/min: 250 mg Q48H instead of Q24H`,
+        requiresAdjustment: true,
+        severityLevel: 'ESRD',
+      };
+    }
+  }
+
+  // Piperacillin/Tazobactam / Tazocin / تازوسين
+  if (norm.includes('piperacillin') || norm.includes('tazocin') || norm.includes('تازوسين') || norm.includes('بيبراسيلين')) {
+    if (crCl === null || crCl > 50) {
+      return {
+        drugMatch: 'Piperacillin/Tazobactam',
+        category: 'Beta-Lactam / Penicillin',
+        crClRange: 'CrCl > 50 mL/min',
+        recommendedDose: '4.5 g',
+        recommendedFrequency: 'Q6H',
+        note: crCl ? `CrCl ${crCl} mL/min: Standard dose 4.5 g Q6H (No adjustment)` : 'Standard dose: 4.5 g Q6H',
+        requiresAdjustment: false,
+        severityLevel: 'NORMAL',
+      };
+    } else if (crCl >= 20) {
+      return {
+        drugMatch: 'Piperacillin/Tazobactam',
+        category: 'Beta-Lactam / Penicillin',
+        crClRange: 'CrCl 20–50 mL/min',
+        recommendedDose: '3.375 g',
+        recommendedFrequency: 'Q6H',
+        note: `Dose adjusted for CrCl ${crCl} mL/min: 3.375 g Q6H instead of 4.5 g Q6H`,
+        requiresAdjustment: true,
+        severityLevel: 'MODERATE',
+      };
+    } else {
+      return {
+        drugMatch: 'Piperacillin/Tazobactam',
+        category: 'Beta-Lactam / Penicillin',
+        crClRange: 'CrCl < 20 mL/min',
+        recommendedDose: '2.25 g',
+        recommendedFrequency: 'Q6H',
+        note: `Dose adjusted for CrCl ${crCl} mL/min: 2.25 g Q6H (or 2.25 g Q8H) instead of 4.5 g Q6H`,
+        requiresAdjustment: true,
+        severityLevel: 'SEVERE',
+      };
+    }
+  }
+
+  // Vancomycin / فانكومايسين
+  if (norm.includes('vancomycin') || norm.includes('vancocin') || norm.includes('فانكومايسين')) {
+    if (crCl === null || crCl >= 50) {
+      return {
+        drugMatch: 'Vancomycin',
+        category: 'Glycopeptide',
+        crClRange: 'CrCl ≥ 50 mL/min',
+        recommendedDose: '1 g',
+        recommendedFrequency: 'Q12H',
+        note: crCl ? `CrCl ${crCl} mL/min: Standard dose 1 g Q12H (Target trough 15-20 mcg/mL)` : 'Standard dose 1 g Q12H',
+        requiresAdjustment: false,
+        severityLevel: 'NORMAL',
+      };
+    } else if (crCl >= 30) {
+      return {
+        drugMatch: 'Vancomycin',
+        category: 'Glycopeptide',
+        crClRange: 'CrCl 30–49 mL/min',
+        recommendedDose: '1 g',
+        recommendedFrequency: 'Q24H',
+        note: `Dose adjusted for CrCl ${crCl} mL/min: 1 g Q24H instead of Q12H (TDM trough monitoring mandatory)`,
+        requiresAdjustment: true,
+        severityLevel: 'MODERATE',
+      };
+    } else {
+      return {
+        drugMatch: 'Vancomycin',
+        category: 'Glycopeptide',
+        crClRange: 'CrCl < 30 mL/min',
+        recommendedDose: '1 g',
+        recommendedFrequency: 'Q48H',
+        note: `Dose adjusted for CrCl ${crCl} mL/min: 1 g Q48H (or guided by trough level < 15 mcg/mL)`,
+        requiresAdjustment: true,
+        severityLevel: 'SEVERE',
+      };
+    }
+  }
+
+  // Cefepime / سيفيبيم
+  if (norm.includes('cefepime') || norm.includes('maxipime') || norm.includes('سيفيبيم')) {
+    if (crCl === null || crCl > 50) {
+      return {
+        drugMatch: 'Cefepime',
+        category: 'Beta-Lactam / Cephalosporin',
+        crClRange: 'CrCl > 50 mL/min',
+        recommendedDose: '2 g',
+        recommendedFrequency: 'Q8H',
+        note: crCl ? `CrCl ${crCl} mL/min: Standard dose 2 g Q8H (No adjustment)` : 'Standard dose: 2 g Q8H',
+        requiresAdjustment: false,
+        severityLevel: 'NORMAL',
+      };
+    } else if (crCl >= 30) {
+      return {
+        drugMatch: 'Cefepime',
+        category: 'Beta-Lactam / Cephalosporin',
+        crClRange: 'CrCl 30–50 mL/min',
+        recommendedDose: '2 g',
+        recommendedFrequency: 'Q12H',
+        note: `Dose adjusted for CrCl ${crCl} mL/min: 2 g Q12H instead of Q8H`,
+        requiresAdjustment: true,
+        severityLevel: 'MODERATE',
+      };
+    } else if (crCl >= 11) {
+      return {
+        drugMatch: 'Cefepime',
+        category: 'Beta-Lactam / Cephalosporin',
+        crClRange: 'CrCl 11–29 mL/min',
+        recommendedDose: '1 g',
+        recommendedFrequency: 'Q12H',
+        note: `Dose adjusted for CrCl ${crCl} mL/min: 1 g Q12H (or 2 g Q24H) instead of 2 g Q8H`,
+        requiresAdjustment: true,
+        severityLevel: 'SEVERE',
+      };
+    } else {
+      return {
+        drugMatch: 'Cefepime',
+        category: 'Beta-Lactam / Cephalosporin',
+        crClRange: 'CrCl < 11 mL/min',
+        recommendedDose: '1 g',
+        recommendedFrequency: 'Q24H',
+        note: `Dose adjusted for CrCl ${crCl} mL/min: 1 g Q24H instead of 2 g Q8H`,
+        requiresAdjustment: true,
+        severityLevel: 'ESRD',
+      };
+    }
+  }
+
+  // Ceftriaxone / سفترياكسون (NO adjustment)
+  if (norm.includes('ceftriaxone') || norm.includes('rocephin') || norm.includes('سفترياكسون')) {
+    return {
+      drugMatch: 'Ceftriaxone',
+      category: 'Beta-Lactam / Cephalosporin',
+      crClRange: 'Any CrCl',
+      recommendedDose: '2 g',
+      recommendedFrequency: 'Q24H',
+      note: crCl !== null 
+        ? `CrCl ${crCl} mL/min: No renal dose adjustment required (Dual biliary/renal clearance). Standard 2 g Q24H.`
+        : 'No renal dose adjustment required (Dual biliary/renal clearance). Standard 2 g Q24H.',
+      requiresAdjustment: false,
+      severityLevel: 'NORMAL',
+    };
+  }
+
+  // Colistin / كوليستين
+  if (norm.includes('colistin') || norm.includes('colistimethate') || norm.includes('كوليستين')) {
+    if (crCl === null || crCl >= 50) {
+      return {
+        drugMatch: 'Colistin',
+        category: 'Polymyxin',
+        crClRange: 'CrCl ≥ 50 mL/min',
+        recommendedDose: '3 MIU',
+        recommendedFrequency: 'Q12H',
+        note: crCl ? `CrCl ${crCl} mL/min: Standard maintenance 3 MIU Q12H` : 'Standard maintenance: 3 MIU Q12H',
+        requiresAdjustment: false,
+        severityLevel: 'NORMAL',
+      };
+    } else if (crCl >= 30) {
+      return {
+        drugMatch: 'Colistin',
+        category: 'Polymyxin',
+        crClRange: 'CrCl 30–49 mL/min',
+        recommendedDose: '2 MIU',
+        recommendedFrequency: 'Q12H',
+        note: `Dose adjusted for CrCl ${crCl} mL/min: 2 MIU Q12H instead of 3 MIU Q12H`,
+        requiresAdjustment: true,
+        severityLevel: 'MODERATE',
+      };
+    } else if (crCl >= 10) {
+      return {
+        drugMatch: 'Colistin',
+        category: 'Polymyxin',
+        crClRange: 'CrCl 10–29 mL/min',
+        recommendedDose: '1.5 MIU',
+        recommendedFrequency: 'Q12H',
+        note: `Dose adjusted for CrCl ${crCl} mL/min: 1.5 MIU Q12H (or 2 MIU Q24H)`,
+        requiresAdjustment: true,
+        severityLevel: 'SEVERE',
+      };
+    } else {
+      return {
+        drugMatch: 'Colistin',
+        category: 'Polymyxin',
+        crClRange: 'CrCl < 10 mL/min',
+        recommendedDose: '1 MIU',
+        recommendedFrequency: 'Q24H',
+        note: `Dose adjusted for CrCl ${crCl} mL/min: 1 MIU Q24H`,
+        requiresAdjustment: true,
+        severityLevel: 'ESRD',
+      };
+    }
+  }
+
+  // Ciprofloxacin / سيبروفلوكساسين
+  if (norm.includes('ciprofloxacin') || norm.includes('ciprobay') || norm.includes('سيبروفلوكساسين')) {
+    if (crCl === null || crCl >= 50) {
+      return {
+        drugMatch: 'Ciprofloxacin',
+        category: 'Fluoroquinolones',
+        crClRange: 'CrCl ≥ 50 mL/min',
+        recommendedDose: '400 mg',
+        recommendedFrequency: 'Q12H',
+        note: crCl ? `CrCl ${crCl} mL/min: Standard dose 400 mg Q12H` : 'Standard dose: 400 mg Q12H',
+        requiresAdjustment: false,
+        severityLevel: 'NORMAL',
+      };
+    } else if (crCl >= 30) {
+      return {
+        drugMatch: 'Ciprofloxacin',
+        category: 'Fluoroquinolones',
+        crClRange: 'CrCl 30–49 mL/min',
+        recommendedDose: '400 mg',
+        recommendedFrequency: 'Q24H',
+        note: `Dose adjusted for CrCl ${crCl} mL/min: 400 mg Q24H instead of Q12H`,
+        requiresAdjustment: true,
+        severityLevel: 'MODERATE',
+      };
+    } else {
+      return {
+        drugMatch: 'Ciprofloxacin',
+        category: 'Fluoroquinolones',
+        crClRange: 'CrCl < 30 mL/min',
+        recommendedDose: '200 mg',
+        recommendedFrequency: 'Q24H',
+        note: `Dose adjusted for CrCl ${crCl} mL/min: 200 mg Q24H instead of 400 mg Q12H`,
+        requiresAdjustment: true,
+        severityLevel: 'SEVERE',
+      };
+    }
+  }
+
+  // Fluconazole / فلوكونازول
+  if (norm.includes('fluconazole') || norm.includes('diflucan') || norm.includes('فلوكونازول')) {
+    if (crCl === null || crCl > 50) {
+      return {
+        drugMatch: 'Fluconazole',
+        category: 'Antifungal',
+        crClRange: 'CrCl > 50 mL/min',
+        recommendedDose: '400 mg',
+        recommendedFrequency: 'Q24H',
+        note: crCl ? `CrCl ${crCl} mL/min: Standard dose 400 mg Q24H (No adjustment)` : 'Standard dose: 400 mg Q24H',
+        requiresAdjustment: false,
+        severityLevel: 'NORMAL',
+      };
+    } else {
+      return {
+        drugMatch: 'Fluconazole',
+        category: 'Antifungal',
+        crClRange: 'CrCl ≤ 50 mL/min',
+        recommendedDose: '200 mg',
+        recommendedFrequency: 'Q24H',
+        note: `Dose adjusted for CrCl ${crCl} mL/min: 200 mg Q24H (50% dose reduction) instead of 400 mg Q24H`,
+        requiresAdjustment: true,
+        severityLevel: 'MODERATE',
+      };
+    }
+  }
+
+  // Amikacin / أميكاسين
+  if (norm.includes('amikacin') || norm.includes('amikin') || norm.includes('أميكاسين')) {
+    if (crCl === null || crCl >= 50) {
+      return {
+        drugMatch: 'Amikacin',
+        category: 'Aminoglycoside',
+        crClRange: 'CrCl ≥ 50 mL/min',
+        recommendedDose: '1 g',
+        recommendedFrequency: 'Q24H',
+        note: crCl ? `CrCl ${crCl} mL/min: 15 mg/kg once daily (Q24H)` : '15 mg/kg once daily (Q24H)',
+        requiresAdjustment: false,
+        severityLevel: 'NORMAL',
+      };
+    } else if (crCl >= 30) {
+      return {
+        drugMatch: 'Amikacin',
+        category: 'Aminoglycoside',
+        crClRange: 'CrCl 30–49 mL/min',
+        recommendedDose: '1 g',
+        recommendedFrequency: 'Q36H',
+        note: `Dose adjusted for CrCl ${crCl} mL/min: Extended interval Q36H (TDM monitoring mandatory)`,
+        requiresAdjustment: true,
+        severityLevel: 'MODERATE',
+      };
+    } else {
+      return {
+        drugMatch: 'Amikacin',
+        category: 'Aminoglycoside',
+        crClRange: 'CrCl < 30 mL/min',
+        recommendedDose: '1 g',
+        recommendedFrequency: 'Q48H',
+        note: `Dose adjusted for CrCl ${crCl} mL/min: Extended interval Q48H (guided by trough level < 5 mcg/mL)`,
+        requiresAdjustment: true,
+        severityLevel: 'SEVERE',
+      };
+    }
+  }
+
+  // Linezolid / لينزوليد (NO adjustment)
+  if (norm.includes('linezolid') || norm.includes('zyvox') || norm.includes('لينزوليد')) {
+    return {
+      drugMatch: 'Linezolid',
+      category: 'Oxazolidinone',
+      crClRange: 'Any CrCl',
+      recommendedDose: '600 mg',
+      recommendedFrequency: 'Q12H',
+      note: crCl !== null 
+        ? `CrCl ${crCl} mL/min: No renal dose adjustment required. Standard 600 mg Q12H.`
+        : 'No renal dose adjustment required. Standard 600 mg Q12H.',
+      requiresAdjustment: false,
+      severityLevel: 'NORMAL',
+    };
+  }
+
+  // Metronidazole / فلاجيل
+  if (norm.includes('metronidazole') || norm.includes('flagyl') || norm.includes('مترونيدازول') || norm.includes('فلاجيل')) {
+    if (crCl === null || crCl >= 10) {
+      return {
+        drugMatch: 'Metronidazole',
+        category: 'Nitroimidazole',
+        crClRange: 'CrCl ≥ 10 mL/min',
+        recommendedDose: '500 mg',
+        recommendedFrequency: 'Q8H',
+        note: crCl ? `CrCl ${crCl} mL/min: Standard dose 500 mg Q8H (No adjustment)` : 'Standard dose 500 mg Q8H',
+        requiresAdjustment: false,
+        severityLevel: 'NORMAL',
+      };
+    } else {
+      return {
+        drugMatch: 'Metronidazole',
+        category: 'Nitroimidazole',
+        crClRange: 'CrCl < 10 mL/min',
+        recommendedDose: '500 mg',
+        recommendedFrequency: 'Q12H',
+        note: `Dose adjusted for CrCl ${crCl} mL/min: 500 mg Q12H (50% reduction for ESRD)`,
+        requiresAdjustment: true,
+        severityLevel: 'ESRD',
+      };
+    }
+  }
+
+  return null;
+}
+
 interface AntibioticsSectionProps {
   patient: PatientDossier;
   bed: BedRecord;
   settings: SystemSettings;
   antibiotics: PatientAntibiotic[];
+  labResults?: LabResultItem[];
   onDataUpdated: () => void;
   currentUser?: {
     id?: string;
@@ -215,6 +701,7 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
   bed,
   settings,
   antibiotics,
+  labResults,
   onDataUpdated,
   currentUser,
 }) => {
@@ -244,10 +731,133 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
   const [notes, setNotes] = useState('');
   const [discontinueReason, setDiscontinueReason] = useState('');
 
-  const doctorName = currentUser?.nameEn || currentUser?.nameAr || currentUser?.email || 'Dr. Attending';
+  // Renal & Cockcroft-Gault Calculation State
+  const [latestCreatinine, setLatestCreatinine] = useState<{
+    value: number;
+    dateStr: string;
+    source: 'LAB' | 'MANUAL';
+  } | null>(null);
+  const [manualCreatinineInput, setManualCreatinineInput] = useState<string>('');
+  const [showManualCrEntry, setShowManualCrEntry] = useState<boolean>(false);
+  const [isRenalAutoApplied, setIsRenalAutoApplied] = useState<boolean>(false);
+
+  // Effective Serum Creatinine (manual input takes precedence if valid)
+  const effectiveCr = useMemo(() => {
+    if (manualCreatinineInput && !isNaN(parseFloat(manualCreatinineInput)) && parseFloat(manualCreatinineInput) > 0) {
+      return parseFloat(manualCreatinineInput);
+    }
+    return latestCreatinine?.value ?? null;
+  }, [manualCreatinineInput, latestCreatinine]);
+
+  // Dynamic Cockcroft-Gault Creatinine Clearance (CrCl in mL/min)
+  const currentCrCl = useMemo(() => {
+    if (!patient || effectiveCr === null) return null;
+    return calculateCockcroftGault(patient.age, patient.weightKg, patient.gender, effectiveCr);
+  }, [patient?.age, patient?.weightKg, patient?.gender, effectiveCr]);
+
+  // Current renal recommendation based on selected drug and CrCl
+  const currentRenalRec = useMemo(() => {
+    return evaluateRenalDosingMatrix(drugNameEn || drugNameAr, currentCrCl);
+  }, [drugNameEn, drugNameAr, currentCrCl]);
 
   const presetsList = settings.antibioticsPresets || [];
   const availableDoses = getAvailableDosesForDrug(drugNameEn || drugNameAr, presetsList);
+
+  // Unified helper to apply antibiotic dosing & Cockcroft-Gault renal adjustment
+  const applyDrugAndRenalAdjustment = (
+    drugName: string,
+    crClVal: number | null,
+    fallbackDose?: string,
+    fallbackFreq?: string
+  ) => {
+    const rec = evaluateRenalDosingMatrix(drugName, crClVal);
+    const matchedDoses = getAvailableDosesForDrug(drugName, presetsList);
+
+    if (rec && rec.requiresAdjustment && crClVal !== null) {
+      if (rec.recommendedDose) {
+        setDose(rec.recommendedDose);
+      } else if (matchedDoses.length > 0) {
+        setDose(matchedDoses[0]);
+      }
+      if (rec.recommendedFrequency) {
+        setFrequency(rec.recommendedFrequency);
+        setIsCustomFrequency(!['Q6H', 'Q8H', 'Q12H', 'Q24H', 'Q48H', 'Q36H', 'Q72H', 'Continuous', 'Once / STAT', 'Post-HD'].includes(rec.recommendedFrequency));
+      }
+      setRenalAdjustment(rec.note);
+      setIsRenalAutoApplied(true);
+    } else {
+      if (fallbackDose) {
+        setDose(fallbackDose);
+      } else if (rec?.recommendedDose) {
+        setDose(rec.recommendedDose);
+      } else if (matchedDoses.length > 0) {
+        setDose(matchedDoses[0]);
+      }
+
+      if (fallbackFreq) {
+        setFrequency(fallbackFreq);
+        setIsCustomFrequency(!['Q6H', 'Q8H', 'Q12H', 'Q24H', 'Q48H', 'Q36H', 'Q72H', 'Continuous', 'Once / STAT', 'Post-HD'].includes(fallbackFreq));
+      } else if (rec?.recommendedFrequency) {
+        setFrequency(rec.recommendedFrequency);
+        setIsCustomFrequency(!['Q6H', 'Q8H', 'Q12H', 'Q24H', 'Q48H', 'Q36H', 'Q72H', 'Continuous', 'Once / STAT', 'Post-HD'].includes(rec.recommendedFrequency));
+      }
+
+      if (rec?.note) {
+        setRenalAdjustment(rec.note);
+      }
+      setIsRenalAutoApplied(false);
+    }
+  };
+
+  // Fetch or resolve latest Creatinine lab result for this patient
+  useEffect(() => {
+    if (!isAddModalOpen || !patient) return;
+
+    let isMounted = true;
+    const resolveCreatinine = async () => {
+      try {
+        const pool = (labResults && labResults.length > 0)
+          ? labResults
+          : await db.labResults.where('patientId').equals(patient.id).toArray();
+
+        const creatLabs = pool.filter(l => {
+          const name = (l.testName || '').toLowerCase().trim();
+          return (name.includes('creat') || name.includes('كرياتين')) && !isNaN(parseFloat(l.value));
+        });
+
+        if (creatLabs.length > 0) {
+          creatLabs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+          const latest = creatLabs[0];
+          const val = parseFloat(latest.value);
+          const d = new Date(latest.timestamp);
+          const dateStr = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`;
+          if (isMounted) {
+            setLatestCreatinine({
+              value: val,
+              dateStr,
+              source: 'LAB',
+            });
+            setShowManualCrEntry(false);
+          }
+        } else {
+          if (isMounted) {
+            setLatestCreatinine(null);
+            setShowManualCrEntry(true);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching creatinine for patient:', err);
+      }
+    };
+
+    resolveCreatinine();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isAddModalOpen, patient?.id, labResults]);
+
+  const doctorName = currentUser?.nameEn || currentUser?.nameAr || currentUser?.email || 'Dr. Attending';
 
   // Calculate Day of Therapy (DOT)
   const calculateDot = (startStr: string, plannedDays: number) => {
@@ -269,19 +879,19 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
   const handleOpenAddModal = (preset?: AntibioticPreset) => {
     setEditingAbx(null);
     setIsCustomFrequency(false);
+    setManualCreatinineInput('');
+    setIsRenalAutoApplied(false);
     if (preset) {
       setSelectedPresetId(preset.id);
       setDrugNameEn(preset.nameEn);
       setDrugNameAr(preset.nameAr);
-      setDose(preset.defaultDose);
       setRoute(preset.defaultRoute || 'IV');
-      setFrequency(preset.defaultFrequency || 'Q8H');
       setIndication(preset.standardIndication || '');
       setCategory(preset.category || 'Beta-Lactam / Carbapenem');
       setPlannedDurationDays(preset.defaultDurationDays || 7);
-      setRenalAdjustment(preset.renalAdjustmentNotes || '');
       setRequiresTdm(!!preset.requiresTdm);
       setTdmTarget(preset.tdmTarget || '');
+      applyDrugAndRenalAdjustment(preset.nameEn, currentCrCl, preset.defaultDose, preset.defaultFrequency);
     } else {
       setSelectedPresetId('');
       setDrugNameEn('');
@@ -324,6 +934,7 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
     setLatestTdmLevel(abx.latestTdmLevel || '');
     setNotes(abx.notes || '');
     setDiscontinueReason(abx.discontinueReason || '');
+    setIsRenalAutoApplied(false);
     setIsAddModalOpen(true);
   };
 
@@ -334,16 +945,13 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
     if (p) {
       setDrugNameEn(p.nameEn);
       setDrugNameAr(p.nameAr);
-      setDose(p.defaultDose);
-      setRoute(p.defaultRoute);
-      setFrequency(p.defaultFrequency);
-      setIsCustomFrequency(!['Q6H', 'Q8H', 'Q12H', 'Q24H', 'Q48H', 'Q36H', 'Q72H', 'Continuous', 'Once / STAT', 'Post-HD'].includes(p.defaultFrequency));
+      setRoute(p.defaultRoute || 'IV');
       setIndication(p.standardIndication || '');
-      setCategory(p.category);
-      setPlannedDurationDays(p.defaultDurationDays);
-      setRenalAdjustment(p.renalAdjustmentNotes || '');
+      setCategory(p.category || 'Beta-Lactam / Carbapenem');
+      setPlannedDurationDays(p.defaultDurationDays || 7);
       setRequiresTdm(!!p.requiresTdm);
       setTdmTarget(p.tdmTarget || '');
+      applyDrugAndRenalAdjustment(p.nameEn, currentCrCl, p.defaultDose, p.defaultFrequency);
     }
   };
 
@@ -887,10 +1495,7 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                   onChange={(e) => {
                     const newName = e.target.value;
                     setDrugNameEn(newName);
-                    const matchedDoses = getAvailableDosesForDrug(newName, presetsList);
-                    if (matchedDoses.length > 0 && (!dose || !matchedDoses.includes(dose))) {
-                      setDose(matchedDoses[0]);
-                    }
+                    applyDrugAndRenalAdjustment(newName, currentCrCl);
                   }}
                   placeholder="e.g. Meropenem, Levofloxacin, Vancomycin, Tazocin"
                   className="w-full bg-[#070c18] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400 font-mono"
@@ -918,10 +1523,7 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                         onClick={() => {
                           setDrugNameEn(chip.name);
                           setDrugNameAr(chip.ar);
-                          setDose(chip.defDose);
-                          setFrequency(chip.defFreq);
-                          const matchedDoses = getAvailableDosesForDrug(chip.name, presetsList);
-                          if (matchedDoses.length > 0) setDose(matchedDoses[0] || chip.defDose);
+                          applyDrugAndRenalAdjustment(chip.name, currentCrCl, chip.defDose, chip.defFreq);
                         }}
                         className={`text-[10px] px-2 py-0.5 rounded-md border transition-all ${
                           drugNameEn.toLowerCase().includes(chip.name.toLowerCase()) || drugNameEn.includes(chip.ar)
@@ -1141,19 +1743,271 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                 </div>
               </div>
 
-              {/* Renal Adjustments */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center gap-1.5">
-                  <ShieldAlert className="w-3.5 h-3.5 text-cyan-400" />
-                  <span>{lang === 'ar' ? 'تعديل وظائف الكلى (Renal Adjustment)' : 'Renal Dosing / CrCl Adjustment Notes'}</span>
-                </label>
-                <input
-                  type="text"
-                  value={renalAdjustment}
-                  onChange={(e) => setRenalAdjustment(e.target.value)}
-                  placeholder="e.g. Dose adjusted for CrCl 25 mL/min (Q12H instead of Q8H)"
-                  className="w-full bg-[#070c18] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400"
-                />
+              {/* Renal Adjustments & Live Cockcroft-Gault Binding */}
+              <div className="bg-[#0b1329] border border-cyan-500/30 rounded-2xl p-4 shadow-lg shadow-cyan-950/20 space-y-3.5">
+                {/* Header with Title & CrCl Status Badge */}
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-cyan-500/20 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
+                      <Calculator className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+                        <span>{lang === 'ar' ? 'تعديل وظائف الكلى وحساب تصفية الكرياتينين' : 'Renal Adjustment & Cockcroft-Gault CrCl'}</span>
+                        <span className="text-[10px] text-cyan-400 font-mono bg-cyan-950/60 px-1.5 py-0.5 rounded border border-cyan-800/60">
+                          Cockcroft-Gault
+                        </span>
+                      </h4>
+                      <p className="text-[10px] text-slate-400">
+                        {lang === 'ar' 
+                          ? 'ربط مباشر ومحسوب تلقائياً من بيانات المريض وآخر تحليل وظائف كلى'
+                          : 'Live clinical binding from patient demographics & latest creatinine lab'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Impairment Status Badge */}
+                  <div>
+                    {currentCrCl === null ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
+                        <AlertTriangle className="w-3 h-3 text-amber-400" />
+                        {lang === 'ar' ? 'بانتظار تحليل الكرياتينين' : 'Awaiting Creatinine'}
+                      </span>
+                    ) : currentCrCl >= 50 ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-emerald-950/70 text-emerald-300 border border-emerald-500/40">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                        {lang === 'ar' ? 'وظائف كلى مقبولة (CrCl ≥ 50)' : 'Normal / Mild (CrCl ≥ 50)'}
+                      </span>
+                    ) : currentCrCl >= 30 ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-amber-950/70 text-amber-300 border border-amber-500/40">
+                        <AlertTriangle className="w-3 h-3 text-amber-400" />
+                        {lang === 'ar' ? 'قصور كلوي متوسط (CrCl 30-49)' : 'Moderate Impairment (CrCl 30-49)'}
+                      </span>
+                    ) : currentCrCl >= 10 ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-rose-950/70 text-rose-300 border border-rose-500/40">
+                        <AlertTriangle className="w-3 h-3 text-rose-400" />
+                        {lang === 'ar' ? 'قصور كلوي شديد (CrCl 10-29)' : 'Severe Impairment (CrCl 10-29)'}
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-rose-950/90 text-rose-200 border border-rose-500/60 animate-pulse">
+                        <AlertTriangle className="w-3 h-3 text-rose-300" />
+                        {lang === 'ar' ? 'قصور كلوي حرج / غسيل كلى (CrCl < 10)' : 'ESRD / Dialysis (CrCl < 10)'}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Patient Live Clinical Parameters Bar */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-[#070c18] p-2.5 rounded-xl border border-slate-800/80 text-xs">
+                  {/* Age */}
+                  <div className="space-y-0.5">
+                    <span className="text-[10px] text-slate-400 block font-medium">
+                      {lang === 'ar' ? 'العمر (Age)' : 'Age'}
+                    </span>
+                    <span className="text-white font-mono font-bold">
+                      {patient.age ? `${patient.age} ${lang === 'ar' ? 'سنة' : 'yrs'}` : (
+                        <span className="text-amber-400 italic text-[11px]">{lang === 'ar' ? 'غير مسجل' : 'Missing'}</span>
+                      )}
+                    </span>
+                  </div>
+
+                  {/* Weight */}
+                  <div className="space-y-0.5">
+                    <span className="text-[10px] text-slate-400 block font-medium">
+                      {lang === 'ar' ? 'الوزن (Weight)' : 'Weight'}
+                    </span>
+                    <span className="text-white font-mono font-bold">
+                      {patient.weightKg ? `${patient.weightKg} kg` : (
+                        <span className="text-amber-400 italic text-[11px]">{lang === 'ar' ? 'غير مسجل' : 'Missing'}</span>
+                      )}
+                    </span>
+                  </div>
+
+                  {/* Gender */}
+                  <div className="space-y-0.5">
+                    <span className="text-[10px] text-slate-400 block font-medium">
+                      {lang === 'ar' ? 'الجنس (Gender)' : 'Gender'}
+                    </span>
+                    <span className="text-white font-mono font-bold">
+                      {patient.gender === 'female' || (patient.gender as any) === 'F' ? (
+                        <span className="text-pink-300">{lang === 'ar' ? 'أنثى (× 0.85)' : 'Female (× 0.85)'}</span>
+                      ) : (
+                        <span className="text-blue-300">{lang === 'ar' ? 'ذكر' : 'Male'}</span>
+                      )}
+                    </span>
+                  </div>
+
+                  {/* Serum Creatinine with source & manual toggle */}
+                  <div className="space-y-0.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-slate-400 block font-medium">
+                        {lang === 'ar' ? 'الكرياتينين (SCr)' : 'Serum Creatinine'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setShowManualCrEntry(prev => !prev)}
+                        className="text-[9px] text-cyan-400 hover:text-cyan-300 underline font-mono cursor-pointer"
+                        title={lang === 'ar' ? 'إدخال أو تعديل يدوي للكرياتينين' : 'Manual Creatinine Override'}
+                      >
+                        {showManualCrEntry ? (lang === 'ar' ? 'إخفاء' : 'Hide') : (lang === 'ar' ? 'تعديل' : 'Edit')}
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-cyan-300 font-mono font-bold">
+                        {effectiveCr !== null ? `${effectiveCr.toFixed(2)} mg/dL` : (
+                          <span className="text-amber-400 italic text-[11px]">{lang === 'ar' ? 'غير متوفر' : 'No Lab'}</span>
+                        )}
+                      </span>
+                      {latestCreatinine?.dateStr && !manualCreatinineInput && (
+                        <span className="text-[9px] text-slate-500 font-mono">
+                          ({latestCreatinine.dateStr})
+                        </span>
+                      )}
+                      {manualCreatinineInput && (
+                        <span className="text-[9px] px-1 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                          {lang === 'ar' ? 'يدوي' : 'Manual'}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Manual Creatinine Entry Drawer if toggled or if no lab is available */}
+                {showManualCrEntry && (
+                  <div className="p-2.5 bg-slate-900/90 rounded-xl border border-cyan-500/30 flex flex-wrap items-center gap-2">
+                    <label className="text-xs text-slate-300 flex items-center gap-1.5 font-semibold">
+                      <Edit3 className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>{lang === 'ar' ? 'قيمة الكرياتينين يدوياً (mg/dL):' : 'Enter Serum Creatinine (mg/dL):'}</span>
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.1"
+                      max="25"
+                      value={manualCreatinineInput}
+                      onChange={(e) => {
+                        setManualCreatinineInput(e.target.value);
+                        const val = parseFloat(e.target.value);
+                        if (!isNaN(val) && val > 0 && patient) {
+                          const crcl = calculateCockcroftGault(patient.age, patient.weightKg, patient.gender, val);
+                          applyDrugAndRenalAdjustment(drugNameEn || drugNameAr, crcl);
+                        }
+                      }}
+                      placeholder="e.g. 1.8"
+                      className="w-24 bg-[#070c18] border border-cyan-500/40 rounded-lg px-2 py-1 text-xs text-white font-mono focus:outline-none focus:border-cyan-400"
+                    />
+                    {latestCreatinine && manualCreatinineInput && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setManualCreatinineInput('');
+                          if (patient && latestCreatinine.value) {
+                            const crcl = calculateCockcroftGault(patient.age, patient.weightKg, patient.gender, latestCreatinine.value);
+                            applyDrugAndRenalAdjustment(drugNameEn || drugNameAr, crcl);
+                          }
+                        }}
+                        className="text-[10px] px-2 py-1 rounded bg-slate-800 text-slate-300 hover:text-white border border-slate-700 flex items-center gap-1"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        <span>{lang === 'ar' ? 'استعادة قيمة المختبر' : 'Revert to Lab Value'}</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* CrCl Calculation Display Box */}
+                <div className="bg-[#070c18]/90 rounded-xl p-3 border border-slate-800/80 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <span className="text-[10px] text-slate-400 block font-medium">
+                      {lang === 'ar' ? 'معدل تصفية الكرياتينين المحسوب (CrCl Result):' : 'Calculated Creatinine Clearance (Cockcroft-Gault):'}
+                    </span>
+                    <div className="flex items-baseline gap-2 mt-0.5">
+                      <span className="text-lg font-bold font-mono text-cyan-300">
+                        {currentCrCl !== null ? `${currentCrCl} mL/min` : '-- mL/min'}
+                      </span>
+                      {currentCrCl !== null && (
+                        <span className="text-[10px] text-slate-400 font-mono">
+                          ({lang === 'ar' ? 'المعادلة' : 'Eq'}: ((140 - {patient.age || 'Age'}) × {patient.weightKg || 'Wt'}) / (72 × {effectiveCr?.toFixed(2) || 'Cr'}) {patient.gender === 'female' || (patient.gender as any) === 'F' ? '× 0.85' : ''})
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Recommendation Button if Adjustment is needed */}
+                  {currentRenalRec && currentRenalRec.requiresAdjustment && currentCrCl !== null && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (currentRenalRec.recommendedDose) setDose(currentRenalRec.recommendedDose);
+                        if (currentRenalRec.recommendedFrequency) {
+                          setFrequency(currentRenalRec.recommendedFrequency);
+                          setIsCustomFrequency(!['Q6H', 'Q8H', 'Q12H', 'Q24H', 'Q48H', 'Q36H', 'Q72H', 'Continuous', 'Once / STAT', 'Post-HD'].includes(currentRenalRec.recommendedFrequency));
+                        }
+                        if (currentRenalRec.note) setRenalAdjustment(currentRenalRec.note);
+                        setIsRenalAutoApplied(true);
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-md shadow-amber-900/30 transition-all cursor-pointer"
+                    >
+                      <Zap className="w-3.5 h-3.5" />
+                      <span>{lang === 'ar' ? 'تطبيق الجرعة الموصى بها كلوياً' : 'Apply Renal Dosing'}</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Recommendation Guidance Alert Box */}
+                {currentRenalRec && (
+                  <div className={`p-3 rounded-xl border text-xs space-y-1.5 ${
+                    currentRenalRec.requiresAdjustment 
+                      ? 'bg-amber-950/30 border-amber-500/40 text-amber-200'
+                      : 'bg-emerald-950/20 border-emerald-500/30 text-emerald-200'
+                  }`}>
+                    <div className="flex items-center justify-between font-semibold">
+                      <span className="flex items-center gap-1.5">
+                        {currentRenalRec.requiresAdjustment ? (
+                          <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                        ) : (
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                        )}
+                        <span>
+                          {lang === 'ar' 
+                            ? `توصية الجرعة لـ ${drugNameEn || drugNameAr || 'المضاد المحدد'}:`
+                            : `Renal Recommendation for ${drugNameEn || drugNameAr || 'Selected Antibiotic'}:`}
+                        </span>
+                      </span>
+                      {currentRenalRec.recommendedDose && currentRenalRec.recommendedFrequency && (
+                        <span className="font-mono text-xs px-2 py-0.5 rounded bg-black/40 border border-current font-bold">
+                          {currentRenalRec.recommendedDose} {currentRenalRec.recommendedFrequency}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] leading-relaxed text-slate-300">
+                      {currentRenalRec.note}
+                    </p>
+                  </div>
+                )}
+
+                {/* Editable Notes Input Field (Preserving Manual Override for Attending Physician) */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[11px] font-semibold text-slate-300 flex items-center gap-1.5">
+                      <ShieldAlert className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>{lang === 'ar' ? 'ملاحظات التعديل الكلوي النهائية للملف' : 'Renal Dosing & Adjustment Note (Editable)'}</span>
+                    </label>
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      {lang === 'ar' ? 'يمكن تعديلها أو إضافة توصية الطبيب يدوياً' : 'Editable manual override'}
+                    </span>
+                  </div>
+                  <input
+                    type="text"
+                    value={renalAdjustment}
+                    onChange={(e) => {
+                      setRenalAdjustment(e.target.value);
+                      setIsRenalAutoApplied(false);
+                    }}
+                    placeholder={lang === 'ar' ? 'مثال: تم تعديل الجرعة لـ CrCl 28 mL/min إلى 500 mg Q12H' : 'e.g. Dose adjusted for CrCl 28 mL/min to 500 mg Q12H'}
+                    className="w-full bg-[#070c18] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-400 font-sans"
+                  />
+                </div>
               </div>
 
               {/* TDM Section */}

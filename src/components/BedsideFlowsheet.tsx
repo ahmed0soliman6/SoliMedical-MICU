@@ -3011,6 +3011,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
           bed={bed}
           settings={settings}
           antibiotics={antibioticsList}
+          labResults={labResults}
           currentUser={currentUser}
           onDataUpdated={() => {
             loadBedsideData();
