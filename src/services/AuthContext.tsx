@@ -377,7 +377,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const role = userData.role || StaffRole.BEDSIDE_RN;
     const rawEmail = userData.email || `staff_${Date.now()}@solimedical-micu.org`;
     const email = rawEmail.includes('@') ? rawEmail.toLowerCase() : `${rawEmail.toLowerCase()}@solimedical-micu.org`;
-    const password = userData.pinCode || '123456';
+    const password = (userData as any).pinCode || '123456';
 
     if (password.length < 6) {
       return { success: false, message: 'كلمة المرور يجب ألا تقل عن 6 أحرف أو أرقام (auth/weak-password).' };

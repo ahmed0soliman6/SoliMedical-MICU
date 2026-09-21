@@ -16,7 +16,7 @@ import {
   firestore,
   sanitizeForFirestore,
 } from './firebase.ts';
-import { runTransaction, doc } from 'firebase/firestore';
+import { runTransaction, doc, collection, query, where, getDocs, deleteDoc } from 'firebase/firestore';
 import {
   BedNumber,
   BedStatus,
@@ -145,7 +145,74 @@ export interface DirectAdmissionInput {
 export async function admitPatient(input: DirectAdmissionInput): Promise<{ patientId: string; noteId?: string }> {
   // Compute everything that uses SubtleCrypto or other non-Dexie promises OUTSIDE the transaction
   const nowIso = new Date().toISOString();
-  const patientId = input.existingPatientId || `pat-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+  
+  // 1. Search for existing patient to restore and prevent duplication
+  let existingPatientDoc: any = null;
+  const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+  const searchMrn = toEnglishDigits(input.mrn).trim();
+
+  const last4 = extractLast4(input.nationalId);
+  const normalizedName = normalizeArabicName(input.fullNameAr || input.fullNameEn);
+  const idHash = input.nationalId ? await computeSha256Hash(input.nationalId) : undefined;
+
+  if (isOnline) {
+    try {
+      // Check in active patients
+      const activeSnap = await getDocs(query(collection(firestore, 'patients'), where('mrn', '==', searchMrn)));
+      if (!activeSnap.empty) {
+        existingPatientDoc = activeSnap.docs[0].data();
+      } else {
+        // Check in archived patients
+        const archiveSnap = await getDocs(query(collection(firestore, 'archivedPatients'), where('mrn', '==', searchMrn)));
+        if (!archiveSnap.empty) {
+          existingPatientDoc = archiveSnap.docs[0].data();
+        }
+      }
+
+      // Check by normalized name and nationalIdLast4 if not found by MRN
+      if (!existingPatientDoc && normalizedName && last4) {
+        const activeSnap2 = await getDocs(query(
+          collection(firestore, 'patients'),
+          where('normalizedFullName', '==', normalizedName),
+          where('nationalIdLast4', '==', last4)
+        ));
+        if (!activeSnap2.empty) {
+          existingPatientDoc = activeSnap2.docs[0].data();
+        } else {
+          const archiveSnap2 = await getDocs(query(
+            collection(firestore, 'archivedPatients'),
+            where('normalizedFullName', '==', normalizedName),
+            where('nationalIdLast4', '==', last4)
+          ));
+          if (!archiveSnap2.empty) {
+            existingPatientDoc = archiveSnap2.docs[0].data();
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Online patient duplicate check failed, using local DB:', err);
+    }
+  }
+
+  // Local fallback or additional offline check
+  if (!existingPatientDoc) {
+    try {
+      const localPatients = await db.patients.toArray();
+      const match = localPatients.find(p => p.mrn === searchMrn);
+      if (match) {
+        existingPatientDoc = match;
+      } else if (normalizedName && last4) {
+        const match2 = localPatients.find(p => p.normalizedFullName === normalizedName && p.nationalIdLast4 === last4);
+        if (match2) {
+          existingPatientDoc = match2;
+        }
+      }
+    } catch (err) {
+      console.warn('Local patient check failed:', err);
+    }
+  }
+
+  const patientId = existingPatientDoc?.id || input.existingPatientId || `pat-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
   const idealWeight = calculateIdealBodyWeight(input.heightCm, input.gender);
 
   const formattedAllergies: AllergyRecord[] = (input.allergies || []).map((a, idx) => ({
@@ -159,17 +226,28 @@ export async function admitPatient(input: DirectAdmissionInput): Promise<{ patie
     clinicalNote: a.clinicalNote,
   }));
 
-  const last4 = extractLast4(input.nationalId);
-  const normalizedName = normalizeArabicName(input.fullNameAr || input.fullNameEn);
-  const idHash = input.nationalId ? await computeSha256Hash(input.nationalId) : undefined;
+  const previousVisits = existingPatientDoc?.pastVisits || [];
+  if (existingPatientDoc && existingPatientDoc.patientStatus !== 'ACTIVE_ICU') {
+    const lastVisitId = `visit-${Date.now()}`;
+    const previousVisitRecord = {
+      id: lastVisitId,
+      admissionDate: existingPatientDoc.admissionDate || existingPatientDoc.createdAt || nowIso,
+      dischargeDate: existingPatientDoc.updatedAt || nowIso,
+      primaryDiagnosis: existingPatientDoc.primaryDiagnosisEn || 'Previous ICU Stay',
+      outcome: 'RESTORED_TO_ACTIVE',
+      attendingPhysicianName: existingPatientDoc.attendingPhysician?.name || 'Unknown'
+    };
+    previousVisits.push(previousVisitRecord);
+  }
 
   const newPatient: PatientDossier = {
+    ...existingPatientDoc, // Retain existing patient historical attributes
     id: patientId,
     mrn: toEnglishDigits(input.mrn),
-    nationalId: input.nationalId ? toEnglishDigits(input.nationalId) : undefined,
-    nationalIdLast4: last4,
-    nationalIdHash: idHash,
-    normalizedFullName: normalizedName,
+    nationalId: input.nationalId ? toEnglishDigits(input.nationalId) : (existingPatientDoc?.nationalId || undefined),
+    nationalIdLast4: last4 || existingPatientDoc?.nationalIdLast4,
+    nationalIdHash: idHash || existingPatientDoc?.nationalIdHash,
+    normalizedFullName: normalizedName || existingPatientDoc?.normalizedFullName,
     fullNameEn: input.fullNameEn,
     fullNameAr: input.fullNameAr,
     age: input.age,
@@ -188,15 +266,15 @@ export async function admitPatient(input: DirectAdmissionInput): Promise<{ patie
     patientStatus: 'ACTIVE_ICU',
     archiveStatus: 'HOT',
     allergies: formattedAllergies,
-    microbiologyHistory: [],
-    pastVisits: [],
+    microbiologyHistory: existingPatientDoc?.microbiologyHistory || [],
+    pastVisits: previousVisits,
     attendingPhysician: input.attendingDoctor,
     primaryNurse: input.assignedNurse,
     isolationPrecautions: input.isolationPrecautions || [],
     history: input.history || '',
     presentingComplaint: input.presentingComplaint || '',
     chronicDiseases: input.chronicDiseases || '',
-    createdAt: nowIso,
+    createdAt: existingPatientDoc?.createdAt || nowIso,
     updatedAt: nowIso,
   };
 
@@ -266,7 +344,6 @@ export async function admitPatient(input: DirectAdmissionInput): Promise<{ patie
   };
 
   // --- SOURCE OF TRUTH #1: FIRESTORE TRANSACTION FIRST (IF ONLINE) ---
-  const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
   if (isOnline) {
     await runTransaction(firestore, async (transaction) => {
       const bedRef = doc(firestore, 'beds', input.targetBed);
@@ -281,6 +358,10 @@ export async function admitPatient(input: DirectAdmissionInput): Promise<{ patie
 
       const patientRef = doc(firestore, 'patients', patientId);
       transaction.set(patientRef, sanitizeForFirestore(newPatient), { merge: true });
+
+      // Ensure we delete any archived copy if they are being readmitted/restored
+      const archivedRef = doc(firestore, 'archivedPatients', patientId);
+      transaction.delete(archivedRef);
 
       const cleanBedUpdate = {
         activePatientId: patientId,

@@ -652,25 +652,22 @@ app.post('/api/admin/mortality/delete', async (req, res) => {
   }
 });
 
-app.post('/api/admin/mortality/auto-purge', async (req, res) => {
+app.all('/api/admin/mortality/auto-purge', async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
-    const result = await adminMortalityAutoPurgeSweep(authHeader);
-    return res.status(200).json(result);
+    // Vercel Crons can trigger this endpoint. We run both sweeps.
+    const purgeResult = await adminMortalityAutoPurgeSweep(authHeader);
+    const archiveResult = await adminArchiveSweep(authHeader, 30);
+    return res.status(200).json({
+      success: true,
+      message: 'Vercel Cron task completed successfully.',
+      purge: purgeResult,
+      archive: archiveResult
+    });
   } catch (err: any) {
     return res.status(500).json({ success: false, message: err?.message || 'Internal server error.' });
   }
 });
-
-// Periodic Server-Side Auto-Purge Task (runs every 24 hours & on server boot)
-setInterval(async () => {
-  try {
-    await adminMortalityAutoPurgeSweep();
-    await adminArchiveSweep(undefined, 1);
-  } catch (err) {
-    console.warn('Scheduled background auto-purge sweep notice:', err);
-  }
-}, 24 * 60 * 60 * 1000);
 
 // Guard API routes so unknown /api/* requests return structured JSON 404 rather than falling into static HTML or returning 405
 app.all('/api/*', (req, res) => {

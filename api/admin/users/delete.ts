@@ -176,21 +176,6 @@ function getAdminServices(): { db: Firestore; auth: Auth } {
   return cachedAdminServices;
 }
 
-function decodeJwtPayload(token: string): any {
-  try {
-    const parts = token.split('.');
-    if (parts.length >= 2) {
-      const base64Url = parts[1];
-      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-      const jsonPayload = Buffer.from(base64, 'base64').toString('utf8');
-      return JSON.parse(jsonPayload);
-    }
-  } catch {
-    // Ignore decode errors
-  }
-  return null;
-}
-
 async function verifyAdminCaller(authHeader: string | undefined): Promise<{ isAdmin: boolean; callerUid?: string; error?: string }> {
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return { isAdmin: false, error: 'Missing or invalid Authorization header. Must be Bearer <Firebase ID Token>.' };

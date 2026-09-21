@@ -83,9 +83,13 @@ service cloud.firestore {
       return isActiveUser() && (
         isAdmin() || (
           isRecordOwner() &&
-          (!("createdByUid" in request.resource.data) || request.resource.data.createdByUid == resource.data.createdByUid) &&
-          (!("doctorId" in request.resource.data) || request.resource.data.doctorId == resource.data.doctorId) &&
-          (!("authorId" in request.resource.data) || request.resource.data.authorId == resource.data.authorId)
+          (!("createdByUid" in resource.data) || request.resource.data.createdByUid == resource.data.createdByUid) &&
+          (!("doctorId" in resource.data) || request.resource.data.doctorId == resource.data.doctorId) &&
+          (!("authorId" in resource.data) || request.resource.data.authorId == resource.data.authorId) &&
+          (!("authorStaffId" in resource.data) || request.resource.data.authorStaffId == resource.data.authorStaffId) &&
+          (!("recordedByStaffId" in resource.data) || request.resource.data.recordedByStaffId == resource.data.recordedByStaffId) &&
+          (!("userId" in resource.data) || request.resource.data.userId == resource.data.userId) &&
+          (!("createdAt" in resource.data) || request.resource.data.createdAt == resource.data.createdAt)
         )
       );
     }

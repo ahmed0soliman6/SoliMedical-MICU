@@ -17,7 +17,8 @@ import {
   limit, 
   Unsubscribe,
   getDocFromServer,
-  updateDoc as fupdateDoc
+  updateDoc as fupdateDoc,
+  deleteField
 } from 'firebase/firestore';
 import {
   getAuth,
@@ -436,7 +437,7 @@ export async function deleteUserAccount(uid: string): Promise<void> {
 export async function syncUserToFirebaseConsole(user: IcuUser): Promise<void> {
   const rawEmail = user.email ? user.email.toLowerCase() : `${user.uid}@solimedical-micu.org`;
   const email = rawEmail.includes('@') ? rawEmail : `${rawEmail}@solimedical-micu.org`;
-  const rawPin = user.pinCode || '123456';
+  const rawPin = (user as any).pinCode || '123456';
   if (rawPin.length < 6) {
     throw new Error('كلمة المرور يجب ألا تقل عن 6 أحرف أو أرقام (auth/weak-password)');
   }
@@ -593,14 +594,22 @@ export async function sanitizeFirestoreUsers() {
     const seenUids = new Map<string, { docId: string; data: IcuUser }>();
 
     for (const docSnap of snap.docs) {
-      const u = docSnap.data() as IcuUser;
+      const u = docSnap.data() as any;
       const docId = docSnap.id;
       
       if (!u || !u.uid) {
         continue;
       }
 
-      // Identify duplicates
+      // 1. Clean up legacy fields: password and pinCode
+      if ('password' in u || 'pinCode' in u) {
+        await fupdateDoc(doc(firestore, 'users', docId), {
+          password: deleteField(),
+          pinCode: deleteField()
+        }).catch(() => {});
+      }
+
+      // 2. Identify duplicates
       const uid = u.uid.trim();
       if (!seenUids.has(uid)) {
         seenUids.set(uid, { docId, data: u });
@@ -1140,15 +1149,36 @@ export async function pullCloudDataToLocalDb(): Promise<boolean> {
   try {
     const bedsSnap = await getDocs(collection(firestore, 'beds'));
     if (bedsSnap.empty) {
-      // Initialize 6 vacant beds if empty on cloud
-      const cleanBeds: BedRecord[] = ['01', '02', '03', '04', '05', '06'].map((num, idx) => ({
+      let totalBedsCount = 6;
+      try {
+        const settingsDoc = await getDocs(collection(firestore, 'system_settings'));
+        if (!settingsDoc.empty) {
+          const data = settingsDoc.docs[0].data();
+          if (data?.unit?.totalBedsCount) {
+            totalBedsCount = data.unit.totalBedsCount;
+          }
+        } else {
+          const saved = localStorage.getItem('soli_medical_icu_settings_v1');
+          if (saved) {
+            const data = JSON.parse(saved);
+            if (data?.unit?.totalBedsCount) {
+              totalBedsCount = data.unit.totalBedsCount;
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Error fetching system settings bed count for cloud pull:', e);
+      }
+
+      const bedIds = Array.from({ length: totalBedsCount }, (_, i) => String(i + 1).padStart(2, '0'));
+      const cleanBeds: BedRecord[] = bedIds.map((num, idx) => ({
         id: num,
         unitId: 'MICU-MAIN',
         bedNumber: num as BedNumber,
         bayName: `Critical Care Bay ${num}`,
         isActive: true,
         displayOrder: idx,
-        status: idx === 5 ? BedStatus.UNAVAILABLE : BedStatus.VACANT,
+        status: idx === (totalBedsCount - 1) ? BedStatus.UNAVAILABLE : BedStatus.VACANT,
         currentPatientId: null,
         activePatientId: null,
         lastCleanedAt: new Date().toISOString()
@@ -1724,15 +1754,37 @@ export async function clearAllCloudAndLocalDataAndReset(): Promise<{ success: bo
       }
     }
 
-    // 3. Reset 6 clean, vacant beds into local IndexedDB & Firestore
-    const cleanBeds: BedRecord[] = ['01', '02', '03', '04', '05', '06'].map((num, idx) => ({
+    // 3. Reset clean, vacant beds into local IndexedDB & Firestore dynamically based on settings
+    let totalBedsCount = 6;
+    try {
+      const settingsDoc = await getDocs(collection(firestore, 'system_settings'));
+      if (!settingsDoc.empty) {
+        const data = settingsDoc.docs[0].data();
+        if (data?.unit?.totalBedsCount) {
+          totalBedsCount = data.unit.totalBedsCount;
+        }
+      } else {
+        const saved = localStorage.getItem('soli_medical_icu_settings_v1');
+        if (saved) {
+          const data = JSON.parse(saved);
+          if (data?.unit?.totalBedsCount) {
+            totalBedsCount = data.unit.totalBedsCount;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Error fetching system settings bed count for purge reset:', e);
+    }
+
+    const bedIds = Array.from({ length: totalBedsCount }, (_, i) => String(i + 1).padStart(2, '0'));
+    const cleanBeds: BedRecord[] = bedIds.map((num, idx) => ({
       id: num,
       unitId: 'MICU-MAIN',
       bedNumber: num as BedNumber,
       bayName: `Critical Care Bay ${num}`,
       isActive: true,
       displayOrder: idx,
-      status: idx === 5 ? BedStatus.UNAVAILABLE : BedStatus.VACANT,
+      status: idx === (totalBedsCount - 1) ? BedStatus.UNAVAILABLE : BedStatus.VACANT,
       currentPatientId: null,
       activePatientId: null,
       lastCleanedAt: new Date().toISOString()

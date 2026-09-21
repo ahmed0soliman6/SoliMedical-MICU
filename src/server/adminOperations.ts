@@ -245,21 +245,6 @@ function hashRecoveryCode(code: string, salt: string): string {
   return crypto.pbkdf2Sync(code.trim(), salt, 10000, 64, 'sha512').toString('hex');
 }
 
-function decodeJwtPayload(token: string): any {
-  try {
-    const parts = token.split('.');
-    if (parts.length >= 2) {
-      const base64Url = parts[1];
-      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-      const jsonPayload = Buffer.from(base64, 'base64').toString('utf8');
-      return JSON.parse(jsonPayload);
-    }
-  } catch (e) {
-    // Ignore decode errors
-  }
-  return null;
-}
-
 export async function verifyAdminCallerToken(authHeader?: string): Promise<{ isAdmin: boolean; callerUid?: string; error?: string }> {
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return { isAdmin: false, error: 'Missing or invalid Authorization header. Must be Bearer <Firebase ID Token>.' };
@@ -886,44 +871,77 @@ export async function adminArchivePatient(authHeader: string | undefined, patien
   }
 }
 
-export async function adminArchiveSweep(authHeader: string | undefined, retentionMonths: number = 6): Promise<AdminOpResult> {
-  const authCheck = await verifyAdminCallerToken(authHeader);
-  if (!authCheck.isAdmin) {
-    return { success: false, message: authCheck.error || 'غير مصرح لك بتنفيذ هذه العملية.' };
+export async function adminArchiveSweep(authHeader: string | undefined, retentionDays: number = 30): Promise<AdminOpResult> {
+  if (authHeader) {
+    const authCheck = await verifyAdminCallerToken(authHeader);
+    if (!authCheck.isAdmin) {
+      return { success: false, message: authCheck.error || 'غير مصرح لك بتنفيذ هذه العملية.' };
+    }
   }
 
   try {
     const { db } = requireAdminServices();
-    const cutoffMs = Date.now() - retentionMonths * 30 * 24 * 60 * 60 * 1000;
-    const snap = await db.collection('patients')
-      .where('currentStatus', 'in', ['DISCHARGED', 'EXPIRED'])
-      .get();
+    const cutoffMs = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
+    
+    const snap = await db.collection('patients').get();
 
     let archivedCount = 0;
-    const batch = db.batch();
+    const nowStr = new Date().toISOString();
 
-    snap.forEach((docSnap) => {
+    for (const docSnap of snap.docs) {
       const data = docSnap.data();
-      if (data.archiveStatus !== 'ARCHIVED' && data.archiveStatus !== 'COLD_STORAGE') {
-        const updateTime = data.updatedAt ? new Date(data.updatedAt).getTime() : 0;
+      const patientId = docSnap.id;
+
+      // Ensure we do not archive ACTIVE_ICU or EXPIRED patients
+      const isExpired = (data.patientStatus === 'EXPIRED_MORTALITY') || 
+                        (data.currentStatus === 'EXPIRED');
+      const isActive = (data.patientStatus === 'ACTIVE_ICU') || 
+                       (data.currentStatus === 'ACTIVE_ICU');
+
+      if (isActive || isExpired) {
+        continue;
+      }
+
+      // Check if discharged or transferred
+      const isDischargedOrTransferred = 
+        ['DISCHARGED_STEPDOWN', 'DISCHARGED_HOME', 'TRANSFERRED_EXTERNAL'].includes(data.patientStatus) ||
+        ['DISCHARGED', 'DISCHARGED_STEPDOWN', 'DISCHARGED_HOME', 'TRANSFERRED'].includes(data.currentStatus);
+
+      if (isDischargedOrTransferred) {
+        const updateTimeStr = data.updatedAt || data.dischargedAt || data.createdAt;
+        const updateTime = updateTimeStr ? new Date(updateTimeStr).getTime() : 0;
+
         if (updateTime > 0 && updateTime < cutoffMs) {
-          batch.update(docSnap.ref, {
+          // 1. Move to archivedPatients
+          const archivedData = {
+            ...data,
             archiveStatus: 'ARCHIVED',
-            archiveDate: new Date().toISOString(),
-            archiveId: `arch_sweep_${docSnap.id}_${Date.now()}`,
-          });
+            archiveDate: nowStr,
+            archiveId: `arch_sweep_${patientId}_${Date.now()}`
+          };
+          await db.collection('archivedPatients').doc(patientId).set(archivedData);
+
+          // 2. Delete from active patients
+          await docSnap.ref.delete();
           archivedCount++;
         }
       }
-    });
+    }
 
     if (archivedCount > 0) {
-      await batch.commit();
+      const auditId = `audit_archive_sweep_${Date.now()}`;
+      await db.collection('auditLogs').doc(auditId).set({
+        id: auditId,
+        timestamp: nowStr,
+        eventType: 'PATIENTS_ARCHIVED_SWEEP',
+        description: `Patient Archive Sweep successfully moved ${archivedCount} inactive discharged/transferred patients to archivedPatients collection.`,
+        isImmutable: true,
+      });
     }
 
     return {
       success: true,
-      message: `تم فحص الأرشيف وتحديث ${archivedCount} سجلاً إلى حالة الأرشفة الدائمة.`,
+      message: `تم فحص الأرشيف ونقل ${archivedCount} سجلاً إلى الأرشيف الدائم (archivedPatients) بنجاح.`,
       data: { archivedCount },
     };
   } catch (err: any) {
@@ -950,9 +968,36 @@ export async function adminDeleteMortalityRecord(authHeader: string | undefined,
     }
 
     const patientData = snap.data();
+    const isMortality = (patientData?.patientStatus === 'EXPIRED_MORTALITY') || 
+                        (patientData?.currentStatus === 'EXPIRED');
+    if (!isMortality) {
+      return { success: false, message: 'فشلت العملية. لا يمكن حذف هذا السجل لأنه ليس حالة وفاة مؤكدة.' };
+    }
+
     await patientRef.delete();
 
-    const collectionsToClean = ['medical_records', 'clinicalNotes', 'vitals', 'sbarHandovers', 'episodes', 'transfers'];
+    const collectionsToClean = [
+      'medical_records',
+      'clinicalNotes',
+      'vitals',
+      'ventilators',
+      'infusionPumps',
+      'infusion_pumps',
+      'fluidBalances',
+      'fluidBalances24H',
+      'statLabs',
+      'investigations',
+      'transfusions',
+      'patientAntibiotics',
+      'sbarHandovers',
+      'handovers',
+      'addendums',
+      'dispositionRecords',
+      'notifications',
+      'episodes',
+      'transfers'
+    ];
+
     for (const colName of collectionsToClean) {
       try {
         const subSnap = await db.collection(colName).where('patientId', '==', patientId).get();
@@ -1015,13 +1060,35 @@ export async function adminMortalityAutoPurgeSweep(authHeader?: string): Promise
 
     for (const [patientId, docSnap] of docMap.entries()) {
       const data = docSnap.data();
-      const deathDateStr = data?.mortalityRecord?.dateOfDeath || data?.dischargedAt || data?.updatedAt || data?.createdAt;
+      // Ensure we do not use createdAt as a fallback for the date of death if dateOfDeath is present.
+      const deathDateStr = (data?.mortalityRecord && data.mortalityRecord.dateOfDeath) ? data.mortalityRecord.dateOfDeath : (data?.dischargedAt || data?.updatedAt || data?.createdAt);
       const deathTime = deathDateStr ? new Date(deathDateStr).getTime() : 0;
 
       if (deathTime > 0 && (now - deathTime) >= thirtyDaysMs) {
         await docSnap.ref.delete();
         
-        const collectionsToClean = ['medical_records', 'clinicalNotes', 'vitals', 'sbarHandovers', 'episodes', 'transfers'];
+        const collectionsToClean = [
+          'medical_records',
+          'clinicalNotes',
+          'vitals',
+          'ventilators',
+          'infusionPumps',
+          'infusion_pumps',
+          'fluidBalances',
+          'fluidBalances24H',
+          'statLabs',
+          'investigations',
+          'transfusions',
+          'patientAntibiotics',
+          'sbarHandovers',
+          'handovers',
+          'addendums',
+          'dispositionRecords',
+          'notifications',
+          'episodes',
+          'transfers'
+        ];
+
         for (const colName of collectionsToClean) {
           try {
             const subSnap = await db.collection(colName).where('patientId', '==', patientId).get();
@@ -1030,8 +1097,8 @@ export async function adminMortalityAutoPurgeSweep(authHeader?: string): Promise
               subSnap.forEach((subDoc) => batch.delete(subDoc.ref));
               await batch.commit();
             }
-          } catch {
-            // Ignore minor errors
+          } catch (err) {
+            console.warn(`Error auto-purging collection ${colName} for patient ${patientId}:`, err);
           }
         }
         purgedCount++;

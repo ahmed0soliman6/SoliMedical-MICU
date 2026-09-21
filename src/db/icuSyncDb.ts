@@ -83,11 +83,26 @@ export const db = new IcuSyncDatabase();
 
 export async function initializeDatabaseSeed(): Promise<void> {
   const count = await db.beds.count();
-  if (count < 6) {
-    const initialBeds: BedRecord[] = ['01', '02', '03', '04', '05', '06'].map((num, idx) => ({
+  
+  let totalBedsCount = 6;
+  try {
+    const saved = localStorage.getItem('soli_medical_icu_settings_v1');
+    if (saved) {
+      const data = JSON.parse(saved);
+      if (data?.unit?.totalBedsCount) {
+        totalBedsCount = data.unit.totalBedsCount;
+      }
+    }
+  } catch (e) {
+    console.warn('Error fetching system settings bed count for seed:', e);
+  }
+
+  if (count === 0) {
+    const bedIds = Array.from({ length: totalBedsCount }, (_, i) => String(i + 1).padStart(2, '0'));
+    const initialBeds: BedRecord[] = bedIds.map((num, idx) => ({
       id: num,
       unitId: 'MICU-MAIN',
-      bedNumber: num,
+      bedNumber: num as any,
       bayName: `Critical Care Bay ${num}`,
       isActive: true,
       displayOrder: idx,

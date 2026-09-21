@@ -810,7 +810,6 @@ export interface IcuUser {
   licenseNumber?: string;
   isActive?: boolean;
   isSuperAdmin?: boolean;
-  pinCode?: string;
   lastLoginAt?: string;
 }
 
