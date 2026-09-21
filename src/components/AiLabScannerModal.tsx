@@ -21,6 +21,7 @@ import {
   scanLabImage, 
   ScannedLabResponse
 } from '../services/aiLabService.ts';
+import { getCategoryForTest } from './LabFlowsheetSection.tsx';
 
 interface AiLabScannerModalProps {
   isOpen: boolean;
@@ -283,13 +284,33 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
         delete rawFields.hct;
       }
 
-      setScannedResult({
-        ...result,
-        statFields: rawFields,
-        items: (result.items || []).filter(item => {
+      // Process and categorize all items
+      const processedItems = (result.items || [])
+        .filter(item => {
           const lower = (item.testName || '').toLowerCase().trim();
           return !['be', 'base excess', 'thbc', 'cthb', 'thb', 'hct (abg)'].includes(lower);
         })
+        .map(item => {
+          const resolved = getCategoryForTest(item.testName, [{ testName: item.testName, category: item.category } as any]);
+          const categoryName = resolved === 'Chemistry' 
+            ? 'Chemistry' 
+            : resolved === 'CBC' 
+              ? 'CBC' 
+              : resolved === 'ABG' 
+                ? 'ABG' 
+                : resolved === 'INR' 
+                  ? 'Coagulation' 
+                  : (item.category || 'Other');
+          return {
+            ...item,
+            category: categoryName,
+          };
+        });
+
+      setScannedResult({
+        ...result,
+        statFields: rawFields,
+        items: processedItems,
       });
 
       setEditableFields(rawFields);
@@ -449,24 +470,24 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
     <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 z-50 overflow-y-auto animate-in fade-in duration-200">
       <div 
         dir={isRTL ? 'rtl' : 'ltr'} 
-        className="bg-[#0b1224] border border-slate-700/80 rounded-2xl w-full max-w-5xl p-5 sm:p-6 shadow-2xl space-y-4 my-auto relative max-h-[92vh] flex flex-col"
+        className="bg-white dark:bg-[#0b1224] border border-slate-200 dark:border-slate-700/80 text-slate-900 dark:text-slate-100 rounded-2xl w-full max-w-5xl p-4 sm:p-6 shadow-2xl space-y-4 my-auto relative max-h-[92vh] flex flex-col"
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-800/80 pb-4 shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-fuchsia-600 to-indigo-500 flex items-center justify-center text-white shadow-lg shadow-fuchsia-500/20">
-              <Sparkles className="w-5 h-5 animate-pulse" />
+        <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800/80 pb-3.5 sm:pb-4 shrink-0">
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-fuchsia-600 to-indigo-500 flex items-center justify-center text-white shadow-md shrink-0">
+              <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 animate-pulse" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base sm:text-lg font-bold text-white">
-                  {lang === 'ar' ? 'المسح الضوئي الذكي للتحاليل المخبرية (AI Lab Scanner)' : 'Intelligent AI Lab Optical Scanner'}
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
+                  {lang === 'ar' ? 'المسح الضوئي الذكي للتحاليل (AI Lab Scanner)' : 'Intelligent AI Lab Optical Scanner'}
                 </h2>
-                <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-fuchsia-500/15 text-fuchsia-300 border border-fuchsia-500/30">
-                  Gemini Vision OCR
+                <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-fuchsia-100 text-fuchsia-900 border border-fuchsia-200 dark:bg-fuchsia-500/15 dark:text-fuchsia-300 dark:border-fuchsia-500/30">
+                  Gemini OCR
                 </span>
               </div>
-              <p className="text-xs text-slate-400">
+              <p className="text-[11px] sm:text-xs text-slate-600 dark:text-slate-400 mt-0.5">
                 {lang === 'ar' 
                   ? `السرير ${bedNumber} - ${patientName || 'المريض الحالي'}: مسح ذكي للتحاليل وتصنيف تلقائي للقيم المستخرجة`
                   : `Bed ${bedNumber} - ${patientName || 'Active Patient'}: Smart lab OCR and automatic categorization`}
@@ -477,7 +498,7 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition-all text-sm font-black cursor-pointer"
+            className="p-1.5 sm:p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-all text-sm font-black cursor-pointer shadow-sm"
           >
             <X className="w-5 h-5" />
           </button>
@@ -493,9 +514,9 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
           {!scannedResult && !isAnalyzing && (
             <div className="space-y-3">
               {/* Category boxes named strictly with medical abbreviations: CBC, ABG, Chemistry, INR */}
-              <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 bg-slate-900/80 border border-slate-800 rounded-xl text-xs">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 p-3 bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-xl text-xs shadow-sm">
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-slate-400 font-bold px-2">
+                  <span className="text-slate-600 dark:text-slate-400 font-bold px-1 text-xs">
                     {lang === 'ar' ? 'تصنيف التحليل:' : 'Category:'}
                   </span>
                   
@@ -503,10 +524,10 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setSelectedPresetType('CBC')}
-                    className={`px-3.5 py-1.5 rounded-lg font-bold font-mono transition-all cursor-pointer ${
+                    className={`px-3 py-1.5 rounded-lg font-bold font-mono transition-all cursor-pointer text-xs ${
                       selectedPresetType === 'CBC'
                         ? 'bg-gradient-to-r from-teal-600 to-cyan-600 text-white shadow-md'
-                        : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                        : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 dark:border-transparent'
                     }`}
                   >
                     CBC
@@ -516,10 +537,10 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setSelectedPresetType('ABG')}
-                    className={`px-3.5 py-1.5 rounded-lg font-bold font-mono transition-all cursor-pointer ${
+                    className={`px-3 py-1.5 rounded-lg font-bold font-mono transition-all cursor-pointer text-xs ${
                       selectedPresetType === 'ABG'
                         ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md'
-                        : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                        : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 dark:border-transparent'
                     }`}
                   >
                     ABG
@@ -529,10 +550,10 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setSelectedPresetType('CHEMISTRY')}
-                    className={`px-3.5 py-1.5 rounded-lg font-bold font-mono transition-all cursor-pointer ${
+                    className={`px-3 py-1.5 rounded-lg font-bold font-mono transition-all cursor-pointer text-xs ${
                       selectedPresetType === 'CHEMISTRY'
                         ? 'bg-gradient-to-r from-cyan-600 to-indigo-600 text-white shadow-md'
-                        : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                        : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 dark:border-transparent'
                     }`}
                   >
                     Chemistry
@@ -542,10 +563,10 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setSelectedPresetType('INR')}
-                    className={`px-3.5 py-1.5 rounded-lg font-bold font-mono transition-all cursor-pointer ${
+                    className={`px-3 py-1.5 rounded-lg font-bold font-mono transition-all cursor-pointer text-xs ${
                       selectedPresetType === 'INR'
                         ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-md'
-                        : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                        : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 dark:border-transparent'
                     }`}
                   >
                     INR
@@ -555,10 +576,10 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setSelectedPresetType('ALL')}
-                    className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                    className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer text-xs ${
                       selectedPresetType === 'ALL'
                         ? 'bg-gradient-to-r from-fuchsia-600 to-indigo-600 text-white shadow-md'
-                        : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                        : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 dark:border-transparent'
                     }`}
                   >
                     {lang === 'ar' ? 'كشف شامل (ALL)' : 'ALL'}
@@ -570,10 +591,10 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
                   <button
                     type="button"
                     onClick={isCameraActive ? stopCamera : startCamera}
-                    className={`px-4 py-2 rounded-xl font-bold flex items-center gap-2 transition-all cursor-pointer shadow-md ${
+                    className={`w-full sm:w-auto px-4 py-2 rounded-xl font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md text-xs ${
                       isCameraActive
                         ? 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-600/30'
-                        : 'bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-slate-950 font-bold'
+                        : 'bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-slate-950 font-black'
                     }`}
                   >
                     <Camera className="w-4 h-4" />
@@ -635,8 +656,8 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
           )}
 
           {cameraError && (
-            <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center gap-2 text-xs text-amber-300">
-              <AlertCircle className="w-4 h-4 shrink-0 text-amber-400" />
+            <div className="p-3.5 bg-amber-50 dark:bg-amber-500/10 border border-amber-300 dark:border-amber-500/30 rounded-xl flex items-center gap-2 text-xs text-amber-900 dark:text-amber-300 shadow-sm">
+              <AlertCircle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
               <span>{cameraError}</span>
             </div>
           )}
@@ -736,31 +757,35 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
           {scannedResult && !isAnalyzing && (
             <div className="space-y-4">
               
-              {/* Recognition Banner */}
-              <div className="p-4 rounded-xl bg-gradient-to-r from-teal-950/40 via-slate-900/60 to-slate-900/40 border border-teal-500/30 flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-teal-500/20 text-teal-300 flex items-center justify-center font-bold">
-                    <CheckCircle2 className="w-5 h-5 text-teal-400" />
+              {/* Recognition Banner: Fixed for Day Mode & Mobile Responsiveness */}
+              <div className="p-3.5 sm:p-4 rounded-xl bg-teal-50 dark:bg-slate-900/90 border border-teal-200 dark:border-teal-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+                <div className="flex items-start sm:items-center gap-3 min-w-0">
+                  <div className="w-9 h-9 rounded-xl bg-teal-600 text-white dark:bg-teal-500/20 dark:text-teal-300 flex items-center justify-center font-bold shrink-0 shadow-sm">
+                    <CheckCircle2 className="w-5 h-5 text-white dark:text-teal-400" />
                   </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-white">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
                         {lang === 'ar' ? 'نوع التحليل المكتشف:' : 'Detected Test Type:'}
                       </span>
-                      <span className="text-xs font-black uppercase px-2 py-0.5 rounded-md bg-teal-500/20 text-teal-300 font-mono">
-                        {scannedResult.detectedType}
+                      <span className="text-xs font-black uppercase px-2.5 py-0.5 rounded-lg bg-teal-600 text-white dark:bg-teal-500/20 dark:text-teal-300 font-mono shadow-sm">
+                        {scannedResult.detectedType === 'CHEMISTRY_ELECTROLYTES' || scannedResult.detectedType === 'CHEMISTRY' || (scannedResult.detectedType as any) === 'CARDIAC'
+                          ? (lang === 'ar' ? 'كيمياء ووظائف كبد وكلى وقلب وأملاح' : 'Chemistry, Renal, Liver, Cardiac & Electrolytes')
+                          : scannedResult.detectedType === 'COAGULATION' || (scannedResult.detectedType as any) === 'INR'
+                            ? (lang === 'ar' ? 'تخثر وسيولة (INR & Coagulation)' : 'INR & Coagulation')
+                            : scannedResult.detectedType}
                       </span>
-                      <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                      <span className="text-[10px] font-mono font-bold text-emerald-800 bg-emerald-100 border border-emerald-300 dark:text-emerald-400 dark:bg-emerald-500/10 dark:border-emerald-500/20 px-2 py-0.5 rounded-full">
                         {Math.round((scannedResult.confidence || 0.95) * 100)}% Confidence
                       </span>
                     </div>
-                    <p className="text-xs text-slate-300 mt-0.5">
+                    <p className="text-xs text-slate-700 dark:text-slate-300 mt-1 leading-relaxed">
                       {lang === 'ar' ? scannedResult.summaryAr : scannedResult.summaryEn}
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
                   <button
                     type="button"
                     onClick={() => {
@@ -768,9 +793,9 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
                       setScannedResult(null);
                       setEditableFields({});
                     }}
-                    className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold flex items-center gap-1 cursor-pointer transition-all"
+                    className="w-full sm:w-auto justify-center px-3 py-2 rounded-lg bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 shadow-sm dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 dark:border-slate-700 text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all"
                   >
-                    <RefreshCw className="w-3.5 h-3.5" />
+                    <RefreshCw className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
                     <span>{lang === 'ar' ? 'تصوير تحليل آخر' : 'Scan Another'}</span>
                   </button>
                 </div>
@@ -780,13 +805,13 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
                 
                 {/* Photo Preview (Col 4) */}
-                <div className="lg:col-span-4 bg-[#070c18] p-3 rounded-xl border border-slate-800 flex flex-col items-center justify-start space-y-2">
-                  <div className="w-full flex items-center justify-between text-xs text-slate-400 font-bold border-b border-slate-800 pb-1.5">
+                <div className="lg:col-span-4 bg-slate-50 dark:bg-[#070c18] p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-col items-center justify-start space-y-2.5 shadow-sm">
+                  <div className="w-full flex items-center justify-between text-xs text-slate-700 dark:text-slate-400 font-bold border-b border-slate-200 dark:border-slate-800 pb-2">
                     <span>{lang === 'ar' ? 'الصورة الملتقطة' : 'Captured Image'}</span>
-                    <span className="text-[10px] text-teal-400 font-mono">Verified OCR</span>
+                    <span className="text-[10px] text-teal-600 dark:text-teal-400 font-mono font-bold bg-teal-50 dark:bg-teal-950/40 px-2 py-0.5 rounded border border-teal-200 dark:border-teal-800">Verified OCR</span>
                   </div>
                   {selectedImage && (
-                    <div className="w-full max-h-[360px] overflow-auto rounded-lg border border-slate-800/80 bg-slate-950 flex items-center justify-center p-1">
+                    <div className="w-full max-h-[360px] overflow-auto rounded-lg border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950 flex items-center justify-center p-1.5 shadow-inner">
                       <img 
                         src={selectedImage} 
                         alt="Lab Slip Preview" 
@@ -796,35 +821,35 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
                   )}
 
                   {/* Sample extraction datetime */}
-                  <div className="w-full pt-2">
-                    <label className="text-[11px] font-semibold text-slate-400 block mb-1">
+                  <div className="w-full pt-1.5">
+                    <label className="text-[11px] font-bold text-slate-700 dark:text-slate-400 block mb-1">
                       {lang === 'ar' ? 'تاريخ ووقت سحب العينة:' : 'Sample Extraction Timestamp:'}
                     </label>
                     <input
                       type="datetime-local"
                       value={sampleDate}
                       onChange={(e) => setSampleDate(e.target.value)}
-                      className="w-full bg-[#0b1224] border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-teal-500 focus:outline-none"
+                      className="w-full bg-white dark:bg-[#0b1224] border border-slate-300 dark:border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 dark:text-white focus:border-teal-500 focus:outline-none shadow-sm"
                     />
                   </div>
                 </div>
 
                 {/* Extracted Parameters Review Panel (Col 8) */}
                 <div className="lg:col-span-8 space-y-3">
-                  <div className="border border-slate-800 rounded-xl p-4 bg-[#070c18] space-y-3.5 shadow-lg">
+                  <div className="border border-slate-200 dark:border-slate-800 rounded-xl p-4 bg-white dark:bg-[#070c18] space-y-3.5 shadow-sm">
                     {/* Header */}
-                    <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-800">
+                    <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-200 dark:border-slate-800">
                       <div>
-                        <div className="flex items-center gap-2">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                          <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                          <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
                             {lang === "ar" ? "التحاليل والنتائج المستخرجة" : "Extracted Lab Parameters"}
                           </h4>
-                          <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-teal-500/20 text-teal-300 font-mono font-bold">
+                          <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-teal-100 text-teal-900 border border-teal-200 dark:bg-teal-500/20 dark:text-teal-300 dark:border-transparent font-mono font-bold">
                             {(scannedResult.items || []).length} {lang === "ar" ? "تحليل" : "tests"}
                           </span>
                         </div>
-                        <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+                        <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">
                           {lang === "ar" 
                             ? "راجع النتائج أو احذف ما لا تريده بالضغط على أيقونة السلة 🗑️. لن يتم حفظ أي قيمة إلا بعد النقر على زر تأكيد وحفظ فوري بالأسفل." 
                             : "Review values or remove unwanted parameters with 🗑️. Nothing will be saved until you click Confirm & Save Directly below."}
@@ -834,7 +859,7 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
 
                     {/* Parameters Grid or Empty message */}
                     {(!scannedResult.items || scannedResult.items.length === 0) ? (
-                      <div className="p-8 text-center text-slate-500 text-xs border border-dashed border-slate-800/80 rounded-xl">
+                      <div className="p-8 text-center text-slate-500 dark:text-slate-400 text-xs border border-dashed border-slate-300 dark:border-slate-800/80 rounded-xl bg-slate-50 dark:bg-slate-900/30">
                         {lang === "ar" ? "تم حذف كافة البنود أو لم يتم استخراج أي قيم صالحة." : "All items have been removed or no valid values extracted."}
                       </div>
                     ) : (
@@ -842,21 +867,21 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
                         {scannedResult.items.map((item, idx) => (
                           <div 
                             key={idx} 
-                            className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 hover:border-slate-700 transition-all flex items-center justify-between gap-2 shadow-sm group"
+                            className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 hover:border-teal-400 dark:hover:border-slate-700 transition-all flex items-center justify-between gap-2 shadow-sm group"
                           >
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="font-bold text-xs text-white truncate max-w-[130px] font-mono">
+                                <span className="font-bold text-xs text-slate-900 dark:text-white truncate max-w-[130px] font-mono">
                                   {item.testName}
                                 </span>
                                 {item.unit && (
-                                  <span className="text-[10px] text-slate-400 font-mono">
+                                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
                                     ({item.unit})
                                   </span>
                                 )}
                               </div>
                               {item.category && item.category !== "Other" && (
-                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-teal-400/80 font-mono mt-0.5 inline-block">
+                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-teal-400/80 font-mono mt-0.5 inline-block">
                                   {item.category}
                                 </span>
                               )}
@@ -867,13 +892,13 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
                                 type="text"
                                 value={item.value}
                                 onChange={(e) => handleItemValueChange(idx, e.target.value)}
-                                className="w-20 bg-[#0b1224] border border-teal-500/40 rounded-lg px-2 py-1 text-xs text-teal-300 font-mono font-bold text-center focus:outline-none focus:border-teal-400"
+                                className="w-20 bg-white dark:bg-[#0b1224] border border-teal-400 dark:border-teal-500/40 rounded-lg px-2 py-1 text-xs text-teal-800 dark:text-teal-300 font-mono font-bold text-center focus:outline-none focus:ring-1 focus:ring-teal-500 shadow-sm"
                                 placeholder="0.0"
                               />
                               <button
                                 type="button"
                                 onClick={() => handleDeleteDetailedItem(idx)}
-                                className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-950/40 transition-colors cursor-pointer"
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:text-rose-400 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
                                 title={lang === "ar" ? "حذف هذا التحليل من المسودة" : "Remove parameter from scan draft"}
                               >
                                 <Trash2 className="w-4 h-4" />
@@ -892,18 +917,18 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
         </div>
 
         {/* FOOTER ACTIONS */}
-        <div className="border-t border-slate-800/80 pt-4 flex flex-wrap items-center justify-between gap-3 shrink-0">
+        <div className="border-t border-slate-200 dark:border-slate-800/80 pt-3.5 sm:pt-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-400 font-mono">
-              {lang === 'ar' ? 'نظام الذكاء الاصطناعي الطبي المعتمد' : 'Gemini 3.8 Flash Vision Engine'}
+            <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+              {lang === 'ar' ? 'نظام الذكاء الاصطناعي الطبي المعتمد' : 'Gemini Vision OCR'}
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-all cursor-pointer"
+              className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 text-xs font-bold transition-all cursor-pointer shadow-sm text-center"
             >
               {lang === 'ar' ? 'إغلاق' : 'Cancel'}
             </button>
@@ -912,9 +937,9 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
               <button
                 type="button"
                 onClick={handleApplyToOpenForm}
-                className="px-4 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold flex items-center gap-1.5 border border-slate-600 transition-all cursor-pointer"
+                className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white text-xs font-bold flex items-center justify-center gap-1.5 border border-slate-300 dark:border-slate-600 transition-all cursor-pointer shadow-sm"
               >
-                <Sliders className="w-4 h-4 text-cyan-400" />
+                <Sliders className="w-4 h-4 text-teal-600 dark:text-cyan-400" />
                 <span>{lang === 'ar' ? 'تعبئة الخانات في النموذج المفتوح' : 'Auto-Fill Into Open Form'}</span>
               </button>
             )}
@@ -924,7 +949,7 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
                 type="button"
                 disabled={isSaving || saveSuccess}
                 onClick={handleConfirmAndDirectSave}
-                className="px-5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-slate-950 font-bold text-xs flex items-center gap-2 shadow-lg shadow-emerald-500/25 transition-all disabled:opacity-50 cursor-pointer"
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-slate-950 font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/25 transition-all disabled:opacity-50 cursor-pointer"
               >
                 {saveSuccess ? (
                   <>

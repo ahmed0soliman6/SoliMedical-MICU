@@ -46,23 +46,77 @@ interface LabFlowsheetSectionProps {
 }
 
 const COMMON_LAB_PRESETS = [
-  { name: 'HG', category: 'CBC', unit: 'g/dL', normal: '12.0 - 16.0' },
+  // CBC
   { name: 'Hb', category: 'CBC', unit: 'g/dL', normal: '12.0 - 16.0' },
+  { name: 'HG', category: 'CBC', unit: 'g/dL', normal: '12.0 - 16.0' },
   { name: 'WBC', category: 'CBC', unit: 'x10^9/L', normal: '4.0 - 11.0' },
   { name: 'Platelets', category: 'CBC', unit: 'x10^9/L', normal: '150 - 450' },
-  { name: 'Creatinine', category: 'Biochemistry', unit: 'mg/dL', normal: '0.7 - 1.3' },
-  { name: 'Urea', category: 'Biochemistry', unit: 'mg/dL', normal: '15 - 45' },
-  { name: 'Sodium (Na)', category: 'Electrolytes', unit: 'mEq/L', normal: '135 - 145' },
-  { name: 'Potassium (K)', category: 'Electrolytes', unit: 'mEq/L', normal: '3.5 - 5.0' },
+  { name: 'Hematocrit (Hct)', category: 'CBC', unit: '%', normal: '36 - 48' },
+  { name: 'Neutrophils', category: 'CBC', unit: '%', normal: '40 - 75' },
+  { name: 'Lymphocytes', category: 'CBC', unit: '%', normal: '20 - 45' },
+  { name: 'MCV', category: 'CBC', unit: 'fL', normal: '80 - 100' },
+
+  // ABG
   { name: 'ABG - pH', category: 'ABG', unit: 'pH', normal: '7.35 - 7.45' },
   { name: 'ABG - pO2', category: 'ABG', unit: 'mmHg', normal: '80 - 100' },
   { name: 'ABG - pCO2', category: 'ABG', unit: 'mmHg', normal: '35 - 45' },
   { name: 'ABG - HCO3', category: 'ABG', unit: 'mmol/L', normal: '22 - 26' },
-  { name: 'Lactate', category: 'Biochemistry', unit: 'mmol/L', normal: '0.5 - 2.0' },
-  { name: 'CRP', category: 'Biochemistry', unit: 'mg/L', normal: '< 5.0' },
+  { name: 'Lactate', category: 'ABG', unit: 'mmol/L', normal: '0.5 - 2.0' },
+  { name: 'Base Excess (BE)', category: 'ABG', unit: 'mmol/L', normal: '-2.0 - +2.0' },
+  { name: 'SaO2', category: 'ABG', unit: '%', normal: '95 - 100' },
+
+  // INR & Coagulation
   { name: 'INR', category: 'Coagulation', unit: 'ratio', normal: '0.8 - 1.2' },
   { name: 'PT', category: 'Coagulation', unit: 'sec', normal: '11.0 - 13.5' },
-  { name: 'PTT', category: 'Coagulation', unit: 'sec', normal: '25 - 35' },
+  { name: 'PTT / aPTT', category: 'Coagulation', unit: 'sec', normal: '25 - 35' },
+  { name: 'D-Dimer', category: 'Coagulation', unit: 'ug/mL', normal: '< 0.5' },
+  { name: 'Fibrinogen', category: 'Coagulation', unit: 'mg/dL', normal: '200 - 400' },
+
+  // Chemistry, Renal, Liver, Cardiac & Electrolytes
+  // Renal (وظائف الكلى)
+  { name: 'Creatinine', category: 'Biochemistry', unit: 'mg/dL', normal: '0.7 - 1.3' },
+  { name: 'Urea', category: 'Biochemistry', unit: 'mg/dL', normal: '15 - 45' },
+  { name: 'BUN', category: 'Biochemistry', unit: 'mg/dL', normal: '7 - 20' },
+  { name: 'Uric Acid', category: 'Biochemistry', unit: 'mg/dL', normal: '3.5 - 7.2' },
+  { name: 'eGFR', category: 'Biochemistry', unit: 'mL/min/1.73m2', normal: '> 90' },
+  
+  // Electrolytes (الأملاح والشوارد)
+  { name: 'Sodium (Na)', category: 'Electrolytes', unit: 'mEq/L', normal: '135 - 145' },
+  { name: 'Potassium (K)', category: 'Electrolytes', unit: 'mEq/L', normal: '3.5 - 5.0' },
+  { name: 'Chloride (Cl)', category: 'Electrolytes', unit: 'mEq/L', normal: '98 - 106' },
+  { name: 'Calcium (Ca)', category: 'Electrolytes', unit: 'mg/dL', normal: '8.5 - 10.5' },
+  { name: 'Ionized Calcium', category: 'Electrolytes', unit: 'mmol/L', normal: '1.15 - 1.33' },
+  { name: 'Magnesium (Mg)', category: 'Electrolytes', unit: 'mg/dL', normal: '1.7 - 2.2' },
+  { name: 'Phosphorus (PO4)', category: 'Electrolytes', unit: 'mg/dL', normal: '2.5 - 4.5' },
+
+  // Liver (وظائف الكبد)
+  { name: 'ALT (SGPT)', category: 'Biochemistry', unit: 'U/L', normal: '7 - 56' },
+  { name: 'AST (SGOT)', category: 'Biochemistry', unit: 'U/L', normal: '10 - 40' },
+  { name: 'Total Bilirubin', category: 'Biochemistry', unit: 'mg/dL', normal: '0.2 - 1.2' },
+  { name: 'Direct Bilirubin', category: 'Biochemistry', unit: 'mg/dL', normal: '0.0 - 0.3' },
+  { name: 'Albumin', category: 'Biochemistry', unit: 'g/dL', normal: '3.5 - 5.0' },
+  { name: 'Total Protein', category: 'Biochemistry', unit: 'g/dL', normal: '6.4 - 8.3' },
+  { name: 'ALP (Alkaline Phosphatase)', category: 'Biochemistry', unit: 'U/L', normal: '44 - 147' },
+  { name: 'GGT', category: 'Biochemistry', unit: 'U/L', normal: '9 - 48' },
+
+  // Cardiac (وظائف وإنزيمات القلب)
+  { name: 'Troponin I (hs-cTnI)', category: 'Biochemistry', unit: 'ng/mL', normal: '< 0.04' },
+  { name: 'Troponin T (hs-cTnT)', category: 'Biochemistry', unit: 'ng/L', normal: '< 14' },
+  { name: 'CK-MB', category: 'Biochemistry', unit: 'ng/mL', normal: '< 5.0' },
+  { name: 'Total CK (CPK)', category: 'Biochemistry', unit: 'U/L', normal: '30 - 200' },
+  { name: 'BNP / NT-proBNP', category: 'Biochemistry', unit: 'pg/mL', normal: '< 100' },
+  { name: 'Myoglobin', category: 'Biochemistry', unit: 'ng/mL', normal: '25 - 72' },
+
+  // Inflammatory, Metabolic & Pancreatic
+  { name: 'CRP', category: 'Biochemistry', unit: 'mg/L', normal: '< 5.0' },
+  { name: 'Procalcitonin (PCT)', category: 'Biochemistry', unit: 'ng/mL', normal: '< 0.5' },
+  { name: 'Glucose (RBS / FBS)', category: 'Biochemistry', unit: 'mg/dL', normal: '70 - 140' },
+  { name: 'HbA1c', category: 'Biochemistry', unit: '%', normal: '< 5.7' },
+  { name: 'Amylase', category: 'Biochemistry', unit: 'U/L', normal: '28 - 100' },
+  { name: 'Lipase', category: 'Biochemistry', unit: 'U/L', normal: '10 - 140' },
+  { name: 'LDH (Lactate Dehydrogenase)', category: 'Biochemistry', unit: 'U/L', normal: '140 - 280' },
+  { name: 'Ferritin', category: 'Biochemistry', unit: 'ng/mL', normal: '20 - 250' },
+  { name: 'ESR', category: 'Biochemistry', unit: 'mm/hr', normal: '< 20' },
 ];
 
 const formatNumericDate = (dateVal?: string | Date | number): string => {
@@ -79,68 +133,94 @@ const formatNumericDate = (dateVal?: string | Date | number): string => {
   }
 };
 
-const getCategoryForTest = (testName: string, items: LabResultItem[]): 'ABG' | 'CBC' | 'Chemistry' | 'INR' | 'Other' => {
+export const getCategoryForTest = (testName: string, items: LabResultItem[] = []): 'ABG' | 'CBC' | 'Chemistry' | 'INR' | 'Other' => {
   const norm = (testName || '').toLowerCase().trim();
   const cat = (items[0]?.category || '').toLowerCase().trim();
 
   // 1. ABG (غازات الدم الشرياني)
   if (
-    cat === 'abg' ||
+    cat === 'abg' || cat.includes('blood gas') || cat.includes('arterial') ||
     norm.startsWith('abg') ||
-    norm === 'ph' || norm.startsWith('ph ') || norm.includes(' ph') ||
+    norm === 'ph' || norm.startsWith('ph ') || norm.includes(' ph') || norm.includes('ph(') ||
     norm === 'pco2' || norm.includes('pco2') ||
-    norm === 'po2' || norm.includes('po2') ||
-    norm === 'hco3' || norm.includes('hco3') ||
-    norm.includes('base excess') || norm === 'be' ||
-    norm === 'cthb' || norm.includes('p/f') ||
-    norm.includes('lactate') || norm === 'lac' ||
-    norm === 'so2' || norm === 'sao2'
+    norm === 'po2' || norm === 'pao2' || norm.includes('po2') ||
+    norm === 'hco3' || norm.includes('hco3') || norm.includes('bicarbonate') ||
+    norm.includes('base excess') || norm === 'be' || norm.includes(' be') ||
+    norm === 'cthb' || norm.includes('p/f') || norm.includes('pao2/fio2') ||
+    norm.includes('lactate (abg)') || norm.includes('abg - lactate') ||
+    norm === 'so2' || norm === 'sao2' || norm.includes('o2 sat')
   ) {
     return 'ABG';
   }
 
   // 2. CBC (صورة الدم الكاملة)
   if (
-    cat === 'cbc' ||
+    cat === 'cbc' || cat.includes('hematology') || cat.includes('blood count') ||
     norm.startsWith('cbc') ||
-    norm === 'wbc' || norm.includes('wbc') ||
-    norm === 'hb' || norm === 'hg' || norm.includes('hemoglobin') ||
-    norm === 'hct' || norm.includes('hematocrit') ||
-    norm === 'plt' || norm.includes('platelet') ||
+    norm === 'wbc' || norm.includes('wbc') || norm.includes('white blood') || norm.includes('leukocyte') || norm === 'tlc' ||
+    norm === 'hb' || norm === 'hg' || norm === 'hgb' || norm.includes('hemoglobin') ||
+    norm === 'hct' || norm.includes('hematocrit') || norm === 'pcv' ||
+    norm === 'plt' || norm.includes('platelet') || norm.includes('thrombocyte') ||
     norm.includes('neutrophil') || norm.includes('lymphocyte') ||
     norm.includes('monocyte') || norm.includes('eosinophil') ||
-    norm.includes('basophil') || norm.includes('mcv') || norm.includes('mch') || norm.includes('rdw') ||
-    norm.includes('anemia')
+    norm.includes('basophil') || norm.includes('mcv') || norm.includes('mch') || norm.includes('mchc') ||
+    norm.includes('rdw') || norm.includes('mpv') || norm === 'rbc' || norm.includes('red blood') ||
+    norm.includes('reticulocyte') || norm.includes('anemia')
   ) {
     return 'CBC';
   }
 
   // 3. INR & Coagulation (السيولة وتخثر الدم)
   if (
-    cat === 'coagulation' || cat === 'inr' ||
+    cat === 'coagulation' || cat === 'inr' || cat.includes('hemostasis') || cat.includes('clotting') ||
     norm === 'inr' || norm.includes('inr') ||
     norm === 'pt' || norm.includes('prothrombin') ||
-    norm === 'ptt' || norm === 'aptt' ||
-    norm.includes('fibrinogen') || norm.includes('d-dimer') ||
-    norm.includes('act')
+    norm === 'ptt' || norm === 'aptt' || norm.includes('thromboplastin') ||
+    norm.includes('fibrinogen') || norm === 'fib' ||
+    norm.includes('d-dimer') || norm.includes('ddimer') ||
+    norm.includes('act') || norm.includes('anti-xa') || norm.includes('thrombin time')
   ) {
     return 'INR';
   }
 
-  // 4. Chemistry / Biochemistry & Electrolytes (كيمياء الدم والأملاح ووظائف الكلى والكبد)
+  // 4. Chemistry / Biochemistry, Electrolytes, Renal, Liver & Cardiac (كيمياء الدم والأملاح ووظائف الكبد والكلى والقلب)
   if (
-    cat === 'biochemistry' || cat === 'electrolytes' || cat === 'chemistry' || cat === 'renal' || cat === 'liver' ||
-    norm.includes('creat') || norm.includes('urea') || norm.includes('bun') ||
-    norm.includes('sodium') || norm === 'na' || norm.includes(' na') ||
-    norm.includes('potassium') || norm === 'k' || norm.includes(' k') ||
-    norm.includes('chloride') || norm.includes('calcium') || norm.includes('magnesium') ||
-    norm.includes('alt') || norm.includes('ast') || norm.includes('bilirubin') || norm.includes('albumin') ||
-    norm.includes('crp') || norm.includes('procalcitonin') || norm.includes('glucose') || norm.includes('rbs') || norm.includes('troponin') ||
-    norm.includes('ck') || norm.includes('ldh')
+    cat === 'biochemistry' || cat === 'electrolytes' || cat === 'chemistry' || 
+    cat.includes('renal') || cat.includes('kidney') || 
+    cat.includes('liver') || cat.includes('hepatic') || 
+    cat.includes('cardiac') || cat.includes('heart') || cat.includes('enzymes') ||
+    cat.includes('metabolic') || cat.includes('endocrine') || cat.includes('lipid') || cat.includes('inflammatory') ||
+    // Renal Function (وظائف الكلى)
+    norm.includes('creat') || norm.includes('urea') || norm.includes('bun') || norm.includes('uric') || norm.includes('gfr') || norm.includes('cystatin') || norm.includes('rft') || norm.includes('kft') ||
+    // Electrolytes & Minerals (الأملاح والمعادن)
+    norm.includes('sodium') || norm === 'na' || norm.startsWith('na ') || norm.includes('(na)') || norm.includes(' na') ||
+    norm.includes('potassium') || norm === 'k' || norm.startsWith('k ') || norm.includes('(k)') || norm.includes(' k') ||
+    norm.includes('chloride') || norm === 'cl' || norm.includes('(cl)') ||
+    norm.includes('calcium') || norm === 'ca' || norm.includes('(ca)') || norm.includes('corrected ca') || norm.includes('ionized ca') ||
+    norm.includes('magnesium') || norm === 'mg' || norm.includes('(mg)') ||
+    norm.includes('phosphorus') || norm.includes('phosphate') || norm === 'po4' || norm.includes('(po4)') ||
+    norm.includes('osmolality') || norm.includes('anion gap') ||
+    // Liver Function (وظائف الكبد)
+    norm.includes('alt') || norm.includes('sgpt') || norm.includes('ast') || norm.includes('sgot') ||
+    norm.includes('bilirubin') || norm.includes('bili') || norm.includes('albumin') || norm === 'alb' ||
+    norm.includes('total protein') || norm.includes('globulin') || norm.includes('alp') || norm.includes('alkaline phosphatase') ||
+    norm.includes('ggt') || norm.includes('ammonia') || norm === 'nh3' || norm.includes('lft') ||
+    // Cardiac Markers & Enzymes (وظائف وإنزيمات القلب)
+    norm.includes('troponin') || norm.includes('trop') || norm.includes('ctn') ||
+    norm.includes('ck') || norm.includes('cpk') || norm.includes('ck-mb') || norm.includes('ckmb') ||
+    norm.includes('bnp') || norm.includes('probnp') || norm.includes('myoglobin') ||
+    // Inflammatory, Metabolic, Pancreatic, Lipids & Endocrine
+    norm.includes('crp') || norm.includes('procalcitonin') || norm === 'pct' || norm.includes('ferritin') || norm.includes('esr') ||
+    norm.includes('glucose') || norm.includes('rbs') || norm.includes('fbs') || norm.includes('sugar') || norm.includes('hba1c') ||
+    norm.includes('amylase') || norm.includes('lipase') || norm.includes('ldh') || norm.includes('lactate') ||
+    norm.includes('cholesterol') || norm.includes('triglyceride') || norm.includes('hdl') || norm.includes('ldl') ||
+    norm.includes('tsh') || norm.includes('ft3') || norm.includes('ft4') || norm.includes('cortisol') ||
+    norm.includes('vitamin') || norm.includes('iron') || norm.includes('tibc')
   ) {
     return 'Chemistry';
   }
 
+  // 5. Other Tests & Cultures (تحاليل ومزارع أخرى: مزارع الدم، البول، البلغم، السوائل، والفحوصات الخاصة)
   return 'Other';
 };
 
@@ -220,13 +300,13 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
   const [quickAddTest, setQuickAddTest] = useState<string | null>(null);
   const [quickAddValue, setQuickAddValue] = useState<string>('');
 
-  // Collapsible category cards in main flowsheet
+  // Collapsible category cards in main flowsheet (collapsed by default)
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
-    ABG: false,
-    CBC: false,
-    Chemistry: false,
-    INR: false,
-    Other: false,
+    ABG: true,
+    CBC: true,
+    Chemistry: true,
+    INR: true,
+    Other: true,
   });
 
   const toggleSection = (sec: string) => {
@@ -615,22 +695,22 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
       {/* Quick search filter if there are many tests */}
       {groupedLabs.size > 4 && (
         <div className="relative">
-          <Search className="w-4 h-4 absolute left-3 rtl:left-auto rtl:right-3 top-2.5 text-slate-500" />
+          <Search className="w-4 h-4 absolute left-3 rtl:left-auto rtl:right-3 top-2.5 text-slate-400 dark:text-slate-500" />
           <input
             type="text"
             value={filterQuery}
             onChange={(e) => setFilterQuery(e.target.value)}
             placeholder={lang === 'ar' ? 'بحث في التحاليل المسجلة (مثل Hb, Creatinine)...' : 'Filter lab tests (e.g., Hb, Creatinine)...'}
-            className="w-full px-9 py-2 text-xs rounded-xl bg-slate-900 border border-slate-800 text-white placeholder-slate-500 focus:outline-none focus:border-teal-500"
+            className="w-full px-9 py-2 text-xs rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-teal-500 shadow-sm"
           />
         </div>
       )}
 
       {/* Categorized Collapsible Lab Flowsheet View */}
       {testKeys.length === 0 ? (
-        <div className="p-8 text-center bg-slate-900/40 rounded-xl border border-dashed border-slate-800 space-y-3">
-          <FlaskConical className="w-8 h-8 text-slate-600 mx-auto" />
-          <p className="text-xs text-slate-400">
+        <div className="p-8 text-center bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 space-y-3">
+          <FlaskConical className="w-8 h-8 text-slate-400 dark:text-slate-600 mx-auto" />
+          <p className="text-xs text-slate-600 dark:text-slate-400">
             {lang === "ar" 
               ? "لم يتم تسجيل أي تحاليل لهذا المريض حتى الآن. اضغط على \"إضافة تحليل جديد\" للبدء." 
               : "No laboratory tests recorded yet. Click \"Add Lab Result\" to start."}
@@ -641,7 +721,7 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
                 key={p.name}
                 type="button"
                 onClick={() => handleOpenAddForTest(p.name)}
-                className="px-2.5 py-1 text-[11px] rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors border border-slate-700"
+                className="px-2.5 py-1 text-[11px] rounded-lg bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-300 transition-colors border border-slate-200 dark:border-slate-700 shadow-sm"
               >
                 + {p.name}
               </button>
@@ -652,9 +732,9 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
         <div className="space-y-3.5">
           {/* Categories Quick Controls: Expand / Collapse All */}
           <div className="flex items-center justify-between gap-2 px-1 flex-wrap">
-            <div className="flex items-center gap-1.5 text-xs text-slate-400">
+            <div className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
               <span>{lang === "ar" ? "أقسام التحاليل المصنفة:" : "Categorized Lab Panels:"}</span>
-              <span className="font-mono text-teal-400 font-bold">{testKeys.length}</span>
+              <span className="font-mono text-teal-600 dark:text-teal-400 font-bold">{testKeys.length}</span>
               <span>{lang === "ar" ? "تحليل مسجل" : "active tests"}</span>
             </div>
 
@@ -662,20 +742,20 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
               <button
                 type="button"
                 onClick={expandAllSections}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 text-[11px] border border-slate-800 transition-colors cursor-pointer"
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-[11px] border border-slate-200 dark:border-slate-800 transition-colors cursor-pointer shadow-sm"
                 title={lang === "ar" ? "فتح وتوسيع كافة الأقسام" : "Expand all panels"}
               >
-                <ChevronDown className="w-3.5 h-3.5 text-teal-400" />
+                <ChevronDown className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
                 <span>{lang === "ar" ? "فتح الكل" : "Expand All"}</span>
               </button>
 
               <button
                 type="button"
                 onClick={collapseAllSections}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 text-[11px] border border-slate-800 transition-colors cursor-pointer"
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-[11px] border border-slate-200 dark:border-slate-800 transition-colors cursor-pointer shadow-sm"
                 title={lang === "ar" ? "طي وإخفاء تفاصيل كافة الأقسام" : "Collapse all panels"}
               >
-                <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
+                <ChevronUp className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
                 <span>{lang === "ar" ? "طي الكل" : "Collapse All"}</span>
               </button>
             </div>
@@ -688,50 +768,60 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
               nameAr: "غازات الدم الشرياني (ABG)",
               nameEn: "Arterial Blood Gas (ABG)",
               icon: Activity,
-              headerBg: "bg-emerald-950/30 hover:bg-emerald-950/50",
-              border: "border-emerald-500/40",
-              accentText: "text-emerald-300",
-              badgeBg: "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30",
+              headerBg: "bg-emerald-50 hover:bg-emerald-100/80 dark:bg-emerald-950/40 dark:hover:bg-emerald-950/60",
+              border: "border-emerald-300 dark:border-emerald-500/40",
+              accentText: "text-emerald-900 dark:text-emerald-300",
+              subText: "text-emerald-800/80 dark:text-slate-400",
+              badgeBg: "bg-emerald-100 text-emerald-900 border border-emerald-300 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/30",
+              iconBg: "bg-emerald-600 text-white dark:bg-emerald-500/20 dark:text-emerald-300",
             },
             {
               id: "CBC" as const,
               nameAr: "صورة الدم الكاملة (CBC)",
               nameEn: "Complete Blood Count (CBC)",
               icon: Droplet,
-              headerBg: "bg-rose-950/30 hover:bg-rose-950/50",
-              border: "border-rose-500/40",
-              accentText: "text-rose-300",
-              badgeBg: "bg-rose-500/20 text-rose-300 border border-rose-500/30",
+              headerBg: "bg-rose-50 hover:bg-rose-100/80 dark:bg-rose-950/40 dark:hover:bg-rose-950/60",
+              border: "border-rose-300 dark:border-rose-500/40",
+              accentText: "text-rose-900 dark:text-rose-300",
+              subText: "text-rose-800/80 dark:text-slate-400",
+              badgeBg: "bg-rose-100 text-rose-900 border border-rose-300 dark:bg-rose-500/20 dark:text-rose-300 dark:border-rose-500/30",
+              iconBg: "bg-rose-600 text-white dark:bg-rose-500/20 dark:text-rose-300",
             },
             {
               id: "Chemistry" as const,
-              nameAr: "كيمياء الدم والأملاح (Chemistry & Electrolytes)",
-              nameEn: "Chemistry & Electrolytes",
+              nameAr: "كيمياء الدم والأملاح ووظائف الكبد والكلى والقلب (Chemistry, Renal, Liver & Cardiac)",
+              nameEn: "Chemistry, Electrolytes, Renal, Liver & Cardiac",
               icon: FlaskConical,
-              headerBg: "bg-cyan-950/30 hover:bg-cyan-950/50",
-              border: "border-cyan-500/40",
-              accentText: "text-cyan-300",
-              badgeBg: "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30",
+              headerBg: "bg-cyan-50 hover:bg-cyan-100/80 dark:bg-cyan-950/40 dark:hover:bg-cyan-950/60",
+              border: "border-cyan-300 dark:border-cyan-500/40",
+              accentText: "text-cyan-950 dark:text-cyan-300",
+              subText: "text-cyan-800/80 dark:text-slate-400",
+              badgeBg: "bg-cyan-100 text-cyan-950 border border-cyan-300 dark:bg-cyan-500/20 dark:text-cyan-300 dark:border-cyan-500/30",
+              iconBg: "bg-cyan-600 text-white dark:bg-cyan-500/20 dark:text-cyan-300",
             },
             {
               id: "INR" as const,
               nameAr: "السيولة وتخثر الدم (INR & Coagulation)",
               nameEn: "Coagulation Profile (INR / PT / PTT)",
               icon: Sparkles,
-              headerBg: "bg-amber-950/30 hover:bg-amber-950/50",
-              border: "border-amber-500/40",
-              accentText: "text-amber-300",
-              badgeBg: "bg-amber-500/20 text-amber-300 border border-amber-500/30",
+              headerBg: "bg-amber-50 hover:bg-amber-100/80 dark:bg-amber-950/40 dark:hover:bg-amber-950/60",
+              border: "border-amber-300 dark:border-amber-500/40",
+              accentText: "text-amber-950 dark:text-amber-300",
+              subText: "text-amber-800/80 dark:text-slate-400",
+              badgeBg: "bg-amber-100 text-amber-950 border border-amber-300 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-500/30",
+              iconBg: "bg-amber-600 text-white dark:bg-amber-500/20 dark:text-amber-300",
             },
             {
               id: "Other" as const,
-              nameAr: "تحاليل ومزارع أخرى (Other Tests)",
-              nameEn: "Other & Specialized Tests",
+              nameAr: "تحاليل ومزارع أخرى (Other Tests & Cultures)",
+              nameEn: "Other Tests & Cultures",
               icon: FileText,
-              headerBg: "bg-slate-900/50 hover:bg-slate-900/70",
-              border: "border-slate-700/60",
-              accentText: "text-slate-300",
-              badgeBg: "bg-slate-800 text-slate-300 border border-slate-700/50",
+              headerBg: "bg-slate-100 hover:bg-slate-200/80 dark:bg-slate-900/50 dark:hover:bg-slate-900/70",
+              border: "border-slate-300 dark:border-slate-700/60",
+              accentText: "text-slate-900 dark:text-slate-300",
+              subText: "text-slate-700 dark:text-slate-400",
+              badgeBg: "bg-slate-200 text-slate-900 border border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700/50",
+              iconBg: "bg-slate-700 text-white dark:bg-slate-800 dark:text-slate-300",
             },
           ]).map((cat) => {
             const categoryTestKeys = testKeys.filter(tKey => {
@@ -747,7 +837,7 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
             return (
               <div 
                 key={cat.id} 
-                className={"rounded-2xl border transition-all duration-200 overflow-hidden " + cat.border + " bg-[#070c18]/90 shadow-md"}
+                className={"rounded-2xl border transition-all duration-200 overflow-hidden " + cat.border + " bg-white dark:bg-[#070c18]/90 shadow-sm"}
               >
                 {/* Collapsible Card Header */}
                 <div
@@ -755,7 +845,7 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
                   className={"p-3.5 flex items-center justify-between gap-3 cursor-pointer transition-colors select-none " + cat.headerBg}
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <div className={"w-8 h-8 rounded-xl flex items-center justify-center " + cat.badgeBg}>
+                    <div className={"w-8 h-8 rounded-xl flex items-center justify-center font-bold " + cat.iconBg}>
                       <Icon className="w-4 h-4" />
                     </div>
                     <div>
@@ -767,24 +857,24 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
                           {categoryTestKeys.length} {lang === "ar" ? "تحليل" : "tests"}
                         </span>
                       </div>
-                      <p className="text-[11px] text-slate-400 truncate max-w-md mt-0.5 font-mono">
+                      <p className={"text-[11px] truncate max-w-md mt-0.5 font-mono " + cat.subText}>
                         {categoryTestKeys.join(" • ")}
                       </p>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-[11px] text-slate-400 hidden sm:inline font-mono">
+                    <span className="text-[11px] text-slate-600 dark:text-slate-400 hidden sm:inline font-mono">
                       {isCollapsed ? (lang === "ar" ? "انقر للفتح" : "Click to expand") : (lang === "ar" ? "انقر للطي" : "Click to collapse")}
                     </span>
                     <button
                       type="button"
-                      className="w-7 h-7 rounded-lg bg-slate-900/80 hover:bg-slate-800 text-slate-300 flex items-center justify-center transition-colors"
+                      className="w-7 h-7 rounded-lg bg-white/90 hover:bg-white text-slate-700 dark:bg-slate-900/80 dark:hover:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-transparent flex items-center justify-center transition-colors shadow-sm"
                     >
                       {isCollapsed ? (
-                        <ChevronDown className="w-4 h-4 text-slate-400" />
+                        <ChevronDown className="w-4 h-4 text-slate-500 dark:text-slate-400" />
                       ) : (
-                        <ChevronUp className="w-4 h-4 text-teal-400" />
+                        <ChevronUp className="w-4 h-4 text-teal-600 dark:text-teal-400" />
                       )}
                     </button>
                   </div>
@@ -792,7 +882,7 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
 
                 {/* Collapsible Body (Trend Cards Grid) */}
                 {!isCollapsed && (
-                  <div className="p-3 sm:p-4 border-t border-slate-800/80 bg-slate-950/50 animate-in fade-in duration-200">
+                  <div className="p-3 sm:p-4 border-t border-slate-200 dark:border-slate-800/80 bg-slate-50/70 dark:bg-slate-950/50 animate-in fade-in duration-200">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       {categoryTestKeys.map((testName) => {
                         const items = groupedLabs.get(testName) || [];
@@ -816,7 +906,7 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
                           <div
                             key={testName}
                             onClick={() => setSelectedTestName(testName)}
-                            className="group p-3.5 rounded-xl bg-[#0d1527] hover:bg-[#111c34] border border-slate-800 hover:border-teal-500/60 transition-all cursor-pointer shadow-md flex flex-col justify-between"
+                            className="group p-3.5 rounded-xl bg-white dark:bg-[#0d1527] hover:bg-slate-50 dark:hover:bg-[#111c34] border border-slate-200 dark:border-slate-800 hover:border-teal-500/60 dark:hover:border-teal-500/60 transition-all cursor-pointer shadow-sm flex flex-col justify-between"
                           >
                             <div>
                               {/* Top Bar: Name, Unit, and Total Count + Green Quick Add "+" Button */}
@@ -841,26 +931,26 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
                                     <Plus className="w-4 h-4 stroke-[3]" />
                                   </button>
 
-                                  <span className="font-bold text-sm text-white group-hover:text-teal-300 transition-colors font-mono">
+                                  <span className="font-bold text-sm text-slate-900 dark:text-white group-hover:text-teal-600 dark:group-hover:text-teal-300 transition-colors font-mono">
                                     {testName}
                                   </span>
                                   {latest.unit && (
-                                    <span className="text-[11px] text-slate-400 font-mono">
+                                    <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
                                       ({latest.unit})
                                     </span>
                                   )}
                                   {latest.category && (
-                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800/80 text-slate-400 font-mono">
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-400 font-mono">
                                       {latest.category}
                                     </span>
                                   )}
                                 </div>
 
                                 <div className="flex items-center gap-1.5">
-                                  <span className="text-[10px] text-slate-400 font-mono">
+                                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
                                     {items.length} {lang === "ar" ? "قراءات" : "readings"}
                                   </span>
-                                  <ChevronRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-teal-400 group-hover:translate-x-0.5 rtl:group-hover:-translate-x-0.5 transition-transform" />
+                                  <ChevronRight className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 group-hover:text-teal-600 dark:group-hover:text-teal-400 group-hover:translate-x-0.5 rtl:group-hover:-translate-x-0.5 transition-transform" />
                                 </div>
                               </div>
 
@@ -868,9 +958,9 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
                               {quickAddTest === testName && (
                                 <div 
                                   onClick={(e) => e.stopPropagation()} 
-                                  className="flex items-center gap-1.5 p-2 rounded-lg bg-emerald-950/90 border border-emerald-500/60 mb-2.5 shadow-md animate-in fade-in zoom-in-95 duration-150"
+                                  className="flex items-center gap-1.5 p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/90 border border-emerald-300 dark:border-emerald-500/60 mb-2.5 shadow-sm animate-in fade-in zoom-in-95 duration-150"
                                 >
-                                  <span className="text-[11px] text-emerald-300 font-bold whitespace-nowrap">
+                                  <span className="text-[11px] text-emerald-900 dark:text-emerald-300 font-bold whitespace-nowrap">
                                     {lang === "ar" ? "قيمة جديدة:" : "New Value:"}
                                   </span>
                                   <input
@@ -889,7 +979,7 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
                                         setQuickAddValue("");
                                       }
                                     }}
-                                    className="flex-1 bg-[#070c18] border border-emerald-500/50 rounded px-2 py-1 text-white font-mono text-xs focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                                    className="flex-1 bg-white dark:bg-[#070c18] border border-emerald-400 dark:border-emerald-500/50 rounded px-2 py-1 text-slate-900 dark:text-white font-mono text-xs focus:outline-none focus:ring-1 focus:ring-emerald-400"
                                   />
                                   <button
                                     type="button"
@@ -907,7 +997,7 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
                                       setQuickAddTest(null);
                                       setQuickAddValue("");
                                     }}
-                                    className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                                    className="p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                                   >
                                     <X className="w-3.5 h-3.5" />
                                   </button>
@@ -915,21 +1005,21 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
                               )}
 
                               {/* Flow progression: e.g. "5 > 7 > 8.5 > 8" */}
-                              <div className="p-2.5 rounded-lg bg-slate-950/70 border border-slate-800/80 mb-2.5 overflow-x-auto">
-                                <div className="flex items-center gap-1.5 flex-wrap font-mono text-xs font-bold text-slate-300">
+                              <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-950/70 border border-slate-200 dark:border-slate-800/80 mb-2.5 overflow-x-auto">
+                                <div className="flex items-center gap-1.5 flex-wrap font-mono text-xs font-bold text-slate-700 dark:text-slate-300">
                                   {trendChain.map((val, idx) => {
                                     const isLast = idx === trendChain.length - 1;
                                     return (
                                       <React.Fragment key={idx}>
                                         <span className={`px-2 py-0.5 rounded ${
                                           isLast 
-                                            ? "bg-teal-500/20 text-teal-300 border border-teal-500/40 shadow-sm" 
-                                            : "text-slate-400"
+                                            ? "bg-teal-100 dark:bg-teal-500/20 text-teal-900 dark:text-teal-300 border border-teal-300 dark:border-teal-500/40 shadow-sm" 
+                                            : "text-slate-500 dark:text-slate-400"
                                         }`}>
                                           {val || (lang === "ar" ? "معلق" : "Pending")}
                                         </span>
                                         {!isLast && (
-                                          <span className="text-slate-600 font-bold select-none">&gt;</span>
+                                          <span className="text-slate-400 dark:text-slate-600 font-bold select-none">&gt;</span>
                                         )}
                                       </React.Fragment>
                                     );
@@ -939,29 +1029,29 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
                             </div>
 
                             {/* Footer details: Only Trend indicator and date/time */}
-                            <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1.5 border-t border-slate-800/50">
+                            <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 pt-1.5 border-t border-slate-200 dark:border-slate-800/50">
                               <div className="flex items-center gap-1.5 font-mono">
                                 {trend === "UP" && (
-                                  <span className="text-amber-400 flex items-center gap-1 text-[10px] font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">
-                                    <TrendingUp className="w-3 h-3 text-amber-400" />
+                                  <span className="text-amber-800 dark:text-amber-400 flex items-center gap-1 text-[10px] font-bold bg-amber-100 dark:bg-amber-500/10 px-2 py-0.5 rounded border border-amber-300 dark:border-amber-500/30">
+                                    <TrendingUp className="w-3 h-3 text-amber-600 dark:text-amber-400" />
                                     <span>{lang === "ar" ? "مؤشر تصاعدي" : "Rising trend"}</span>
                                   </span>
                                 )}
                                 {trend === "DOWN" && (
-                                  <span className="text-blue-400 flex items-center gap-1 text-[10px] font-bold bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/30">
-                                    <TrendingDown className="w-3 h-3 text-blue-400" />
+                                  <span className="text-blue-800 dark:text-blue-400 flex items-center gap-1 text-[10px] font-bold bg-blue-100 dark:bg-blue-500/10 px-2 py-0.5 rounded border border-blue-300 dark:border-blue-500/30">
+                                    <TrendingDown className="w-3 h-3 text-blue-600 dark:text-blue-400" />
                                     <span>{lang === "ar" ? "مؤشر تنازلي" : "Declining trend"}</span>
                                   </span>
                                 )}
                                 {trend === "EQUAL" && (
-                                  <span className="text-slate-400 flex items-center gap-1 text-[10px] bg-slate-800/80 px-2 py-0.5 rounded border border-slate-700/50">
-                                    <Minus className="w-3 h-3 text-slate-400" />
+                                  <span className="text-slate-700 dark:text-slate-400 flex items-center gap-1 text-[10px] bg-slate-100 dark:bg-slate-800/80 px-2 py-0.5 rounded border border-slate-300 dark:border-slate-700/50">
+                                    <Minus className="w-3 h-3 text-slate-500 dark:text-slate-400" />
                                     <span>{lang === "ar" ? "مؤشر مستقر" : "Stable"}</span>
                                   </span>
                                 )}
                               </div>
 
-                              <span className="text-slate-500 font-mono text-[10px]">
+                              <span className="text-slate-500 dark:text-slate-500 font-mono text-[10px]">
                                 {formatNumericDate(latest.timestamp)} {new Date(latest.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                               </span>
                             </div>
@@ -1405,21 +1495,24 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
           targetPreset={aiPreset}
           onDirectSave={async (data) => {
             const doctorName = currentUser?.nameEn || currentUser?.nameAr || currentUser?.email || 'Dr. Guest';
-            const newItems: LabResultItem[] = (data.items || []).map((it, idx) => ({
-              id: `lab-${Date.now()}-${idx}`,
-              patientId,
-              bedNumber,
-              testName: it.testName,
-              category: (it.category as any) || 'Other',
-              value: it.value,
-              unit: it.unit || '',
-              normalRange: it.normalRange || '',
-              status: 'RESULTED',
-              timestamp: new Date(data.timestamp || new Date()).toISOString(),
-              notes: `AI Optical OCR - ${data.summaryEn}`,
-              recordedByName: doctorName,
-              recordedByStaffId: currentUser?.badgeId || currentUser?.uid,
-            }));
+            const newItems: LabResultItem[] = (data.items || []).map((it, idx) => {
+              const resolvedCat = getCategoryForTest(it.testName, [{ testName: it.testName, category: it.category } as any]);
+              return {
+                id: `lab-${Date.now()}-${idx}`,
+                patientId,
+                bedNumber,
+                testName: it.testName,
+                category: resolvedCat,
+                value: it.value,
+                unit: it.unit || '',
+                normalRange: it.normalRange || '',
+                status: 'RESULTED',
+                timestamp: new Date(data.timestamp || new Date()).toISOString(),
+                notes: `AI Optical OCR - ${data.summaryEn || ''}`,
+                recordedByName: doctorName,
+                recordedByStaffId: currentUser?.badgeId || currentUser?.uid,
+              };
+            });
 
             if (newItems.length > 0) {
               await db.labResults.bulkPut(newItems);
