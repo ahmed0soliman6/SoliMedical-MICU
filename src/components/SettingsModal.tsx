@@ -396,36 +396,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
       color: 'text-emerald-400',
     },
     {
-      key: 'enableAudioAlarms',
-      category: 'alerts',
-      labelAr: 'الإنذارات الصوتية الطبية (IEC 60601-1-8 Alarms)',
-      labelEn: 'Audible Medical Warning Alarms',
-      descriptionAr: 'تشغيل نغمة إنذار الطوارئ الطبية عند تدهور المعايير الحيوية الحرجة.',
-      descriptionEn: 'Synthesized ICU bedside audio tone triggers for STAT emergencies.',
-      icon: BellRing,
-      color: 'text-red-400',
-    },
-    {
-      key: 'enablePushNotifications',
-      category: 'alerts',
-      labelAr: 'إشعارات النظام والأندرويد (Push Notifications)',
-      labelEn: 'System & Android Push Notifications',
-      descriptionAr: 'إرسال إشعارات طارئة لنظام التشغيل والهواتف الذكية.',
-      descriptionEn: 'Browser and mobile notification triggers for critical telemetry alerts.',
-      icon: BellRing,
-      color: 'text-amber-400',
-    },
-    {
-      key: 'enableCloudSync',
-      category: 'alerts',
-      labelAr: 'المزامنة السحابية اللحظية (Firebase Cloud Sync)',
-      labelEn: 'Realtime Cloud Synchronization',
-      descriptionAr: 'مزامنة السجلات والبيانات الحيوية سحابياً وفورياً بين جميع الأجهزة.',
-      descriptionEn: 'Instant multi-device database synchronization powered by Firestore.',
-      icon: Cloud,
-      color: 'text-teal-400',
-    },
-    {
       key: 'enableExitProtection',
       category: 'alerts',
       labelAr: 'حماية منع الخروج العرضي (Accidental Exit Guard)',
@@ -458,10 +428,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
     },
     {
       id: 'alerts',
-      labelAr: 'الإنذارات، الإشعارات والمزامنة السحابية',
-      labelEn: 'Alarms & Cloud Infrastructure',
-      badgeAr: '4 ميزات',
-      badgeEn: '4 Features',
+      labelAr: 'الإنذارات السريرية وتأكيد الخروج',
+      labelEn: 'Alarms & Exit Protection',
+      badgeAr: 'حماية الخروج',
+      badgeEn: 'Exit Guard',
       icon: BellRing,
       items: featureItems.filter(f => f.category === 'alerts')
     },
@@ -499,15 +469,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
       badgeAr: '6 أسِرّة',
       badgeEn: '6 Beds',
       icon: Wrench,
-      isCustom: true
-    },
-    {
-      id: 'unit',
-      labelAr: 'بيانات الوحدة والمناوبة السريرية',
-      labelEn: 'ICU Unit & Shift Configuration',
-      badgeAr: 'بيانات الوحدة',
-      badgeEn: 'Unit Config',
-      icon: Sliders,
       isCustom: true
     },
     {

@@ -443,6 +443,9 @@ export const SbarSignModal: React.FC<SbarSignModalProps> = ({
     setNeurology(prev.assessment?.neurologyAndSedation || '');
     setInfectious(prev.assessment?.infectiousDiseaseAndAntibiotics || '');
     setRecommendation(prev.recommendationAndOrders?.join('\n') || '');
+    if (prev.customFields) {
+      setCustomFieldValues({ ...prev.customFields });
+    }
     setShowPreviousDrawer(false);
   };
 
@@ -802,6 +805,30 @@ export const SbarSignModal: React.FC<SbarSignModalProps> = ({
                       ))}
                     </ul>
                   </div>
+
+                  {/* Custom Fields Display in Review Mode */}
+                  {pendingHandover.customFields && Object.keys(pendingHandover.customFields).length > 0 && (
+                    <div className="bg-[#060c1a] border border-teal-500/30 p-4 rounded-xl space-y-2 shadow-md md:col-span-2">
+                      <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                        <span className="font-extrabold text-teal-300 text-xs flex items-center gap-1.5">
+                          <span className="w-5 h-5 rounded bg-teal-500/20 text-teal-300 flex items-center justify-center font-mono text-[10px]">+</span>
+                          <span>{lang === 'ar' ? 'الحقول والمعلومات المخصصة (Custom Fields)' : 'Custom Fields'}</span>
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1">
+                        {Object.entries(pendingHandover.customFields).map(([k, val]) => {
+                          const fieldCfg = configuredFields.find(f => f.id === k);
+                          const fieldLabel = fieldCfg ? (lang === 'ar' ? fieldCfg.labelAr : fieldCfg.labelEn) : k;
+                          return (
+                            <div key={k} className="bg-[#040813] p-3 rounded-lg border border-slate-800">
+                              <span className="font-bold text-teal-400 block mb-0.5">{fieldLabel}:</span>
+                              <span className="text-slate-200">{val || '—'}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Accept / Acknowledge Shift Button */}

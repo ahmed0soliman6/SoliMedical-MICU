@@ -160,6 +160,7 @@ export const SettingsProvider = ({ children }: { children: ReactNode }) => {
 
   const resetToDefaults = () => {
     setSettings(DEFAULT_SYSTEM_SETTINGS);
+    saveSettingsToStorage(DEFAULT_SYSTEM_SETTINGS);
   };
 
   return (

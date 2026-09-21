@@ -809,7 +809,7 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
     }
   };
 
-  // Fetch or resolve latest Creatinine lab result for this patient
+  // Fetch or resolve latest Creatinine lab result for this patient when modal opens
   useEffect(() => {
     if (!isAddModalOpen || !patient) return;
 
@@ -837,7 +837,10 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
               dateStr,
               source: 'LAB',
             });
-            setShowManualCrEntry(false);
+            // Only set showManualCrEntry to false on initial open if user hasn't typed anything
+            if (!manualCreatinineInput) {
+              setShowManualCrEntry(false);
+            }
           }
         } else {
           if (isMounted) {
@@ -855,7 +858,7 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [isAddModalOpen, patient?.id, labResults]);
+  }, [isAddModalOpen, patient?.id]);
 
   const doctorName = currentUser?.nameEn || currentUser?.nameAr || currentUser?.email || 'Dr. Attending';
 
@@ -1426,22 +1429,22 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
           <div 
-            className="w-full max-w-xl bg-[#091122] border border-amber-500/40 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]"
+            className="w-full max-w-xl bg-white dark:bg-[#091122] text-slate-900 dark:text-white border border-slate-200 dark:border-amber-500/40 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]"
             dir={isRTL ? 'rtl' : 'ltr'}
           >
             {/* Modal Header */}
-            <div className="flex items-center justify-between p-4 border-b border-slate-800 bg-slate-900/70">
+            <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/70">
               <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400">
+                <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400">
                   <Pill className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-white">
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
                     {editingAbx
                       ? (lang === 'ar' ? 'تعديل بيانات المضاد الحيوي' : 'Edit Antibiotic Regimen')
                       : (lang === 'ar' ? 'إضافة مضاد حيوي للمريض' : 'Prescribe New Antibiotic')}
                   </h3>
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
                     {lang === 'ar' ? `سرير ${bed.bedNumber} - المريض: ${patient.fullNameAr || patient.fullNameEn}` : `Bed ${bed.bedNumber} - Patient: ${patient.fullNameEn || patient.fullNameAr}`}
                   </p>
                 </div>
@@ -1449,7 +1452,7 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
               <button
                 type="button"
                 onClick={() => setIsAddModalOpen(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-all cursor-pointer"
+                className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1460,13 +1463,13 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
               {/* Presets Selection if Adding */}
               {!editingAbx && presetsList.length > 0 && (
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     {lang === 'ar' ? 'اختر من قائمة المضادات الجاهزة في وحدة العناية:' : 'Load from Unit Antibiotic Presets:'}
                   </label>
                   <select
                     value={selectedPresetId}
                     onChange={(e) => handleApplyPreset(e.target.value)}
-                    className="w-full bg-[#070c18] border border-amber-500/40 rounded-xl px-3 py-2 text-xs text-amber-300 font-medium focus:outline-none focus:border-amber-400"
+                    className="w-full bg-amber-50/60 dark:bg-[#070c18] border border-amber-400 dark:border-amber-500/40 rounded-xl px-3 py-2 text-xs text-amber-900 dark:text-amber-300 font-medium focus:outline-none focus:border-amber-500"
                   >
                     <option value="">{lang === 'ar' ? '-- إدخال يدوي مخصص --' : '-- Custom Manual Entry --'}</option>
                     {presetsList.map(p => (
@@ -1481,10 +1484,10 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
               {/* Drug Name with fast suggestions */}
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-semibold text-slate-300">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
                     {lang === 'ar' ? 'اسم المضاد الحيوي (Drug Name) *' : 'Drug Name (Generic / Brand) *'}
                   </label>
-                  <span className="text-[10px] text-slate-400 font-mono">
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
                     {lang === 'ar' ? 'اكتب أو اختر المضاد لتحديث الجرعات المتاحة' : 'Type or pick to load standard doses'}
                   </span>
                 </div>
@@ -1498,7 +1501,7 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                     applyDrugAndRenalAdjustment(newName, currentCrCl);
                   }}
                   placeholder="e.g. Meropenem, Levofloxacin, Vancomycin, Tazocin"
-                  className="w-full bg-[#070c18] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400 font-mono"
+                  className="w-full bg-slate-50 dark:bg-[#070c18] border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-amber-500 font-mono"
                 />
 
                 {/* Fast Drug Chips */}
@@ -1525,10 +1528,10 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                           setDrugNameAr(chip.ar);
                           applyDrugAndRenalAdjustment(chip.name, currentCrCl, chip.defDose, chip.defFreq);
                         }}
-                        className={`text-[10px] px-2 py-0.5 rounded-md border transition-all ${
+                        className={`text-[10px] px-2 py-0.5 rounded-md border transition-all cursor-pointer ${
                           drugNameEn.toLowerCase().includes(chip.name.toLowerCase()) || drugNameEn.includes(chip.ar)
-                            ? 'bg-amber-500/20 text-amber-300 border-amber-500/60 font-semibold'
-                            : 'bg-slate-900/80 text-slate-400 border-slate-700/60 hover:text-slate-200 hover:border-slate-600'
+                            ? 'bg-amber-100 dark:bg-amber-500/20 text-amber-900 dark:text-amber-300 border-amber-400 dark:border-amber-500/60 font-semibold'
+                            : 'bg-slate-100 dark:bg-slate-900/80 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700/60 hover:text-slate-900 dark:hover:text-slate-200 hover:border-slate-300 dark:hover:border-slate-600'
                         }`}
                       >
                         {lang === 'ar' ? `${chip.ar} (${chip.name})` : chip.name}
@@ -1543,10 +1546,10 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                 {/* Dynamic Dose Dropdown */}
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-semibold text-slate-300">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
                       {lang === 'ar' ? 'الجرعة المتوفرة *' : 'Available Dose *'}
                     </label>
-                    <span className="text-[10px] text-amber-400 font-mono font-medium">
+                    <span className="text-[10px] text-amber-600 dark:text-amber-400 font-mono font-medium">
                       {availableDoses.length} {lang === 'ar' ? 'خيارات' : 'options'}
                     </span>
                   </div>
@@ -1562,7 +1565,7 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                         }
                       }
                     }}
-                    className="w-full bg-[#070c18] border border-amber-500/50 rounded-xl px-3 py-2 text-xs text-amber-300 font-bold font-mono focus:outline-none focus:border-amber-400 cursor-pointer shadow-inner"
+                    className="w-full bg-slate-50 dark:bg-[#070c18] border border-amber-400 dark:border-amber-500/50 rounded-xl px-3 py-2 text-xs text-amber-900 dark:text-amber-300 font-bold font-mono focus:outline-none focus:border-amber-500 cursor-pointer shadow-inner"
                   >
                     <option value="" disabled>{lang === 'ar' ? '-- اختر الجرعة المتوفرة --' : '-- Select Available Dose --'}</option>
                     {availableDoses.map(d => (
@@ -1582,19 +1585,19 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                         value={dose}
                         onChange={(e) => setDose(e.target.value)}
                         placeholder={lang === 'ar' ? 'اكتب الجرعة (مثال: 500 mg أو 1 g)' : 'Enter custom dose (e.g. 500 mg or 1 g)'}
-                        className="w-full bg-[#070c18] border border-amber-500/60 rounded-xl px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 font-mono"
+                        className="w-full bg-slate-50 dark:bg-[#070c18] border border-amber-400 dark:border-amber-500/60 rounded-xl px-3 py-1.5 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-amber-500 font-mono"
                       />
                     </div>
                   )}
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     {lang === 'ar' ? 'طريقة الإعطاء' : 'Route'}
                   </label>
                   <select
                     value={route}
                     onChange={(e) => setRoute(e.target.value)}
-                    className="w-full bg-[#070c18] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400"
+                    className="w-full bg-slate-50 dark:bg-[#070c18] border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-amber-500"
                   >
                     <option value="IV">IV (Intravenous)</option>
                     <option value="PO">PO (Oral)</option>
@@ -1606,7 +1609,7 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                 </div>
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-semibold text-slate-300">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
                       {lang === 'ar' ? 'التكرار / الجدول' : 'Frequency / Interval'}
                     </label>
                     <button
@@ -1617,7 +1620,7 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                           setFrequency('');
                         }
                       }}
-                      className="text-[11px] text-amber-400 hover:text-amber-300 font-bold cursor-pointer hover:underline flex items-center gap-1"
+                      className="text-[11px] text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 font-bold cursor-pointer hover:underline flex items-center gap-1"
                     >
                       {isCustomFrequency ? (lang === 'ar' ? '📋 قائمة جاهزة' : '📋 Presets') : (lang === 'ar' ? '✏️ مخصص' : '✏️ Custom')}
                     </button>
@@ -1635,7 +1638,7 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                           setFrequency(val);
                         }
                       }}
-                      className="w-full bg-[#070c18] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400 font-mono cursor-pointer"
+                      className="w-full bg-slate-50 dark:bg-[#070c18] border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-amber-500 font-mono cursor-pointer"
                     >
                       <option value="Q6H">{lang === 'ar' ? 'كل 6 س (Q6H)' : 'Every 6 hrs (Q6H)'}</option>
                       <option value="Q8H">{lang === 'ar' ? 'كل 8 س (Q8H)' : 'Every 8 hrs (Q8H)'}</option>
@@ -1657,7 +1660,7 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                         value={frequency}
                         onChange={(e) => setFrequency(e.target.value)}
                         placeholder={lang === 'ar' ? 'اكتب التكرار المخصص (مثال: كل 4 س أو كل 18 س أو يوم بعد يوم)' : 'Enter custom frequency (e.g. Q4H, Q18H, or Alternate days)'}
-                        className="w-full bg-[#070c18] border border-amber-500/60 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 font-mono"
+                        className="w-full bg-slate-50 dark:bg-[#070c18] border border-amber-400 dark:border-amber-500/60 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-amber-500 font-mono"
                       />
                     </div>
                   )}
@@ -1667,7 +1670,7 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
               {/* Indication & Category */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     {lang === 'ar' ? 'دواعي الاستخدام / مصدر العدوى' : 'Indication / Infection Source'}
                   </label>
                   <input
@@ -1675,17 +1678,17 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                     value={indication}
                     onChange={(e) => setIndication(e.target.value)}
                     placeholder="e.g. VAP, Septic Shock, Intra-abdominal"
-                    className="w-full bg-[#070c18] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400"
+                    className="w-full bg-slate-50 dark:bg-[#070c18] border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-amber-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     {lang === 'ar' ? 'تصنيف المضاد' : 'Category'}
                   </label>
                   <select
                     value={category}
                     onChange={(e) => setCategory(e.target.value)}
-                    className="w-full bg-[#070c18] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400"
+                    className="w-full bg-slate-50 dark:bg-[#070c18] border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-amber-500"
                   >
                     <option value="Beta-Lactam / Carbapenem">Beta-Lactam / Carbapenem</option>
                     <option value="Glycopeptide / Lipopeptide">Glycopeptide / Lipopeptide</option>
@@ -1702,7 +1705,7 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
               {/* Dates & Duration */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     {lang === 'ar' ? 'تاريخ البدء' : 'Start Date'}
                   </label>
                   <input
@@ -1710,11 +1713,11 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                     required
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
-                    className="w-full bg-[#070c18] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400 font-mono"
+                    className="w-full bg-slate-50 dark:bg-[#070c18] border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-amber-500 font-mono"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     {lang === 'ar' ? 'مدة الكورس (أيام)' : 'Course Duration (Days)'}
                   </label>
                   <input
@@ -1723,42 +1726,42 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                     max="60"
                     value={plannedDurationDays}
                     onChange={(e) => setPlannedDurationDays(Number(e.target.value))}
-                    className="w-full bg-[#070c18] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400 font-mono"
+                    className="w-full bg-slate-50 dark:bg-[#070c18] border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-amber-500 font-mono"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     {lang === 'ar' ? 'الحالة الحالية' : 'Regimen Status'}
                   </label>
                   <select
                     value={status}
                     onChange={(e) => setStatus(e.target.value as any)}
-                    className="w-full bg-[#070c18] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400 font-bold"
+                    className="w-full bg-slate-50 dark:bg-[#070c18] border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-amber-500 font-bold"
                   >
-                    <option value="ACTIVE" className="text-emerald-400">ACTIVE (جاري)</option>
-                    <option value="PAUSED" className="text-yellow-400">PAUSED (مؤقت)</option>
-                    <option value="COMPLETED" className="text-blue-400">COMPLETED (مكتمل)</option>
-                    <option value="DISCONTINUED" className="text-rose-400">DISCONTINUED (ملغي)</option>
+                    <option value="ACTIVE" className="text-emerald-600 dark:text-emerald-400">ACTIVE (جاري)</option>
+                    <option value="PAUSED" className="text-amber-600 dark:text-yellow-400">PAUSED (مؤقت)</option>
+                    <option value="COMPLETED" className="text-blue-600 dark:text-blue-400">COMPLETED (مكتمل)</option>
+                    <option value="DISCONTINUED" className="text-rose-600 dark:text-rose-400">DISCONTINUED (ملغي)</option>
                   </select>
                 </div>
               </div>
 
               {/* Renal Adjustments & Live Cockcroft-Gault Binding */}
-              <div className="bg-[#0b1329] border border-cyan-500/30 rounded-2xl p-4 shadow-lg shadow-cyan-950/20 space-y-3.5">
+              <div className="bg-cyan-50/80 dark:bg-[#0b1329] border border-cyan-300 dark:border-cyan-500/30 rounded-2xl p-4 shadow-sm dark:shadow-lg dark:shadow-cyan-950/20 space-y-3.5">
                 {/* Header with Title & CrCl Status Badge */}
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-cyan-500/20 pb-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-cyan-200 dark:border-cyan-500/20 pb-2.5">
                   <div className="flex items-center gap-2">
-                    <div className="p-1.5 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
+                    <div className="p-1.5 rounded-lg bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-300 dark:border-cyan-500/30">
                       <Calculator className="w-4 h-4" />
                     </div>
                     <div>
-                      <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+                      <h4 className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
                         <span>{lang === 'ar' ? 'تعديل وظائف الكلى وحساب تصفية الكرياتينين' : 'Renal Adjustment & Cockcroft-Gault CrCl'}</span>
-                        <span className="text-[10px] text-cyan-400 font-mono bg-cyan-950/60 px-1.5 py-0.5 rounded border border-cyan-800/60">
+                        <span className="text-[10px] text-cyan-700 dark:text-cyan-400 font-mono bg-cyan-100 dark:bg-cyan-950/60 px-1.5 py-0.5 rounded border border-cyan-300 dark:border-cyan-800/60">
                           Cockcroft-Gault
                         </span>
                       </h4>
-                      <p className="text-[10px] text-slate-400">
+                      <p className="text-[10px] text-slate-600 dark:text-slate-400">
                         {lang === 'ar' 
                           ? 'ربط مباشر ومحسوب تلقائياً من بيانات المريض وآخر تحليل وظائف كلى'
                           : 'Live clinical binding from patient demographics & latest creatinine lab'}
@@ -1769,28 +1772,28 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                   {/* Impairment Status Badge */}
                   <div>
                     {currentCrCl === null ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
-                        <AlertTriangle className="w-3 h-3 text-amber-400" />
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-300 border border-slate-300 dark:border-slate-700">
+                        <AlertTriangle className="w-3 h-3 text-amber-500 dark:text-amber-400" />
                         {lang === 'ar' ? 'بانتظار تحليل الكرياتينين' : 'Awaiting Creatinine'}
                       </span>
                     ) : currentCrCl >= 50 ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-emerald-950/70 text-emerald-300 border border-emerald-500/40">
-                        <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-500/40">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
                         {lang === 'ar' ? 'وظائف كلى مقبولة (CrCl ≥ 50)' : 'Normal / Mild (CrCl ≥ 50)'}
                       </span>
                     ) : currentCrCl >= 30 ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-amber-950/70 text-amber-300 border border-amber-500/40">
-                        <AlertTriangle className="w-3 h-3 text-amber-400" />
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-amber-100 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-500/40">
+                        <AlertTriangle className="w-3 h-3 text-amber-600 dark:text-amber-400" />
                         {lang === 'ar' ? 'قصور كلوي متوسط (CrCl 30-49)' : 'Moderate Impairment (CrCl 30-49)'}
                       </span>
                     ) : currentCrCl >= 10 ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-rose-950/70 text-rose-300 border border-rose-500/40">
-                        <AlertTriangle className="w-3 h-3 text-rose-400" />
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-rose-100 dark:bg-rose-950/70 text-rose-800 dark:text-rose-300 border border-rose-300 dark:border-rose-500/40">
+                        <AlertTriangle className="w-3 h-3 text-rose-600 dark:text-rose-400" />
                         {lang === 'ar' ? 'قصور كلوي شديد (CrCl 10-29)' : 'Severe Impairment (CrCl 10-29)'}
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-rose-950/90 text-rose-200 border border-rose-500/60 animate-pulse">
-                        <AlertTriangle className="w-3 h-3 text-rose-300" />
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-rose-200 dark:bg-rose-950/90 text-rose-950 dark:text-rose-200 border border-rose-400 dark:border-rose-500/60 animate-pulse">
+                        <AlertTriangle className="w-3 h-3 text-rose-700 dark:text-rose-300" />
                         {lang === 'ar' ? 'قصور كلوي حرج / غسيل كلى (CrCl < 10)' : 'ESRD / Dialysis (CrCl < 10)'}
                       </span>
                     )}
@@ -1798,41 +1801,41 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                 </div>
 
                 {/* Patient Live Clinical Parameters Bar */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-[#070c18] p-2.5 rounded-xl border border-slate-800/80 text-xs">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-white dark:bg-[#070c18] p-2.5 rounded-xl border border-cyan-200 dark:border-slate-800/80 text-xs shadow-xs">
                   {/* Age */}
                   <div className="space-y-0.5">
-                    <span className="text-[10px] text-slate-400 block font-medium">
+                    <span className="text-[10px] text-slate-600 dark:text-slate-400 block font-medium">
                       {lang === 'ar' ? 'العمر (Age)' : 'Age'}
                     </span>
-                    <span className="text-white font-mono font-bold">
+                    <span className="text-slate-900 dark:text-white font-mono font-bold">
                       {patient.age ? `${patient.age} ${lang === 'ar' ? 'سنة' : 'yrs'}` : (
-                        <span className="text-amber-400 italic text-[11px]">{lang === 'ar' ? 'غير مسجل' : 'Missing'}</span>
+                        <span className="text-amber-600 dark:text-amber-400 italic text-[11px]">{lang === 'ar' ? 'غير مسجل' : 'Missing'}</span>
                       )}
                     </span>
                   </div>
 
                   {/* Weight */}
                   <div className="space-y-0.5">
-                    <span className="text-[10px] text-slate-400 block font-medium">
+                    <span className="text-[10px] text-slate-600 dark:text-slate-400 block font-medium">
                       {lang === 'ar' ? 'الوزن (Weight)' : 'Weight'}
                     </span>
-                    <span className="text-white font-mono font-bold">
+                    <span className="text-slate-900 dark:text-white font-mono font-bold">
                       {patient.weightKg ? `${patient.weightKg} kg` : (
-                        <span className="text-amber-400 italic text-[11px]">{lang === 'ar' ? 'غير مسجل' : 'Missing'}</span>
+                        <span className="text-amber-600 dark:text-amber-400 italic text-[11px]">{lang === 'ar' ? 'غير مسجل' : 'Missing'}</span>
                       )}
                     </span>
                   </div>
 
                   {/* Gender */}
                   <div className="space-y-0.5">
-                    <span className="text-[10px] text-slate-400 block font-medium">
+                    <span className="text-[10px] text-slate-600 dark:text-slate-400 block font-medium">
                       {lang === 'ar' ? 'الجنس (Gender)' : 'Gender'}
                     </span>
-                    <span className="text-white font-mono font-bold">
+                    <span className="text-slate-900 dark:text-white font-mono font-bold">
                       {patient.gender === 'female' || (patient.gender as any) === 'F' ? (
-                        <span className="text-pink-300">{lang === 'ar' ? 'أنثى (× 0.85)' : 'Female (× 0.85)'}</span>
+                        <span className="text-pink-600 dark:text-pink-300">{lang === 'ar' ? 'أنثى (× 0.85)' : 'Female (× 0.85)'}</span>
                       ) : (
-                        <span className="text-blue-300">{lang === 'ar' ? 'ذكر' : 'Male'}</span>
+                        <span className="text-blue-600 dark:text-blue-300">{lang === 'ar' ? 'ذكر' : 'Male'}</span>
                       )}
                     </span>
                   </div>
@@ -1840,22 +1843,22 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                   {/* Serum Creatinine with source & manual toggle */}
                   <div className="space-y-0.5">
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px] text-slate-400 block font-medium">
+                      <span className="text-[10px] text-slate-600 dark:text-slate-400 block font-medium">
                         {lang === 'ar' ? 'الكرياتينين (SCr)' : 'Serum Creatinine'}
                       </span>
                       <button
                         type="button"
                         onClick={() => setShowManualCrEntry(prev => !prev)}
-                        className="text-[9px] text-cyan-400 hover:text-cyan-300 underline font-mono cursor-pointer"
+                        className="text-[9px] text-cyan-600 dark:text-cyan-400 hover:text-cyan-800 dark:hover:text-cyan-300 underline font-mono cursor-pointer"
                         title={lang === 'ar' ? 'إدخال أو تعديل يدوي للكرياتينين' : 'Manual Creatinine Override'}
                       >
                         {showManualCrEntry ? (lang === 'ar' ? 'إخفاء' : 'Hide') : (lang === 'ar' ? 'تعديل' : 'Edit')}
                       </button>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <span className="text-cyan-300 font-mono font-bold">
+                      <span className="text-cyan-700 dark:text-cyan-300 font-mono font-bold">
                         {effectiveCr !== null ? `${effectiveCr.toFixed(2)} mg/dL` : (
-                          <span className="text-amber-400 italic text-[11px]">{lang === 'ar' ? 'غير متوفر' : 'No Lab'}</span>
+                          <span className="text-amber-600 dark:text-amber-400 italic text-[11px]">{lang === 'ar' ? 'غير متوفر' : 'No Lab'}</span>
                         )}
                       </span>
                       {latestCreatinine?.dateStr && !manualCreatinineInput && (
@@ -1864,7 +1867,7 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                         </span>
                       )}
                       {manualCreatinineInput && (
-                        <span className="text-[9px] px-1 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                        <span className="text-[9px] px-1 rounded bg-amber-100 dark:bg-amber-500/20 text-amber-900 dark:text-amber-300 border border-amber-300 dark:border-amber-500/30 font-semibold">
                           {lang === 'ar' ? 'يدوي' : 'Manual'}
                         </span>
                       )}
@@ -1874,9 +1877,9 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
 
                 {/* Manual Creatinine Entry Drawer if toggled or if no lab is available */}
                 {showManualCrEntry && (
-                  <div className="p-2.5 bg-slate-900/90 rounded-xl border border-cyan-500/30 flex flex-wrap items-center gap-2">
-                    <label className="text-xs text-slate-300 flex items-center gap-1.5 font-semibold">
-                      <Edit3 className="w-3.5 h-3.5 text-cyan-400" />
+                  <div className="p-2.5 bg-cyan-100/80 dark:bg-slate-900/90 rounded-xl border border-cyan-300 dark:border-cyan-500/30 flex flex-wrap items-center gap-2">
+                    <label className="text-xs text-slate-800 dark:text-slate-300 flex items-center gap-1.5 font-semibold">
+                      <Edit3 className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
                       <span>{lang === 'ar' ? 'قيمة الكرياتينين يدوياً (mg/dL):' : 'Enter Serum Creatinine (mg/dL):'}</span>
                     </label>
                     <input
@@ -1894,7 +1897,7 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                         }
                       }}
                       placeholder="e.g. 1.8"
-                      className="w-24 bg-[#070c18] border border-cyan-500/40 rounded-lg px-2 py-1 text-xs text-white font-mono focus:outline-none focus:border-cyan-400"
+                      className="w-24 bg-white dark:bg-[#070c18] border border-cyan-400 dark:border-cyan-500/40 rounded-lg px-2 py-1 text-xs text-slate-900 dark:text-white font-mono focus:outline-none focus:border-cyan-500"
                     />
                     {latestCreatinine && manualCreatinineInput && (
                       <button
@@ -1906,7 +1909,7 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                             applyDrugAndRenalAdjustment(drugNameEn || drugNameAr, crcl);
                           }
                         }}
-                        className="text-[10px] px-2 py-1 rounded bg-slate-800 text-slate-300 hover:text-white border border-slate-700 flex items-center gap-1"
+                        className="text-[10px] px-2 py-1 rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-300 dark:border-slate-700 flex items-center gap-1 cursor-pointer"
                       >
                         <RotateCcw className="w-3 h-3" />
                         <span>{lang === 'ar' ? 'استعادة قيمة المختبر' : 'Revert to Lab Value'}</span>
@@ -1916,17 +1919,17 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                 )}
 
                 {/* CrCl Calculation Display Box */}
-                <div className="bg-[#070c18]/90 rounded-xl p-3 border border-slate-800/80 flex flex-wrap items-center justify-between gap-3">
+                <div className="bg-white/90 dark:bg-[#070c18]/90 rounded-xl p-3 border border-cyan-200 dark:border-slate-800/80 flex flex-wrap items-center justify-between gap-3 shadow-xs">
                   <div>
-                    <span className="text-[10px] text-slate-400 block font-medium">
+                    <span className="text-[10px] text-slate-600 dark:text-slate-400 block font-medium">
                       {lang === 'ar' ? 'معدل تصفية الكرياتينين المحسوب (CrCl Result):' : 'Calculated Creatinine Clearance (Cockcroft-Gault):'}
                     </span>
                     <div className="flex items-baseline gap-2 mt-0.5">
-                      <span className="text-lg font-bold font-mono text-cyan-300">
+                      <span className="text-lg font-bold font-mono text-cyan-700 dark:text-cyan-300">
                         {currentCrCl !== null ? `${currentCrCl} mL/min` : '-- mL/min'}
                       </span>
                       {currentCrCl !== null && (
-                        <span className="text-[10px] text-slate-400 font-mono">
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
                           ({lang === 'ar' ? 'المعادلة' : 'Eq'}: ((140 - {patient.age || 'Age'}) × {patient.weightKg || 'Wt'}) / (72 × {effectiveCr?.toFixed(2) || 'Cr'}) {patient.gender === 'female' || (patient.gender as any) === 'F' ? '× 0.85' : ''})
                         </span>
                       )}
@@ -1958,15 +1961,15 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                 {currentRenalRec && (
                   <div className={`p-3 rounded-xl border text-xs space-y-1.5 ${
                     currentRenalRec.requiresAdjustment 
-                      ? 'bg-amber-950/30 border-amber-500/40 text-amber-200'
-                      : 'bg-emerald-950/20 border-emerald-500/30 text-emerald-200'
+                      ? 'bg-amber-100/90 dark:bg-amber-950/30 border-amber-300 dark:border-amber-500/40 text-amber-950 dark:text-amber-200'
+                      : 'bg-emerald-100/90 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-500/30 text-emerald-950 dark:text-emerald-200'
                   }`}>
                     <div className="flex items-center justify-between font-semibold">
                       <span className="flex items-center gap-1.5">
                         {currentRenalRec.requiresAdjustment ? (
-                          <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                          <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
                         ) : (
-                          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                         )}
                         <span>
                           {lang === 'ar' 
@@ -1975,12 +1978,12 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                         </span>
                       </span>
                       {currentRenalRec.recommendedDose && currentRenalRec.recommendedFrequency && (
-                        <span className="font-mono text-xs px-2 py-0.5 rounded bg-black/40 border border-current font-bold">
+                        <span className="font-mono text-xs px-2 py-0.5 rounded bg-white/80 dark:bg-black/40 border border-current font-bold">
                           {currentRenalRec.recommendedDose} {currentRenalRec.recommendedFrequency}
                         </span>
                       )}
                     </div>
-                    <p className="text-[11px] leading-relaxed text-slate-300">
+                    <p className="text-[11px] leading-relaxed text-slate-700 dark:text-slate-300">
                       {currentRenalRec.note}
                     </p>
                   </div>
@@ -1989,11 +1992,11 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                 {/* Editable Notes Input Field (Preserving Manual Override for Attending Physician) */}
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-[11px] font-semibold text-slate-300 flex items-center gap-1.5">
-                      <ShieldAlert className="w-3.5 h-3.5 text-cyan-400" />
+                    <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                      <ShieldAlert className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
                       <span>{lang === 'ar' ? 'ملاحظات التعديل الكلوي النهائية للملف' : 'Renal Dosing & Adjustment Note (Editable)'}</span>
                     </label>
-                    <span className="text-[10px] text-slate-400 font-mono">
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
                       {lang === 'ar' ? 'يمكن تعديلها أو إضافة توصية الطبيب يدوياً' : 'Editable manual override'}
                     </span>
                   </div>
@@ -2005,23 +2008,23 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                       setIsRenalAutoApplied(false);
                     }}
                     placeholder={lang === 'ar' ? 'مثال: تم تعديل الجرعة لـ CrCl 28 mL/min إلى 500 mg Q12H' : 'e.g. Dose adjusted for CrCl 28 mL/min to 500 mg Q12H'}
-                    className="w-full bg-[#070c18] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-400 font-sans"
+                    className="w-full bg-slate-50 dark:bg-[#070c18] border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-cyan-500 font-sans"
                   />
                 </div>
               </div>
 
               {/* TDM Section */}
-              <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800 space-y-2.5">
+              <div className="bg-purple-50/60 dark:bg-slate-950/60 p-3 rounded-xl border border-purple-200 dark:border-slate-800 space-y-2.5">
                 <div className="flex items-center gap-2">
                   <input
                     type="checkbox"
                     id="req-tdm"
                     checked={requiresTdm}
                     onChange={(e) => setRequiresTdm(e.target.checked)}
-                    className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500 bg-slate-900 border-slate-700"
+                    className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500 bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700"
                   />
-                  <label htmlFor="req-tdm" className="text-xs font-bold text-purple-300 cursor-pointer flex items-center gap-1.5">
-                    <Activity className="w-3.5 h-3.5 text-purple-400" />
+                  <label htmlFor="req-tdm" className="text-xs font-bold text-purple-900 dark:text-purple-300 cursor-pointer flex items-center gap-1.5">
+                    <Activity className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
                     <span>{lang === 'ar' ? 'يتطلب مراقبة مستوى الدواء بالدم (TDM Required)' : 'Therapeutic Drug Monitoring (TDM) Required'}</span>
                   </label>
                 </div>
@@ -2029,7 +2032,7 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                 {requiresTdm && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                     <div>
-                      <label className="block text-[11px] text-slate-400 mb-1">
+                      <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1">
                         {lang === 'ar' ? 'المستوى المستهدف (TDM Target)' : 'Target Range'}
                       </label>
                       <input
@@ -2037,11 +2040,11 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                         value={tdmTarget}
                         onChange={(e) => setTdmTarget(e.target.value)}
                         placeholder="e.g. Trough: 15-20 mcg/mL"
-                        className="w-full bg-[#070c18] border border-purple-800/60 rounded-xl px-3 py-1.5 text-xs text-purple-300 font-mono"
+                        className="w-full bg-white dark:bg-[#070c18] border border-purple-300 dark:border-purple-800/60 rounded-xl px-3 py-1.5 text-xs text-purple-900 dark:text-purple-300 font-mono"
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] text-slate-400 mb-1">
+                      <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1">
                         {lang === 'ar' ? 'آخر قراءة مسجلة' : 'Latest Measured Level'}
                       </label>
                       <input
@@ -2049,7 +2052,7 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                         value={latestTdmLevel}
                         onChange={(e) => setLatestTdmLevel(e.target.value)}
                         placeholder="e.g. 17.2 mcg/mL"
-                        className="w-full bg-[#070c18] border border-purple-800/60 rounded-xl px-3 py-1.5 text-xs text-purple-300 font-mono"
+                        className="w-full bg-white dark:bg-[#070c18] border border-purple-300 dark:border-purple-800/60 rounded-xl px-3 py-1.5 text-xs text-purple-900 dark:text-purple-300 font-mono"
                       />
                     </div>
                   </div>
@@ -2059,7 +2062,7 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
               {/* Notes & Discontinue reason */}
               {status === 'DISCONTINUED' && (
                 <div>
-                  <label className="block text-xs font-semibold text-rose-400 mb-1">
+                  <label className="block text-xs font-semibold text-rose-600 dark:text-rose-400 mb-1">
                     {lang === 'ar' ? 'سبب إلغاء / إيقاف المضاد الحيوي' : 'Discontinue Reason'}
                   </label>
                   <input
@@ -2067,13 +2070,13 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                     value={discontinueReason}
                     onChange={(e) => setDiscontinueReason(e.target.value)}
                     placeholder="e.g. Culture negative / De-escalated / Toxicity"
-                    className="w-full bg-[#070c18] border border-rose-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-rose-400"
+                    className="w-full bg-slate-50 dark:bg-[#070c18] border border-rose-300 dark:border-rose-800 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-rose-500"
                   />
                 </div>
               )}
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   {lang === 'ar' ? 'ملاحظات وتوجيهات تمريضية وسريرية' : 'Clinical & Nursing Notes'}
                 </label>
                 <textarea
@@ -2081,16 +2084,16 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder={lang === 'ar' ? 'مثال: تسريب ممتد على مدار 3 ساعات، متابعة نسبة الصفائح...' : 'e.g. Extended 3h infusion, monitor platelet count...'}
-                  className="w-full bg-[#070c18] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400"
+                  className="w-full bg-slate-50 dark:bg-[#070c18] border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-amber-500"
                 />
               </div>
 
               {/* Modal Actions */}
-              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-800">
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-200 dark:border-slate-800">
                 <button
                   type="button"
                   onClick={() => setIsAddModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-all cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold transition-all cursor-pointer"
                 >
                   {lang === 'ar' ? 'إلغاء' : 'Cancel'}
                 </button>

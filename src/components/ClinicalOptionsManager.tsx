@@ -13,7 +13,9 @@ import {
   Activity, 
   AlertCircle,
   Pill,
-  ShieldAlert
+  ShieldAlert,
+  Pencil,
+  X
 } from 'lucide-react';
 import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
@@ -22,10 +24,12 @@ import {
   VentilatorModePreset, 
   FluidCategoryPreset,
   AntibioticPreset,
+  SbarFieldConfig,
   DEFAULT_INFUSION_DRUGS,
   DEFAULT_VENTILATOR_MODES,
   DEFAULT_FLUID_CATEGORIES,
-  DEFAULT_ANTIBIOTIC_PRESETS
+  DEFAULT_ANTIBIOTIC_PRESETS,
+  DEFAULT_SBAR_FIELDS
 } from '../types/settings.ts';
 
 export const ClinicalOptionsManager: React.FC = () => {
@@ -73,10 +77,80 @@ export const ClinicalOptionsManager: React.FC = () => {
   const [abxTdmTarget, setAbxTdmTarget] = useState('');
   const [abxIndication, setAbxIndication] = useState('');
 
+  // SBAR Field Form State
+  const [showAddSbarField, setShowAddSbarField] = useState(false);
+  const [editingSbarFieldId, setEditingSbarFieldId] = useState<string | null>(null);
+  const [sbarLabelAr, setSbarLabelAr] = useState('');
+  const [sbarLabelEn, setSbarLabelEn] = useState('');
+  const [sbarSection, setSbarSection] = useState<'S' | 'B' | 'A' | 'R'>('A');
+  const [sbarIsRequired, setSbarIsRequired] = useState(false);
+
   const drugs = settings.infusionDrugs || DEFAULT_INFUSION_DRUGS;
   const ventModes = settings.ventilatorModes || DEFAULT_VENTILATOR_MODES;
   const fluidCategories = settings.fluidCategories || DEFAULT_FLUID_CATEGORIES;
   const antibioticsPresets = settings.antibioticsPresets || DEFAULT_ANTIBIOTIC_PRESETS;
+  const sbarFieldsList = (settings.sbarFields && settings.sbarFields.length > 0)
+    ? settings.sbarFields
+    : DEFAULT_SBAR_FIELDS;
+
+  // Handlers for SBAR Custom Fields
+  const handleSaveSbarField = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!sbarLabelAr.trim() && !sbarLabelEn.trim()) return;
+
+    if (editingSbarFieldId) {
+      const updated = sbarFieldsList.map(f => {
+        if (f.id === editingSbarFieldId) {
+          return {
+            ...f,
+            labelAr: sbarLabelAr.trim() || f.labelAr,
+            labelEn: sbarLabelEn.trim() || sbarLabelAr.trim() || f.labelEn,
+            section: sbarSection,
+            isRequired: sbarIsRequired,
+          };
+        }
+        return f;
+      });
+      updateSettings({ sbarFields: updated });
+      setEditingSbarFieldId(null);
+    } else {
+      const newField: SbarFieldConfig = {
+        id: `custom-${Date.now()}`,
+        labelAr: sbarLabelAr.trim() || 'حقل مخصص جديد',
+        labelEn: sbarLabelEn.trim() || sbarLabelAr.trim() || 'New Custom Field',
+        section: sbarSection,
+        isRequired: sbarIsRequired,
+        order: sbarFieldsList.length + 1,
+      };
+      updateSettings({ sbarFields: [...sbarFieldsList, newField] });
+    }
+
+    setSbarLabelAr('');
+    setSbarLabelEn('');
+    setSbarSection('A');
+    setSbarIsRequired(false);
+    setShowAddSbarField(false);
+  };
+
+  const handleStartEditSbarField = (field: SbarFieldConfig) => {
+    setEditingSbarFieldId(field.id);
+    setSbarLabelAr(field.labelAr || '');
+    setSbarLabelEn(field.labelEn || '');
+    setSbarSection(field.section || 'A');
+    setSbarIsRequired(!!field.isRequired);
+    setShowAddSbarField(true);
+  };
+
+  const handleDeleteSbarField = (id: string) => {
+    if (!confirm(lang === 'ar' ? 'هل أنت متأكد من حذف هذا الحقل من نموذج تسليم المناوبة؟' : 'Are you sure you want to remove this field?')) return;
+    const updated = sbarFieldsList.filter(f => f.id !== id);
+    updateSettings({ sbarFields: updated });
+  };
+
+  const handleResetSbarFields = () => {
+    if (!confirm(lang === 'ar' ? 'استعادة حقول نموذج SBAR الافتراضية؟' : 'Reset SBAR fields to defaults?')) return;
+    updateSettings({ sbarFields: DEFAULT_SBAR_FIELDS });
+  };
 
   // Handlers for Antibiotics
   const handleAddAbxPreset = (e: React.FormEvent) => {
@@ -1197,80 +1271,202 @@ export const ClinicalOptionsManager: React.FC = () => {
       {/* TAB 6: SBAR */}
       {activeTab === 'sbar' && (
         <div className="space-y-4">
-          <div className="p-4 bg-[#0a101c] rounded-xl border border-slate-800">
-            <h4 className="text-sm font-bold text-teal-400 mb-2 flex items-center gap-2">
-              <ShieldAlert className="w-4 h-4" />
-              {lang === 'ar' ? 'تخصيص نموذج تسليم المناوبة (SBAR)' : 'SBAR Handover Template Configuration'}
-            </h4>
-            <p className="text-xs text-slate-400 mb-4">
-              {lang === 'ar'
-                ? 'إدارة الحقول المطلوبة أثناء عملية الاستلام والتسليم بين الكوادر الطبية (SBAR Protocol).'
-                : 'Manage the required fields during the shift handover process (SBAR Protocol).'}
-            </p>
+          <div className="p-4 bg-[#0a101c] rounded-xl border border-slate-800 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h4 className="text-sm font-bold text-teal-400 flex items-center gap-2">
+                  <ShieldAlert className="w-4 h-4" />
+                  <span>{lang === 'ar' ? 'تخصيص وتسمية حقول نموذج تسليم المناوبة (SBAR)' : 'SBAR Handover Custom Fields & Labels'}</span>
+                </h4>
+                <p className="text-xs text-slate-400 mt-1">
+                  {lang === 'ar'
+                    ? 'يمكنك تسمية وتعديل وإضافة أو حذف حقول التوثيق الخاصة بنموذج التسليم والاستلام بين الأطباء والتمريض.'
+                    : 'Manage field labels, required status, and custom handover parameters.'}
+                </p>
+              </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {(settings.sbarFields || []).map((field) => (
-                <div key={field.id} className="bg-slate-900/50 p-3 rounded-xl border border-slate-700/60 flex items-center justify-between">
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="w-5 h-5 rounded flex items-center justify-center bg-teal-500/20 text-teal-400 font-bold text-xs border border-teal-500/30">
-                        {field.section}
-                      </span>
-                      <span className="font-bold text-xs text-slate-200">
-                        {lang === 'ar' ? field.labelAr : field.labelEn}
-                      </span>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      // Logic to remove a field
-                      const updated = (settings.sbarFields || []).filter(f => f.id !== field.id);
-                      updateSettings({ sbarFields: updated });
-                    }}
-                    className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
-                    title={lang === 'ar' ? 'حذف الحقل' : 'Delete field'}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingSbarFieldId(null);
+                    setSbarLabelAr('');
+                    setSbarLabelEn('');
+                    setSbarSection('A');
+                    setSbarIsRequired(false);
+                    setShowAddSbarField(!showAddSbarField);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs transition-all cursor-pointer shadow-sm"
+                >
+                  <Plus className="w-3.5 h-3.5 text-slate-950" />
+                  <span>{lang === 'ar' ? 'إضافة حقل مخصص جديد' : 'Add Custom Field'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleResetSbarFields}
+                  title={lang === 'ar' ? 'استعادة الحقول الافتراضية' : 'Reset Defaults'}
+                  className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-white transition-all cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
 
-            <div className="mt-6 pt-4 border-t border-slate-800/60 flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  // Reset to default
-                  import('../types/settings.ts').then((mod) => {
-                    updateSettings({ sbarFields: mod.DEFAULT_SBAR_FIELDS });
-                  });
-                }}
-                className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold transition-colors"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                {lang === 'ar' ? 'استعادة الافتراضيات' : 'Reset to Defaults'}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  // Add a new custom field
-                  const newId = `custom-${Date.now()}`;
-                  const newField = {
-                    id: newId,
-                    labelEn: 'New Custom Field',
-                    labelAr: 'حقل مخصص جديد',
-                    section: 'A' as const,
-                    isRequired: false,
-                    order: (settings.sbarFields?.length || 0) + 1,
-                  };
-                  updateSettings({ sbarFields: [...(settings.sbarFields || []), newField] });
-                }}
-                className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-500 text-white rounded-xl text-xs font-bold transition-colors"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                {lang === 'ar' ? 'إضافة حقل جديد' : 'Add New Field'}
-              </button>
+            {/* Form for Adding / Editing an SBAR Field */}
+            {showAddSbarField && (
+              <form onSubmit={handleSaveSbarField} className="p-4 rounded-xl bg-[#070c18] border border-teal-500/40 space-y-3 animate-in fade-in duration-200">
+                <div className="flex items-center justify-between">
+                  <h5 className="text-xs font-bold text-teal-300 flex items-center gap-1.5">
+                    {editingSbarFieldId ? <Pencil className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
+                    <span>
+                      {editingSbarFieldId 
+                        ? (lang === 'ar' ? 'تعديل تسمية وبيانات الحقل' : 'Edit Field Label & Options')
+                        : (lang === 'ar' ? 'إضافة حقل مخصص جديد وتسميته' : 'Add & Name New Custom Field')}
+                    </span>
+                  </h5>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddSbarField(false)}
+                    className="p-1 rounded text-slate-500 hover:text-slate-300"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                      {lang === 'ar' ? 'اسم الحقل بالعربية (Arabic Label)' : 'Arabic Label'} *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="مثال: تقييم مستوى الألم، نتائج الأشعة المقطعية"
+                      value={sbarLabelAr}
+                      onChange={(e) => setSbarLabelAr(e.target.value)}
+                      className="w-full bg-[#0b1224] border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-teal-400"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                      {lang === 'ar' ? 'اسم الحقل بالإنجليزية (English Label)' : 'English Label'}
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Pain Score Assessment, CT Scan Findings"
+                      value={sbarLabelEn}
+                      onChange={(e) => setSbarLabelEn(e.target.value)}
+                      className="w-full bg-[#0b1224] border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-teal-400"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                      {lang === 'ar' ? 'قسم الحقل في نموذج SBAR (Section)' : 'SBAR Section'}
+                    </label>
+                    <select
+                      value={sbarSection}
+                      onChange={(e) => setSbarSection(e.target.value as any)}
+                      className="w-full bg-[#0b1224] border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-teal-400"
+                    >
+                      <option value="S">S - Situation (الموقف الحالي)</option>
+                      <option value="B">B - Background (الخلفية المرضية)</option>
+                      <option value="A">A - Assessment (التقييم السريري)</option>
+                      <option value="R">R - Recommendation (التوصيات والخطة)</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-center pt-6">
+                    <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-teal-300">
+                      <input
+                        type="checkbox"
+                        checked={sbarIsRequired}
+                        onChange={(e) => setSbarIsRequired(e.target.checked)}
+                        className="w-4 h-4 rounded text-teal-500 bg-slate-900 border-slate-700"
+                      />
+                      <span>{lang === 'ar' ? 'حقل إجباري أثناء الاستلام والتسليم' : 'Mandatory field'}</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddSbarField(false)}
+                    className="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 text-xs font-semibold cursor-pointer"
+                  >
+                    {lang === 'ar' ? 'إلغاء' : 'Cancel'}
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-1.5 rounded-lg bg-teal-500 text-slate-950 text-xs font-bold hover:bg-teal-400 cursor-pointer shadow-md"
+                  >
+                    {editingSbarFieldId 
+                      ? (lang === 'ar' ? 'حفظ التعديلات' : 'Save Changes')
+                      : (lang === 'ar' ? 'إضافة الحقل المخصص' : 'Add Field')}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* List of Configured Fields */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {sbarFieldsList.map((field) => {
+                const isCustom = field.id.startsWith('custom-');
+                return (
+                  <div key={field.id} className="bg-slate-900/60 p-3 rounded-xl border border-slate-800 hover:border-slate-700 transition-all flex items-center justify-between gap-3">
+                    <div className="space-y-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className={`w-5 h-5 rounded flex items-center justify-center font-black text-xs border ${
+                          field.section === 'S' ? 'bg-teal-500/20 text-teal-300 border-teal-500/30' :
+                          field.section === 'B' ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' :
+                          field.section === 'A' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
+                          'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                        }`}>
+                          {field.section}
+                        </span>
+                        <span className="font-bold text-xs text-white truncate">
+                          {lang === 'ar' ? field.labelAr : field.labelEn}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono">
+                        {field.labelAr && field.labelEn && field.labelAr !== field.labelEn && (
+                          <span className="text-slate-400 truncate">({lang === 'ar' ? field.labelEn : field.labelAr})</span>
+                        )}
+                        {field.isRequired && (
+                          <span className="px-1.5 py-0.2 rounded bg-red-950/80 text-red-300 border border-red-800/50">
+                            {lang === 'ar' ? 'إجباري' : 'Required'}
+                          </span>
+                        )}
+                        <span className="px-1.5 py-0.2 rounded bg-slate-950 text-slate-400 border border-slate-800">
+                          {isCustom ? (lang === 'ar' ? 'مخصص' : 'Custom') : (lang === 'ar' ? 'أساسي' : 'Standard')}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleStartEditSbarField(field)}
+                        className="p-1.5 text-slate-400 hover:text-teal-300 hover:bg-teal-500/10 rounded-lg transition-colors cursor-pointer"
+                        title={lang === 'ar' ? 'تعديل وتسمية الحقل' : 'Edit field label'}
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteSbarField(field.id)}
+                        className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
+                        title={lang === 'ar' ? 'حذف الحقل' : 'Delete field'}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>

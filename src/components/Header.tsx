@@ -280,9 +280,8 @@ export const Header: React.FC<HeaderProps> = ({
           )}
 
           {/* Interactive Online/Offline Connection Status Button (Desktop) */}
-          {settings.features.enableCloudSync && (
-            <button
-              type="button"
+          <button
+            type="button"
               id="header-connection-status-btn-desktop"
               onClick={handleCloudSyncClick}
               className={`border px-3 py-1.5 rounded-xl flex items-center gap-2 shadow-sm transition-all active:scale-95 group cursor-pointer text-xs font-bold ${
@@ -310,15 +309,13 @@ export const Header: React.FC<HeaderProps> = ({
                 </>
               )}
             </button>
-          )}
         </div>
 
         {/* Action Controls: Mobile Connection Indicator, Search, Alerts & Settings */}
         <div className="flex items-center gap-2 sm:gap-2.5 relative">
           {/* Mobile Connection Indicator */}
-          {settings.features.enableCloudSync && (
-            <button
-              type="button"
+          <button
+            type="button"
               id="header-connection-status-btn-mobile"
               onClick={handleCloudSyncClick}
               className={`md:hidden border px-2.5 py-1.5 rounded-xl flex items-center gap-1.5 shadow-sm transition-all active:scale-95 text-xs font-bold ${
@@ -346,7 +343,6 @@ export const Header: React.FC<HeaderProps> = ({
                 </>
               )}
             </button>
-          )}
           {/* Universal Search Icon Button */}
           {settings.features.enableArchiveSearch && (
             <button
