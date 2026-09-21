@@ -434,7 +434,7 @@ export async function executeTransfer(
       activePatientId: patientId,
       currentPatientId: patientId,
       status: isPatientIsolated ? 'ISOLATION' : 'OCCUPIED',
-      isolation: isolationPayload,
+      isolation: isPatientIsolated ? isolationPayload : { isIsolated: false, precautions: [] },
       lastTransferId: transferId,
       updatedAt: Date.now(),
     });
@@ -442,6 +442,7 @@ export async function executeTransfer(
     // 3. Update patient's current bed in Firestore
     transaction.update(patientRef, {
       currentBedId: toBedId,
+      isolationPrecautions: isPatientIsolated ? (isolationPayload.precautions && isolationPayload.precautions.length > 0 ? isolationPayload.precautions : ['Contact Precautions']) : [],
       updatedAt: serverTimestamp(),
       updatedByUid: doctorId,
     });
@@ -466,7 +467,7 @@ export async function executeTransfer(
               type: 'Airborne',
               reason: 'Clinical Isolation',
               startDate: new Date().toISOString(),
-              precautions: pat?.isolationPrecautions || [],
+              precautions: pat?.isolationPrecautions || ['Contact Precautions'],
             })
       : { isIsolated: false, precautions: [] };
 
@@ -480,10 +481,11 @@ export async function executeTransfer(
       status: isIsolated ? BedStatus.ISOLATION : BedStatus.OCCUPIED,
       currentPatientId: patientId,
       activePatientId: patientId,
-      isolation: isolationPayload,
+      isolation: isIsolated ? isolationPayload : { isIsolated: false, precautions: [] },
     });
     await db.patients.update(patientId, {
       currentBedId: toBedId as BedNumber,
+      isolationPrecautions: isIsolated ? (isolationPayload.precautions && isolationPayload.precautions.length > 0 ? isolationPayload.precautions : ['Contact Precautions']) : [],
       updatedAt: new Date().toISOString(),
     });
     await ensureBedPatientSync();
@@ -566,13 +568,13 @@ export async function executeBedSwap(
     const isolationA = isPatientAIsolated
       ? (bedAData.isolation && bedAData.isolation.isIsolated
           ? bedAData.isolation
-          : { isIsolated: true, precautions: patientAData.isolationPrecautions || [] })
+          : { isIsolated: true, type: 'Airborne', reason: 'Clinical Isolation', startDate: new Date().toISOString(), precautions: patientAData.isolationPrecautions || ['Contact Precautions'] })
       : { isIsolated: false, precautions: [] };
 
     const isolationB = isPatientBIsolated
       ? (bedBData.isolation && bedBData.isolation.isIsolated
           ? bedBData.isolation
-          : { isIsolated: true, precautions: patientBData.isolationPrecautions || [] })
+          : { isIsolated: true, type: 'Airborne', reason: 'Clinical Isolation', startDate: new Date().toISOString(), precautions: patientBData.isolationPrecautions || ['Contact Precautions'] })
       : { isIsolated: false, precautions: [] };
 
     const operationId = generateId();
@@ -629,34 +631,36 @@ export async function executeBedSwap(
     transaction.set(transferARef, transferA);
     transaction.set(transferBRef, transferB);
 
-    // Bed A now receives Patient B
+    // Bed A now receives Patient B -> takes on Patient B's isolation status
     transaction.update(bedARef, {
       activePatientId: patientBId,
       currentPatientId: patientBId,
       status: isPatientBIsolated ? 'ISOLATION' : 'OCCUPIED',
-      isolation: isolationB,
+      isolation: isPatientBIsolated ? isolationB : { isIsolated: false, precautions: [] },
       lastTransferId: transferBId,
       updatedAt: Date.now(),
     });
 
-    // Bed B now receives Patient A
+    // Bed B now receives Patient A -> takes on Patient A's isolation status
     transaction.update(bedBRef, {
       activePatientId: patientAId,
       currentPatientId: patientAId,
       status: isPatientAIsolated ? 'ISOLATION' : 'OCCUPIED',
-      isolation: isolationA,
+      isolation: isPatientAIsolated ? isolationA : { isIsolated: false, precautions: [] },
       lastTransferId: transferAId,
       updatedAt: Date.now(),
     });
 
     transaction.update(patientARef, {
       currentBedId: bedBId,
+      isolationPrecautions: isPatientAIsolated ? (isolationA.precautions && isolationA.precautions.length > 0 ? isolationA.precautions : ['Contact Precautions']) : [],
       updatedAt: serverTimestamp(),
       updatedByUid: doctorId,
     });
 
     transaction.update(patientBRef, {
       currentBedId: bedAId,
+      isolationPrecautions: isPatientBIsolated ? (isolationB.precautions && isolationB.precautions.length > 0 ? isolationB.precautions : ['Contact Precautions']) : [],
       updatedAt: serverTimestamp(),
       updatedByUid: doctorId,
     });
@@ -689,33 +693,35 @@ export async function executeBedSwap(
       const isolationA = isPatientAIsolated
         ? (bedA?.isolation && bedA.isolation.isIsolated
             ? bedA.isolation
-            : { isIsolated: true, precautions: patA?.isolationPrecautions || [] })
+            : { isIsolated: true, type: 'Airborne', reason: 'Clinical Isolation', startDate: new Date().toISOString(), precautions: patA?.isolationPrecautions || ['Contact Precautions'] })
         : { isIsolated: false, precautions: [] };
 
       const isolationB = isPatientBIsolated
         ? (bedB?.isolation && bedB.isolation.isIsolated
             ? bedB.isolation
-            : { isIsolated: true, precautions: patB?.isolationPrecautions || [] })
+            : { isIsolated: true, type: 'Airborne', reason: 'Clinical Isolation', startDate: new Date().toISOString(), precautions: patB?.isolationPrecautions || ['Contact Precautions'] })
         : { isIsolated: false, precautions: [] };
 
       await db.beds.update(bedAId, {
         status: isPatientBIsolated ? BedStatus.ISOLATION : BedStatus.OCCUPIED,
         currentPatientId: patientBId,
         activePatientId: patientBId,
-        isolation: isolationB,
+        isolation: isPatientBIsolated ? isolationB : { isIsolated: false, precautions: [] },
       });
       await db.beds.update(bedBId, {
         status: isPatientAIsolated ? BedStatus.ISOLATION : BedStatus.OCCUPIED,
         currentPatientId: patientAId,
         activePatientId: patientAId,
-        isolation: isolationA,
+        isolation: isPatientAIsolated ? isolationA : { isIsolated: false, precautions: [] },
       });
       await db.patients.update(patientAId, {
         currentBedId: bedBId as BedNumber,
+        isolationPrecautions: isPatientAIsolated ? (isolationA.precautions && isolationA.precautions.length > 0 ? isolationA.precautions : ['Contact Precautions']) : [],
         updatedAt: new Date().toISOString(),
       });
       await db.patients.update(patientBId, {
         currentBedId: bedAId as BedNumber,
+        isolationPrecautions: isPatientBIsolated ? (isolationB.precautions && isolationB.precautions.length > 0 ? isolationB.precautions : ['Contact Precautions']) : [],
         updatedAt: new Date().toISOString(),
       });
       await ensureBedPatientSync();

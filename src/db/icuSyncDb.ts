@@ -823,8 +823,7 @@ export async function ensureBedPatientSync(): Promise<void> {
         modified = true;
       }
       const isPatientIsolated = !!(
-        (targetPatient.isolationPrecautions && targetPatient.isolationPrecautions.length > 0) ||
-        (b.isolation && b.isolation.isIsolated)
+        targetPatient.isolationPrecautions && targetPatient.isolationPrecautions.length > 0
       );
 
       if (isPatientIsolated) {
@@ -838,13 +837,23 @@ export async function ensureBedPatientSync(): Promise<void> {
             type: b.isolation?.type || 'Airborne',
             reason: b.isolation?.reason || 'Clinical Isolation',
             startDate: b.isolation?.startDate || new Date().toISOString(),
-            precautions: targetPatient.isolationPrecautions || b.isolation?.precautions || [],
+            precautions: targetPatient.isolationPrecautions || ['Contact Precautions'],
           };
           modified = true;
         }
-      } else if (b.status !== BedStatus.OCCUPIED && b.status !== BedStatus.UNAVAILABLE) {
-        b.status = BedStatus.OCCUPIED;
-        modified = true;
+      } else {
+        // Patient is NOT in isolation -> strictly reset and clear bed isolation
+        if (b.isolation && b.isolation.isIsolated) {
+          b.isolation = { isIsolated: false, precautions: [] };
+          modified = true;
+        }
+        if (b.status === BedStatus.ISOLATION) {
+          b.status = BedStatus.OCCUPIED;
+          modified = true;
+        } else if (b.status !== BedStatus.OCCUPIED && b.status !== BedStatus.UNAVAILABLE) {
+          b.status = BedStatus.OCCUPIED;
+          modified = true;
+        }
       }
     } else {
       // Bed has no active patient assigned - strictly reset to vacant and clear any isolation
