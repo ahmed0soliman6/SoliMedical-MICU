@@ -21,6 +21,7 @@ import {
 import { InvestigationItem } from '../types/schema.ts';
 import { useTranslation } from '../services/i18n.ts';
 import { useAuth } from '../services/AuthContext.tsx';
+import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { db } from '../db/icuSyncDb.ts';
 import { doc, deleteDoc } from 'firebase/firestore';
 import { firestore, setDoc } from '../services/firebase.ts';
@@ -67,6 +68,7 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
 }) => {
   const { lang, isRTL } = useTranslation();
   const { currentUser } = useAuth();
+  const { settings } = useSystemSettings();
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isAiScanModalOpen, setIsAiScanModalOpen] = useState(false);
@@ -300,15 +302,17 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
             <span>{lang === 'ar' ? 'إضافة فحص / تقرير' : 'Add Investigation'}</span>
           </button>
 
-          <button
-            type="button"
-            onClick={() => setIsAiScanModalOpen(true)}
-            className="flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-teal-500 via-cyan-500 to-teal-400 hover:from-teal-400 hover:to-cyan-300 text-slate-950 font-bold text-xs shadow-md shadow-teal-500/25 transition-all cursor-pointer active:scale-95"
-            title={lang === 'ar' ? 'مسح ضوئي ذكي لتقارير الأشعة وتخطيط القلب والسونار بالذكاء الاصطناعي' : 'AI Smart Scan for Radiology, CXR, CT, ECG, and POCUS'}
-          >
-            <Sparkles className="w-4 h-4 text-slate-950 animate-pulse" />
-            <span>{lang === 'ar' ? 'مسح ضوئي ذكي (AI Scanner)' : 'AI Smart Scan'}</span>
-          </button>
+          {settings.features.enableAiInvestigationScanner !== false && (
+            <button
+              type="button"
+              onClick={() => setIsAiScanModalOpen(true)}
+              className="flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-teal-500 via-cyan-500 to-teal-400 hover:from-teal-400 hover:to-cyan-300 text-slate-950 font-bold text-xs shadow-md shadow-teal-500/25 transition-all cursor-pointer active:scale-95"
+              title={lang === 'ar' ? 'مسح ضوئي ذكي لتقارير الأشعة وتخطيط القلب والسونار بالذكاء الاصطناعي' : 'AI Smart Scan for Radiology, CXR, CT, ECG, and POCUS'}
+            >
+              <Sparkles className="w-4 h-4 text-slate-950 animate-pulse" />
+              <span>{lang === 'ar' ? 'مسح ضوئي ذكي (AI Scanner)' : 'AI Smart Scan'}</span>
+            </button>
+          )}
         </div>
 
         <div className="flex items-center justify-between sm:justify-end gap-2 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-xs font-mono text-slate-300">
@@ -629,16 +633,18 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
         </div>
       )}
       {/* AI Smart Investigation / Radiology Scanner Modal */}
-      <AiInvestigationScannerModal
-        isOpen={isAiScanModalOpen}
-        onClose={() => setIsAiScanModalOpen(false)}
-        patientId={patientId}
-        patientName={patientName}
-        bedNumber={bedNumber}
-        onApplyToForm={handleApplyFromAi}
-        onDirectSave={handleDirectSaveFromAi}
-        onInvestigationAdded={onInvestigationAdded}
-      />
+      {settings.features.enableAiInvestigationScanner !== false && (
+        <AiInvestigationScannerModal
+          isOpen={isAiScanModalOpen}
+          onClose={() => setIsAiScanModalOpen(false)}
+          patientId={patientId}
+          patientName={patientName}
+          bedNumber={bedNumber}
+          onApplyToForm={handleApplyFromAi}
+          onDirectSave={handleDirectSaveFromAi}
+          onInvestigationAdded={onInvestigationAdded}
+        />
+      )}
     </div>
   );
 };

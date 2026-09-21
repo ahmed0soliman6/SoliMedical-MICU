@@ -1306,33 +1306,39 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
         {!isPatientCardCollapsed && (
           <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-800/80 animate-in fade-in duration-200">
             {/* Action Buttons: Transfer, Swap, Isolation - Unified Row */}
-            <div className="grid grid-cols-3 gap-1.5 w-full sm:flex sm:items-center sm:justify-end sm:gap-2">
-              <button
-                onClick={() => setIsTransferModalOpen(true)}
-                className="flex flex-col sm:flex-row items-center justify-center gap-1 px-1 py-1.5 sm:px-3 sm:py-1.5 rounded-xl bg-blue-500/15 hover:bg-blue-500/25 text-blue-700 dark:text-blue-300 border border-blue-500/30 text-[10px] xs:text-[11px] sm:text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer text-center min-w-0"
-                title={lang === 'ar' ? 'نقل المريض لسرير شاغر' : 'Transfer patient to vacant bed'}
-              >
-                <ArrowRightLeft className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
-                <span className="truncate">{lang === 'ar' ? 'نقل المريض' : 'Transfer'}</span>
-              </button>
+            <div className="flex items-center justify-end gap-1.5 flex-wrap w-full">
+              {settings.features.enableBedTransferAndSwap !== false && (
+                <>
+                  <button
+                    onClick={() => setIsTransferModalOpen(true)}
+                    className="flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-xl bg-blue-500/15 hover:bg-blue-500/25 text-blue-700 dark:text-blue-300 border border-blue-500/30 text-[10px] xs:text-[11px] sm:text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer text-center min-w-0"
+                    title={lang === 'ar' ? 'نقل المريض لسرير شاغر' : 'Transfer patient to vacant bed'}
+                  >
+                    <ArrowRightLeft className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+                    <span className="truncate">{lang === 'ar' ? 'نقل المريض' : 'Transfer'}</span>
+                  </button>
 
-              <button
-                onClick={() => setIsSwapModalOpen(true)}
-                className="flex flex-col sm:flex-row items-center justify-center gap-1 px-1 py-1.5 sm:px-3 sm:py-1.5 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 text-purple-700 dark:text-purple-300 border border-purple-500/30 text-[10px] xs:text-[11px] sm:text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer text-center min-w-0"
-                title={lang === 'ar' ? 'تبديل سريرين ومشغولين' : 'Swap beds'}
-              >
-                <Layers className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400 shrink-0" />
-                <span className="truncate">{lang === 'ar' ? 'تبديل سريرين' : 'Swap Beds'}</span>
-              </button>
+                  <button
+                    onClick={() => setIsSwapModalOpen(true)}
+                    className="flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 text-purple-700 dark:text-purple-300 border border-purple-500/30 text-[10px] xs:text-[11px] sm:text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer text-center min-w-0"
+                    title={lang === 'ar' ? 'تبديل سريرين ومشغولين' : 'Swap beds'}
+                  >
+                    <Layers className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400 shrink-0" />
+                    <span className="truncate">{lang === 'ar' ? 'تبديل سريرين' : 'Swap Beds'}</span>
+                  </button>
+                </>
+              )}
 
-              <button
-                onClick={() => setIsIsolationModalOpen(true)}
-                className="flex flex-col sm:flex-row items-center justify-center gap-1 px-1 py-1.5 sm:px-3 sm:py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-[10px] xs:text-[11px] sm:text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer text-center min-w-0"
-                title={lang === 'ar' ? 'تدابير العزل وحالة السرير' : 'Manage bed status & isolation'}
-              >
-                <ShieldAlert className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-                <span className="truncate">{lang === 'ar' ? 'العزل والحالة' : 'Bed Status'}</span>
-              </button>
+              {settings.features.enableBedIsolationControls !== false && (
+                <button
+                  onClick={() => setIsIsolationModalOpen(true)}
+                  className="flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-[10px] xs:text-[11px] sm:text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer text-center min-w-0"
+                  title={lang === 'ar' ? 'تدابير العزل وحالة السرير' : 'Manage bed status & isolation'}
+                >
+                  <ShieldAlert className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                  <span className="truncate">{lang === 'ar' ? 'العزل والحالة' : 'Bed Status'}</span>
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -1358,7 +1364,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
               id: 'labs', 
               label: lang === 'ar' ? `التحاليل والجدول اليومي (${labResults.length})` : `Daily Lab Flowsheet (${labResults.length})`, 
               icon: FlaskConical, 
-              enabled: true 
+              enabled: settings.features.enableLabFlowsheet !== false 
             },
             { 
               id: 'antibiotics', 
@@ -1370,43 +1376,43 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
               id: 'investigations', 
               label: lang === 'ar' ? `الفحوصات والأشعات (${investigations.length})` : `Radiology & Investigations (${investigations.length})`, 
               icon: Microscope, 
-              enabled: true 
+              enabled: settings.features.enableInvestigations !== false 
             },
             { 
               id: 'pumps', 
               label: lang === 'ar' ? 'مضخات المحاليل (Infusion Pumps)' : 'Infusion Pumps', 
               icon: Droplet, 
-              enabled: settings.features.enableInfusionPumps 
+              enabled: settings.features.enableInfusionPumps !== false 
             },
             { 
               id: 'vitals', 
               label: lang === 'ar' ? 'العلامات الحيوية (Vitals)' : 'Vitals & Telemetry', 
               icon: Activity, 
-              enabled: settings.features.enableTelemetryVitals 
+              enabled: settings.features.enableTelemetryVitals !== false 
             },
             { 
               id: 'vent', 
               label: lang === 'ar' ? 'التنفس الصناعي (Vent & ABG)' : 'Ventilator & ABG', 
               icon: Wind, 
-              enabled: settings.features.enableVentilatorParameters 
+              enabled: settings.features.enableVentilatorParameters !== false 
             },
             { 
               id: 'fluids', 
               label: lang === 'ar' ? 'ميزان السوائل ونقل الدم (Fluids & MTP)' : '24h Fluid Balance & MTP', 
               icon: Scale, 
-              enabled: settings.features.enableFluidBalance 
+              enabled: settings.features.enableFluidBalance !== false 
             },
             { 
               id: 'sbar', 
               label: lang === 'ar' ? `تسليم المناوبة SBAR (${sbarList.length})` : `SBAR Handovers (${sbarList.length})`, 
               icon: ShieldCheck, 
-              enabled: settings.features.enableSbarHandover 
+              enabled: settings.features.enableSbarHandover !== false 
             },
             { 
               id: 'notes', 
               label: lang === 'ar' ? `الملاحظات المشفرة (${notesList.length})` : `Clinical Notes (${notesList.length})`, 
               icon: FileText, 
-              enabled: settings.features.enableClinicalNotes 
+              enabled: settings.features.enableClinicalNotes !== false 
             },
             { 
               id: 'disposition', 
@@ -1744,7 +1750,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       )}
 
       {/* Tab 1: Continuous Vitals & Telemetry (Top Section after Patient Data) */}
-      {(activeTab === 'vitals' || activeTab === 'all' || activeTab === 'paperFlowsheet') && (
+      {(activeTab === 'vitals' || (activeTab === 'all' && settings.features.enableTelemetryVitals !== false) || activeTab === 'paperFlowsheet') && (
         <div 
           data-expanded={!isPaperVitalsCardCollapsed ? "true" : "false"}
           className="icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-4 border transition-all"
@@ -2948,7 +2954,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       )}
 
       {/* Tab: Daily Lab Flowsheet with Interactive Trend History (HG 5 > 7 > 8.5 > 8) */}
-      {(activeTab === 'labs' || activeTab === 'all') && (
+      {(activeTab === 'labs' || (activeTab === 'all' && settings.features.enableLabFlowsheet !== false)) && (
         <div 
           data-expanded={!isPaperLabsCardCollapsed ? "true" : "false"}
           className="icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-4 border transition-all"
@@ -3021,7 +3027,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       )}
 
       {/* Tab: Investigations, Radiology & POCUS Studies */}
-      {(activeTab === 'investigations' || activeTab === 'all') && (
+      {(activeTab === 'investigations' || (activeTab === 'all' && settings.features.enableInvestigations !== false)) && (
         <div 
           id="patient-investigations-card" 
           data-expanded={!isPaperInvestigationsCardCollapsed ? "true" : "false"}
@@ -3084,7 +3090,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       )}
 
       {/* Tab 3: Infusion Pumps */}
-      {(activeTab === 'pumps' || activeTab === 'all') && (
+      {(activeTab === 'pumps' || (activeTab === 'all' && settings.features.enableInfusionPumps !== false)) && (
         <div 
           data-expanded={!isPaperPumpsCardCollapsed ? "true" : "false"}
           className="icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-4 border transition-all"
@@ -3280,7 +3286,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       )}
 
       {/* Tab 2: Ventilator & ABG */}
-      {(activeTab === 'vent' || activeTab === 'all') && (
+      {(activeTab === 'vent' || (activeTab === 'all' && settings.features.enableVentilatorParameters !== false)) && (
         <div 
           data-expanded={!isPaperVentCardCollapsed ? "true" : "false"}
           className="icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-4 border transition-all"
@@ -3497,7 +3503,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       )}
 
       {/* Tab 4: Fluids & MTP */}
-      {(activeTab === 'fluids' || activeTab === 'all') && (
+      {(activeTab === 'fluids' || (activeTab === 'all' && settings.features.enableFluidBalance !== false)) && (
         <div 
           data-expanded={!isPaperFluidsCardCollapsed ? "true" : "false"}
           className="icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-4 border transition-all"
@@ -3805,7 +3811,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       )}
 
       {/* Tab 5: SBAR Handovers */}
-      {(activeTab === 'sbar' || activeTab === 'all') && (
+      {(activeTab === 'sbar' || (activeTab === 'all' && settings.features.enableSbarHandover !== false)) && (
         <div 
           data-expanded={!isPaperSbarCardCollapsed ? "true" : "false"}
           className="icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-4 border transition-all"
@@ -4044,7 +4050,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       )}
 
       {/* Tab 6: Clinical Notes & SHA-256 Addendums */}
-      {(activeTab === 'notes' || activeTab === 'all') && (
+      {(activeTab === 'notes' || (activeTab === 'all' && settings.features.enableClinicalNotes !== false)) && (
         <div 
           data-expanded={!isPaperNotesCardCollapsed ? "true" : "false"}
           className="icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-4 border transition-all"

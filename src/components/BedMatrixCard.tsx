@@ -26,6 +26,7 @@ export const BedMatrixCard: React.FC<BedMatrixCardProps> = ({
   onAdmitToBed,
 }) => {
   const { lang } = useTranslation();
+  const { settings } = useSystemSettings();
   const [lastHandoverDoctor, setLastHandoverDoctor] = useState<string | null>(null);
   
   const hasPatient = !!patient;
@@ -191,8 +192,8 @@ export const BedMatrixCard: React.FC<BedMatrixCardProps> = ({
       <div className="mt-3.5 pt-2 border-t border-slate-200/60 dark:border-slate-800/80">
         {isOccupied || isTransferPending ? (
           <div className="space-y-1.5">
-            {/* Patient Name + Distinctive Age Badge directly next to name */}
-            <div className="flex items-center justify-start gap-2.5 flex-wrap">
+            {/* Patient Name + Distinctive Age Badge + Acuity Badge + Code Status Badge */}
+            <div className="flex items-center justify-start gap-2 flex-wrap">
               <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white leading-snug truncate">
                 {patientName || (lang === 'ar' ? 'مريض بدون اسم' : 'Unnamed Patient')}
               </h2>
@@ -203,6 +204,16 @@ export const BedMatrixCard: React.FC<BedMatrixCardProps> = ({
                 >
                   {patient.age}{lang === 'ar' ? 'س' : 'y'}
                 </div>
+              )}
+              {settings.features.enableAcuityLevels !== false && patient?.acuityLevel && (
+                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded bg-red-100 text-red-800 border border-red-300 dark:bg-red-950 dark:text-red-300 dark:border-red-800 shrink-0">
+                  {patient.acuityLevel}
+                </span>
+              )}
+              {settings.features.enableCodeStatus !== false && patient?.codeStatus && (
+                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded bg-purple-100 text-purple-800 border border-purple-300 dark:bg-purple-950 dark:text-purple-300 dark:border-purple-800 shrink-0">
+                  {patient.codeStatus}
+                </span>
               )}
             </div>
 

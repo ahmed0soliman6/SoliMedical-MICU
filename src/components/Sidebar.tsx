@@ -168,7 +168,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         {/* 2. Patient Admission STAT */}
-        {settings.features.enablePatientAdmission && (
+        {settings.features.enableAdmissions !== false && (
           <button
             onClick={() => {
               onClose();
