@@ -655,9 +655,19 @@ app.post('/api/admin/mortality/delete', async (req, res) => {
 app.all('/api/admin/mortality/auto-purge', async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
-    // Vercel Crons can trigger this endpoint. We run both sweeps.
-    const purgeResult = await adminMortalityAutoPurgeSweep(authHeader);
-    const archiveResult = await adminArchiveSweep(authHeader, 30);
+    const cronSecret = process.env.CRON_SECRET;
+
+    if (!cronSecret) {
+      return res.status(401).json({ success: false, message: 'CRON_SECRET is not configured on the server.' });
+    }
+
+    if (!authHeader || authHeader !== `Bearer ${cronSecret}`) {
+      return res.status(401).json({ success: false, message: 'Unauthorized: CRON_SECRET mismatch.' });
+    }
+
+    // Vercel Crons can trigger this endpoint. We run both sweeps with trusted credentials.
+    const purgeResult = await adminMortalityAutoPurgeSweep();
+    const archiveResult = await adminArchiveSweep(undefined, 30);
     return res.status(200).json({
       success: true,
       message: 'Vercel Cron task completed successfully.',

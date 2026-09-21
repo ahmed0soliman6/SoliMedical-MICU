@@ -335,14 +335,13 @@ export async function adminCreateUser(authHeader?: string, userData?: any): Prom
       if (authErr.code === 'auth/email-already-exists' || authErr.code === 'auth/email-already-in-use') {
         const existing = await auth.getUserByEmail(email);
         fbUid = existing.uid;
-        await auth.updateUser(fbUid, { password: cleanPassword, displayName: cleanDisplayName, disabled: false });
-      } else {
-        const isPermissionDenied = authErr?.message?.includes('PERMISSION_DENIED') || authErr?.code === 7 || authErr?.message?.includes('credential');
-        if (isPermissionDenied) {
-          fbUid = `usr_${Date.now()}`;
-        } else {
-          throw new Error(`Firebase Auth createUser failed: ${authErr?.message || authErr}`);
+        try {
+          await auth.updateUser(fbUid, { password: cleanPassword, displayName: cleanDisplayName, disabled: false });
+        } catch (updateErr: any) {
+          return { success: false, message: `Firebase Auth updateUser failed: ${updateErr?.message || updateErr}` };
         }
+      } else {
+        return { success: false, message: `Firebase Auth createUser failed: ${authErr?.message || authErr}` };
       }
     }
 

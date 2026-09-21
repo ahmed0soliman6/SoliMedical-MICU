@@ -119,6 +119,12 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Archived Patients
+    match /archivedPatients/{patientId} {
+      allow read: if isClinician();
+      allow write: if isAdmin();
+    }
+
     // Beds Collection (Clinicians can admit, transfer, vacate beds)
     match /beds/{bedId} {
       allow read: if isClinician();

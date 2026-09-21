@@ -75,65 +75,57 @@ export async function searchExistingPatients(
   const last4 = extractLast4(inputNationalId);
   const normalizedName = normalizeArabicName(inputName);
 
-  // 1. Exact MRN Search (Highest Priority)
-  if (cleanMrn) {
+  const queryAndAdd = async (collName: string, qField: string, qValue: any, matchType: 'MRN_EXACT' | 'NAME_AND_NATIONAL_ID_EXACT', compoundCheck?: { field: string; value: any }) => {
     try {
-      const q = query(
-        collection(firestore, COLLECTIONS.PATIENTS),
-        where('mrn', '==', cleanMrn),
-        limit(5)
-      );
+      let q;
+      if (compoundCheck) {
+        q = query(
+          collection(firestore, collName),
+          where(qField, '==', qValue),
+          where(compoundCheck.field, '==', compoundCheck.value),
+          limit(5)
+        );
+      } else {
+        q = query(
+          collection(firestore, collName),
+          where(qField, '==', qValue),
+          limit(5)
+        );
+      }
       const snap = await getDocs(q);
       snap.forEach((d) => {
-        const data = d.data() as PatientContract;
-        matches.push({
-          patientId: data.patientId || d.id,
-          mrn: data.mrn,
-          fullNameAr: data.fullNameAr || data.fullName,
-          fullNameEn: data.fullNameEn,
-          nationalIdLast4: data.nationalIdLast4 || '',
-          gender: data.gender,
-          bloodType: data.bloodGroup,
-          allergies: data.allergiesSummary,
-          chronicDiseases: data.chronicConditionsSummary,
-          matchType: 'MRN_EXACT',
-        });
-      });
-    } catch (e) {
-      console.warn('Firestore MRN search warning:', e);
-    }
-  }
-
-  // 2. Strict Compound Match (Normalized Full Name + Last 4 digits ID)
-  if (normalizedName && last4 && last4.length === 4) {
-    try {
-      const q = query(
-        collection(firestore, COLLECTIONS.PATIENTS),
-        where('normalizedFullName', '==', normalizedName),
-        where('nationalIdLast4', '==', last4),
-        limit(5)
-      );
-      const snap = await getDocs(q);
-      snap.forEach((d) => {
-        const data = d.data() as PatientContract;
-        if (!matches.some((m) => m.patientId === (data.patientId || d.id))) {
+        const data = d.data() as any;
+        const pId = data.patientId || data.id || d.id;
+        if (!matches.some((m) => m.patientId === pId)) {
           matches.push({
-            patientId: data.patientId || d.id,
+            patientId: pId,
             mrn: data.mrn,
             fullNameAr: data.fullNameAr || data.fullName,
             fullNameEn: data.fullNameEn,
-            nationalIdLast4: data.nationalIdLast4,
+            nationalIdLast4: data.nationalIdLast4 || '',
             gender: data.gender,
-            bloodType: data.bloodGroup,
-            allergies: data.allergiesSummary,
-            chronicDiseases: data.chronicConditionsSummary,
-            matchType: 'NAME_AND_NATIONAL_ID_EXACT',
+            bloodType: data.bloodGroup || data.bloodType,
+            allergies: data.allergiesSummary || (data.allergies && Array.isArray(data.allergies) ? data.allergies.map((a: any) => typeof a === 'string' ? a : a.allergen) : []),
+            chronicDiseases: data.chronicConditionsSummary || (data.chronicDiseases && (typeof data.chronicDiseases === 'string' ? [data.chronicDiseases] : data.chronicDiseases)) || [],
+            matchType,
           });
         }
       });
     } catch (e) {
-      console.warn('Firestore Name+ID compound search warning:', e);
+      console.warn(`Firestore search on ${collName} failed:`, e);
     }
+  };
+
+  // 1. Exact MRN Search (Highest Priority)
+  if (cleanMrn) {
+    await queryAndAdd(COLLECTIONS.PATIENTS, 'mrn', cleanMrn, 'MRN_EXACT');
+    await queryAndAdd('archivedPatients', 'mrn', cleanMrn, 'MRN_EXACT');
+  }
+
+  // 2. Strict Compound Match (Normalized Full Name + Last 4 digits ID)
+  if (normalizedName && last4 && last4.length === 4) {
+    await queryAndAdd(COLLECTIONS.PATIENTS, 'normalizedFullName', normalizedName, 'NAME_AND_NATIONAL_ID_EXACT', { field: 'nationalIdLast4', value: last4 });
+    await queryAndAdd('archivedPatients', 'normalizedFullName', normalizedName, 'NAME_AND_NATIONAL_ID_EXACT', { field: 'nationalIdLast4', value: last4 });
   }
 
   // 3. Fallback search on local Dexie cache if online search returned no hits or was offline
@@ -300,6 +292,8 @@ export async function executeAdmission(
 
     if (isReadmission) {
       transaction.set(patientRef, patientDoc, { merge: true });
+      const archivedRef = doc(firestore, 'archivedPatients', patientId);
+      transaction.delete(archivedRef);
     } else {
       transaction.set(patientRef, patientDoc);
     }

@@ -87,7 +87,7 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token || 'legacy_admin'}`
+          'Authorization': `Bearer ${token || ''}`
         },
         body: JSON.stringify({ patientId: patient.id })
       });
