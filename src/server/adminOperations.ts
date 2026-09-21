@@ -23,21 +23,56 @@ let adminApp: App | undefined;
 let firestoreDb: Firestore | undefined;
 let authAdmin: Auth | undefined;
 
-function sanitizePemKey(key: string): string {
-  let clean = key.trim();
-  if ((clean.startsWith('"') && clean.endsWith('"')) || (clean.startsWith("'") && clean.endsWith("'"))) {
-    clean = clean.slice(1, -1).trim();
-  }
-  clean = clean.replace(/\\n/g, '\n').replace(/\\r/g, '');
+function formatPrivateKey(key: string | undefined): string | undefined {
+  if (!key) return undefined;
 
-  if (!clean.includes('-----BEGIN PRIVATE KEY-----')) {
-    clean = `-----BEGIN PRIVATE KEY-----\n${clean}\n-----END PRIVATE KEY-----`;
+  let cleanKey = key.trim();
+
+  // Strip wrapping quotes (single or double)
+  while (
+    (cleanKey.startsWith('"') && cleanKey.endsWith('"')) ||
+    (cleanKey.startsWith("'") && cleanKey.endsWith("'"))
+  ) {
+    cleanKey = cleanKey.slice(1, -1).trim();
   }
 
-  if (!clean.endsWith('\n')) {
-    clean += '\n';
+  // Convert escaped newlines and CRLF to real newline characters
+  cleanKey = cleanKey
+    .replace(/\\r\\n/g, '\n')
+    .replace(/\\n/g, '\n')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(/\\\\n/g, '\n');
+
+  // Handle case where user pasted the full service account JSON
+  if (cleanKey.startsWith('{') && cleanKey.endsWith('}')) {
+    try {
+      const parsed = JSON.parse(cleanKey);
+      if (parsed.private_key) {
+        return formatPrivateKey(parsed.private_key);
+      }
+    } catch {
+      // Continue if not JSON
+    }
   }
-  return clean;
+
+  // Format into standard PEM with clean line breaks
+  if (cleanKey.includes('-----BEGIN') && cleanKey.includes('-----END')) {
+    const match = cleanKey.match(/(-----BEGIN [^-]+-----)([\s\S]+?)(-----END [^-]+-----)/);
+    if (match) {
+      const header = match[1].trim();
+      const body = match[2].replace(/\s+/g, '');
+      const footer = match[3].trim();
+      const formattedBody = body.match(/.{1,64}/g)?.join('\n') || body;
+      return `${header}\n${formattedBody}\n${footer}\n`;
+    }
+  } else {
+    const base64Body = cleanKey.replace(/\s+/g, '');
+    const formattedBody = base64Body.match(/.{1,64}/g)?.join('\n') || base64Body;
+    return `-----BEGIN PRIVATE KEY-----\n${formattedBody}\n-----END PRIVATE KEY-----\n`;
+  }
+
+  return cleanKey.endsWith('\n') ? cleanKey : `${cleanKey}\n`;
 }
 
 function parseServiceAccountCredentials(): { projectId?: string; clientEmail?: string; privateKey?: string } | null {
@@ -46,11 +81,14 @@ function parseServiceAccountCredentials(): { projectId?: string; clientEmail?: s
     try {
       const parsed = typeof rawJson === 'string' ? JSON.parse(rawJson) : rawJson;
       if (parsed.client_email && parsed.private_key) {
-        return {
-          projectId: parsed.project_id,
-          clientEmail: parsed.client_email,
-          privateKey: sanitizePemKey(parsed.private_key)
-        };
+        const formattedKey = formatPrivateKey(parsed.private_key);
+        if (formattedKey) {
+          return {
+            projectId: parsed.project_id,
+            clientEmail: parsed.client_email,
+            privateKey: formattedKey
+          };
+        }
       }
     } catch (e) {
       console.warn('[Firebase Admin] JSON parse error in service account:', e);
@@ -62,11 +100,14 @@ function parseServiceAccountCredentials(): { projectId?: string; clientEmail?: s
     try {
       const parsed = JSON.parse(rawKey);
       if (parsed.client_email && parsed.private_key) {
-        return {
-          projectId: parsed.project_id || process.env.FIREBASE_PROJECT_ID,
-          clientEmail: parsed.client_email,
-          privateKey: sanitizePemKey(parsed.private_key)
-        };
+        const formattedKey = formatPrivateKey(parsed.private_key);
+        if (formattedKey) {
+          return {
+            projectId: parsed.project_id || process.env.FIREBASE_PROJECT_ID,
+            clientEmail: parsed.client_email,
+            privateKey: formattedKey
+          };
+        }
       }
     } catch {
       // Not valid JSON, continue with raw PEM
@@ -75,11 +116,14 @@ function parseServiceAccountCredentials(): { projectId?: string; clientEmail?: s
 
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL?.trim();
   if (clientEmail && rawKey) {
-    return {
-      projectId: process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID || 'solimedical-micu',
-      clientEmail,
-      privateKey: sanitizePemKey(rawKey)
-    };
+    const formattedKey = formatPrivateKey(rawKey);
+    if (formattedKey) {
+      return {
+        projectId: process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID || 'solimedical-micu',
+        clientEmail,
+        privateKey: formattedKey
+      };
+    }
   }
 
   return null;
