@@ -24,29 +24,74 @@ export async function scanLabImage(
   mimeType = 'image/jpeg',
   expectedType: 'ABG' | 'CBC' | 'ALL' | string = 'ALL'
 ): Promise<ScannedLabResponse> {
-  const response = await fetch('/api/ai/scan-lab', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      imageBase64,
-      mimeType,
-      expectedType,
-    }),
+  // Ensure payload has base64 data
+  if (!imageBase64 || typeof imageBase64 !== 'string') {
+    throw new Error('لم يتم تمرير بيانات الصورة (Image payload is empty)');
+  }
+
+  // Detect mime type if provided in Data URL
+  const mimeMatch = imageBase64.match(/^data:([a-zA-Z0-9/+-]+);base64,/);
+  const resolvedMimeType = mimeMatch ? mimeMatch[1] : (mimeType || 'image/jpeg');
+
+  const payload = JSON.stringify({
+    imageBase64,
+    mimeType: resolvedMimeType,
+    expectedType,
   });
 
-  if (!response.ok) {
-    const errData = await response.json().catch(() => ({}));
-    throw new Error(errData.error || `Server responded with status ${response.status}`);
+  const headers = {
+    'Content-Type': 'application/json',
+  };
+
+  // Primary endpoint: /api/scan-lab (Vercel Serverless / Express)
+  // Fallback endpoint: /api/ai/scan-lab
+  const endpointsToTry = ['/api/scan-lab', '/api/ai/scan-lab'];
+  let lastError: Error | null = null;
+
+  for (const endpoint of endpointsToTry) {
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+        body: payload,
+      });
+
+      // If 404 and we have another endpoint to try, attempt fallback
+      if (response.status === 404 && endpoint !== endpointsToTry[endpointsToTry.length - 1]) {
+        console.warn(`[AI Lab Scanner] ${endpoint} returned 404, attempting fallback endpoint...`);
+        continue;
+      }
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        const serverMsg = errData.error || errData.message;
+        if (serverMsg) {
+          throw new Error(serverMsg);
+        }
+        if (response.status === 404) {
+          throw new Error(
+            'مسار المعالجة غير موجود على الخادم (404: Route Not Found). تأكد من رفع مجلد /api ونشره على Vercel أو تفعيل الخادم.'
+          );
+        }
+        throw new Error(`خطأ من الخادم (Status: ${response.status})`);
+      }
+
+      const result = await response.json().catch(() => ({}));
+      if (!result.success || !result.data) {
+        throw new Error(result.error || result.message || 'فشل استخراج وتحليل بيانات التقرير من الذكاء الاصطناعي.');
+      }
+
+      return result.data as ScannedLabResponse;
+    } catch (err: any) {
+      lastError = err;
+      // If it wasn't a 404, don't try the other endpoint, throw immediately
+      if (!err.message?.includes('404')) {
+        throw err;
+      }
+    }
   }
 
-  const result = await response.json();
-  if (!result.success || !result.data) {
-    throw new Error(result.error || 'Failed to parse lab results');
-  }
-
-  return result.data as ScannedLabResponse;
+  throw lastError || new Error('تعذر الاتصال بـ API فحص التحاليل (Server responded with 404)');
 }
 
 // Generate realistic SVG-based data-URL samples of medical analyzer printouts for live testing

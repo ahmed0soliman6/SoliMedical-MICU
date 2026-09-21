@@ -80,6 +80,7 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
 
   // Image & Analysis state
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [selectedImageMime, setSelectedImageMime] = useState<string>('image/jpeg');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [scannedResult, setScannedResult] = useState<ScannedLabResponse | null>(null);
@@ -113,6 +114,7 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
   const resetState = () => {
     stopCamera();
     setSelectedImage(null);
+    setSelectedImageMime('image/jpeg');
     setIsAnalyzing(false);
     setAnalysisError(null);
     setScannedResult(null);
@@ -206,6 +208,7 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
       setSelectedImage(dataUrl);
+      setSelectedImageMime('image/jpeg');
       stopCamera();
       processImageWithAI(dataUrl, 'image/jpeg');
     }
@@ -220,14 +223,17 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
       setAnalysisError(null);
       const { base64, mimeType } = await compressImageForOcr(file);
       setSelectedImage(base64);
+      setSelectedImageMime(mimeType);
       processImageWithAI(base64, mimeType);
     } catch (err) {
       console.warn('Image compression fallback:', err);
       const reader = new FileReader();
       reader.onload = (event) => {
         const base64 = event.target?.result as string;
+        const resolvedMime = file.type || 'image/jpeg';
         setSelectedImage(base64);
-        processImageWithAI(base64, file.type || 'image/jpeg');
+        setSelectedImageMime(resolvedMime);
+        processImageWithAI(base64, resolvedMime);
       };
       reader.readAsDataURL(file);
     } finally {
@@ -247,13 +253,16 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
       setAnalysisError(null);
       const { base64, mimeType } = await compressImageForOcr(file);
       setSelectedImage(base64);
+      setSelectedImageMime(mimeType);
       processImageWithAI(base64, mimeType);
     } catch {
       const reader = new FileReader();
       reader.onload = (event) => {
         const base64 = event.target?.result as string;
+        const resolvedMime = file.type || 'image/jpeg';
         setSelectedImage(base64);
-        processImageWithAI(base64, file.type || 'image/jpeg');
+        setSelectedImageMime(resolvedMime);
+        processImageWithAI(base64, resolvedMime);
       };
       reader.readAsDataURL(file);
     }
@@ -263,6 +272,7 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
     setSelectedPresetType('ABG');
     const sample = generateSampleAbgImage();
     setSelectedImage(sample);
+    setSelectedImageMime('image/svg+xml');
     processImageWithAI(sample, 'image/svg+xml', 'ABG');
   };
 
@@ -270,6 +280,7 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
     setSelectedPresetType('CBC');
     const sample = generateSampleCbcImage();
     setSelectedImage(sample);
+    setSelectedImageMime('image/svg+xml');
     processImageWithAI(sample, 'image/svg+xml', 'CBC');
   };
 
@@ -277,6 +288,7 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
     setSelectedPresetType('CHEMISTRY');
     const sample = generateSampleChemistryImage();
     setSelectedImage(sample);
+    setSelectedImageMime('image/svg+xml');
     processImageWithAI(sample, 'image/svg+xml', 'CHEMISTRY');
   };
 
@@ -284,6 +296,7 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
     setIsAnalyzing(true);
     setAnalysisError(null);
     setScannedResult(null);
+    setSelectedImageMime(mimeType);
 
     try {
       const presetToUse = overridePreset || selectedPresetType || 'ALL';
@@ -313,13 +326,21 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
       
       let userErrorMsg = err?.message || (lang === 'ar' ? 'فشل التعرف على تقرير التحليل. يرجى التأكد من وضوح الصورة.' : 'Failed to recognize lab report. Ensure the image is legible and well-lit.');
       
-      if (errStr.includes('405') || errStr.includes('Failed to fetch') || errStr.includes('NetworkError')) {
+      if (errStr.includes('404')) {
         userErrorMsg = lang === 'ar'
-          ? 'تعذر الاتصال بخدمة التحليل الذكي (تم تحديث خادم الخدمة بنجاح، يرجى النقر على "المحاولة مرة أخرى").'
-          : 'Could not reach the AI scanning service. The backend service was updated, please click "Retry Scanning Now".';
+          ? 'تعذر الوصول إلى نقطة المعالجة (404: Endpoint Not Found). تم تحديث مسار /api/scan-lab بنجاح. إذا كنت على Vercel، تأكد من رفع ونشر مجلد /api.'
+          : 'API Endpoint not found (404). Dual routes /api/scan-lab and /api/ai/scan-lab are now active. Please ensure /api is deployed to Vercel.';
+      } else if (errStr.includes('GEMINI_API_KEY')) {
+        userErrorMsg = lang === 'ar'
+          ? 'مفتاح GEMINI_API_KEY غير موجود في إعدادات البيئة على Vercel. يرجى الدخول إلى Project Settings > Environment Variables وإضافة GEMINI_API_KEY ثم إعادة النشر.'
+          : 'GEMINI_API_KEY is missing from Vercel Environment Variables. Please add GEMINI_API_KEY and redeploy.';
+      } else if (errStr.includes('405') || errStr.includes('Failed to fetch') || errStr.includes('NetworkError')) {
+        userErrorMsg = lang === 'ar'
+          ? 'تعذر الاتصال بخدمة التحليل الذكي. يرجى النقر على "المحاولة مرة أخرى".'
+          : 'Could not reach the AI scanning service. Please click "Retry Scanning Now".';
       } else if (isOverload) {
         userErrorMsg = lang === 'ar' 
-          ? 'نموذج الذكاء الاصطناعي يواجه ضغطاً مؤقتاً (503). يرجى النقر على زر "المحاولة مرة أخرى".' 
+          ? 'خوادم الذكاء الاصطناعي تواجه ضغطاً مؤقتاً (503). يرجى النقر على زر "المحاولة مرة أخرى".' 
           : 'The AI model is experiencing temporary demand (503). Please click "Retry Scanning Now".';
       }
       
@@ -699,7 +720,7 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
                       type="button"
                       onClick={() => {
                         if (selectedImage) {
-                          processImageWithAI(selectedImage, 'image/jpeg');
+                          processImageWithAI(selectedImage, selectedImageMime || 'image/jpeg');
                         }
                       }}
                       className="px-3.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold flex items-center gap-1.5 cursor-pointer shadow-sm transition-all active:scale-95"
@@ -711,9 +732,7 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      setAnalysisError(null);
-                      setSelectedImage(null);
-                      setScannedResult(null);
+                      resetState();
                     }}
                     className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold cursor-pointer transition-all"
                   >

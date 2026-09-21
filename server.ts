@@ -49,17 +49,33 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// AI Lab OCR Scanner Endpoint
-app.post('/api/ai/scan-lab', async (req, res) => {
-  try {
-    const { imageBase64, mimeType = 'image/jpeg', expectedType = 'ALL' } = req.body;
+// AI Lab OCR Scanner Endpoints (supporting both /api/scan-lab and /api/ai/scan-lab)
+app.get(['/api/scan-lab', '/api/ai/scan-lab'], (req, res) => {
+  res.json({
+    service: 'AI Lab Scanner API',
+    status: 'active',
+    supportedMethods: ['POST'],
+    endpoints: ['/api/scan-lab', '/api/ai/scan-lab'],
+    timestamp: new Date().toISOString(),
+  });
+});
 
-    if (!imageBase64) {
-      return res.status(400).json({ error: 'Missing imageBase64 data in request body.' });
+app.post(['/api/scan-lab', '/api/ai/scan-lab'], async (req, res) => {
+  try {
+    const { imageBase64, expectedType = 'ALL' } = req.body;
+
+    if (!imageBase64 || typeof imageBase64 !== 'string') {
+      return res.status(400).json({ success: false, error: 'Missing imageBase64 data in request body.' });
     }
 
-    // Strip data URL prefix if present
-    const cleanBase64 = imageBase64.replace(/^data:[a-zA-Z0-9/+-]+;base64,/, '');
+    // Strip data URL prefix if present and extract mime type
+    const mimeMatch = imageBase64.match(/^data:([a-zA-Z0-9/+-]+);base64,/);
+    const mimeType = mimeMatch ? mimeMatch[1] : (req.body.mimeType || 'image/jpeg');
+    const cleanBase64 = imageBase64.replace(/^data:[a-zA-Z0-9/+-]+;base64,/, '').trim();
+
+    if (!cleanBase64) {
+      return res.status(400).json({ success: false, error: 'Empty image payload after removing data URL header.' });
+    }
 
     const ai = getGenAI();
 
@@ -97,8 +113,14 @@ Specific mappings:
   - inr, pt, ptt, fib, troponin, ck, ckMb, crp, procalc, amylase, lipase, esr
 `;
 
-    // Quadruple-redundancy model fallback to guarantee 100% availability even during 503 high demand periods
-    const modelsToTry = ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'];
+    // Multi-model fallback cascade including user requested gemini-1.5-flash / gemini-2.5-flash / gemini-3.8-flash
+    const modelsToTry = [
+      'gemini-2.5-flash',
+      'gemini-1.5-flash',
+      'gemini-3.8-flash',
+      'gemini-3.1-flash-lite',
+      'gemini-3.6-flash'
+    ];
     let response: any = null;
     let lastError: any = null;
 
