@@ -29,6 +29,8 @@ import {
 import { PatientAntibiotic, PatientDossier, BedRecord, BedNumber, LabResultItem, Gender } from '../types/schema.ts';
 import { AntibioticPreset, SystemSettings } from '../types/settings.ts';
 import { useTranslation } from '../services/i18n.ts';
+import { useAuth } from '../services/AuthContext.tsx';
+import { canEditRecord, canDeleteRecord, preserveRecordOwnership } from '../services/medicalRecordPermissions.ts';
 import { db } from '../db/icuSyncDb.ts';
 import { doc, deleteDoc } from 'firebase/firestore';
 import { firestore, setDoc } from '../services/firebase.ts';
@@ -706,6 +708,8 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
   currentUser,
 }) => {
   const { lang, isRTL } = useTranslation();
+  const { currentUser: authUser, user: authContextUser } = useAuth();
+  const activeUser = currentUser || authUser || authContextUser;
   const [isCollapsed, setIsCollapsed] = useState(true);
   const [activeFilter, setActiveFilter] = useState<'ALL' | 'ACTIVE' | 'COMPLETED_DISCONTINUED'>('ACTIVE');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -962,6 +966,13 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
     e.preventDefault();
     if (!drugNameEn.trim()) return;
 
+    if (editingAbx) {
+      if (!canEditRecord(activeUser, editingAbx)) {
+        alert(lang === 'ar' ? 'غير مصرح: يمكنك فقط تعديل السجلات الطبية التي قمت بإضافتها بنفسك (أو صلاحية مدير النظام ADMIN).' : 'Unauthorized: You can only edit records you created (or ADMIN role).');
+        return;
+      }
+    }
+
     const abxId = editingAbx ? editingAbx.id : `abx-${Date.now()}`;
     const nowIso = new Date().toISOString();
 
@@ -985,6 +996,7 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
       latestTdmLevel: latestTdmLevel.trim() || undefined,
       latestTdmTimestamp: latestTdmLevel.trim() ? (editingAbx?.latestTdmTimestamp || nowIso) : undefined,
       prescribedByDoctorName: editingAbx?.prescribedByDoctorName || doctorName,
+      createdByUid: editingAbx?.createdByUid || activeUser?.uid,
       notes: notes.trim() || undefined,
       discontinueReason: status === 'DISCONTINUED' ? (discontinueReason.trim() || 'Discontinued by MD') : undefined,
       discontinuedAt: status === 'DISCONTINUED' ? (editingAbx?.discontinuedAt || nowIso) : undefined,
@@ -1008,6 +1020,11 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
   };
 
   const handleUpdateStatus = async (abx: PatientAntibiotic, newStatus: 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'DISCONTINUED') => {
+    if (!canEditRecord(activeUser, abx)) {
+      alert(lang === 'ar' ? 'غير مصرح: يمكنك فقط تعديل السجلات الطبية التي قمت بإضافتها بنفسك (أو صلاحية مدير النظام ADMIN).' : 'Unauthorized: You can only modify status for records you created (or ADMIN role).');
+      return;
+    }
+
     try {
       const updated: PatientAntibiotic = {
         ...abx,
@@ -1030,6 +1047,11 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
   };
 
   const handleDelete = async (abx: PatientAntibiotic) => {
+    if (!canDeleteRecord(activeUser)) {
+      alert(lang === 'ar' ? 'غير مصرح: حذف السجلات الطبية متاح فقط لمدير النظام (ADMIN).' : 'Unauthorized: Deleting records is available for ADMIN only.');
+      return;
+    }
+
     if (!window.confirm(lang === 'ar' ? `هل أنت متأكد من حذف ${abx.drugNameAr || abx.drugNameEn}؟` : `Are you sure you want to delete ${abx.drugNameEn}?`)) {
       return;
     }

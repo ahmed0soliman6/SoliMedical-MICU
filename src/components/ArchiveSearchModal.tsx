@@ -2,11 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { 
   X, 
   Search,
-  Archive
+  Archive,
+  Trash2
 } from 'lucide-react';
 import { PatientDossier, BedNumber } from '../types/schema.ts';
 import { db } from '../db/icuSyncDb.ts';
 import { useTranslation } from '../services/i18n.ts';
+import { useAuth } from '../services/AuthContext.tsx';
+import { canDeleteMortalityRecord } from '../services/medicalRecordPermissions.ts';
 
 interface ArchiveSearchModalProps {
   isOpen: boolean;
@@ -38,9 +41,14 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
   initialFilterType = 'ALL',
 }) => {
   const { t, lang, isRTL } = useTranslation();
+  const { currentUser, user, token } = useAuth();
   const [searchTerm, setSearchTerm] = useState<string>(initialSearchTerm);
   const [allPatients, setAllPatients] = useState<PatientDossier[]>([]);
   const [filterType, setFilterType] = useState<'ALL' | 'ACTIVE_ICU' | 'DISCHARGED' | 'ARCHIVED' | 'DECEASED'>(initialFilterType);
+  const [deletingPatientId, setDeletingPatientId] = useState<string | null>(null);
+
+  const effectiveUser = currentUser || user;
+  const isAdmin = canDeleteMortalityRecord(effectiveUser);
 
   useEffect(() => {
     if (isOpen) {
@@ -57,6 +65,52 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
   const loadPatients = async () => {
     const list = await db.patients.toArray();
     setAllPatients(list);
+  };
+
+  const handleDeleteMortalityPatient = async (patient: PatientDossier) => {
+    if (!isAdmin) {
+      alert(lang === 'ar' ? 'غير مصرح: الحذف متاح فقط لمدير النظام (ADMIN).' : 'Unauthorized: Deletion is available for ADMIN only.');
+      return;
+    }
+
+    const confirmMsg = lang === 'ar'
+      ? `هل أنت متأكد من حذف سجل المتوفى للمريض "${patient.fullNameAr || patient.fullNameEn}" (#${patient.mrn}) نهائياً من قاعدة البيانات والمنظومة؟`
+      : `Are you sure you want to permanently delete the mortality record for "${patient.fullNameEn}" (#${patient.mrn}) from the database?`;
+
+    if (!confirm(confirmMsg)) return;
+
+    try {
+      setDeletingPatientId(patient.id);
+
+      // Server-side permanent deletion
+      const res = await fetch('/api/admin/mortality/delete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token || 'legacy_admin'}`
+        },
+        body: JSON.stringify({ patientId: patient.id })
+      });
+
+      const resData = await res.json().catch(() => null);
+
+      if (!res.ok || (resData && !resData.success)) {
+        throw new Error(resData?.message || (lang === 'ar' ? 'فشلت عملية الحذف من السيرفر.' : 'Server deletion failed.'));
+      }
+
+      // Local IndexedDB deletion
+      await db.patients.delete(patient.id);
+      await db.clinicalNotes.where('patientId').equals(patient.id).delete();
+      await db.vitals.where('patientId').equals(patient.id).delete();
+      await db.patientAntibiotics.where('patientId').equals(patient.id).delete();
+
+      alert(lang === 'ar' ? 'تم حذف ملف حالة الوفاة وكافة سجلاته بنجاح.' : 'Mortality record deleted successfully.');
+      await loadPatients();
+    } catch (err: any) {
+      alert(err?.message || (lang === 'ar' ? 'حدث خطأ أثناء عملية الحذف.' : 'An error occurred during deletion.'));
+    } finally {
+      setDeletingPatientId(null);
+    }
   };
 
   if (!isOpen) return null;
@@ -232,6 +286,18 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
                         className="px-3 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white dark:bg-teal-500/20 dark:hover:bg-teal-500/30 dark:text-teal-300 dark:border dark:border-teal-500/40 text-xs font-bold transition-all shadow-sm cursor-pointer"
                       >
                         {lang === 'ar' ? `فتح سرير ${patient.currentBedId}` : `Open Bed ${patient.currentBedId}`}
+                      </button>
+                    )}
+
+                    {isDeceased && isAdmin && (
+                      <button
+                        onClick={() => handleDeleteMortalityPatient(patient)}
+                        disabled={deletingPatientId === patient.id}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-xs font-bold transition-all shadow-sm cursor-pointer disabled:opacity-50"
+                        title={lang === 'ar' ? 'حذف سجل الوفاة من قاعدة البيانات نهائياً (ADMIN)' : 'Delete mortality record permanently (ADMIN)'}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>{deletingPatientId === patient.id ? (lang === 'ar' ? 'جاري الحذف...' : 'Deleting...') : (lang === 'ar' ? 'حذف نهائي' : 'Delete Record')}</span>
                       </button>
                     )}
                   </div>

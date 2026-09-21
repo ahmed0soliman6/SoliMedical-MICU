@@ -290,15 +290,6 @@ export default async function handler(req: VercelReq, res: VercelRes) {
     }
 
     if (!isCodeValid) {
-      const defaultSalt = 'SOLI_MICU_SECURE_SALT_2026';
-      const defaultHash = hashRecoveryCode('SOLI-MICU-RECOVERY-2026', defaultSalt);
-      const inputHash = hashRecoveryCode(rawCode, defaultSalt);
-      if ((defaultHash && inputHash === defaultHash) || rawCode === 'SOLI-MICU-RECOVERY-2026') {
-        isCodeValid = true;
-      }
-    }
-
-    if (!isCodeValid) {
       return sendJson(res, 400, { success: false, message: 'كود الاستعادة الخطي المكتبي غير صحيح. يرجى التحقق وإعادة المحاولة.' });
     }
 
@@ -308,7 +299,6 @@ export default async function handler(req: VercelReq, res: VercelRes) {
 
     try {
       await db.collection('users').doc(targetUid).update({
-        pinCode: rawNewPass,
         updatedAt: new Date().toISOString(),
       });
     } catch {

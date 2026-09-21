@@ -908,6 +908,7 @@ export interface PatientAntibiotic {
   latestTdmLevel?: string;
   latestTdmTimestamp?: string;
   prescribedByDoctorName?: string;
+  createdByUid?: string;
   administeredByRN?: string;
   notes?: string;
   discontinuedAt?: string;

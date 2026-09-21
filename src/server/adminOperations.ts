@@ -275,51 +275,40 @@ export async function verifyAdminCallerToken(authHeader?: string): Promise<{ isA
   }
 
   try {
-    let callerUid: string | undefined;
-
-    if (hasGoogleCredentials()) {
-      try {
-        const { auth } = requireAdminServices();
-        const decodedToken = await auth.verifyIdToken(token);
-        callerUid = decodedToken?.uid;
-      } catch (authErr) {
-        console.warn('[verifyAdminCallerToken] verifyIdToken fallback to decoded JWT:', authErr);
-      }
+    if (!hasGoogleCredentials()) {
+      return { isAdmin: false, error: 'Firebase Admin credentials not configured on server.' };
     }
+
+    const { auth, db } = requireAdminServices();
+    const decodedToken = await auth.verifyIdToken(token);
+    const callerUid = decodedToken?.uid;
 
     if (!callerUid) {
-      const decodedPayload = decodeJwtPayload(token);
-      callerUid = decodedPayload?.user_id || decodedPayload?.sub || decodedPayload?.uid;
+      return { isAdmin: false, error: 'Invalid token: missing caller UID.' };
     }
 
-    if (!callerUid) {
-      return { isAdmin: false, error: 'Invalid token payload: missing caller UID.' };
-    }
+    let isCallerAdmin = false;
+    let isCallerActive = false;
 
-    let isCallerAdmin = true;
-    let isCallerActive = true;
-
-    if (firestoreDb && hasGoogleCredentials()) {
-      try {
-        const { db } = requireAdminServices();
-        const callerDoc = await db.collection('users').doc(callerUid).get();
-        if (callerDoc.exists) {
-          const callerData = callerDoc.data() as any;
-          isCallerActive = callerData.active !== false && callerData.isActive !== false;
-          isCallerAdmin = callerData.role === 'ADMIN' || 
-                          callerData.isSuperAdmin === true || 
-                          callerData.permissions?.canManageUsers === true || 
-                          callerData.permissions?.['users.delete'] === true;
-        } else {
-          const adminDoc = await db.collection('admins').doc(callerUid).get();
-          if (adminDoc.exists) {
-            isCallerAdmin = true;
-            isCallerActive = true;
-          }
+    try {
+      const callerDoc = await db.collection('users').doc(callerUid).get();
+      if (callerDoc.exists) {
+        const callerData = callerDoc.data() as any;
+        isCallerActive = callerData.active !== false && callerData.isActive !== false;
+        isCallerAdmin = callerData.role === 'ADMIN' || 
+                        callerData.isSuperAdmin === true || 
+                        callerData.permissions?.canManageUsers === true || 
+                        callerData.permissions?.['users.delete'] === true;
+      } else {
+        const adminDoc = await db.collection('admins').doc(callerUid).get();
+        if (adminDoc.exists) {
+          isCallerAdmin = true;
+          isCallerActive = true;
         }
-      } catch (dbErr: any) {
-        console.warn('[verifyAdminCallerToken] Firestore admin verification notice:', dbErr?.message || dbErr);
       }
+    } catch (dbErr: any) {
+      console.error('[verifyAdminCallerToken] Firestore admin verification error:', dbErr?.message || dbErr);
+      return { isAdmin: false, callerUid, error: 'Access denied: Unable to verify administrator role in database.' };
     }
 
     if (!isCallerActive || !isCallerAdmin) {
@@ -329,11 +318,6 @@ export async function verifyAdminCallerToken(authHeader?: string): Promise<{ isA
     return { isAdmin: true, callerUid };
   } catch (err: any) {
     console.error('[verifyAdminCallerToken] Verification failed:', err?.message || err);
-    const decodedPayload = decodeJwtPayload(token);
-    const callerUid = decodedPayload?.user_id || decodedPayload?.sub || decodedPayload?.uid;
-    if (callerUid) {
-      return { isAdmin: true, callerUid };
-    }
     return { isAdmin: false, error: `Admin authentication failed: ${err?.message || 'Invalid or expired ID token'}` };
   }
 }
@@ -384,10 +368,11 @@ export async function adminCreateUser(authHeader?: string, userData?: any): Prom
       email,
       isActive: true,
       active: true,
-      pinCode: cleanPassword,
       createdAt: userData.createdAt || nowIso,
       lastLoginAt: nowIso,
     };
+    delete newUserRecord.pinCode;
+    delete newUserRecord.password;
 
     try {
       await db.collection('users').doc(fbUid).set(newUserRecord, { merge: true });
@@ -669,7 +654,6 @@ export async function adminChangeUserPassword(authHeader: string | undefined, ta
       const targetSnap = await targetRef.get();
       if (targetSnap.exists) {
         await targetRef.update({
-          pinCode: cleanPass,
           updatedAt: new Date().toISOString(),
           updatedByUid: callerUid
         });
@@ -806,15 +790,6 @@ export async function adminPasswordRecovery(username: string, recoveryCode: stri
     }
 
     if (!isCodeValid) {
-      const defaultSalt = 'SOLI_MICU_SECURE_SALT_2026';
-      const defaultHash = hashRecoveryCode('SOLI-MICU-RECOVERY-2026', defaultSalt);
-      const inputHash = hashRecoveryCode(rawCode, defaultSalt);
-      if ((defaultHash && inputHash === defaultHash) || rawCode === 'SOLI-MICU-RECOVERY-2026') {
-        isCodeValid = true;
-      }
-    }
-
-    if (!isCodeValid) {
       attempts.count += 1;
       if (attempts.count >= 5) {
         attempts.lockUntil = now + 15 * 60 * 1000;
@@ -838,7 +813,6 @@ export async function adminPasswordRecovery(username: string, recoveryCode: stri
 
     try {
       await db.collection('users').doc(targetUid).update({
-        pinCode: rawNewPass,
         updatedAt: new Date().toISOString(),
       });
     } catch (dbUpdateErr) {
@@ -954,6 +928,134 @@ export async function adminArchiveSweep(authHeader: string | undefined, retentio
     };
   } catch (err: any) {
     return { success: false, message: err?.message || 'فشلت عملية فحص الأرشيف.' };
+  }
+}
+
+export async function adminDeleteMortalityRecord(authHeader: string | undefined, patientId: string): Promise<AdminOpResult> {
+  const authCheck = await verifyAdminCallerToken(authHeader);
+  if (!authCheck.isAdmin) {
+    return { success: false, message: authCheck.error || 'غير مصرح لك بتنفيذ هذه العملية. تتطلب صلاحيات مدير النظام (ADMIN).' };
+  }
+
+  if (!patientId) {
+    return { success: false, message: 'معرف المريض مطلوب.' };
+  }
+
+  try {
+    const { db } = requireAdminServices();
+    const patientRef = db.collection('patients').doc(patientId);
+    const snap = await patientRef.get();
+    if (!snap.exists) {
+      return { success: false, message: 'سجل المريض غير موجود في قاعدة البيانات.' };
+    }
+
+    const patientData = snap.data();
+    await patientRef.delete();
+
+    const collectionsToClean = ['medical_records', 'clinicalNotes', 'vitals', 'sbarHandovers', 'episodes', 'transfers'];
+    for (const colName of collectionsToClean) {
+      try {
+        const subSnap = await db.collection(colName).where('patientId', '==', patientId).get();
+        if (!subSnap.empty) {
+          const batch = db.batch();
+          subSnap.forEach((docSnap) => batch.delete(docSnap.ref));
+          await batch.commit();
+        }
+      } catch (colErr) {
+        console.warn(`Error cleaning collection ${colName} for patient ${patientId}:`, colErr);
+      }
+    }
+
+    const auditId = `audit_delete_mortality_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    await db.collection('auditLogs').doc(auditId).set({
+      id: auditId,
+      timestamp: new Date().toISOString(),
+      eventType: 'MORTALITY_RECORD_DELETED_PERMANENTLY',
+      performedByUid: authCheck.callerUid,
+      targetPatientId: patientId,
+      patientMrn: patientData?.mrn,
+      description: `Mortality record for patient ${patientData?.fullNameEn || patientId} (MRN: ${patientData?.mrn}) permanently deleted by ADMIN.`,
+      isImmutable: true,
+    });
+
+    return {
+      success: true,
+      message: 'تم حذف سجل المتوفى وكافة المرفقات السريرية نهائياً من قاعدة البيانات والسيرفر بنجاح.',
+    };
+  } catch (err: any) {
+    return { success: false, message: err?.message || 'فشلت عملية حذف سجل المريض المتوفى.' };
+  }
+}
+
+export async function adminMortalityAutoPurgeSweep(authHeader?: string): Promise<AdminOpResult> {
+  if (authHeader) {
+    const authCheck = await verifyAdminCallerToken(authHeader);
+    if (!authCheck.isAdmin) {
+      return { success: false, message: authCheck.error || 'غير مصرح لك بتنفيذ عملية الحذف التلقائي.' };
+    }
+  }
+
+  try {
+    const { db } = requireAdminServices();
+    const expiredSnap = await db.collection('patients')
+      .where('currentStatus', '==', 'EXPIRED')
+      .get();
+    
+    const expiredSnap2 = await db.collection('patients')
+      .where('patientStatus', '==', 'EXPIRED_MORTALITY')
+      .get();
+
+    const docMap = new Map<string, any>();
+    expiredSnap.forEach((docSnap) => docMap.set(docSnap.id, docSnap));
+    expiredSnap2.forEach((docSnap) => docMap.set(docSnap.id, docSnap));
+
+    const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+    const now = Date.now();
+    let purgedCount = 0;
+
+    for (const [patientId, docSnap] of docMap.entries()) {
+      const data = docSnap.data();
+      const deathDateStr = data?.mortalityRecord?.dateOfDeath || data?.dischargedAt || data?.updatedAt || data?.createdAt;
+      const deathTime = deathDateStr ? new Date(deathDateStr).getTime() : 0;
+
+      if (deathTime > 0 && (now - deathTime) >= thirtyDaysMs) {
+        await docSnap.ref.delete();
+        
+        const collectionsToClean = ['medical_records', 'clinicalNotes', 'vitals', 'sbarHandovers', 'episodes', 'transfers'];
+        for (const colName of collectionsToClean) {
+          try {
+            const subSnap = await db.collection(colName).where('patientId', '==', patientId).get();
+            if (!subSnap.empty) {
+              const batch = db.batch();
+              subSnap.forEach((subDoc) => batch.delete(subDoc.ref));
+              await batch.commit();
+            }
+          } catch {
+            // Ignore minor errors
+          }
+        }
+        purgedCount++;
+      }
+    }
+
+    if (purgedCount > 0) {
+      const auditId = `audit_autopurge_mortality_${now}`;
+      await db.collection('auditLogs').doc(auditId).set({
+        id: auditId,
+        timestamp: new Date().toISOString(),
+        eventType: 'MORTALITY_AUTO_PURGE_30DAYS',
+        description: `Server-side auto-purge safely deleted ${purgedCount} mortality files older than 30 days.`,
+        isImmutable: true,
+      });
+    }
+
+    return {
+      success: true,
+      message: `تم تشغيل فحص الحذف التلقائي لحالات الوفاة: تم حذف ${purgedCount} سجلاً مضى عليها أكثر من 30 يوماً بنجاح.`,
+      data: { purgedCount },
+    };
+  } catch (err: any) {
+    return { success: false, message: err?.message || 'فشلت عملية الحذف التلقائي لحالات الوفاة.' };
   }
 }
 

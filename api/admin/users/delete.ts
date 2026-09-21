@@ -207,42 +207,40 @@ async function verifyAdminCaller(authHeader: string | undefined): Promise<{ isAd
 
   try {
     const { auth, db } = getAdminServices();
-    let callerUid: string | undefined;
-
-    try {
-      const decodedToken = await auth.verifyIdToken(token);
-      callerUid = decodedToken?.uid;
-    } catch {
-      const decodedPayload = decodeJwtPayload(token);
-      callerUid = decodedPayload?.user_id || decodedPayload?.sub || decodedPayload?.uid;
-    }
+    const decodedToken = await auth.verifyIdToken(token);
+    const callerUid = decodedToken?.uid;
 
     if (!callerUid) {
       return { isAdmin: false, error: 'Invalid token payload: missing caller UID.' };
     }
+
+    let isCallerAdmin = false;
+    let isCallerActive = false;
 
     // Check admin authorization in Firestore
     try {
       const callerDoc = await db.collection('users').doc(callerUid).get();
       if (callerDoc.exists) {
         const callerData = callerDoc.data() as any;
-        const isActive = callerData.active !== false && callerData.isActive !== false;
-        const isAdmin = callerData.role === 'ADMIN' || 
+        isCallerActive = callerData.active !== false && callerData.isActive !== false;
+        isCallerAdmin = callerData.role === 'ADMIN' || 
                         callerData.isSuperAdmin === true || 
                         callerData.permissions?.canManageUsers === true || 
                         callerData.permissions?.['users.delete'] === true;
-
-        if (!isActive || !isAdmin) {
-          return { isAdmin: false, callerUid, error: 'Access denied: Caller does not have active administrator permissions.' };
-        }
       } else {
         const adminDoc = await db.collection('admins').doc(callerUid).get();
-        if (!adminDoc.exists) {
-          return { isAdmin: false, callerUid, error: 'Access denied: Caller is not registered as an administrator.' };
+        if (adminDoc.exists) {
+          isCallerAdmin = true;
+          isCallerActive = true;
         }
       }
     } catch (dbErr) {
-      console.warn('[Vercel Delete Admin Check] Firestore check warning:', dbErr);
+      console.error('[Vercel Delete Admin Check] Firestore check error:', dbErr);
+      return { isAdmin: false, callerUid, error: 'Access denied: Unable to verify administrator permissions in database.' };
+    }
+
+    if (!isCallerActive || !isCallerAdmin) {
+      return { isAdmin: false, callerUid, error: 'Access denied: Caller does not have active administrator permissions.' };
     }
 
     return { isAdmin: true, callerUid };

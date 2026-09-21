@@ -504,6 +504,8 @@ import {
   adminSetRecoveryCode,
   adminArchivePatient,
   adminArchiveSweep,
+  adminDeleteMortalityRecord,
+  adminMortalityAutoPurgeSweep,
   runAdminDiagnosticCheck
 } from './src/server/adminOperations';
 
@@ -627,13 +629,48 @@ app.post('/api/admin/archive/patient', async (req, res) => {
 app.post('/api/admin/archive/sweep', async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
-    const { retentionMonths = 6 } = req.body;
+    const { retentionMonths = 1 } = req.body;
     const result = await adminArchiveSweep(authHeader, retentionMonths);
     return res.status(200).json(result);
   } catch (err: any) {
     return res.status(200).json({ success: false, message: err?.message || 'Internal server error.' });
   }
 });
+
+// Mortality Deletion & Auto-Purge Endpoints (Server-Side SSOT)
+app.post('/api/admin/mortality/delete', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const { patientId } = req.body;
+    if (!patientId) {
+      return res.status(400).json({ success: false, message: 'Missing patientId in request body.' });
+    }
+    const result = await adminDeleteMortalityRecord(authHeader, patientId);
+    return res.status(result.success ? 200 : 403).json(result);
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err?.message || 'Internal server error.' });
+  }
+});
+
+app.post('/api/admin/mortality/auto-purge', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const result = await adminMortalityAutoPurgeSweep(authHeader);
+    return res.status(200).json(result);
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err?.message || 'Internal server error.' });
+  }
+});
+
+// Periodic Server-Side Auto-Purge Task (runs every 24 hours & on server boot)
+setInterval(async () => {
+  try {
+    await adminMortalityAutoPurgeSweep();
+    await adminArchiveSweep(undefined, 1);
+  } catch (err) {
+    console.warn('Scheduled background auto-purge sweep notice:', err);
+  }
+}, 24 * 60 * 60 * 1000);
 
 // Guard API routes so unknown /api/* requests return structured JSON 404 rather than falling into static HTML or returning 405
 app.all('/api/*', (req, res) => {

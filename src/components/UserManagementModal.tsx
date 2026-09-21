@@ -155,7 +155,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
       : (user.email.split('@')[0] || user.badgeId);
     setFormUsername(uname);
     setFormDisplayName(user.nameAr || user.nameEn);
-    setFormPassword(user.pinCode || '12345678');
+    setFormPassword('');
     setShowFormPassword(false);
     setFormRole(user.role as StaffRole);
     setFormPermissions(user.permissions || getDefaultPermissionsForRole(user.role as StaffRole));
@@ -243,9 +243,10 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
         nameEn: cleanDisplayName,
         email: userEmail,
         role: formRole,
-        pinCode: cleanPassword,
         permissions: formPermissions,
       };
+      delete (updated as any).pinCode;
+      delete (updated as any).password;
       const res = await updateUser(updated);
       if (res.success) {
         setStatusMsg({ type: 'success', text: lang === 'ar' ? 'تم تحديث بيانات المستخدم بنجاح' : 'User updated successfully' });

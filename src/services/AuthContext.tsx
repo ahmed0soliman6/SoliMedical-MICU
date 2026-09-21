@@ -440,7 +440,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         licenseNumber: userData.licenseNumber || `LIC-${Math.floor(100000 + Math.random() * 900000)}`,
         isActive: userData.isActive ?? true,
         isSuperAdmin: role === StaffRole.ADMIN,
-        pinCode: password,
         createdAt: now,
         lastLoginAt: now,
         permissions: userData.permissions || getDefaultPermissionsForRole(role as StaffRole),
@@ -522,15 +521,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
-      // Always update password/pin in Firestore user document and Dexie cache
+      // Always update profile document in Firestore user document and Dexie cache
       const targetUser = allUsers.find(u => u.uid === uid);
       if (targetUser) {
         const updatedUser = {
           ...targetUser,
-          pinCode: cleanPass,
           updatedAt: new Date().toISOString(),
           updatedByUid: currentUser?.uid || 'admin'
         };
+        delete (updatedUser as any).pinCode;
+        delete (updatedUser as any).password;
         await saveUserAccount(updatedUser);
       }
 
@@ -538,8 +538,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return {
         success: true,
         message: authPasswordUpdated
-          ? 'تم تغيير وتحديث كلمة المرور بنجاح في Firebase Authentication وقاعدة البيانات.'
-          : 'تم تحديث كلمة المرور وحفظها في قاعدة بيانات المنظومة بنجاح.'
+          ? 'تم تغيير وتحديث كلمة المرور بنجاح في Firebase Authentication.'
+          : 'تم تحديث كلمة المرور بنجاح.'
       };
     } catch (err: any) {
       return { success: false, message: err?.message || 'حدث خطأ أثناء تحديث كلمة المرور.' };
@@ -580,9 +580,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (currentUser) {
         const updated: IcuUser = { 
           ...currentUser, 
-          pinCode: cleanPass,
           updatedAt: new Date().toISOString()
         };
+        delete (updated as any).pinCode;
+        delete (updated as any).password;
         setCurrentUser(updated);
         try {
           localStorage.setItem('soli_icu_active_user', JSON.stringify(updated));

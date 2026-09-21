@@ -377,17 +377,20 @@ export async function registerInitialSuperAdminWithFirebaseAuth(data: {
       badgeId: 'ADM-001',
       isActive: true,
       isSuperAdmin: true,
-      pinCode: data.password,
       createdAt: now,
       lastLoginAt: now,
       permissions: getDefaultPermissionsForRole(StaffRole.ADMIN),
     };
 
+    const userDocToSave = { ...superAdminUser };
+    delete (userDocToSave as any).pinCode;
+    delete (userDocToSave as any).password;
+
     // 2. Save to Local Dexie DB
-    await db.users.put(superAdminUser);
+    await db.users.put(userDocToSave);
 
     // 3. Save to Firestore users & admins collections
-    await setDoc(doc(firestore, 'users', uid), superAdminUser, { merge: true });
+    await setDoc(doc(firestore, 'users', uid), userDocToSave, { merge: true });
     await setDoc(doc(firestore, 'admins', uid), {
       uid,
       email,
@@ -459,6 +462,8 @@ export async function syncUserToFirebaseConsole(user: IcuUser): Promise<void> {
   }
 
   const updatedUser = { ...user, uid: finalUid, email };
+  delete (updatedUser as any).pinCode;
+  delete (updatedUser as any).password;
   
   // Save to Firestore (default) database users collection
   await setDoc(doc(firestore, 'users', finalUid), updatedUser, { merge: true });
@@ -505,16 +510,19 @@ export async function registerInitialSuperAdmin(adminData: {
     badgeId: adminData.badgeId || 'ADM-001',
     isActive: true,
     isSuperAdmin: true,
-    pinCode: adminData.pinCode || '1234',
     createdAt: now,
     lastLoginAt: now,
     permissions: getDefaultPermissionsForRole(StaffRole.ADMIN),
   };
 
-  await db.users.put(superAdminUser);
+  const userDocToSave = { ...superAdminUser };
+  delete (userDocToSave as any).pinCode;
+  delete (userDocToSave as any).password;
+
+  await db.users.put(userDocToSave);
 
   try {
-    await setDoc(doc(firestore, 'users', uid), superAdminUser, { merge: true });
+    await setDoc(doc(firestore, 'users', uid), userDocToSave, { merge: true });
     await setDoc(doc(firestore, 'admins', uid), {
       uid,
       email: adminData.email,
@@ -555,8 +563,11 @@ export async function createSecondaryAuthUser(email: string, password: string): 
 }
 
 export async function saveUserAccount(user: IcuUser): Promise<void> {
-  await db.users.put(user);
-  await setDoc(doc(firestore, 'users', user.uid), user, { merge: true });
+  const userToSave = { ...user };
+  delete (userToSave as any).pinCode;
+  delete (userToSave as any).password;
+  await db.users.put(userToSave);
+  await setDoc(doc(firestore, 'users', user.uid), userToSave, { merge: true });
   if (user.role === StaffRole.ADMIN || user.isSuperAdmin) {
     await setDoc(doc(firestore, 'admins', user.uid), {
       uid: user.uid,

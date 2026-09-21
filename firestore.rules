@@ -68,11 +68,24 @@ service cloud.firestore {
       );
     }
 
+    function isRecordOwner() {
+      return (
+        ("createdByUid" in resource.data && resource.data.createdByUid == request.auth.uid) ||
+        ("doctorId" in resource.data && resource.data.doctorId == request.auth.uid) ||
+        ("authorId" in resource.data && resource.data.authorId == request.auth.uid) ||
+        ("authorStaffId" in resource.data && resource.data.authorStaffId == request.auth.uid) ||
+        ("recordedByStaffId" in resource.data && resource.data.recordedByStaffId == request.auth.uid) ||
+        ("userId" in resource.data && resource.data.userId == request.auth.uid)
+      );
+    }
+
     function isValidMedicalRecordUpdate() {
       return isActiveUser() && (
         isAdmin() || (
-          (!("createdByUid" in resource.data) || resource.data.createdByUid == request.auth.uid) &&
-          (!("createdByUid" in request.resource.data) || request.resource.data.createdByUid == resource.data.createdByUid)
+          isRecordOwner() &&
+          (!("createdByUid" in request.resource.data) || request.resource.data.createdByUid == resource.data.createdByUid) &&
+          (!("doctorId" in request.resource.data) || request.resource.data.doctorId == resource.data.doctorId) &&
+          (!("authorId" in request.resource.data) || request.resource.data.authorId == resource.data.authorId)
         )
       );
     }
@@ -138,57 +151,67 @@ service cloud.firestore {
     // Clinical Notes
     match /clinicalNotes/{noteId} {
       allow read: if isClinician();
-      allow create, update: if isClinician();
+      allow create: if isClinician();
+      allow update: if isClinician() && isValidMedicalRecordUpdate();
       allow delete: if isAdmin();
     }
 
     match /addendums/{addendumId} {
       allow read: if isClinician();
-      allow create, update: if isClinician();
+      allow create: if isClinician();
+      allow update: if isClinician() && isValidMedicalRecordUpdate();
       allow delete: if isAdmin();
     }
 
     // SBAR Handovers & Shift Transitions
     match /sbarHandovers/{sbarId} {
       allow read: if isClinician();
-      allow create, update: if isClinician();
+      allow create: if isClinician();
+      allow update: if isClinician() && isValidMedicalRecordUpdate();
       allow delete: if isAdmin();
     }
 
     match /handovers/{handoverId} {
       allow read: if isClinician();
-      allow create, update: if isClinician();
+      allow create: if isClinician();
+      allow update: if isClinician() && isValidMedicalRecordUpdate();
       allow delete: if isAdmin();
     }
 
     // Telemetry Vitals, Ventilator, Infusions & Labs
     match /vitals/{vitalId} {
       allow read: if isClinician();
-      allow create, update: if isClinician();
+      allow create: if isClinician();
+      allow update: if isClinician() && isValidMedicalRecordUpdate();
       allow delete: if isAdmin();
     }
 
     match /ventilators/{id} {
       allow read: if isClinician();
-      allow create, update: if isClinician();
+      allow create: if isClinician();
+      allow update: if isClinician() && isValidMedicalRecordUpdate();
       allow delete: if isAdmin();
     }
 
     match /infusionPumps/{id} {
       allow read: if isClinician();
-      allow create, update: if isClinician();
+      allow create: if isClinician();
+      allow update: if isClinician() && isValidMedicalRecordUpdate();
       allow delete: if isAdmin();
     }
 
     match /infusion_pumps/{id} {
       allow read: if isClinician();
-      allow create, update: if isClinician();
+      allow create: if isClinician();
+      allow update: if isClinician() && isValidMedicalRecordUpdate();
       allow delete: if isAdmin();
     }
 
     match /patientAntibiotics/{id} {
       allow read: if isClinician();
-      allow create, update, delete: if isClinician();
+      allow create: if isClinician();
+      allow update: if isClinician() && isValidMedicalRecordUpdate();
+      allow delete: if isAdmin();
     }
 
     match /fluidBalances/{id} {
@@ -205,12 +228,16 @@ service cloud.firestore {
 
     match /statLabs/{id} {
       allow read: if isClinician();
-      allow create, update, delete: if isClinician();
+      allow create: if isClinician();
+      allow update: if isClinician() && isValidMedicalRecordUpdate();
+      allow delete: if isAdmin();
     }
 
     match /investigations/{id} {
       allow read: if isClinician();
-      allow create, update, delete: if isClinician();
+      allow create: if isClinician();
+      allow update: if isClinician() && isValidMedicalRecordUpdate();
+      allow delete: if isAdmin();
     }
 
     match /transfusions/{id} {
@@ -221,7 +248,9 @@ service cloud.firestore {
 
     match /medical_records/{recordId} {
       allow read: if isClinician();
-      allow create, update, delete: if isClinician();
+      allow create: if isClinician();
+      allow update: if isClinician() && isValidMedicalRecordUpdate();
+      allow delete: if isAdmin();
     }
 
     match /dispositionRecords/{dispoId} {
