@@ -5,7 +5,7 @@
  * and immutable doctor-to-doctor clinical note operations.
  */
 
-import { db } from '../db/icuSyncDb.ts';
+import { db, ensureBedPatientSync } from '../db/icuSyncDb.ts';
 import { toEnglishDigits } from './numberUtils.ts';
 import {
   syncBedToCloud,
@@ -767,16 +767,18 @@ export async function dischargeOrTransferPatient(input: DispositionInput): Promi
 
   const updatedPatientFields = {
     patientStatus: nextPatientStatus,
-    archiveStatus: input.dispositionType === DispositionType.CLINICAL_MORTALITY ? ('ARCHIVED' as const) : patient.archiveStatus,
+    archiveStatus: 'ARCHIVED' as const,
     currentBedId: undefined,
+    dischargeDate: nowIso,
     mortalityRecord: nextMortalityRecord || null,
     updatedAt: nowIso,
   };
 
   const updatedBedFields = {
-    status: nextBedStatus,
+    status: BedStatus.VACANT,
     activePatientId: null,
     currentPatientId: null,
+    isolation: { isIsolated: false, precautions: [] },
     hardwareReadiness: {
       ventilatorCalibrated: false,
       ventilatorModel: 'Standby / Decontamination Required',
@@ -788,6 +790,7 @@ export async function dischargeOrTransferPatient(input: DispositionInput): Promi
       disposableKitsPrepped: false,
       terminalDecontaminationCompletedAt: undefined,
     },
+    updatedAt: Date.now(),
   };
 
   const isMortality = input.dispositionType === DispositionType.CLINICAL_MORTALITY;
@@ -869,6 +872,8 @@ export async function dischargeOrTransferPatient(input: DispositionInput): Promi
     await db.clinicalNotes.put(summaryNote);
     await db.auditLogs.put(auditLog);
   });
+
+  await ensureBedPatientSync();
 }
 
 // -------------------------------------------------------------

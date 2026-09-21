@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../db/icuSyncDb.ts';
+import { db, ensureBedPatientSync } from '../db/icuSyncDb.ts';
 import { BedRecord, PatientDossier, BedNumber, BedStatus } from '../types/schema.ts';
 import { getPatientForBed, toggleBedOperationalStatus } from '../services/dataModel.ts';
+import { syncBedToCloud } from '../services/firebase.ts';
 import { useTranslation } from '../services/i18n.ts';
 import { 
   Wrench, 
@@ -13,7 +14,8 @@ import {
   UserCheck, 
   Loader2, 
   Activity,
-  Info
+  Info,
+  RotateCcw
 } from 'lucide-react';
 
 interface BedOperationsSettingsCardProps {
@@ -62,6 +64,45 @@ export const BedOperationsSettingsCard: React.FC<BedOperationsSettingsCardProps>
     } catch (err: any) {
       setStatusMessage({
         text: err?.message || 'حدث خطأ أثناء تحديث حالة تشغيل السرير.',
+        isSuccess: false,
+      });
+    } finally {
+      setActionBedNumber(null);
+    }
+  };
+
+  const handleResetBed = async (bedNumber: BedNumber) => {
+    try {
+      setActionBedNumber(bedNumber);
+      setStatusMessage(null);
+      const bed = await db.beds.get(bedNumber);
+      if (bed) {
+        const updated: BedRecord = {
+          ...bed,
+          status: BedStatus.VACANT,
+          currentPatientId: null,
+          activePatientId: null,
+          isolation: { isIsolated: false, precautions: [] },
+          lastCleanedAt: new Date().toISOString(),
+        };
+        await db.beds.put(updated);
+        try {
+          await syncBedToCloud(updated);
+        } catch (e) {}
+      }
+      await ensureBedPatientSync();
+      setStatusMessage({
+        text: lang === 'ar' ? `تم تفريغ السرير ${bedNumber} وإلغاء أي تدابير عزل بنجاح.` : `Bed ${bedNumber} reset to clean vacant with no isolation.`,
+        isSuccess: true,
+      });
+      await loadBedsData();
+      if (onBedUpdated) {
+        onBedUpdated();
+      }
+      window.dispatchEvent(new Event('icu-data-updated'));
+    } catch (err: any) {
+      setStatusMessage({
+        text: err?.message || 'حدث خطأ أثناء إعادة ضبط السرير.',
         isSuccess: false,
       });
     } finally {
@@ -248,7 +289,7 @@ export const BedOperationsSettingsCard: React.FC<BedOperationsSettingsCardProps>
               </div>
 
               {/* Action Button */}
-              <div className="pt-2">
+              <div className="pt-2 space-y-2">
                 {isOccupied ? (
                   <button
                     type="button"
@@ -259,45 +300,69 @@ export const BedOperationsSettingsCard: React.FC<BedOperationsSettingsCardProps>
                     <span>{lang === 'ar' ? 'السرير مشغول بمريض' : 'Bed Occupied'}</span>
                   </button>
                 ) : isUnavailable ? (
-                  <button
-                    type="button"
-                    id={`settings-reactivate-bed-${bed.bedNumber}`}
-                    onClick={() => handleToggle(bed.bedNumber)}
-                    disabled={isActionLoading}
-                    className="w-full py-2.5 px-3 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-50"
-                  >
-                    {isActionLoading ? (
-                      <>
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        <span>{lang === 'ar' ? 'جاري التفعيل...' : 'Activating...'}</span>
-                      </>
-                    ) : (
-                      <>
-                        <Power className="w-3.5 h-3.5" />
-                        <span>{lang === 'ar' ? 'إعادة السرير للخدمة وتفعيله' : 'Reactivate Bed for Service'}</span>
-                      </>
-                    )}
-                  </button>
+                  <div className="space-y-2">
+                    <button
+                      type="button"
+                      id={`settings-reactivate-bed-${bed.bedNumber}`}
+                      onClick={() => handleToggle(bed.bedNumber)}
+                      disabled={isActionLoading}
+                      className="w-full py-2.5 px-3 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      {isActionLoading ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>{lang === 'ar' ? 'جاري التفعيل...' : 'Activating...'}</span>
+                        </>
+                      ) : (
+                        <>
+                          <Power className="w-3.5 h-3.5" />
+                          <span>{lang === 'ar' ? 'إعادة السرير للخدمة وتفعيله' : 'Reactivate Bed for Service'}</span>
+                        </>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleResetBed(bed.bedNumber)}
+                      disabled={isActionLoading}
+                      className="w-full py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50 border border-slate-300 dark:border-slate-700"
+                    >
+                      <RotateCcw className="w-3 h-3 text-slate-500" />
+                      <span>{lang === 'ar' ? 'إعادة الضبط كسرير شاغر نظيف' : 'Reset to Clean Vacant'}</span>
+                    </button>
+                  </div>
                 ) : (
-                  <button
-                    type="button"
-                    id={`settings-deactivate-bed-${bed.bedNumber}`}
-                    onClick={() => handleToggle(bed.bedNumber)}
-                    disabled={isActionLoading}
-                    className="w-full py-2.5 px-3 rounded-xl bg-slate-50 hover:bg-rose-50 dark:bg-slate-900 dark:hover:bg-rose-950/30 text-slate-700 hover:text-rose-700 dark:text-slate-300 dark:hover:text-rose-300 font-bold text-xs flex items-center justify-center gap-1.5 border border-slate-200 hover:border-rose-300 dark:border-slate-800 dark:hover:border-rose-900/50 transition-all cursor-pointer disabled:opacity-50"
-                  >
-                    {isActionLoading ? (
-                      <>
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        <span>{lang === 'ar' ? 'جاري التحديث...' : 'Updating...'}</span>
-                      </>
-                    ) : (
-                      <>
-                        <Wrench className="w-3.5 h-3.5 text-slate-400 hover:text-rose-600" />
-                        <span>{lang === 'ar' ? 'وضع السرير خارج الخدمة (صيانة / تعقيم)' : 'Set Out of Service (Maintenance)'}</span>
-                      </>
+                  <div className="space-y-2">
+                    <button
+                      type="button"
+                      id={`settings-deactivate-bed-${bed.bedNumber}`}
+                      onClick={() => handleToggle(bed.bedNumber)}
+                      disabled={isActionLoading}
+                      className="w-full py-2.5 px-3 rounded-xl bg-slate-50 hover:bg-rose-50 dark:bg-slate-900 dark:hover:bg-rose-950/30 text-slate-700 hover:text-rose-700 dark:text-slate-300 dark:hover:text-rose-300 font-bold text-xs flex items-center justify-center gap-1.5 border border-slate-200 hover:border-rose-300 dark:border-slate-800 dark:hover:border-rose-900/50 transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      {isActionLoading ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>{lang === 'ar' ? 'جاري التحديث...' : 'Updating...'}</span>
+                        </>
+                      ) : (
+                        <>
+                          <Wrench className="w-3.5 h-3.5 text-slate-400 hover:text-rose-600" />
+                          <span>{lang === 'ar' ? 'وضع السرير خارج الخدمة (صيانة / تعقيم)' : 'Set Out of Service (Maintenance)'}</span>
+                        </>
+                      )}
+                    </button>
+                    {(bed.isolation?.isIsolated || bed.status !== BedStatus.VACANT) && (
+                      <button
+                        type="button"
+                        onClick={() => handleResetBed(bed.bedNumber)}
+                        disabled={isActionLoading}
+                        className="w-full py-2 px-3 rounded-xl bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-900/50 text-amber-900 dark:text-amber-300 font-semibold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50 border border-amber-300 dark:border-amber-700/60"
+                      >
+                        <RotateCcw className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                        <span>{lang === 'ar' ? 'إلغاء العزل وتصفير السرير كشاغر' : 'Clear Isolation & Set Vacant'}</span>
+                      </button>
                     )}
-                  </button>
+                  </div>
                 )}
               </div>
             </div>

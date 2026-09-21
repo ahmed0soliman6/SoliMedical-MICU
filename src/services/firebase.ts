@@ -54,7 +54,7 @@ import {
   PatientAntibiotic
 } from '../types/schema.ts';
 import { isAudioGloballyMuted } from './NotificationAudio.ts';
-import { db, initializeDatabaseSeed } from '../db/icuSyncDb.ts';
+import { db, initializeDatabaseSeed, ensureBedPatientSync } from '../db/icuSyncDb.ts';
 
 // -------------------------------------------------------------
 // Firebase Initialization
@@ -757,13 +757,22 @@ export function subscribeToRealtimeFirestore(
           const bedId = remoteBed.id || change.doc.id;
           if (bedId) {
             const localBed = await db.beds.get(bedId);
+            const assignedPatId = remoteBed.currentPatientId !== undefined 
+              ? remoteBed.currentPatientId 
+              : ((remoteBed as any).activePatientId !== undefined ? (remoteBed as any).activePatientId : null);
+
+            const isVacantBed = !assignedPatId;
             const mergedBed: BedRecord = {
               ...localBed,
               ...remoteBed,
               id: bedId,
               bedNumber: remoteBed.bedNumber || bedId,
-              currentPatientId: remoteBed.currentPatientId || (remoteBed as any).activePatientId || undefined,
-              activePatientId: (remoteBed as any).activePatientId || remoteBed.currentPatientId || undefined,
+              currentPatientId: assignedPatId || null,
+              activePatientId: assignedPatId || null,
+              isolation: isVacantBed ? { isIsolated: false, precautions: [] } : (remoteBed.isolation || { isIsolated: false, precautions: [] }),
+              status: isVacantBed && remoteBed.status !== BedStatus.UNAVAILABLE && remoteBed.status !== BedStatus.DECONTAMINATING
+                ? BedStatus.VACANT
+                : (remoteBed.status || (assignedPatId ? BedStatus.OCCUPIED : BedStatus.VACANT)),
             };
             await db.beds.put(mergedBed);
           }
@@ -771,6 +780,7 @@ export function subscribeToRealtimeFirestore(
           await db.beds.delete(change.doc.id);
         }
       }
+      await ensureBedPatientSync();
       notifyUpdate();
     }, (err) => handleFirestoreError(err, OperationType.GET, 'beds'));
     unsubscribers.push(unsubBeds);
@@ -1298,6 +1308,8 @@ export async function pullCloudDataToLocalDb(): Promise<boolean> {
 
     if (labs.length > 0) await db.labResults.bulkPut(labs);
     if (invs.length > 0) await db.investigations.bulkPut(invs);
+
+    await ensureBedPatientSync();
 
     return true;
   } catch (err) {

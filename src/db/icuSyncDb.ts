@@ -798,48 +798,68 @@ export async function ensureBedPatientSync(): Promise<void> {
   const allPatients = await db.patients.toArray();
   const activePatients = allPatients.filter(p => p.patientStatus === 'ACTIVE_ICU');
 
-  const assignedPatientIds = new Set<string>();
+  // Build a map of bedNumber -> active patient (Patient dossier is primary source of truth)
+  const bedToActivePatientMap = new Map<string, PatientDossier>();
+
+  // Sort active patients so newest/most recent update wins if duplicate
+  const sortedActive = [...activePatients].sort((a, b) => 
+    new Date(b.admissionDate || b.updatedAt || 0).getTime() - new Date(a.admissionDate || a.updatedAt || 0).getTime()
+  );
+
+  for (const p of sortedActive) {
+    if (p.currentBedId && !bedToActivePatientMap.has(p.currentBedId)) {
+      bedToActivePatientMap.set(p.currentBedId, p);
+    }
+  }
 
   for (const b of currentBeds) {
     let modified = false;
-
-    // Find active patient for this bed
-    let targetPatient: PatientDossier | undefined;
-
-    if (b.currentPatientId && !assignedPatientIds.has(b.currentPatientId)) {
-      const p = activePatients.find(pt => pt.id === b.currentPatientId);
-      if (p) targetPatient = p;
-    }
-
-    if (!targetPatient) {
-      const p = activePatients.find(pt => pt.currentBedId === b.bedNumber && !assignedPatientIds.has(pt.id));
-      if (p) targetPatient = p;
-    }
+    const targetPatient = bedToActivePatientMap.get(b.bedNumber);
 
     if (targetPatient) {
-      assignedPatientIds.add(targetPatient.id);
-
-      if (b.currentPatientId !== targetPatient.id) {
+      if (b.currentPatientId !== targetPatient.id || b.activePatientId !== targetPatient.id) {
         b.currentPatientId = targetPatient.id;
         b.activePatientId = targetPatient.id;
         modified = true;
       }
-      if (b.status !== BedStatus.OCCUPIED && b.status !== BedStatus.ISOLATION) {
+      const isPatientIsolated = !!(
+        (targetPatient.isolationPrecautions && targetPatient.isolationPrecautions.length > 0) ||
+        (b.isolation && b.isolation.isIsolated)
+      );
+
+      if (isPatientIsolated) {
+        if (b.status !== BedStatus.ISOLATION) {
+          b.status = BedStatus.ISOLATION;
+          modified = true;
+        }
+        if (!b.isolation || !b.isolation.isIsolated) {
+          b.isolation = {
+            isIsolated: true,
+            type: b.isolation?.type || 'Airborne',
+            reason: b.isolation?.reason || 'Clinical Isolation',
+            startDate: b.isolation?.startDate || new Date().toISOString(),
+            precautions: targetPatient.isolationPrecautions || b.isolation?.precautions || [],
+          };
+          modified = true;
+        }
+      } else if (b.status !== BedStatus.OCCUPIED && b.status !== BedStatus.UNAVAILABLE) {
         b.status = BedStatus.OCCUPIED;
         modified = true;
       }
-      if (targetPatient.currentBedId !== b.bedNumber) {
-        targetPatient.currentBedId = b.bedNumber as BedNumber;
-        await db.patients.put(targetPatient);
-      }
     } else {
-      if (b.currentPatientId !== null) {
+      // Bed has no active patient assigned - strictly reset to vacant and clear any isolation
+      if (b.currentPatientId !== null || b.activePatientId !== null) {
         b.currentPatientId = null;
         b.activePatientId = null;
         modified = true;
       }
-      if (b.status === BedStatus.OCCUPIED) {
+      if (b.isolation && b.isolation.isIsolated) {
+        b.isolation = { isIsolated: false, precautions: [] };
+        modified = true;
+      }
+      if (b.status === BedStatus.OCCUPIED || b.status === BedStatus.ISOLATION) {
         b.status = BedStatus.VACANT;
+        b.isolation = { isIsolated: false, precautions: [] };
         modified = true;
       } else if (b.status === BedStatus.DECONTAMINATING) {
         // Auto-expire decontamination status after 30 minutes
@@ -847,6 +867,7 @@ export async function ensureBedPatientSync(): Promise<void> {
         const thirtyMinutesMs = 30 * 60 * 1000;
         if (!b.lastCleanedAt || (Date.now() - cleanedTime) >= thirtyMinutesMs) {
           b.status = BedStatus.VACANT;
+          b.isolation = { isIsolated: false, precautions: [] };
           modified = true;
         }
       }
@@ -854,6 +875,12 @@ export async function ensureBedPatientSync(): Promise<void> {
 
     if (modified) {
       await db.beds.put(b);
+      try {
+        const { syncBedToCloud } = await import('../services/firebase.ts');
+        await syncBedToCloud(b);
+      } catch (e) {
+        // Safe fallback if offline or during circular load
+      }
     }
   }
 }

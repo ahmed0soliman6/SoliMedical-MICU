@@ -29,7 +29,7 @@ export const BedMatrixCard: React.FC<BedMatrixCardProps> = ({
   const [lastHandoverDoctor, setLastHandoverDoctor] = useState<string | null>(null);
   
   const hasPatient = !!patient;
-  const isIsolation = bed.status === BedStatus.ISOLATION || (bed.isolation?.isIsolated ?? false);
+  const isIsolation = (bed.status === BedStatus.ISOLATION || (bed.isolation?.isIsolated ?? false)) && hasPatient;
   const isUnavailable = bed.status === BedStatus.UNAVAILABLE && !hasPatient;
   const isOccupied = hasPatient && !isUnavailable;
   const isTransferPending = bed.status === BedStatus.TRANSFER_PENDING && hasPatient;

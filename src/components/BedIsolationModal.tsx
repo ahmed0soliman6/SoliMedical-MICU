@@ -10,7 +10,7 @@ import {
   Check
 } from 'lucide-react';
 import { BedRecord, BedStatus, BedIsolationInfo, PatientDossier } from '../types/schema.ts';
-import { db } from '../db/icuSyncDb.ts';
+import { db, ensureBedPatientSync } from '../db/icuSyncDb.ts';
 import { syncBedToCloud, syncPatientToCloud } from '../services/firebase.ts';
 import { useTranslation } from '../services/i18n.ts';
 import { useAppNotifications } from '../services/NotificationContext.tsx';
@@ -154,7 +154,8 @@ export const BedIsolationModal: React.FC<BedIsolationModalProps> = ({
         });
       }
 
-      // 4. Dispatch local and parent update events
+      // 4. Ensure immediate local synchronization and dispatch events
+      await ensureBedPatientSync();
       window.dispatchEvent(new Event('icu-data-updated'));
       (onSuccess || onUpdated)?.();
       onClose();

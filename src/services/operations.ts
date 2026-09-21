@@ -17,7 +17,7 @@ import {
   OperationContract,
   EpisodeContract 
 } from '../types/contracts.ts';
-import { db } from '../db/icuSyncDb.ts';
+import { db, ensureBedPatientSync } from '../db/icuSyncDb.ts';
 import { BedStatus, BedNumber, PatientDossier } from '../types/schema.ts';
 import { normalizeArabicName, extractLast4, computeSha256Hash } from './patientSearchUtils.ts';
 import { toEnglishDigits } from './numberUtils.ts';
@@ -350,20 +350,39 @@ export async function executeTransfer(
       throw new Error('بيانات السرير أو المريض غير موجودة في النظام.');
     }
 
-    const fromBed = fromBedSnap.data() as BedContract;
-    const toBed = toBedSnap.data() as BedContract;
+    const fromBed = fromBedSnap.data() as any;
+    const toBed = toBedSnap.data() as any;
+    const patientData = patientSnap.data() as any;
 
-    const sourcePatientId = fromBed.activePatientId || (fromBed as any).currentPatientId;
+    const sourcePatientId = fromBed.activePatientId || fromBed.currentPatientId;
     if (sourcePatientId !== patientId) {
       throw new Error('المريض غير متواجد بالسرير المصدر.');
     }
-    const destPatientId = toBed.activePatientId || (toBed as any).currentPatientId;
+    const destPatientId = toBed.activePatientId || toBed.currentPatientId;
     if (destPatientId) {
       throw new Error('السرير المستهدف مشغول بالفعل.');
     }
-    if ((toBed as any).status === 'UNAVAILABLE') {
+    if (toBed.status === 'UNAVAILABLE') {
       throw new Error('السرير المستهدف غير متاح للخدمة حالياً.');
     }
+
+    const isPatientIsolated = !!(
+      (patientData.isolationPrecautions && patientData.isolationPrecautions.length > 0) ||
+      (fromBed.isolation && fromBed.isolation.isIsolated) ||
+      fromBed.status === 'ISOLATION'
+    );
+
+    const isolationPayload = isPatientIsolated
+      ? (fromBed.isolation && fromBed.isolation.isIsolated
+          ? fromBed.isolation
+          : {
+              isIsolated: true,
+              type: 'Airborne',
+              reason: 'Clinical Isolation',
+              startDate: new Date().toISOString(),
+              precautions: patientData.isolationPrecautions || [],
+            })
+      : { isIsolated: false, precautions: [] };
 
     const operationId = generateId();
     const transferId = generateId();
@@ -401,15 +420,26 @@ export async function executeTransfer(
     transaction.set(operationRef, newOperation);
     transaction.set(transferRef, newTransfer);
 
+    // 1. Release source bed completely in Firestore
     transaction.update(fromBedRef, {
       activePatientId: null,
+      currentPatientId: null,
       status: 'VACANT',
+      isolation: { isIsolated: false, precautions: [] },
+      updatedAt: Date.now(),
     });
+
+    // 2. Assign target bed in Firestore
     transaction.update(toBedRef, {
       activePatientId: patientId,
-      status: 'OCCUPIED',
+      currentPatientId: patientId,
+      status: isPatientIsolated ? 'ISOLATION' : 'OCCUPIED',
+      isolation: isolationPayload,
       lastTransferId: transferId,
+      updatedAt: Date.now(),
     });
+
+    // 3. Update patient's current bed in Firestore
     transaction.update(patientRef, {
       currentBedId: toBedId,
       updatedAt: serverTimestamp(),
@@ -421,19 +451,45 @@ export async function executeTransfer(
 
   // Local cache update
   try {
+    const fromBed = await db.beds.get(fromBedId);
+    const pat = await db.patients.get(patientId);
+    const isIsolated = !!(
+      (pat?.isolationPrecautions && pat.isolationPrecautions.length > 0) ||
+      (fromBed?.isolation && fromBed.isolation.isIsolated) ||
+      fromBed?.status === BedStatus.ISOLATION
+    );
+    const isolationPayload = isIsolated
+      ? (fromBed?.isolation && fromBed.isolation.isIsolated
+          ? fromBed.isolation
+          : {
+              isIsolated: true,
+              type: 'Airborne',
+              reason: 'Clinical Isolation',
+              startDate: new Date().toISOString(),
+              precautions: pat?.isolationPrecautions || [],
+            })
+      : { isIsolated: false, precautions: [] };
+
     await db.beds.update(fromBedId, {
       status: BedStatus.VACANT,
       currentPatientId: null,
       activePatientId: null,
+      isolation: { isIsolated: false, precautions: [] },
     });
     await db.beds.update(toBedId, {
-      status: BedStatus.OCCUPIED,
+      status: isIsolated ? BedStatus.ISOLATION : BedStatus.OCCUPIED,
       currentPatientId: patientId,
       activePatientId: patientId,
+      isolation: isolationPayload,
     });
     await db.patients.update(patientId, {
       currentBedId: toBedId as BedNumber,
+      updatedAt: new Date().toISOString(),
     });
+    await ensureBedPatientSync();
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('icu-data-updated'));
+    }
   } catch (err) {
     console.warn('Local Dexie update following transfer:', err);
   }
@@ -490,6 +546,35 @@ export async function executeBedSwap(
     const patientARef = doc(firestore, COLLECTIONS.PATIENTS, patientAId);
     const patientBRef = doc(firestore, COLLECTIONS.PATIENTS, patientBId);
 
+    const patientASnap = await transaction.get(patientARef);
+    const patientBSnap = await transaction.get(patientBRef);
+
+    const patientAData = patientASnap.exists() ? (patientASnap.data() as any) : {};
+    const patientBData = patientBSnap.exists() ? (patientBSnap.data() as any) : {};
+
+    const isPatientAIsolated = !!(
+      (patientAData.isolationPrecautions && patientAData.isolationPrecautions.length > 0) ||
+      (bedAData.isolation && bedAData.isolation.isIsolated) ||
+      bedAData.status === 'ISOLATION'
+    );
+    const isPatientBIsolated = !!(
+      (patientBData.isolationPrecautions && patientBData.isolationPrecautions.length > 0) ||
+      (bedBData.isolation && bedBData.isolation.isIsolated) ||
+      bedBData.status === 'ISOLATION'
+    );
+
+    const isolationA = isPatientAIsolated
+      ? (bedAData.isolation && bedAData.isolation.isIsolated
+          ? bedAData.isolation
+          : { isIsolated: true, precautions: patientAData.isolationPrecautions || [] })
+      : { isIsolated: false, precautions: [] };
+
+    const isolationB = isPatientBIsolated
+      ? (bedBData.isolation && bedBData.isolation.isIsolated
+          ? bedBData.isolation
+          : { isIsolated: true, precautions: patientBData.isolationPrecautions || [] })
+      : { isIsolated: false, precautions: [] };
+
     const operationId = generateId();
     const transferAId = generateId();
     const transferBId = generateId();
@@ -544,16 +629,24 @@ export async function executeBedSwap(
     transaction.set(transferARef, transferA);
     transaction.set(transferBRef, transferB);
 
+    // Bed A now receives Patient B
     transaction.update(bedARef, {
       activePatientId: patientBId,
-      status: 'OCCUPIED',
+      currentPatientId: patientBId,
+      status: isPatientBIsolated ? 'ISOLATION' : 'OCCUPIED',
+      isolation: isolationB,
       lastTransferId: transferBId,
+      updatedAt: Date.now(),
     });
 
+    // Bed B now receives Patient A
     transaction.update(bedBRef, {
       activePatientId: patientAId,
-      status: 'OCCUPIED',
+      currentPatientId: patientAId,
+      status: isPatientAIsolated ? 'ISOLATION' : 'OCCUPIED',
+      isolation: isolationA,
       lastTransferId: transferAId,
+      updatedAt: Date.now(),
     });
 
     transaction.update(patientARef, {
@@ -579,22 +672,56 @@ export async function executeBedSwap(
     const patientBId = bedB?.currentPatientId || bedB?.activePatientId;
 
     if (patientAId && patientBId) {
+      const patA = await db.patients.get(patientAId);
+      const patB = await db.patients.get(patientBId);
+
+      const isPatientAIsolated = !!(
+        (patA?.isolationPrecautions && patA.isolationPrecautions.length > 0) ||
+        (bedA?.isolation && bedA.isolation.isIsolated) ||
+        bedA?.status === BedStatus.ISOLATION
+      );
+      const isPatientBIsolated = !!(
+        (patB?.isolationPrecautions && patB.isolationPrecautions.length > 0) ||
+        (bedB?.isolation && bedB.isolation.isIsolated) ||
+        bedB?.status === BedStatus.ISOLATION
+      );
+
+      const isolationA = isPatientAIsolated
+        ? (bedA?.isolation && bedA.isolation.isIsolated
+            ? bedA.isolation
+            : { isIsolated: true, precautions: patA?.isolationPrecautions || [] })
+        : { isIsolated: false, precautions: [] };
+
+      const isolationB = isPatientBIsolated
+        ? (bedB?.isolation && bedB.isolation.isIsolated
+            ? bedB.isolation
+            : { isIsolated: true, precautions: patB?.isolationPrecautions || [] })
+        : { isIsolated: false, precautions: [] };
+
       await db.beds.update(bedAId, {
-        status: BedStatus.OCCUPIED,
+        status: isPatientBIsolated ? BedStatus.ISOLATION : BedStatus.OCCUPIED,
         currentPatientId: patientBId,
         activePatientId: patientBId,
+        isolation: isolationB,
       });
       await db.beds.update(bedBId, {
-        status: BedStatus.OCCUPIED,
+        status: isPatientAIsolated ? BedStatus.ISOLATION : BedStatus.OCCUPIED,
         currentPatientId: patientAId,
         activePatientId: patientAId,
+        isolation: isolationA,
       });
       await db.patients.update(patientAId, {
         currentBedId: bedBId as BedNumber,
+        updatedAt: new Date().toISOString(),
       });
       await db.patients.update(patientBId, {
         currentBedId: bedAId as BedNumber,
+        updatedAt: new Date().toISOString(),
       });
+      await ensureBedPatientSync();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('icu-data-updated'));
+      }
     }
   } catch (err) {
     console.warn('Local Dexie update following bed swap:', err);
@@ -616,7 +743,7 @@ export async function executeDischarge(
   reason: string,
   outcome: string = 'DISCHARGED_STEPDOWN'
 ): Promise<string> {
-  return await runTransaction(firestore, async (transaction) => {
+  const dischargeResult = await runTransaction(firestore, async (transaction) => {
     const bedRef = doc(firestore, COLLECTIONS.BEDS, fromBedId);
     const patientRef = doc(firestore, COLLECTIONS.PATIENTS, patientId);
 
@@ -627,8 +754,9 @@ export async function executeDischarge(
       throw new Error('Records do not exist');
     }
 
-    const bed = bedSnap.data() as BedContract;
-    if (bed.activePatientId !== patientId) {
+    const bed = bedSnap.data() as any;
+    const activePatId = bed.activePatientId || bed.currentPatientId;
+    if (activePatId !== patientId) {
       throw new Error('المريض غير متواجد بالسرير المحدد.');
     }
 
@@ -666,13 +794,19 @@ export async function executeDischarge(
 
     transaction.update(bedRef, {
       activePatientId: null,
+      currentPatientId: null,
       status: 'VACANT',
+      isolation: { isIsolated: false, precautions: [] },
+      updatedAt: Date.now(),
     });
 
     transaction.update(patientRef, {
       currentStatus: 'DISCHARGED',
+      patientStatus: outcome,
       status: 'DISCHARGED',
       currentBedId: null,
+      isArchived: true,
+      dischargeDate: new Date().toISOString(),
       updatedAt: serverTimestamp(),
       updatedByUid: doctorId,
     });
@@ -689,4 +823,27 @@ export async function executeDischarge(
 
     return transferId;
   });
+
+  try {
+    await db.beds.update(fromBedId, {
+      status: BedStatus.VACANT,
+      currentPatientId: null,
+      activePatientId: null,
+      isolation: { isIsolated: false, precautions: [] },
+    });
+    await db.patients.update(patientId, {
+      patientStatus: outcome as any,
+      currentBedId: null as any,
+      archiveStatus: 'ARCHIVED',
+      updatedAt: new Date().toISOString(),
+    });
+    await ensureBedPatientSync();
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('icu-data-updated'));
+    }
+  } catch (err) {
+    console.warn('Local Dexie update following discharge:', err);
+  }
+
+  return dischargeResult;
 }
