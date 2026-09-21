@@ -3,7 +3,8 @@ import {
   BedRecord, 
   PatientDossier, 
   BedStatus, 
-  BedNumber 
+  BedNumber,
+  IntakePathway
 } from '../types/schema.ts';
 import { db } from '../db/icuSyncDb.ts';
 import { useSystemSettings } from '../services/SettingsContext.tsx';
@@ -44,6 +45,16 @@ export const BedMatrixCard: React.FC<BedMatrixCardProps> = ({
 
   const isDecontaminating = !hasPatient && bed.status === BedStatus.DECONTAMINATING && !isDeconExpired;
   const isVacant = !hasPatient && !isUnavailable && !isDecontaminating && !isIsolation;
+
+  const getPathwayArLabel = (pathway?: IntakePathway) => {
+    switch (pathway) {
+      case IntakePathway.STAT_CRITICAL: return lang === 'ar' ? 'طوارئ' : 'ER / Stat';
+      case IntakePathway.ELECTIVE_POST_OP: return lang === 'ar' ? 'عمليات' : 'OR / Post-Op';
+      case IntakePathway.FLOOR_TRANSFER: return lang === 'ar' ? 'قسم داخلي' : 'Ward';
+      case IntakePathway.ER_REFERRAL: return lang === 'ar' ? 'طوارئ' : 'ER Ref';
+      default: return pathway || (lang === 'ar' ? 'طوارئ' : 'ER');
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -105,9 +116,13 @@ export const BedMatrixCard: React.FC<BedMatrixCardProps> = ({
     <div 
       onClick={handleClick}
       data-card-open={isSelected ? "true" : "false"}
-      className={`relative rounded-2xl border transition-all duration-200 overflow-hidden flex flex-col justify-between p-4 min-h-[135px] shadow-sm cursor-pointer hover:scale-[1.01] hover:shadow-md icu-card-interactive ${
+      className={`relative rounded-2xl border transition-all duration-200 overflow-hidden flex flex-col justify-between p-5 sm:p-6 min-h-[170px] sm:min-h-[190px] md:min-h-[210px] shadow-sm cursor-pointer hover:scale-[1.01] hover:shadow-md icu-card-interactive ${
         isSelected
-          ? 'icu-card-active ring-2 ring-teal-500 shadow-xl border-teal-500 bg-slate-200/90 dark:bg-[#202f50]'
+          ? isIsolation
+            ? 'icu-card-active ring-2 ring-amber-500 border-amber-500 bg-amber-500/10 dark:bg-gradient-to-b dark:from-[#3a2007] dark:to-[#1a0e03] shadow-amber-950/40 text-amber-950 dark:text-amber-200'
+            : isUnavailable
+            ? 'icu-card-active ring-2 ring-red-500 border-red-500 bg-red-500/10 dark:bg-red-950/20 text-red-950 dark:text-red-300'
+            : 'icu-card-active ring-2 ring-teal-500 shadow-xl border-teal-500 bg-slate-200/90 dark:bg-[#1e2e4e]'
           : isUnavailable
           ? 'bg-rose-50/80 border-rose-200 text-rose-950 dark:bg-[#100f1a] dark:border-red-900/50 dark:text-red-300 opacity-90'
           : isIsolation
@@ -121,121 +136,100 @@ export const BedMatrixCard: React.FC<BedMatrixCardProps> = ({
           : 'bg-slate-50/90 border-slate-300 hover:border-slate-400 dark:bg-[#0a0f1d] dark:border-slate-800/60 dark:hover:border-slate-700'
       }`}
     >
-      <div className="flex items-start justify-between gap-4">
-        {/* Bed Number / Status */}
-        <div className="flex items-center gap-2.5">
-          <div className={`w-12 h-12 rounded-xl font-mono font-black text-xl flex items-center justify-center shadow-sm ${
-            isUnavailable
-              ? 'bg-red-100 text-red-700 border border-red-300 dark:bg-red-950 dark:text-red-400 dark:border-red-800'
-              : isIsolation
-              ? 'bg-amber-500 text-slate-950 border-2 border-amber-600 dark:bg-amber-500 dark:text-slate-950 dark:border-amber-400 font-black animate-pulse shadow-sm'
-              : isOccupied 
-              ? 'bg-teal-50 text-teal-700 border border-teal-300 dark:bg-teal-500/20 dark:text-teal-300 dark:border-teal-500/40'
-              : 'bg-slate-100 text-slate-600 border border-slate-300 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
-          }`}>
-            {bed.bedNumber}
-          </div>
-          <div>
-            <div className="text-base font-bold text-slate-900 dark:text-white tracking-wide flex items-center gap-1.5">
-              <span>{lang === 'ar' ? `سرير ${bed.bedNumber}` : `Bed ${bed.bedNumber}`}</span>
-              {isSelected && (
-                <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded bg-teal-100 text-teal-800 dark:bg-teal-500/30 dark:text-teal-200 border border-teal-300 dark:border-teal-400">
-                  {lang === 'ar' ? 'مفتوح' : 'OPEN'}
-                </span>
-              )}
-            </div>
-            <div className="text-xs text-slate-500 dark:text-slate-400 truncate max-w-[130px]">
-              {bed.bayName}
-            </div>
-          </div>
+      <div className="flex items-center justify-between gap-4 w-full">
+        {/* Bed Number Badge/Pill */}
+        <div className={`h-10 px-3.5 rounded-xl font-bold text-sm sm:text-base flex items-center justify-center gap-1.5 shadow-sm border ${
+          isUnavailable
+            ? 'bg-red-100 text-red-700 border-red-300 dark:bg-red-950/50 dark:text-red-400 dark:border-red-900/50'
+            : isIsolation
+            ? 'bg-amber-500 text-slate-950 border-amber-600 dark:bg-amber-500 dark:text-slate-950 dark:border-amber-400 font-extrabold animate-pulse'
+            : isOccupied 
+            ? 'bg-teal-50 text-teal-700 border-teal-300 dark:bg-teal-500/10 dark:text-teal-300 dark:border-teal-500/30'
+            : 'bg-slate-100 text-slate-600 border-slate-300 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
+        }`}>
+          <span>{lang === 'ar' ? 'سرير' : 'Bed'} {bed.bedNumber}</span>
+          {isSelected && (
+            <span className="text-[10px] uppercase font-black px-1.5 py-0.2 rounded bg-white/30 text-slate-950 dark:text-white">
+              {lang === 'ar' ? 'مفتوح' : 'OPEN'}
+            </span>
+          )}
         </div>
 
-        {/* Dynamic Status Label */}
-        <div className="flex items-center gap-1.5">
-          <div className="text-xs font-bold px-2 py-0.5 rounded-md font-mono">
-            {isIsolation && (
-              <span className="bg-amber-500 text-slate-950 font-black border border-amber-600 dark:bg-amber-400 dark:text-slate-950 dark:border-amber-300 px-2 py-0.5 rounded flex items-center gap-1 shadow-sm">
-                <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
-                <span>{lang === 'ar' ? 'عزل سريري' : 'ISOLATION'}</span>
-              </span>
+        {/* Dynamic Status Label + Intake Pathway */}
+        <div className="flex items-center gap-2">
+          {/* Intake Pathway "مسار الدخول للقسم" (Only if patient is present) */}
+          {hasPatient && patient.intakePathway && (
+            <span className="bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/20 px-2 py-0.5 rounded-md text-[11px] font-bold">
+              {getPathwayArLabel(patient.intakePathway)}
+            </span>
+          )}
+
+          {/* Bed Status Badge (مشغول أو عزل أو صيانة أو شاغر) */}
+          <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md border ${
+            isIsolation
+              ? 'bg-amber-500/15 text-amber-700 border-amber-500/40 dark:text-amber-400 flex items-center gap-1'
+              : isUnavailable
+              ? 'bg-red-100 text-red-800 border-red-300 dark:bg-red-950 dark:text-red-400 dark:border-red-900/40'
+              : isDecontaminating
+              ? 'bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-950 dark:text-purple-400'
+              : isOccupied
+              ? 'bg-teal-100 text-teal-800 border-teal-300 dark:bg-teal-950 dark:text-teal-400'
+              : 'bg-slate-100 text-slate-600 border-slate-300 dark:bg-slate-800 dark:text-slate-400'
+          }`}>
+            {isIsolation ? (
+              <>
+                <ShieldAlert className="w-3 h-3 shrink-0 inline-block align-middle" />
+                <span className="align-middle">{lang === 'ar' ? 'عزل' : 'Isolation'}</span>
+              </>
+            ) : isUnavailable ? (
+              <span>{lang === 'ar' ? 'صيانة' : 'Maintenance'}</span>
+            ) : isDecontaminating ? (
+              <span>{lang === 'ar' ? 'تعقيم' : 'Cleaning'}</span>
+            ) : isOccupied ? (
+              <span>{lang === 'ar' ? 'مشغول' : 'Occupied'}</span>
+            ) : (
+              <span>{lang === 'ar' ? 'شاغر' : 'Vacant'}</span>
             )}
-            {isUnavailable && !isIsolation && (
-              <span className="bg-red-100 text-red-800 border border-red-300 dark:bg-red-950 dark:text-red-300 dark:border-red-800 px-1.5 py-0.5 rounded">
-                {lang === 'ar' ? 'غير متاح' : 'Unavailable'}
-              </span>
-            )}
-            {isTransferPending && !isIsolation && (
-              <span className="bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-700 px-1.5 py-0.5 rounded">
-                {lang === 'ar' ? 'نقل معلق' : 'Transfer Pending'}
-              </span>
-            )}
-            {isDecontaminating && !isIsolation && (
-              <span className="bg-purple-100 text-purple-800 border border-purple-300 dark:bg-purple-950 dark:text-purple-300 dark:border-purple-800 px-1.5 py-0.5 rounded">
-                {lang === 'ar' ? 'تطهير' : 'Cleaning'}
-              </span>
-            )}
-            {isVacant && (
-              <span className="bg-slate-100 text-slate-600 border border-slate-300 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700 px-1.5 py-0.5 rounded">
-                {lang === 'ar' ? 'شاغر' : 'Vacant'}
-              </span>
-            )}
-            {isOccupied && !isIsolation && (
-              <span className="bg-teal-100 text-teal-800 border border-teal-300 dark:bg-teal-950 dark:text-teal-300 dark:border-teal-800 px-1.5 py-0.5 rounded">
-                {lang === 'ar' ? 'مشغول' : 'Occupied'}
-              </span>
-            )}
-          </div>
+          </span>
         </div>
       </div>
 
       {/* Patient Name, Age Badge, Diagnosis & Handover Physician */}
-      <div className="mt-3.5 pt-2 border-t border-slate-200/60 dark:border-slate-800/80">
+      <div className="mt-4 pt-3.5 border-t border-slate-200/60 dark:border-slate-800/80">
         {isOccupied || isTransferPending ? (
-          <div className="space-y-1.5">
-            {/* Patient Name + Distinctive Age Badge + Acuity Badge + Code Status Badge */}
-            <div className="flex items-center justify-start gap-2 flex-wrap">
-              <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white leading-snug truncate">
+          <div className="space-y-3.5">
+            {/* Patient Name + Age Badge - Fully utilizing the entire horizontal space */}
+            <div className="flex items-center justify-between w-full gap-4">
+              <h2 className="text-lg xs:text-xl sm:text-2xl md:text-[22px] font-black text-slate-900 dark:text-white leading-snug truncate flex-1 tracking-tight">
                 {patientName || (lang === 'ar' ? 'مريض بدون اسم' : 'Unnamed Patient')}
               </h2>
               {patient?.age !== undefined && patient?.age !== null && (
                 <div 
-                  className="inline-flex items-center justify-center min-w-[2rem] h-6 px-2 rounded-full font-mono text-xs font-black bg-teal-100 text-teal-900 border border-teal-300 dark:bg-teal-950 dark:text-teal-300 dark:border-teal-500/50 shadow-sm shrink-0"
+                  className="inline-flex items-center justify-center min-w-[2.5rem] sm:min-w-[3.25rem] h-7 sm:h-8.5 px-3 rounded-xl font-mono text-xs xs:text-sm sm:text-base font-black bg-teal-500/10 text-teal-800 dark:text-teal-300 border border-teal-500/30 dark:border-teal-500/20 shadow-sm shrink-0"
                   title={lang === 'ar' ? `العمر: ${patient.age} سنة` : `Age: ${patient.age} years`}
                 >
-                  {patient.age}{lang === 'ar' ? 'س' : 'y'}
+                  {patient.age}{lang === 'ar' ? ' س' : 'y'}
                 </div>
-              )}
-              {settings.features.enableAcuityLevels !== false && patient?.acuityLevel && (
-                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded bg-red-100 text-red-800 border border-red-300 dark:bg-red-950 dark:text-red-300 dark:border-red-800 shrink-0">
-                  {patient.acuityLevel}
-                </span>
-              )}
-              {settings.features.enableCodeStatus !== false && patient?.codeStatus && (
-                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded bg-purple-100 text-purple-800 border border-purple-300 dark:bg-purple-950 dark:text-purple-300 dark:border-purple-800 shrink-0">
-                  {patient.codeStatus}
-                </span>
               )}
             </div>
 
-            {/* Diagnosis & Handover Doctor (Only if handover exists) */}
-            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs pt-0.5">
+            {/* Diagnosis & Physician (Merged in a single spacious spaced-out row) */}
+            <div className="flex items-center justify-between gap-4 w-full text-xs xs:text-sm sm:text-base pt-3 border-t border-slate-200/40 dark:border-slate-800/40">
               {/* Diagnosis */}
-              <div className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300 font-medium min-w-0 max-w-full">
-                <Stethoscope className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
-                <span className="truncate" title={diagnosisText}>
+              <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300 font-bold min-w-0 flex-1">
+                <Stethoscope className="w-4 h-4 sm:w-5 sm:h-5 text-teal-600 dark:text-teal-400 shrink-0" />
+                <span className="truncate text-[13px] sm:text-sm md:text-[15px]" title={diagnosisText}>
                   {diagnosisText || (lang === 'ar' ? 'بدون تشخيص' : 'No diagnosis')}
                 </span>
               </div>
 
-              {/* Handover Physician (Only shown if real handover signed) */}
-              {lastHandoverDoctor && (
-                <div className="flex items-center gap-1 text-slate-600 dark:text-slate-300 text-[11px] font-semibold shrink-0" title={lang === 'ar' ? `طبيب التسليم: ${lastHandoverDoctor}` : `Handover: ${lastHandoverDoctor}`}>
-                  <UserCheck className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
-                  <span className="truncate max-w-[150px]">
-                    {lastHandoverDoctor}
-                  </span>
-                </div>
-              )}
+              {/* Physician */}
+              <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400 font-bold min-w-0 shrink-0" title={lang === 'ar' ? `الطبيب: ${lastHandoverDoctor || patient?.attendingPhysician?.name || ''}` : `Physician: ${lastHandoverDoctor || patient?.attendingPhysician?.name || ''}`}>
+                <UserCheck className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                <span className="truncate text-[13px] sm:text-sm md:text-[15px]">
+                  {lastHandoverDoctor || patient?.attendingPhysician?.name || (lang === 'ar' ? 'غير محدد' : 'Unassigned')}
+                </span>
+              </div>
             </div>
           </div>
         ) : isDecontaminating ? (

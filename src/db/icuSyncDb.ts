@@ -837,9 +837,10 @@ export async function ensureBedPatientSync(): Promise<void> {
         b.activePatientId = targetPatient.id;
         modified = true;
       }
+      const isBedCurrentlyIsolated = b.status === BedStatus.ISOLATION || !!(b.isolation && b.isolation.isIsolated);
       const isPatientIsolated = !!(
         targetPatient.isolationPrecautions && targetPatient.isolationPrecautions.length > 0
-      );
+      ) || isBedCurrentlyIsolated;
 
       if (isPatientIsolated) {
         if (b.status !== BedStatus.ISOLATION) {
@@ -852,9 +853,28 @@ export async function ensureBedPatientSync(): Promise<void> {
             type: b.isolation?.type || 'Airborne',
             reason: b.isolation?.reason || 'Clinical Isolation',
             startDate: b.isolation?.startDate || new Date().toISOString(),
-            precautions: targetPatient.isolationPrecautions || ['Contact Precautions'],
+            precautions: targetPatient.isolationPrecautions || b.isolation?.precautions || ['n95', 'gloves', 'gown'],
           };
           modified = true;
+        }
+        // Dual-directional: Sync back to target patient's isolation precautions if they are empty
+        if (!targetPatient.isolationPrecautions || targetPatient.isolationPrecautions.length === 0) {
+          const defaultPrecautions = b.isolation.precautions && b.isolation.precautions.length > 0 
+            ? b.isolation.precautions 
+            : ['n95', 'gloves', 'gown'];
+          targetPatient.isolationPrecautions = defaultPrecautions;
+          
+          // Background update and sync
+          db.patients.update(targetPatient.id, {
+            isolationPrecautions: defaultPrecautions,
+            updatedAt: new Date().toISOString()
+          }).then(async () => {
+            const freshPat = await db.patients.get(targetPatient.id);
+            if (freshPat) {
+              const { syncPatientToCloud } = await import('../services/firebase.ts');
+              await syncPatientToCloud(freshPat);
+            }
+          }).catch(err => console.warn('Delayed background patient isolation sync error:', err));
         }
       } else {
         // Patient is NOT in isolation -> strictly reset and clear bed isolation
