@@ -548,35 +548,78 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Change own password for currently logged in user by reauthenticating with old password
   const changeMyOwnPassword = async (oldPassword: string, newPassword: string, confirmPassword?: string): Promise<{ success: boolean; message?: string }> => {
-    if (!auth.currentUser || !auth.currentUser.email) {
+    const activeEmail = auth.currentUser?.email || currentUser?.email;
+    if (!activeEmail) {
       return { success: false, message: 'لا يوجد مستخدم مسجل الدخول حالياً.' };
     }
     if (!oldPassword) {
-      return { success: false, message: 'يرجى إدخال كلمة المرور القديمة.' };
+      return { success: false, message: 'يرجى إدخال كلمة المرور الحالية (القديمة).' };
     }
     if (!newPassword || newPassword.trim().length < 6) {
-      return { success: false, message: 'كلمة المرور الجديدة يجب ألا تقل عن 6 أحرف أو أرقام (auth/weak-password).' };
+      return { success: false, message: 'كلمة المرور الجديدة يجب ألا تقل عن 6 أحرف أو أرقام.' };
     }
     if (confirmPassword !== undefined && newPassword.trim() !== confirmPassword.trim()) {
-      return { success: false, message: 'كلمتا المرور غير متطابقتين.' };
+      return { success: false, message: 'كلمتا المرور الجديدتان غير متطابقتين.' };
     }
 
-    try {
-      const credential = EmailAuthProvider.credential(auth.currentUser.email, oldPassword);
-      await reauthenticateWithCredential(auth.currentUser, credential);
-      await updatePassword(auth.currentUser, newPassword.trim());
+    const cleanPass = newPassword.trim();
 
-      if (currentUser) {
-        const updated = { ...currentUser, pinCode: newPassword.trim() };
-        setCurrentUser(updated);
-        localStorage.setItem('soli_icu_active_user', JSON.stringify(updated));
-        await saveUserAccount(updated);
+    try {
+      // 1. If auth.currentUser exists, re-authenticate
+      if (auth.currentUser && auth.currentUser.email) {
+        const credential = EmailAuthProvider.credential(auth.currentUser.email, oldPassword);
+        await reauthenticateWithCredential(auth.currentUser, credential);
+        await updatePassword(auth.currentUser, cleanPass);
+      } else {
+        // Sign in to establish active session if disconnected
+        const userCred = await signInWithEmailAndPassword(auth, activeEmail, oldPassword);
+        await updatePassword(userCred.user, cleanPass);
       }
 
-      await refreshUsers();
-      return { success: true, message: 'تم تغيير كلمة المرور بنجاح في النظام.' };
+      // 2. Update local state and Dexie/Firestore profile
+      if (currentUser) {
+        const updated: IcuUser = { 
+          ...currentUser, 
+          pinCode: cleanPass,
+          updatedAt: new Date().toISOString()
+        };
+        setCurrentUser(updated);
+        try {
+          localStorage.setItem('soli_icu_active_user', JSON.stringify(updated));
+          await saveUserAccount(updated);
+        } catch (saveErr) {
+          console.warn('[changeMyOwnPassword] Profile document update notice:', saveErr);
+        }
+      }
+
+      refreshUsers().catch(() => {});
+      return { success: true, message: 'تم تغيير وتحديث كلمة المرور بنجاح.' };
     } catch (err: any) {
-      return { success: false, message: err?.message || 'كلمة المرور القديمة غير صحيحة أو فشل تحديث كلمة المرور.' };
+      console.error('[changeMyOwnPassword] Exception:', err);
+      const errCode = err?.code || '';
+      let errMsg = 'فشل تغيير كلمة المرور. يرجى التأكد من صحة كلمة المرور الحالية.';
+
+      if (
+        errCode === 'auth/wrong-password' || 
+        errCode === 'auth/invalid-credential' || 
+        errCode === 'auth/invalid-login-credentials' ||
+        err?.message?.includes('invalid-credential') ||
+        err?.message?.includes('wrong-password')
+      ) {
+        errMsg = 'كلمة المرور الحالية (القديمة) غير صحيحة.';
+      } else if (errCode === 'auth/weak-password' || err?.message?.includes('weak-password')) {
+        errMsg = 'كلمة المرور الجديدة ضعيفة جداً (يجب أن تتكون من 6 أحرف أو أرقام على الأقل).';
+      } else if (errCode === 'auth/requires-recent-login') {
+        errMsg = 'انتهت صلاحية الجلسة الأمنية، يرجى تسجيل الدخول مرة أخرى.';
+      } else if (errCode === 'auth/too-many-requests') {
+        errMsg = 'تم حظر المحاولات مؤقتاً بسبب كثرة الطلبات. يرجى الانتظار دقيقة والمحاولة لاحقاً.';
+      } else if (errCode === 'auth/network-request-failed') {
+        errMsg = 'تعذر الاتصال بالخادم، يرجى التحقق من اتصالك بالإنترنت.';
+      } else if (err?.message && !err.message.includes('auth/')) {
+        errMsg = err.message;
+      }
+
+      return { success: false, message: errMsg };
     }
   };
 
@@ -760,6 +803,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         createUser,
         updateUser,
         changeUserPassword,
+        changeMyOwnPassword,
         toggleUserStatus,
         deleteUser,
         hasPermission,
