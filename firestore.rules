@@ -273,6 +273,13 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // Clinical & Operational Notifications
+    match /notifications/{notifId} {
+      allow read: if isClinician();
+      allow create, update: if isClinician();
+      allow delete: if isClinician() || isAdmin();
+    }
+
     // System Settings
     match /system_settings/{settingId} {
       allow read: if isClinician();

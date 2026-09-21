@@ -26,6 +26,7 @@ export const COLLECTIONS = {
   CHATS: 'chats',
   CHAT_MESSAGES: 'chatMessages',
   AUDIT_LOGS: 'auditLogs',
+  NOTIFICATIONS: 'notifications',
   SETTINGS: 'system_settings',
 } as const;
 

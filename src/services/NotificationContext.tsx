@@ -1,10 +1,21 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
+import { 
+  collection, 
+  doc, 
+  setDoc as fsetDoc, 
+  deleteDoc, 
+  onSnapshot, 
+  query, 
+  orderBy, 
+  limit 
+} from 'firebase/firestore';
 import { AppNotification, NotificationType, AppNotificationTarget } from '../types/notification.ts';
 import { useSystemSettings } from './SettingsContext.tsx';
 import { playGentleNotificationTone, isAudioGloballyMuted } from './NotificationAudio.ts';
+import { firestore, sanitizeForFirestore } from './firebase.ts';
 
 const NOTIFICATIONS_STORAGE_KEY = 'soli_icu_notifications_queue_v2';
-const MAX_NOTIFICATIONS = 20;
+const MAX_NOTIFICATIONS = 25;
 
 interface TriggerNotificationParams {
   type: NotificationType;
@@ -63,12 +74,16 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
   const [activeBanner, setActiveBanner] = useState<AppNotification | null>(null);
   const [navHandler, setNavHandler] = useState<((target: AppNotificationTarget) => void) | null>(null);
 
+  // Track locally triggered notification IDs to avoid echo audio/banner loops
+  const locallyTriggeredIdsRef = useRef<Set<string>>(new Set());
+  const isInitialSnapshotRef = useRef(true);
+
   // Sync to storage
   useEffect(() => {
     saveNotificationsToStorage(notifications);
   }, [notifications]);
 
-  // Auto-dismiss top visual banner after 2.8 seconds (2 to 3 seconds as requested)
+  // Auto-dismiss top visual banner after 2.8 seconds
   useEffect(() => {
     if (!activeBanner) return;
     const timer = setTimeout(() => {
@@ -85,8 +100,6 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
     if (hasTriggeredStartupChimeRef.current) return;
     hasTriggeredStartupChimeRef.current = true;
 
-    // Strict user rule: Only play ONE single notification chime on reload if there are unread notifications
-    // If unread is 0 or if muted, absolutely no sound should play!
     const isMuted = settings.notifications.isMuted || isAudioGloballyMuted();
     if (unreadCount > 0 && !isMuted && settings.notifications.masterAudio) {
       const timer = setTimeout(() => {
@@ -96,12 +109,110 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
     }
   }, [unreadCount, settings.notifications.isMuted, settings.notifications.masterAudio]);
 
+  // --------------------------------------------------------------------------
+  // Real-Time Multi-User Clinical Notification Listener from Firestore
+  // --------------------------------------------------------------------------
+  useEffect(() => {
+    try {
+      const notifsCol = collection(firestore, 'notifications');
+      const notifsQuery = query(notifsCol, orderBy('timestamp', 'desc'), limit(MAX_NOTIFICATIONS));
+
+      const unsubscribe = onSnapshot(notifsQuery, (snapshot) => {
+        const notifSettings = settings.notifications;
+        const isMuted = notifSettings.isMuted || isAudioGloballyMuted();
+        const now = Date.now();
+
+        if (isInitialSnapshotRef.current) {
+          isInitialSnapshotRef.current = false;
+          const remoteList: AppNotification[] = [];
+          snapshot.forEach((docSnap) => {
+            const data = docSnap.data() as AppNotification;
+            remoteList.push({
+              ...data,
+              id: data.id || docSnap.id,
+            });
+          });
+
+          if (remoteList.length > 0) {
+            setNotifications((prev) => {
+              // Merge remote into local, preserving local read status where available
+              const readMap = new Map(prev.map(p => [p.id, p.read]));
+              const merged = remoteList.map(r => ({
+                ...r,
+                read: readMap.has(r.id) ? readMap.get(r.id)! : r.read,
+              }));
+              return merged.slice(0, MAX_NOTIFICATIONS);
+            });
+          }
+          return;
+        }
+
+        // Handle Real-Time Live Changes (From other clinicians / other sessions)
+        const incomingDocs: AppNotification[] = [];
+        snapshot.docChanges().forEach((change) => {
+          if (change.type === 'added') {
+            const incoming = change.doc.data() as AppNotification;
+            const notifId = incoming.id || change.doc.id;
+            const itemTime = new Date(incoming.timestamp).getTime();
+            const ageMs = now - itemTime;
+
+            // Check if this was NOT triggered locally and is fresh (less than 45 seconds old)
+            if (!locallyTriggeredIdsRef.current.has(notifId) && ageMs < 45000) {
+              let eventKey: keyof typeof notifSettings.events = 'admission';
+              if (incoming.type === 'ADMISSION') eventKey = 'admission';
+              else if (incoming.type === 'DISCHARGE' || incoming.type === 'DEATH' || incoming.type === 'TRANSFER') eventKey = 'discharge';
+              else if (incoming.type === 'SBAR_HANDOVER') eventKey = 'sbarHandover';
+              else if (incoming.type === 'SBAR_RECEIVED') eventKey = 'sbarReceived';
+              else if (incoming.type === 'ISOLATION_CHANGE') eventKey = 'isolationChange';
+              else if (incoming.type === 'CRITICAL_TELEMETRY') eventKey = 'criticalTelemetry';
+
+              const eventConfig = notifSettings.events[eventKey] || { visual: true, audio: true };
+              const shouldShowVisual = notifSettings.masterVisual && eventConfig.visual;
+              const shouldPlayAudio = !isMuted && notifSettings.masterAudio && eventConfig.audio;
+
+              if (shouldPlayAudio) {
+                playGentleNotificationTone(incoming.type);
+              }
+              if (shouldShowVisual) {
+                setActiveBanner(incoming);
+              }
+            }
+          }
+        });
+
+        // Update local state with latest snapshot list
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data() as AppNotification;
+          incomingDocs.push({
+            ...data,
+            id: data.id || docSnap.id,
+          });
+        });
+
+        setNotifications((prev) => {
+          const readMap = new Map(prev.map(p => [p.id, p.read]));
+          const merged = incomingDocs.map(r => ({
+            ...r,
+            read: readMap.has(r.id) ? readMap.get(r.id)! : r.read,
+          }));
+          return merged.slice(0, MAX_NOTIFICATIONS);
+        });
+      }, (err) => {
+        console.warn('Notifications stream note (offline / retry):', err);
+      });
+
+      return () => unsubscribe();
+    } catch (e) {
+      console.warn('Could not initialize notifications Firestore listener:', e);
+    }
+  }, [settings.notifications]);
+
   const setNavigationHandler = useCallback((handler: (target: AppNotificationTarget) => void) => {
     setNavHandler(() => handler);
   }, []);
 
   const triggerNotification = useCallback(
-    ({
+    async ({
       type,
       titleEn,
       titleAr,
@@ -129,7 +240,6 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
         return;
       }
 
-      // Determine which event key in settings this belongs to
       let eventKey: keyof typeof notifSettings.events = 'admission';
       if (type === 'ADMISSION') eventKey = 'admission';
       else if (type === 'DISCHARGE' || type === 'DEATH' || type === 'TRANSFER') eventKey = 'discharge';
@@ -139,14 +249,12 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
       else if (type === 'CRITICAL_TELEMETRY') eventKey = 'criticalTelemetry';
 
       const eventConfig = notifSettings.events[eventKey] || { visual: true, audio: true };
-
       const shouldShowVisual = forceVisual || (notifSettings.masterVisual && eventConfig.visual);
-      // Strict mute: if muted, NEVER play audio!
-      const shouldPlayAudio =
-        !isMuted && (forceAudio || (notifSettings.masterAudio && eventConfig.audio));
+      const shouldPlayAudio = !isMuted && (forceAudio || (notifSettings.masterAudio && eventConfig.audio));
 
+      const notifId = `notif-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
       const newNotif: AppNotification = {
-        id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        id: notifId,
         type,
         titleEn,
         titleAr,
@@ -157,21 +265,32 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
         target,
       };
 
-      // 1. Play gentle audio tone (if not muted)
+      // Register as locally triggered to prevent echo audio/banner loops
+      locallyTriggeredIdsRef.current.add(notifId);
+
+      // 1. Play gentle audio tone locally
       if (shouldPlayAudio) {
         playGentleNotificationTone(type);
       }
 
-      // 2. Show top banner if visual enabled
+      // 2. Show top banner locally
       if (shouldShowVisual) {
         setActiveBanner(newNotif);
       }
 
-      // 3. Add to notifications queue (Max 20 items, newest first, auto-prune)
+      // 3. Add to local queue immediately
       setNotifications((prev) => {
         const updated = [newNotif, ...prev.filter((p) => p.id !== newNotif.id)];
         return updated.slice(0, MAX_NOTIFICATIONS);
       });
+
+      // 4. Broadcast in real time to Cloud Firestore for other connected users
+      try {
+        const notifRef = doc(firestore, 'notifications', notifId);
+        await fsetDoc(notifRef, sanitizeForFirestore(newNotif));
+      } catch (cloudErr) {
+        console.warn('Cloud notification sync (offline cache active):', cloudErr);
+      }
     },
     [settings.notifications, notifications]
   );
@@ -188,6 +307,10 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
 
   const deleteNotification = useCallback((id: string) => {
     setNotifications((prev) => prev.filter((n) => n.id !== id));
+    try {
+      const notifRef = doc(firestore, 'notifications', id);
+      deleteDoc(notifRef).catch(() => {});
+    } catch {}
   }, []);
 
   const clearAllNotifications = useCallback(() => {
@@ -200,11 +323,9 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
 
   const handleNotificationClick = useCallback(
     (notif: AppNotification) => {
-      // Mark as read immediately on click
       markAsRead(notif.id);
       setActiveBanner(null);
 
-      // Trigger navigation if target is set
       if (notif.target && navHandler) {
         navHandler(notif.target);
       }

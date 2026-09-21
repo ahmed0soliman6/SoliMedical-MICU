@@ -8,7 +8,7 @@ import {
 import { db } from '../db/icuSyncDb.ts';
 import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
-import { Stethoscope, UserCheck, Activity, Wrench } from 'lucide-react';
+import { Stethoscope, UserCheck, Activity, Wrench, ShieldAlert } from 'lucide-react';
 
 interface BedMatrixCardProps {
   bed: BedRecord;
@@ -29,7 +29,7 @@ export const BedMatrixCard: React.FC<BedMatrixCardProps> = ({
   const [lastHandoverDoctor, setLastHandoverDoctor] = useState<string | null>(null);
   
   const hasPatient = !!patient;
-  const isIsolation = hasPatient && (bed.status === BedStatus.ISOLATION || (bed.isolation?.isIsolated ?? false));
+  const isIsolation = bed.status === BedStatus.ISOLATION || (bed.isolation?.isIsolated ?? false);
   const isUnavailable = bed.status === BedStatus.UNAVAILABLE && !hasPatient;
   const isOccupied = hasPatient && !isUnavailable;
   const isTransferPending = bed.status === BedStatus.TRANSFER_PENDING && hasPatient;
@@ -83,7 +83,7 @@ export const BedMatrixCard: React.FC<BedMatrixCardProps> = ({
   }, [patient?.id, patient?.attendingPhysician?.name]);
 
   const handleClick = () => {
-    if (isOccupied || isTransferPending || isUnavailable || isDecontaminating) {
+    if (isOccupied || isTransferPending || isUnavailable || isDecontaminating || isIsolation) {
       onSelectBed(bed.bedNumber);
     } else {
       onAdmitToBed(bed.bedNumber);
@@ -110,7 +110,7 @@ export const BedMatrixCard: React.FC<BedMatrixCardProps> = ({
           : isUnavailable
           ? 'bg-rose-50/80 border-rose-200 text-rose-950 dark:bg-[#100f1a] dark:border-red-900/50 dark:text-red-300 opacity-90'
           : isIsolation
-          ? 'bg-amber-50/90 border-amber-300 text-amber-950 dark:bg-gradient-to-b dark:from-[#1c1409] dark:to-[#0f0c08] dark:border-amber-600/60 dark:text-amber-200 shadow-amber-950/20'
+          ? 'bg-amber-500/10 border-2 border-amber-500 text-amber-950 shadow-md shadow-amber-500/15 dark:bg-gradient-to-b dark:from-[#2a1705] dark:to-[#140b02] dark:border-amber-500 dark:text-amber-200 dark:shadow-amber-950/40 ring-1 ring-amber-500/50'
           : isTransferPending
           ? 'bg-amber-50/70 border-amber-300 text-amber-950 dark:bg-[#0f172a] dark:border-amber-500/40'
           : isDecontaminating
@@ -127,7 +127,7 @@ export const BedMatrixCard: React.FC<BedMatrixCardProps> = ({
             isUnavailable
               ? 'bg-red-100 text-red-700 border border-red-300 dark:bg-red-950 dark:text-red-400 dark:border-red-800'
               : isIsolation
-              ? 'bg-amber-100 text-amber-800 border border-amber-400 dark:bg-red-950 dark:text-red-500 dark:border-red-800/80 animate-pulse'
+              ? 'bg-amber-500 text-slate-950 border-2 border-amber-600 dark:bg-amber-500 dark:text-slate-950 dark:border-amber-400 font-black animate-pulse shadow-sm'
               : isOccupied 
               ? 'bg-teal-50 text-teal-700 border border-teal-300 dark:bg-teal-500/20 dark:text-teal-300 dark:border-teal-500/40'
               : 'bg-slate-100 text-slate-600 border border-slate-300 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
@@ -153,21 +153,22 @@ export const BedMatrixCard: React.FC<BedMatrixCardProps> = ({
         <div className="flex items-center gap-1.5">
           <div className="text-xs font-bold px-2 py-0.5 rounded-md font-mono">
             {isIsolation && (
-              <span className="bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-600/70 px-1.5 py-0.5 rounded">
-                {lang === 'ar' ? 'عزل' : 'Isolation'}
+              <span className="bg-amber-500 text-slate-950 font-black border border-amber-600 dark:bg-amber-400 dark:text-slate-950 dark:border-amber-300 px-2 py-0.5 rounded flex items-center gap-1 shadow-sm">
+                <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
+                <span>{lang === 'ar' ? 'عزل سريري' : 'ISOLATION'}</span>
               </span>
             )}
-            {isUnavailable && (
+            {isUnavailable && !isIsolation && (
               <span className="bg-red-100 text-red-800 border border-red-300 dark:bg-red-950 dark:text-red-300 dark:border-red-800 px-1.5 py-0.5 rounded">
                 {lang === 'ar' ? 'غير متاح' : 'Unavailable'}
               </span>
             )}
-            {isTransferPending && (
+            {isTransferPending && !isIsolation && (
               <span className="bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-700 px-1.5 py-0.5 rounded">
                 {lang === 'ar' ? 'نقل معلق' : 'Transfer Pending'}
               </span>
             )}
-            {isDecontaminating && (
+            {isDecontaminating && !isIsolation && (
               <span className="bg-purple-100 text-purple-800 border border-purple-300 dark:bg-purple-950 dark:text-purple-300 dark:border-purple-800 px-1.5 py-0.5 rounded">
                 {lang === 'ar' ? 'تطهير' : 'Cleaning'}
               </span>

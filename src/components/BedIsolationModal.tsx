@@ -11,9 +11,7 @@ import {
 } from 'lucide-react';
 import { BedRecord, BedStatus, BedIsolationInfo, PatientDossier } from '../types/schema.ts';
 import { db } from '../db/icuSyncDb.ts';
-import { doc, updateDoc } from 'firebase/firestore';
-import { firestore } from '../services/firebase.ts';
-import { COLLECTIONS } from '../types/contracts.ts';
+import { syncBedToCloud, syncPatientToCloud } from '../services/firebase.ts';
 import { useTranslation } from '../services/i18n.ts';
 import { useAppNotifications } from '../services/NotificationContext.tsx';
 
@@ -78,15 +76,16 @@ export const BedIsolationModal: React.FC<BedIsolationModalProps> = ({
 
     try {
       let finalStatus = selectedStatus;
+      const hasAssignedPatient = !!(bed.currentPatientId || bed.activePatientId || patient?.id);
       if (isIsolated && selectedStatus !== BedStatus.UNAVAILABLE) {
         finalStatus = BedStatus.ISOLATION;
       } else if (!isIsolated && selectedStatus === BedStatus.ISOLATION) {
-        finalStatus = bed.currentPatientId ? BedStatus.OCCUPIED : BedStatus.VACANT;
+        finalStatus = hasAssignedPatient ? BedStatus.OCCUPIED : BedStatus.VACANT;
       }
 
       const isolationData: BedIsolationInfo = {
         isIsolated,
-        type: isIsolated ? isolationType : undefined,
+        type: isIsolated ? (isolationType || 'Airborne') : undefined,
         reason: isIsolated ? reason.trim() : undefined,
         startDate: isIsolated ? startDate : undefined,
         endDate: isIsolated && endDate ? endDate : undefined,
@@ -95,23 +94,38 @@ export const BedIsolationModal: React.FC<BedIsolationModalProps> = ({
       };
 
       // 1. Update local Dexie database
-      await db.beds.update(bed.bedNumber, {
+      const existingBed = await db.beds.get(bed.bedNumber);
+      const updatedBed: BedRecord = {
+        ...(existingBed || bed),
         status: finalStatus,
         isolation: isolationData,
-      });
+      };
+      await db.beds.put(updatedBed);
 
-      // 2. Update Firestore SSOT
+      // If patient exists, update patient's isolation precautions too
+      if (patient?.id) {
+        try {
+          await db.patients.update(patient.id, {
+            isolationPrecautions: isIsolated ? precautions : [],
+            updatedAt: new Date().toISOString(),
+          });
+          const pat = await db.patients.get(patient.id);
+          if (pat) {
+            await syncPatientToCloud(pat);
+          }
+        } catch (e) {
+          console.warn('Patient isolation update error:', e);
+        }
+      }
+
+      // 2. Sync Bed to Cloud Firestore SSOT
       try {
-        const bedRef = doc(firestore, COLLECTIONS.BEDS, bed.bedNumber);
-        await updateDoc(bedRef, {
-          status: finalStatus,
-          isolation: isolationData,
-          updatedAt: Date.now()
-        });
+        await syncBedToCloud(updatedBed);
       } catch (cloudErr) {
         console.warn('Firestore bed status update (offline cache will sync):', cloudErr);
       }
 
+      // 3. Trigger Notification (broadcasts to other clinicians in real time)
       if (isIsolated) {
         triggerNotification({
           type: 'ISOLATION_CHANGE',
@@ -125,8 +139,23 @@ export const BedIsolationModal: React.FC<BedIsolationModalProps> = ({
             patientName: patient?.fullNameAr || patient?.fullNameEn,
           }
         });
+      } else {
+        triggerNotification({
+          type: 'ISOLATION_CHANGE',
+          titleEn: `Isolation Lifted - Bed ${bed.bedNumber}`,
+          titleAr: `إنهاء تدابير العزل - سرير ${bed.bedNumber}`,
+          messageEn: `Isolation precautions removed for Bed ${bed.bedNumber}.`,
+          messageAr: `تم إنهاء وإلغاء تدابير العزل بالسرير رقم ${bed.bedNumber}.`,
+          target: {
+            action: 'OPEN_BED',
+            bedNumber: bed.bedNumber,
+            patientName: patient?.fullNameAr || patient?.fullNameEn,
+          }
+        });
       }
 
+      // 4. Dispatch local and parent update events
+      window.dispatchEvent(new Event('icu-data-updated'));
       (onSuccess || onUpdated)?.();
       onClose();
     } catch (err: any) {
