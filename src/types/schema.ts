@@ -576,6 +576,8 @@ export interface SbarHandoverReport {
   shiftDate: string; // e.g. 2026-09-14
   shiftStartTime: string;
   shiftEndTime: string;
+  createdAt?: string | number;
+  timestamp?: string;
   outgoingDoctor: {
     staffId: string;
     name: string;
@@ -701,6 +703,9 @@ export interface PatientDossier {
   currentEpisodeId?: string | null;
   acuityLevel: AcuityLevel;
   patientStatus: 'ACTIVE_ICU' | 'DISCHARGED_STEPDOWN' | 'DISCHARGED_HOME' | 'TRANSFERRED_EXTERNAL' | 'EXPIRED_MORTALITY';
+  status?: 'ACTIVE_ICU' | 'DISCHARGED' | 'EXPIRED' | 'TRANSFERRED_EXTERNAL' | string;
+  currentStatus?: 'ACTIVE_ICU' | 'DISCHARGED' | 'EXPIRED' | 'TRANSFERRED_EXTERNAL' | string;
+  unitId?: string;
   archiveStatus?: 'HOT' | 'ARCHIVED' | 'COLD_STORAGE';
   archiveDate?: number | string | null;
   archiveStoragePath?: string | null;
