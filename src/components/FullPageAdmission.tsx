@@ -361,25 +361,18 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
         return;
       }
 
-      // Detect current logged in physician / user in background
-      let docName = attendingDoctorName.trim();
+      // Attending Doctor: strictly use entered doctor name, or 'غير محدد' / 'Unassigned' if blank
+      const docName = attendingDoctorName.trim() || (lang === 'ar' ? 'غير محدد' : 'Unassigned');
       let nurseName = '';
       try {
         const storedUser = localStorage.getItem('icu_current_user') || localStorage.getItem('soli_logged_user');
         if (storedUser) {
           const parsed = JSON.parse(storedUser);
-          if (!docName && (parsed.nameAr || parsed.nameEn || parsed.name)) {
-            docName = parsed.nameAr || parsed.nameEn || parsed.name;
-          }
           if (parsed.role === StaffRole.LEAD_RN || parsed.role === StaffRole.BEDSIDE_RN) {
-            nurseName = parsed.nameAr || parsed.nameEn || parsed.name;
+            nurseName = parsed.nameAr || parsed.nameEn || parsed.name || '';
           }
         }
       } catch (e) {}
-
-      if (!docName) {
-        docName = lang === 'ar' ? 'غير محدد' : 'Unassigned';
-      }
 
       await admitPatient({
         targetBed,

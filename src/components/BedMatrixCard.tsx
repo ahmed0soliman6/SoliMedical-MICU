@@ -19,6 +19,27 @@ interface BedMatrixCardProps {
   onAdmitToBed: (bedNumber: BedNumber) => void;
 }
 
+// Helper to validate and clean physician name
+function getValidDoctorName(nameOrObj?: any): string | null {
+  if (!nameOrObj) return null;
+  const name = typeof nameOrObj === 'string'
+    ? nameOrObj.trim()
+    : (nameOrObj.name ? String(nameOrObj.name).trim() : null);
+  if (!name) return null;
+  const lower = name.toLowerCase();
+  if (
+    name === 'غير محدد' ||
+    lower === 'unassigned' ||
+    lower === 'not assigned' ||
+    lower === 'unknown' ||
+    lower === 'null' ||
+    lower === 'undefined'
+  ) {
+    return null;
+  }
+  return name;
+}
+
 export const BedMatrixCard: React.FC<BedMatrixCardProps> = ({
   bed,
   patient,
@@ -28,7 +49,10 @@ export const BedMatrixCard: React.FC<BedMatrixCardProps> = ({
 }) => {
   const { lang } = useTranslation();
   const { settings } = useSystemSettings();
-  const [lastHandoverDoctor, setLastHandoverDoctor] = useState<string | null>(null);
+  
+  // Direct primary source from patient
+  const directDoctor = getValidDoctorName(patient?.attendingPhysician);
+  const [resolvedDoctor, setResolvedDoctor] = useState<string | null>(directDoctor);
   
   const hasPatient = !!patient;
   const hasPatientIsolation = !!(
@@ -71,50 +95,83 @@ export const BedMatrixCard: React.FC<BedMatrixCardProps> = ({
 
   useEffect(() => {
     let isMounted = true;
-    async function fetchLastHandover() {
+
+    async function fetchPhysician() {
       if (!patient?.id) {
-        setLastHandoverDoctor(null);
+        if (isMounted) setResolvedDoctor(null);
         return;
       }
+
+      // 1. Primary Source: patient.attendingPhysician?.name
+      const primaryDoc = getValidDoctorName(patient.attendingPhysician);
+      if (primaryDoc) {
+        if (isMounted) setResolvedDoctor(primaryDoc);
+        return;
+      }
+
       try {
-        // 1. First priority: The receiving doctor from the latest SBAR handover card (اسم آخر طبيب مستلم من بطاقة استلام مناوبة SBAR)
+        // 2. Fallback 1: Latest SBAR Handover linked to patientId -> incomingDoctor.name then outgoingDoctor.name
         const sbars = await db.sbarHandovers
           .where('patientId')
           .equals(patient.id)
           .toArray();
         
         if (sbars && sbars.length > 0) {
-          sbars.sort((a, b) => new Date(b.outgoingDoctor?.signedAt || b.shiftDate || 0).getTime() - new Date(a.outgoingDoctor?.signedAt || a.shiftDate || 0).getTime());
+          sbars.sort((a, b) => 
+            new Date(b.incomingDoctor?.signedAt || b.outgoingDoctor?.signedAt || b.shiftDate || 0).getTime() - 
+            new Date(a.incomingDoctor?.signedAt || a.outgoingDoctor?.signedAt || a.shiftDate || 0).getTime()
+          );
           const latest = sbars[0];
-          // Doctor who received the shift / incoming doctor, or outgoing doctor
-          const sbarDoctor = latest?.incomingDoctor?.name?.trim() || latest?.outgoingDoctor?.name?.trim();
-          if (sbarDoctor && sbarDoctor !== 'غير محدد' && sbarDoctor !== 'Unassigned') {
-            if (isMounted) setLastHandoverDoctor(sbarDoctor);
+          const sbarDoctor = getValidDoctorName(latest?.incomingDoctor) || getValidDoctorName(latest?.outgoingDoctor);
+          if (sbarDoctor) {
+            if (isMounted) setResolvedDoctor(sbarDoctor);
             return;
           }
         }
 
-        // 2. Second priority: The physician who registered/admitted the patient if no SBAR handover has occurred yet (الطبيب مسجل دخول للمريض أول مرة)
-        const admittingDoc = patient?.attendingPhysician?.name?.trim();
-        if (admittingDoc && admittingDoc !== 'غير محدد' && admittingDoc !== 'Unassigned' && admittingDoc !== 'Unknown') {
-          if (isMounted) setLastHandoverDoctor(admittingDoc);
-          return;
+        // 3. Fallback 2: Latest Clinical Note linked to patientId -> authorName
+        const notes = await db.clinicalNotes
+          .where('patientId')
+          .equals(patient.id)
+          .toArray();
+
+        if (notes && notes.length > 0) {
+          notes.sort((a, b) => 
+            new Date(b.timestamp || (b as any).createdAt || 0).getTime() - 
+            new Date(a.timestamp || (a as any).createdAt || 0).getTime()
+          );
+          const latestNote = notes[0];
+          const noteDoctor = getValidDoctorName(latestNote?.authorName) || getValidDoctorName((latestNote as any)?.createdByName);
+          if (noteDoctor) {
+            if (isMounted) setResolvedDoctor(noteDoctor);
+            return;
+          }
         }
 
-        // 3. If neither exists, show unassigned (بدون أي بيانات وهمية إطلاقاً)
-        if (isMounted) setLastHandoverDoctor(null);
-      } catch (e) {
-        const fallback = patient?.attendingPhysician?.name?.trim();
-        if (fallback && fallback !== 'غير محدد' && fallback !== 'Unassigned') {
-          if (isMounted) setLastHandoverDoctor(fallback);
-        } else {
-          if (isMounted) setLastHandoverDoctor(null);
-        }
+        // 4. Final Fallback: patient.attendingPhysician
+        const fallback = getValidDoctorName(patient.attendingPhysician);
+        if (isMounted) setResolvedDoctor(fallback || null);
+      } catch (err) {
+        const fallback = getValidDoctorName(patient.attendingPhysician);
+        if (isMounted) setResolvedDoctor(fallback || null);
       }
     }
-    fetchLastHandover();
-    return () => { isMounted = false; };
-  }, [patient?.id, patient?.attendingPhysician?.name, lang]);
+
+    fetchPhysician();
+
+    const handleSyncEvent = () => {
+      fetchPhysician();
+    };
+
+    window.addEventListener('icu-data-updated', handleSyncEvent);
+    window.addEventListener('storage', handleSyncEvent);
+
+    return () => { 
+      isMounted = false; 
+      window.removeEventListener('icu-data-updated', handleSyncEvent);
+      window.removeEventListener('storage', handleSyncEvent);
+    };
+  }, [patient?.id, patient?.attendingPhysician?.name, patient?.attendingPhysician, lang]);
 
   const handleClick = () => {
     if (isOccupied || isTransferPending || isUnavailable || isDecontaminating || isIsolation) {
@@ -246,10 +303,13 @@ export const BedMatrixCard: React.FC<BedMatrixCardProps> = ({
               </div>
 
               {/* Physician */}
-              <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400 font-bold min-w-0 shrink-0" title={lang === 'ar' ? `الطبيب: ${lastHandoverDoctor || patient?.attendingPhysician?.name || 'غير محدد'}` : `Physician: ${lastHandoverDoctor || patient?.attendingPhysician?.name || 'Unassigned'}`}>
+              <div 
+                className="flex items-center gap-2 text-slate-600 dark:text-slate-400 font-bold min-w-0 shrink-0" 
+                title={lang === 'ar' ? `الطبيب: ${resolvedDoctor || 'غير محدد'}` : `Physician: ${resolvedDoctor || 'Unassigned'}`}
+              >
                 <UserCheck className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-600 dark:text-indigo-400 shrink-0" />
                 <span className="truncate text-[13px] sm:text-sm md:text-[15px]">
-                  {lastHandoverDoctor || (patient?.attendingPhysician?.name && patient.attendingPhysician.name !== 'غير محدد' && patient.attendingPhysician.name !== 'Unassigned' ? patient.attendingPhysician.name : (lang === 'ar' ? 'غير محدد' : 'Unassigned'))}
+                  {resolvedDoctor || (lang === 'ar' ? 'غير محدد' : 'Unassigned')}
                 </span>
               </div>
             </div>
