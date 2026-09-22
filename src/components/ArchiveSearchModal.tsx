@@ -1,12 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   X, 
-  Search,
-  Archive,
-  Trash2
+  Search, 
+  Trash2,
+  Loader2
 } from 'lucide-react';
+import { collection, getDocs } from 'firebase/firestore';
 import { PatientDossier, BedNumber } from '../types/schema.ts';
 import { db } from '../db/icuSyncDb.ts';
+import { firestore } from '../services/firebase.ts';
 import { useTranslation } from '../services/i18n.ts';
 import { useAuth } from '../services/AuthContext.tsx';
 import { canDeleteMortalityRecord } from '../services/medicalRecordPermissions.ts';
@@ -17,7 +19,7 @@ interface ArchiveSearchModalProps {
   onSelectPatientBed: (bedNumber: BedNumber) => void;
   onViewReadOnlyPatient: (patient: PatientDossier) => void;
   initialSearchTerm?: string;
-  initialFilterType?: 'ALL' | 'ACTIVE_ICU' | 'DISCHARGED' | 'ARCHIVED' | 'DECEASED';
+  initialFilterType?: 'ALL' | 'ACTIVE_ICU' | 'DISCHARGED' | 'TRANSFERRED' | 'EXPIRED_MORTALITY' | 'ARCHIVED';
 }
 
 const formatNumericDate = (dateVal?: string | Date | number): string => {
@@ -42,15 +44,90 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
   initialSearchTerm = '',
   initialFilterType = 'ALL',
 }) => {
-  const { t, lang, isRTL } = useTranslation();
+  const { lang, isRTL } = useTranslation();
   const { currentUser, user, token } = useAuth();
   const [searchTerm, setSearchTerm] = useState<string>(initialSearchTerm);
   const [allPatients, setAllPatients] = useState<PatientDossier[]>([]);
-  const [filterType, setFilterType] = useState<'ALL' | 'ACTIVE_ICU' | 'DISCHARGED' | 'ARCHIVED' | 'DECEASED'>(initialFilterType);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [filterType, setFilterType] = useState<'ALL' | 'ACTIVE_ICU' | 'DISCHARGED' | 'TRANSFERRED' | 'EXPIRED_MORTALITY' | 'ARCHIVED'>(initialFilterType);
   const [deletingPatientId, setDeletingPatientId] = useState<string | null>(null);
 
   const effectiveUser = currentUser || user;
   const isAdmin = canDeleteMortalityRecord(effectiveUser);
+
+  const loadPatients = useCallback(async () => {
+    setIsLoading(true);
+
+    // 1. Load initial cache from Dexie IndexedDB for instant UI responsiveness
+    try {
+      const localList = await db.patients.toArray();
+      if (localList && localList.length > 0) {
+        setAllPatients(localList);
+      }
+    } catch (localErr) {
+      console.warn('Dexie cache read notice:', localErr);
+    }
+
+    // 2. Fetch directly from Firestore collections 'patients' and 'archivedPatients' as Primary Source of Truth
+    try {
+      const [activeSnap, archiveSnap] = await Promise.all([
+        getDocs(collection(firestore, 'patients')).catch((e) => {
+          console.warn('Firestore active patients fetch error:', e);
+          return null;
+        }),
+        getDocs(collection(firestore, 'archivedPatients')).catch((e) => {
+          console.warn('Firestore archived patients fetch error:', e);
+          return null;
+        }),
+      ]);
+
+      const patientMap = new Map<string, PatientDossier>();
+
+      // Populate from active patients collection
+      if (activeSnap && !activeSnap.empty) {
+        activeSnap.docs.forEach((d) => {
+          const data = d.data() as PatientDossier;
+          const patientId = data.id || (data as any).patientId || d.id;
+          if (patientId) {
+            patientMap.set(patientId, {
+              ...data,
+              id: patientId,
+            });
+          }
+        });
+      }
+
+      // Populate from archivedPatients collection (Deduplicate by patientId: if already in map, keep once)
+      if (archiveSnap && !archiveSnap.empty) {
+        archiveSnap.docs.forEach((d) => {
+          const data = d.data() as PatientDossier;
+          const patientId = data.id || (data as any).patientId || d.id;
+          if (patientId && !patientMap.has(patientId)) {
+            patientMap.set(patientId, {
+              ...data,
+              id: patientId,
+              archiveStatus: data.archiveStatus || 'ARCHIVED',
+            });
+          }
+        });
+      }
+
+      // If online data was fetched, update state with combined deduplicated records
+      if (patientMap.size > 0) {
+        const combined = Array.from(patientMap.values());
+        setAllPatients(combined);
+
+        // Update local Dexie cache asynchronously
+        try {
+          await db.patients.bulkPut(combined);
+        } catch {}
+      }
+    } catch (cloudErr) {
+      console.warn('Firestore direct fetch error in ArchiveSearchModal, relying on local cache:', cloudErr);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (isOpen) {
@@ -62,12 +139,7 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
         setFilterType(initialFilterType);
       }
     }
-  }, [isOpen, initialSearchTerm, initialFilterType]);
-
-  const loadPatients = async () => {
-    const list = await db.patients.toArray();
-    setAllPatients(list);
-  };
+  }, [isOpen, initialSearchTerm, initialFilterType, loadPatients]);
 
   const handleDeleteMortalityPatient = async (patient: PatientDossier) => {
     if (!isAdmin) {
@@ -119,28 +191,58 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
 
   const filteredPatients = (allPatients || []).filter((p) => {
     if (!p) return false;
-    const q = (searchTerm || '').toLowerCase();
+    const q = (searchTerm || '').trim().toLowerCase();
     const mrn = (p.mrn || '').toLowerCase();
-    const nameAr = p.fullNameAr || '';
+    const nameAr = (p.fullNameAr || '').toLowerCase();
     const nameEn = (p.fullNameEn || '').toLowerCase();
-    const diagAr = p.primaryDiagnosisAr || '';
+    const legacyName = ((p as any).patientName || '').toLowerCase();
+    const diagAr = (p.primaryDiagnosisAr || '').toLowerCase();
     const diagEn = (p.primaryDiagnosisEn || '').toLowerCase();
-    const last4 = p.nationalIdLast4 || (p.nationalId ? p.nationalId.slice(-4) : '');
+    const legacyDiag = ((p as any).diagnosis || '').toLowerCase();
+    const secDiag = ((p as any).secondaryDiagnosis || '').toLowerCase();
+    const last4 = (p.nationalIdLast4 || (p.nationalId ? p.nationalId.slice(-4) : '') || ((p as any).idNumber ? (p as any).idNumber.slice(-4) : '')).toLowerCase();
+    const fullId = (p.nationalId || (p as any).idNumber || '').toLowerCase();
 
     const matchesSearch = 
+      !q ||
       mrn.includes(q) ||
-      nameAr.includes(searchTerm) ||
+      nameAr.includes(q) ||
       nameEn.includes(q) ||
-      diagAr.includes(searchTerm) ||
+      legacyName.includes(q) ||
+      diagAr.includes(q) ||
       diagEn.includes(q) ||
-      last4.includes(q);
+      legacyDiag.includes(q) ||
+      secDiag.includes(q) ||
+      last4.includes(q) ||
+      fullId.includes(q);
 
     if (!matchesSearch) return false;
+
+    // Status filtering
+    const isDeceased = p.patientStatus === 'EXPIRED_MORTALITY' || (p as any).currentStatus === 'EXPIRED';
+    const isActive = p.patientStatus === 'ACTIVE_ICU' || (p as any).currentStatus === 'ACTIVE_ICU';
+    const isTransferred = p.patientStatus === 'TRANSFERRED_EXTERNAL' || 
+                          (p as any).currentStatus === 'TRANSFERRED' ||
+                          (typeof p.patientStatus === 'string' && p.patientStatus.includes('TRANSFER')) ||
+                          (typeof (p as any).currentStatus === 'string' && (p as any).currentStatus.includes('TRANSFER'));
+    const isDischarged = (
+      p.patientStatus === 'DISCHARGED_STEPDOWN' || 
+      p.patientStatus === 'DISCHARGED_HOME' || 
+      (p as any).currentStatus === 'DISCHARGED' || 
+      (p as any).currentStatus === 'DISCHARGED_HOME' ||
+      (p as any).currentStatus === 'DISCHARGED_STEPDOWN' ||
+      (typeof p.patientStatus === 'string' && p.patientStatus.includes('DISCHARGE')) ||
+      (typeof (p as any).currentStatus === 'string' && (p as any).currentStatus.includes('DISCHARGE')) ||
+      (!isActive && !isDeceased && !isTransferred && p.archiveStatus !== 'ARCHIVED' && p.archiveStatus !== 'COLD_STORAGE')
+    );
+    const isArchived = p.archiveStatus === 'ARCHIVED' || p.archiveStatus === 'COLD_STORAGE' || (p as any).isArchived === true;
+
     if (filterType === 'ALL') return true;
-    if (filterType === 'ACTIVE_ICU') return p.patientStatus === 'ACTIVE_ICU';
-    if (filterType === 'ARCHIVED') return p.archiveStatus === 'ARCHIVED' || p.archiveStatus === 'COLD_STORAGE';
-    if (filterType === 'DECEASED') return p.patientStatus === 'EXPIRED_MORTALITY';
-    if (filterType === 'DISCHARGED') return p.patientStatus !== 'ACTIVE_ICU' && p.patientStatus !== 'EXPIRED_MORTALITY';
+    if (filterType === 'ACTIVE_ICU') return isActive;
+    if (filterType === 'DISCHARGED') return isDischarged && !isActive && !isDeceased;
+    if (filterType === 'TRANSFERRED') return isTransferred && !isActive && !isDeceased;
+    if (filterType === 'EXPIRED_MORTALITY') return isDeceased;
+    if (filterType === 'ARCHIVED') return isArchived;
     return true;
   });
 
@@ -154,13 +256,21 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
               <Search className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                {lang === 'ar' ? 'أرشيف المرضى والبحث الموحد (MRN Master Index)' : 'MRN Master Archive & Patient Index'}
-              </h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  {lang === 'ar' ? 'أرشيف المرضى والبحث الموحد (MRN Master Index)' : 'MRN Master Archive & Patient Index'}
+                </h3>
+                {isLoading && (
+                  <span className="flex items-center gap-1 text-[11px] text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/60 border border-teal-200 dark:border-teal-800/60 px-2 py-0.5 rounded-md">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    <span>{lang === 'ar' ? 'مزامنة السحابة...' : 'Cloud Syncing...'}</span>
+                  </span>
+                )}
+              </div>
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 {lang === 'ar' 
-                  ? 'بحث فوري برقم الملف MRN، الاسم، آخر 4 أرقام، والتشخيص الطبي'
-                  : 'Universal search by MRN, patient name, last 4 digits, and diagnosis'}
+                  ? 'بحث سحابي ومحلي فوري برقم الملف MRN، الاسم، آخر 4 أرقام، والتشخيص الطبي'
+                  : 'Universal cloud and local search by MRN, patient name, last 4 digits, and diagnosis'}
               </p>
             </div>
           </div>
@@ -187,21 +297,24 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
 
           <div className="flex items-center justify-between gap-2 flex-wrap text-xs">
             <div className="flex items-center gap-1.5 flex-wrap">
-              {(['ALL', 'ACTIVE_ICU', 'DISCHARGED', 'ARCHIVED', 'DECEASED'] as const).map((type) => (
+              {([
+                { id: 'ALL', labelAr: 'الكل', labelEn: 'All Records' },
+                { id: 'ACTIVE_ICU', labelAr: 'منوم بالرعاية (ACTIVE_ICU)', labelEn: 'Active ICU' },
+                { id: 'DISCHARGED', labelAr: 'خرج (DISCHARGED)', labelEn: 'Discharged' },
+                { id: 'TRANSFERRED', labelAr: 'نقل (TRANSFERRED)', labelEn: 'Transferred' },
+                { id: 'EXPIRED_MORTALITY', labelAr: 'وفيات (EXPIRED_MORTALITY)', labelEn: 'Mortality' },
+                { id: 'ARCHIVED', labelAr: 'الأرشيف الدائم (ARCHIVED / COLD_STORAGE)', labelEn: 'Archived / Cold Storage' },
+              ] as const).map((filterItem) => (
                 <button
-                  key={type}
-                  onClick={() => setFilterType(type)}
+                  key={filterItem.id}
+                  onClick={() => setFilterType(filterItem.id)}
                   className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                    filterType === type
+                    filterType === filterItem.id
                       ? 'bg-teal-50 border border-teal-400 text-teal-800 dark:bg-teal-500/20 dark:text-teal-300 dark:border-teal-500/40 shadow-sm'
                       : 'bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 dark:bg-slate-800/70 dark:text-slate-400 dark:hover:text-slate-200 dark:border-transparent'
                   }`}
                 >
-                  {type === 'ALL' && (lang === 'ar' ? 'الكل' : 'All Records')}
-                  {type === 'ACTIVE_ICU' && (lang === 'ar' ? 'منوم بالرعاية' : 'Active ICU')}
-                  {type === 'DISCHARGED' && (lang === 'ar' ? 'خرج/نُقل' : 'Discharged / Step-Down')}
-                  {type === 'ARCHIVED' && (lang === 'ar' ? 'الأرشيف الدائم' : 'Permanent Archive')}
-                  {type === 'DECEASED' && (lang === 'ar' ? 'وفيات (أرشيف دائم)' : 'Mortality (Archived)')}
+                  {lang === 'ar' ? filterItem.labelAr : filterItem.labelEn}
                 </button>
               ))}
             </div>
@@ -212,15 +325,20 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
         <div className="p-4 max-h-[60vh] overflow-y-auto space-y-2.5">
           {filteredPatients.length === 0 ? (
             <div className="py-12 text-center text-slate-500 dark:text-slate-400 text-xs">
-              {lang === 'ar' 
-                ? 'لا توجد نتائج مطابقة لبحثك في قاعدة البيانات المحلية.'
-                : 'No matching records found in the local database.'}
+              {isLoading 
+                ? (lang === 'ar' ? 'جاري جلب السجلات من السحابة وقاعدة البيانات...' : 'Fetching records from Firestore cloud and database...')
+                : (lang === 'ar' ? 'لا توجد نتائج مطابقة لبحثك في السجلات.' : 'No matching records found.')}
             </div>
           ) : (
             filteredPatients.map((patient) => {
-              const isDeceased = patient.patientStatus === 'EXPIRED_MORTALITY';
-              const isDischarged = patient.patientStatus !== 'ACTIVE_ICU' && !isDeceased;
-              const isActive = patient.patientStatus === 'ACTIVE_ICU';
+              const isDeceased = patient.patientStatus === 'EXPIRED_MORTALITY' || (patient as any).currentStatus === 'EXPIRED';
+              const isActive = patient.patientStatus === 'ACTIVE_ICU' || (patient as any).currentStatus === 'ACTIVE_ICU';
+              const isTransferred = patient.patientStatus === 'TRANSFERRED_EXTERNAL' || 
+                                    (patient as any).currentStatus === 'TRANSFERRED' ||
+                                    (typeof patient.patientStatus === 'string' && patient.patientStatus.includes('TRANSFER')) ||
+                                    (typeof (patient as any).currentStatus === 'string' && (patient as any).currentStatus.includes('TRANSFER'));
+              const isDischarged = !isActive && !isDeceased && !isTransferred;
+              const isArchivedTier = patient.archiveStatus === 'ARCHIVED' || patient.archiveStatus === 'COLD_STORAGE' || (patient as any).isArchived === true;
 
               return (
                 <div
@@ -230,48 +348,53 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-bold text-slate-900 dark:text-white text-sm">
-                        {patient.fullNameAr || patient.fullNameEn}
+                        {patient.fullNameAr || patient.fullNameEn || (patient as any).patientName || 'Patient'}
                       </span>
                       <span className="font-mono text-xs text-teal-700 dark:text-teal-400 font-semibold px-2 py-0.5 rounded bg-teal-50 dark:bg-teal-950/60 border border-teal-200 dark:border-teal-800/60">
                         #{patient.mrn}
                       </span>
                       {isActive && patient.currentBedId && (
                         <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-700">
-                          {lang === 'ar' ? `منوم بسرير ${patient.currentBedId}` : `Admitted in Bed ${patient.currentBedId}`}
+                          {lang === 'ar' ? `منوم بسرير ${patient.currentBedId} (ACTIVE_ICU)` : `Admitted Bed ${patient.currentBedId} (ACTIVE_ICU)`}
                         </span>
                       )}
                       {isDeceased && (
                         <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-300 dark:bg-slate-900 dark:text-slate-400 dark:border-slate-700">
-                          {lang === 'ar' ? 'متوفى (أرشيف دائم للقراءة فقط)' : 'Deceased (Permanent Read-Only Archive)'}
+                          {lang === 'ar' ? 'متوفى (EXPIRED_MORTALITY)' : 'Deceased (EXPIRED_MORTALITY)'}
                         </span>
                       )}
-                      {isDischarged && (
+                      {isTransferred && !isDeceased && (
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-300 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800">
+                          {lang === 'ar' ? 'نُقل لقسم آخر (TRANSFERRED)' : 'Transferred (TRANSFERRED)'}
+                        </span>
+                      )}
+                      {isDischarged && !isTransferred && (
                         <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-purple-50 text-purple-800 border border-purple-300 dark:bg-purple-950 dark:text-purple-300 dark:border-purple-800">
-                          {lang === 'ar' ? 'نُقل للجناح / خرج' : 'Discharged / Step-Down'}
+                          {lang === 'ar' ? 'خروج (DISCHARGED)' : 'Discharged (DISCHARGED)'}
                         </span>
                       )}
-                      {(patient.archiveStatus === 'ARCHIVED' || patient.archiveStatus === 'COLD_STORAGE') && (
+                      {isArchivedTier && (
                         <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-300 dark:bg-amber-950/80 dark:text-amber-300 dark:border-amber-800/80">
-                          {lang === 'ar' ? 'مؤرشف دائم' : 'Archived Tier'}
+                          {lang === 'ar' ? 'أرشيف دائم (ARCHIVED)' : 'Permanent Archive (ARCHIVED)'}
                         </span>
                       )}
-                      {(patient.nationalIdLast4 || patient.nationalId) && (
+                      {(patient.nationalIdLast4 || patient.nationalId || (patient as any).idNumber) && (
                         <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-transparent">
-                          ID: ****{patient.nationalIdLast4 || (patient.nationalId ? patient.nationalId.slice(-4) : '')}
+                          ID: ****{patient.nationalIdLast4 || (patient.nationalId ? patient.nationalId.slice(-4) : '') || ((patient as any).idNumber ? (patient as any).idNumber.slice(-4) : '')}
                         </span>
                       )}
                     </div>
 
                     <div className="text-xs text-slate-600 dark:text-slate-300">
                       {lang === 'ar' 
-                        ? (patient.primaryDiagnosisAr || patient.primaryDiagnosisEn) 
-                        : (patient.primaryDiagnosisEn || patient.primaryDiagnosisAr)}
+                        ? (patient.primaryDiagnosisAr || patient.primaryDiagnosisEn || (patient as any).diagnosis) 
+                        : (patient.primaryDiagnosisEn || patient.primaryDiagnosisAr || (patient as any).diagnosis)}
                     </div>
 
                     <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-3 flex-wrap">
-                      <span>{lang === 'ar' ? `العمر: ${patient.age} سنة` : `Age: ${patient.age} yo`}</span>
+                      <span>{lang === 'ar' ? `العمر: ${patient.age || '—'} سنة` : `Age: ${patient.age || '—'} yo`}</span>
                       <span>•</span>
-                      <span>{lang === 'ar' ? `كود الإنعاش: ${patient.codeStatus}` : `Code: ${patient.codeStatus}`}</span>
+                      <span>{lang === 'ar' ? `كود الإنعاش: ${patient.codeStatus || 'FULL_CODE'}` : `Code: ${patient.codeStatus || 'FULL_CODE'}`}</span>
                       <span>•</span>
                       <span>{lang === 'ar' ? `تاريخ الدخول: ${formatNumericDate(patient.admissionDate)}` : `Admitted: ${formatNumericDate(patient.admissionDate)}`}</span>
                     </div>
@@ -299,7 +422,7 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
                         }}
                         className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white dark:bg-indigo-500/20 dark:hover:bg-indigo-500/30 dark:text-indigo-300 dark:border dark:border-indigo-500/40 text-xs font-bold transition-all shadow-sm cursor-pointer"
                       >
-                        {lang === 'ar' ? 'ملف للقراءة فقط' : 'Read-Only File'}
+                        {lang === 'ar' ? 'فتح الملف (للقراءة فقط)' : 'Open File (Read-Only)'}
                       </button>
                     )}
 

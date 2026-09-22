@@ -186,10 +186,6 @@ async function verifyAdminCaller(authHeader: string | undefined): Promise<{ isAd
     return { isAdmin: false, error: 'Empty Authorization ID Token.' };
   }
 
-  if (token.startsWith('legacy_')) {
-    return { isAdmin: false, error: 'Legacy tokens are not permitted. A valid Firebase ID Token is required.' };
-  }
-
   try {
     const { auth, db } = getAdminServices();
     const decodedToken = await auth.verifyIdToken(token);

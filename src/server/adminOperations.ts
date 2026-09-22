@@ -255,10 +255,6 @@ export async function verifyAdminCallerToken(authHeader?: string): Promise<{ isA
     return { isAdmin: false, error: 'Empty Authorization ID Token.' };
   }
 
-  if (token.startsWith('legacy_')) {
-    return { isAdmin: false, error: 'Legacy tokens are not permitted. A valid Firebase ID Token is required.' };
-  }
-
   try {
     if (!hasGoogleCredentials()) {
       return { isAdmin: false, error: 'Firebase Admin credentials not configured on server.' };
@@ -904,14 +900,29 @@ export async function adminArchiveSweep(authHeader: string | undefined, retentio
       // Check if discharged or transferred
       const isDischargedOrTransferred = 
         ['DISCHARGED_STEPDOWN', 'DISCHARGED_HOME', 'TRANSFERRED_EXTERNAL'].includes(data.patientStatus) ||
-        ['DISCHARGED', 'DISCHARGED_STEPDOWN', 'DISCHARGED_HOME', 'TRANSFERRED'].includes(data.currentStatus);
+        ['DISCHARGED', 'DISCHARGED_STEPDOWN', 'DISCHARGED_HOME', 'TRANSFERRED'].includes(data.currentStatus) ||
+        (typeof data.patientStatus === 'string' && (data.patientStatus.includes('DISCHARGE') || data.patientStatus.includes('TRANSFER'))) ||
+        (typeof data.currentStatus === 'string' && (data.currentStatus.includes('DISCHARGE') || data.currentStatus.includes('TRANSFER')));
 
       if (isDischargedOrTransferred) {
-        const updateTimeStr = data.updatedAt || data.dischargedAt || data.createdAt;
-        const updateTime = updateTimeStr ? new Date(updateTimeStr).getTime() : 0;
+        // Priority order strictly: dischargeDate -> transferDate -> dischargedAt -> dispositionDate
+        // Do NOT use updatedAt or createdAt as fallback
+        const endOfStayDateStr = data.dischargeDate || 
+                                 data.transferDate || 
+                                 data.dischargedAt || 
+                                 data.dispositionDate ||
+                                 data.dischargeInfo?.dischargeDate ||
+                                 data.transferInfo?.transferDate ||
+                                 data.disposition?.dispositionDate;
 
-        if (updateTime > 0 && updateTime < cutoffMs) {
-          // 1. Move to archivedPatients
+        if (!endOfStayDateStr) {
+          continue;
+        }
+
+        const endOfStayTime = new Date(endOfStayDateStr).getTime();
+
+        if (endOfStayTime > 0 && endOfStayTime < cutoffMs) {
+          // 1. Move to archivedPatients with the exact same patientId and all fields intact
           const archivedData = {
             ...data,
             archiveStatus: 'ARCHIVED',
@@ -1123,14 +1134,6 @@ export async function adminMortalityAutoPurgeSweep(authHeader?: string): Promise
   } catch (err: any) {
     return { success: false, message: err?.message || 'فشلت عملية الحذف التلقائي لحالات الوفاة.' };
   }
-}
-
-export async function disableUser(callerUid: string, targetUid: string, reason?: string): Promise<AdminOpResult> {
-  return disableUserWithToken(`Bearer legacy_${callerUid}`, targetUid, reason);
-}
-
-export async function deleteUser(callerUid: string, targetUid: string, reason?: string): Promise<AdminOpResult> {
-  return deleteUserWithToken(`Bearer legacy_${callerUid}`, targetUid, reason);
 }
 
 export async function adminSetRecoveryCode(authHeader: string | undefined, recoveryCode: string): Promise<AdminOpResult> {
