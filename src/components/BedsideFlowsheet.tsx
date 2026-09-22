@@ -69,7 +69,7 @@ import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
 import { useAuth } from '../services/AuthContext.tsx';
 import { useAppNotifications } from '../services/NotificationContext.tsx';
-import { syncStatLabsToCloud, deleteStatLabFromCloud, syncLabResultToCloud, syncPatientToCloud, syncPumpToCloud, deletePumpFromCloud, firestore } from '../services/firebase.ts';
+import { syncStatLabsToCloud, deleteStatLabFromCloud, syncLabResultToCloud, syncPatientToCloud, syncPumpToCloud, deletePumpFromCloud, firestore, fetchPatientHistoricalDataFromCloud } from '../services/firebase.ts';
 import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { FullPageAdmission } from './FullPageAdmission.tsx';
 import { LabFlowsheetSection } from './LabFlowsheetSection.tsx';
@@ -303,6 +303,11 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
     setPrimaryDiagnosisArInput(patient.primaryDiagnosisAr || '');
     setIsHistoryEditing(false);
 
+    if (patient?.id) {
+      fetchPatientHistoricalDataFromCloud(patient.id).then(() => {
+        loadBedsideData();
+      }).catch(() => null);
+    }
     loadBedsideData();
     const handleDataUpdate = () => loadBedsideData();
     window.addEventListener('icu-data-updated', handleDataUpdate);

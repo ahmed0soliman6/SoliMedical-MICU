@@ -34,7 +34,7 @@ import {
   updatePassword,
   User as FirebaseUser 
 } from 'firebase/auth';
-import { collection, onSnapshot, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
+import { collection, onSnapshot, doc, getDoc, getDocs, query, where, Unsubscribe } from 'firebase/firestore';
 import { db } from '../db/icuSyncDb.ts';
 
 interface AuthContextType {
@@ -142,57 +142,49 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsLoading(false);
     });
 
-    // Real-Time Cloud Firestore user subscription
-    const usersCol = collection(firestore, 'users');
-    const unsubscribeUsers = onSnapshot(usersCol, async (snapshot) => {
-      const remoteUsers: IcuUser[] = [];
-      snapshot.forEach((docSnap) => {
-        const d = docSnap.data() as IcuUser;
-        if (d && d.uid) {
-          remoteUsers.push(d);
-        }
-      });
-      
-      const uniqueUsers: IcuUser[] = [];
-      const seen = new Set<string>();
+    // Load local cached users for dropdowns/mentions without network hit
+    db.users.toArray().then(localUsers => {
+      if (localUsers.length > 0) {
+        setAllUsers(localUsers);
+      }
+    }).catch(() => null);
 
-      for (const u of remoteUsers) {
-        if (u && u.uid) {
-          u.permissions = {
-            ...getDefaultPermissionsForRole(u.role as StaffRole),
-            ...(u.permissions || {})
-          };
-          if (!seen.has(u.uid)) {
-            seen.add(u.uid);
-            uniqueUsers.push(u);
+    // Single-document listener for current active user's permissions and status
+    let activeUserUnsub: Unsubscribe | null = null;
+    const unsubscribeAuthUser = onAuthStateChanged(auth, (fbUser) => {
+      if (activeUserUnsub) {
+        activeUserUnsub();
+        activeUserUnsub = null;
+      }
+
+      if (fbUser) {
+        const userDocRef = doc(firestore, 'users', fbUser.uid);
+        activeUserUnsub = onSnapshot(userDocRef, (docSnap) => {
+          if (docSnap.exists()) {
+            const u = docSnap.data() as IcuUser;
+            u.permissions = {
+              ...getDefaultPermissionsForRole(u.role as StaffRole),
+              ...(u.permissions || {})
+            };
+            if (u.isActive === false || u.active === false) {
+              firebaseSignOut(auth);
+              setCurrentUser(null);
+              localStorage.removeItem('soli_icu_active_user');
+            } else {
+              setCurrentUser(u);
+              localStorage.setItem('soli_icu_active_user', JSON.stringify(u));
+            }
           }
-        }
+        }, (err) => {
+          handleFirestoreError(err, OperationType.GET, `users/${fbUser.uid}`);
+        });
       }
-
-      setAllUsers(uniqueUsers);
-      await db.users.clear();
-      await db.users.bulkPut(uniqueUsers);
-
-      // Verify active user status in real time
-      if (auth.currentUser) {
-        const activeUid = auth.currentUser.uid;
-        const currentInCloud = uniqueUsers.find(u => u.uid === activeUid || (auth.currentUser?.email && u.email?.toLowerCase() === auth.currentUser.email.toLowerCase()));
-        if (!currentInCloud || currentInCloud.isActive === false || currentInCloud.active === false) {
-          await firebaseSignOut(auth);
-          setCurrentUser(null);
-          localStorage.removeItem('soli_icu_active_user');
-        } else {
-          setCurrentUser(currentInCloud);
-          localStorage.setItem('soli_icu_active_user', JSON.stringify(currentInCloud));
-        }
-      }
-    }, (err) => {
-      handleFirestoreError(err, OperationType.GET, 'users');
     });
 
     return () => {
       unsubscribeAuth();
-      unsubscribeUsers();
+      unsubscribeAuthUser();
+      if (activeUserUnsub) activeUserUnsub();
     };
   }, [checkInitialSetup]);
 

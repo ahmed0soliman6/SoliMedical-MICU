@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   X, 
   Users, 
@@ -36,8 +36,14 @@ interface UserManagementModalProps {
 }
 
 export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClose }) => {
-  const { allUsers, currentUser, createUser, updateUser, changeUserPassword, toggleUserStatus, deleteUser, hasPermission } = useAuth();
+  const { allUsers, currentUser, createUser, updateUser, changeUserPassword, toggleUserStatus, deleteUser, hasPermission, refreshUsers } = useAuth();
   const { lang, isRTL } = useTranslation();
+
+  useEffect(() => {
+    if (isOpen && refreshUsers) {
+      refreshUsers();
+    }
+  }, [isOpen, refreshUsers]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('ALL');
