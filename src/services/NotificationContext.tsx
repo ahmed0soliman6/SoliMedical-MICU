@@ -18,6 +18,18 @@ import { firestore, sanitizeForFirestore, handleFirestoreError, OperationType } 
 const NOTIFICATIONS_STORAGE_KEY = 'soli_icu_notifications_queue_v2';
 const MAX_NOTIFICATIONS = 25;
 
+export const ALLOWED_NOTIFICATION_TYPES: NotificationType[] = [
+  'ADMISSION',
+  'DISCHARGE',
+  'SBAR_HANDOVER',
+  'SBAR_RECEIVED',
+  'ISOLATION_CHANGE',
+];
+
+function isWhitelistedType(type: any): type is NotificationType {
+  return typeof type === 'string' && ALLOWED_NOTIFICATION_TYPES.includes(type as NotificationType);
+}
+
 interface TriggerNotificationParams {
   type: NotificationType;
   titleEn: string;
@@ -52,7 +64,9 @@ function loadSavedNotifications(): AppNotification[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
-      return parsed.slice(0, MAX_NOTIFICATIONS);
+      return parsed
+        .filter((item: any) => item && isWhitelistedType(item.type))
+        .slice(0, MAX_NOTIFICATIONS);
     }
   } catch (err) {
     console.error('Failed to load notifications from storage:', err);
@@ -94,7 +108,7 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
     return () => clearTimeout(timer);
   }, [activeBanner]);
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  const unreadCount = notifications.filter((n) => !n.read && isWhitelistedType(n.type)).length;
 
   // Single chime on reload/startup IF and ONLY IF there are unread notifications
   const hasTriggeredStartupChimeRef = useRef(false);
@@ -104,12 +118,25 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
 
     const isMuted = settings.notifications.isMuted || isAudioGloballyMuted();
     if (unreadCount > 0 && !isMuted && settings.notifications.masterAudio) {
-      const timer = setTimeout(() => {
-        playGentleNotificationTone('SBAR_HANDOVER');
-      }, 700);
-      return () => clearTimeout(timer);
+      const firstUnread = notifications.find((n) => !n.read && isWhitelistedType(n.type));
+      if (firstUnread) {
+        let eventKey: keyof typeof settings.notifications.events = 'admission';
+        if (firstUnread.type === 'ADMISSION') eventKey = 'admission';
+        else if (firstUnread.type === 'DISCHARGE') eventKey = 'discharge';
+        else if (firstUnread.type === 'SBAR_HANDOVER') eventKey = 'sbarHandover';
+        else if (firstUnread.type === 'SBAR_RECEIVED') eventKey = 'sbarReceived';
+        else if (firstUnread.type === 'ISOLATION_CHANGE') eventKey = 'isolationChange';
+
+        const eventConfig = settings.notifications.events[eventKey] || { visual: true, audio: true };
+        if (eventConfig.audio) {
+          const timer = setTimeout(() => {
+            playGentleNotificationTone(firstUnread.type);
+          }, 700);
+          return () => clearTimeout(timer);
+        }
+      }
     }
-  }, [unreadCount, settings.notifications.isMuted, settings.notifications.masterAudio]);
+  }, [unreadCount, notifications, settings.notifications]);
 
   // --------------------------------------------------------------------------
   // Real-Time Multi-User Clinical Notification Listener from Firestore
@@ -135,31 +162,37 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
           const remoteList: AppNotification[] = [];
           snapshot.forEach((docSnap) => {
             const data = docSnap.data() as AppNotification;
-            remoteList.push({
-              ...data,
-              id: data.id || docSnap.id,
-            });
+            if (isWhitelistedType(data?.type)) {
+              remoteList.push({
+                ...data,
+                id: data.id || docSnap.id,
+              });
+            }
           });
 
           if (remoteList.length > 0) {
             setNotifications((prev) => {
-              // Merge remote into local, preserving local read status where available
               const readMap = new Map(prev.map(p => [p.id, p.read]));
               const merged = remoteList.map(r => ({
                 ...r,
                 read: readMap.has(r.id) ? readMap.get(r.id)! : r.read,
               }));
-              return merged.slice(0, MAX_NOTIFICATIONS);
+              return merged.filter(m => isWhitelistedType(m.type)).slice(0, MAX_NOTIFICATIONS);
             });
+          } else {
+            setNotifications((prev) => prev.filter(p => isWhitelistedType(p.type)));
           }
           return;
         }
 
         // Handle Real-Time Live Changes (From other clinicians / other sessions)
-        const incomingDocs: AppNotification[] = [];
         snapshot.docChanges().forEach((change) => {
           if (change.type === 'added') {
             const incoming = change.doc.data() as AppNotification;
+            if (!isWhitelistedType(incoming?.type)) {
+              return; // Ignore non-whitelisted item
+            }
+
             const notifId = incoming.id || change.doc.id;
             const itemTime = new Date(incoming.timestamp).getTime();
             const ageMs = now - itemTime;
@@ -187,13 +220,16 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
           }
         });
 
-        // Update local state with latest snapshot list
+        // Update local state with latest snapshot list (filtered by whitelist)
+        const incomingDocs: AppNotification[] = [];
         snapshot.forEach((docSnap) => {
           const data = docSnap.data() as AppNotification;
-          incomingDocs.push({
-            ...data,
-            id: data.id || docSnap.id,
-          });
+          if (isWhitelistedType(data?.type)) {
+            incomingDocs.push({
+              ...data,
+              id: data.id || docSnap.id,
+            });
+          }
         });
 
         setNotifications((prev) => {
@@ -202,7 +238,7 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
             ...r,
             read: readMap.has(r.id) ? readMap.get(r.id)! : r.read,
           }));
-          return merged.slice(0, MAX_NOTIFICATIONS);
+          return merged.filter(m => isWhitelistedType(m.type)).slice(0, MAX_NOTIFICATIONS);
         });
       }, (err) => {
         handleFirestoreError(err, OperationType.GET, 'notifications');
@@ -229,6 +265,12 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
       forceVisual = false,
       forceAudio = false,
     }: TriggerNotificationParams) => {
+      // Strict Runtime Whitelist Check
+      if (!isWhitelistedType(type)) {
+        console.warn(`[NotificationContext] Blocked non-whitelisted notification type: ${type}`);
+        return;
+      }
+
       const notifSettings = settings.notifications;
       const isMuted = notifSettings.isMuted || isAudioGloballyMuted();
 

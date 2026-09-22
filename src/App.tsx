@@ -99,7 +99,7 @@ export default function App() {
   const { t, lang, isRTL } = useTranslation();
   const { currentUser, isAuthenticated, needsInitialAdminSetup, isLoading: isAuthLoading } = useAuth();
   const { settings } = useSystemSettings();
-  const { setNavigationHandler, triggerNotification } = useAppNotifications();
+  const { setNavigationHandler } = useAppNotifications();
   const [isReady, setIsReady] = useState(false);
 
   // Robust persistent navigation state across reloads

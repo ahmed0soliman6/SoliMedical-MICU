@@ -970,10 +970,6 @@ export function playIcuAlarmAudio(urgency: 'HIGH' | 'MEDIUM' = 'HIGH') {
   }
 }
 
-export function triggerExternalCriticalNotification(_title: string, _body: string, _bedNumber: string) {
-  // External critical telemetry notifications disabled per notification whitelist
-}
-
 // -------------------------------------------------------------
 // Real-Time Cloud Firestore Sync Subscriptions
 // -------------------------------------------------------------

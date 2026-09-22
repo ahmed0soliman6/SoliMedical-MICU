@@ -4,11 +4,10 @@ import { NotificationType } from '../types/notification.ts';
  * Web Audio API gentle tone generator for Soli Medical MICU
  * Generates custom gentle chimes for ICU clinical events:
  * - ADMISSION: Gentle uplifting 2-tone melodic chime (C5 -> E5)
- * - DISCHARGE / DEATH / TRANSFER: Gentle resolving 2-tone soft chime (E5 -> C5)
+ * - DISCHARGE: Gentle resolving 2-tone soft chime (E5 -> C5)
  * - SBAR_HANDOVER: Professional 3-note ascending clinical handover cascade (A4 -> C#5 -> E5)
  * - SBAR_RECEIVED: Affirmative crisp double chime (D5 -> A5)
  * - ISOLATION_CHANGE: Warm caution alert tone (B4 -> D#5)
- * - CRITICAL_TELEMETRY: Dual pulse telemetry monitor chime
  */
 
 let sharedAudioCtx: AudioContext | null = null;

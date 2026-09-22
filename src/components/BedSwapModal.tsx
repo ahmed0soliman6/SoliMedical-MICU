@@ -45,7 +45,6 @@ export const BedSwapModal: React.FC<BedSwapModalProps> = ({
 }) => {
   const { lang, isRTL } = useTranslation();
   const { currentUser } = useAuth();
-  const { triggerNotification } = useAppNotifications();
 
   const effectiveBeds = beds || allBeds || [];
   const effectivePatients = patients || allPatients || [];
@@ -133,18 +132,6 @@ export const BedSwapModal: React.FC<BedSwapModalProps> = ({
         unitId,
         reason.trim()
       );
-
-      triggerNotification({
-        type: 'DISCHARGE',
-        titleAr: `تبديل أسِرّة - سرير ${bedAId} ⇋ سرير ${bedBId}`,
-        titleEn: `Bed Swap - Bed ${bedAId} ⇋ Bed ${bedBId}`,
-        messageAr: `تم تبديل موقع السرير ${bedAId} (${patientA?.fullNameAr || 'مريض'}) مع السرير ${bedBId} (${patientB?.fullNameAr || 'مريض'}).`,
-        messageEn: `Swapped Bed ${bedAId} (${patientA?.fullNameEn || 'Patient'}) with Bed ${bedBId} (${patientB?.fullNameEn || 'Patient'}).`,
-        target: {
-          action: 'OPEN_BED',
-          bedNumber: bedAId as any,
-        },
-      });
 
       (onSuccess || onSwapSuccess)?.();
       onClose();
