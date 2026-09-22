@@ -737,52 +737,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem('soli_icu_active_user');
   };
 
-  // Comprehensive Permission Checking Engine
+  // Comprehensive Permission Checking Engine (Canonical PAGE.ACTION)
   const hasPermission = (permission: string | keyof UserPermissions): boolean => {
     if (!currentUser) return false;
-    if (currentUser.isSuperAdmin || currentUser.role === StaffRole.ADMIN || (currentUser.role as any) === 'ADMIN') return true;
+    if (
+      currentUser.isSuperAdmin || 
+      currentUser.role === StaffRole.ADMIN || 
+      (currentUser.role as any) === 'ADMIN'
+    ) {
+      return true;
+    }
     
+    // Direct canonical lookup in user document
     if (currentUser.permissions && (currentUser.permissions as any)[permission] !== undefined) {
       return !!(currentUser.permissions as any)[permission];
     }
 
-    const legacyMap: Record<string, keyof UserPermissions> = {
-      'users.view': 'canManageUsers',
-      'users.create': 'canManageUsers',
-      'users.update': 'canManageUsers',
-      'users.disable': 'canManageUsers',
-      'users.delete': 'canManageUsers',
-      'patients.view': 'canAdmitPatient',
-      'patients.create': 'canAdmitPatient',
-      'patients.update': 'canAdmitPatient',
-      'clinicalNotes.create': 'canWriteNotes',
-      'clinicalNotes.update': 'canWriteNotes',
-      'sbar.create': 'canSignSbar',
-      'sbar.update': 'canSignSbar',
-      'vitals.create': 'canEditVitals',
-      'vitals.update': 'canEditVitals',
-      'labs.create': 'canManageLabs',
-      'labs.update': 'canManageLabs',
-      'investigations.create': 'canManageLabs',
-      'investigations.update': 'canManageLabs',
-      'transfer.create': 'canTransferPatient',
-      'bedSwap.create': 'canTransferPatient',
-      'discharge.create': 'canDischargePatient',
-      'settings.view': 'canConfigureSettings',
-      'settings.update': 'canConfigureSettings',
-      'sections.create': 'canConfigureSettings',
-      'sections.update': 'canConfigureSettings',
-      'sections.delete': 'canConfigureSettings',
-      'cards.create': 'canConfigureSettings',
-      'cards.update': 'canConfigureSettings',
-      'cards.delete': 'canConfigureSettings',
-      'chat.view': 'canWriteNotes',
-      'chat.create': 'canWriteNotes',
-    };
-
-    const mappedKey = legacyMap[permission as string];
-    if (mappedKey && currentUser.permissions) {
-      return !!currentUser.permissions[mappedKey];
+    // Role default fallback if not explicitly customized
+    const defaultPerms = getDefaultPermissionsForRole(currentUser.role as StaffRole);
+    if (defaultPerms && (defaultPerms as any)[permission] !== undefined) {
+      return !!(defaultPerms as any)[permission];
     }
 
     return false;

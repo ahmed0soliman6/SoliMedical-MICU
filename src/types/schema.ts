@@ -731,44 +731,42 @@ export interface PatientDossier {
 }
 
 export interface UserPermissions {
-  // Canonical dot-notation permissions
+  // Canonical dot-notation permissions (PAGE.ACTION)
   'beds.view'?: boolean;
   'patients.view'?: boolean;
   'patients.create'?: boolean;
   'patients.update'?: boolean;
+  'archive.view'?: boolean;
+  'vitals.view'?: boolean;
   'vitals.create'?: boolean;
   'vitals.update'?: boolean;
+  'labs.view'?: boolean;
   'labs.create'?: boolean;
   'labs.update'?: boolean;
+  'investigations.view'?: boolean;
   'investigations.create'?: boolean;
   'investigations.update'?: boolean;
+  'clinicalNotes.view'?: boolean;
   'clinicalNotes.create'?: boolean;
   'clinicalNotes.update'?: boolean;
+  'sbar.view'?: boolean;
   'sbar.create'?: boolean;
   'sbar.update'?: boolean;
   'transfer.create'?: boolean;
   'bedSwap.create'?: boolean;
   'discharge.create'?: boolean;
+  'chat.view'?: boolean;
+  'chat.create'?: boolean;
+  'chat.delete'?: boolean;
+  'settings.view'?: boolean;
+  'settings.update'?: boolean;
+  'sections.manage'?: boolean;
+  'cards.manage'?: boolean;
   'users.view'?: boolean;
   'users.create'?: boolean;
   'users.update'?: boolean;
   'users.disable'?: boolean;
   'users.delete'?: boolean;
-  'users.manage'?: boolean;
-  'sections.create'?: boolean;
-  'sections.update'?: boolean;
-  'sections.delete'?: boolean;
-  'sections.manage'?: boolean;
-  'cards.create'?: boolean;
-  'cards.update'?: boolean;
-  'cards.delete'?: boolean;
-  'cards.manage'?: boolean;
-  'settings.view'?: boolean;
-  'settings.update'?: boolean;
-  'settings.manage'?: boolean;
-  'chat.view'?: boolean;
-  'chat.create'?: boolean;
-  'chat.delete'?: boolean;
   'audit.view'?: boolean;
 
   // Legacy boolean flags for backwards compatibility

@@ -36,7 +36,7 @@ interface UserManagementModalProps {
 }
 
 export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClose }) => {
-  const { allUsers, currentUser, createUser, updateUser, changeUserPassword, toggleUserStatus, deleteUser } = useAuth();
+  const { allUsers, currentUser, createUser, updateUser, changeUserPassword, toggleUserStatus, deleteUser, hasPermission } = useAuth();
   const { lang, isRTL } = useTranslation();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -297,18 +297,72 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
     return matchesSearch && matchesRole;
   });
 
-  const permissionLabels: Record<keyof UserPermissions, { ar: string; en: string }> = {
-    canAdmitPatient: { ar: 'إدخال وقبول المرضى (Admission)', en: 'Admit Patient' },
-    canDischargePatient: { ar: 'تخريج ونقل المرضى (Discharge/Transfer)', en: 'Discharge/Transfer' },
-    canSignNotes: { ar: 'كتابة وتوثيق الملاحظات الطبية (Clinical Notes)', en: 'Sign Clinical Notes' },
-    canAddAddendum: { ar: 'إضافة ملاحق غير قابلة للحذف (SHA-256 Addendum)', en: 'Add Note Addendum' },
-    canSignSbar: { ar: 'توقيع واعتماد تقرير تسليم الشفت (SBAR Handover)', en: 'Sign SBAR Handover' },
-    canTitrateMedications: { ar: 'معايرة الأدوية ومضخات الحقن (Titrate Pumps)', en: 'Titrate Infusion Pumps' },
-    canManageUsers: { ar: 'إدارة المستخدمين والصلاحيات (User Admin)', en: 'Manage Users & RBAC' },
-    canManageSettings: { ar: 'تعديل إعدادات المنظومة (System Settings)', en: 'Manage System Settings' },
-    canViewAuditLogs: { ar: 'الاطلاع على سجلات الرقابة (Audit Logs)', en: 'View Compliance Audit Logs' },
-    canEditVitals: { ar: 'تعديل وتوثيق العلامات الحيوية (Edit Vitals)', en: 'Record & Edit Vitals' },
-  };
+interface PermissionCategory {
+  title: { ar: string; en: string };
+  permissions: Array<{
+    key: keyof UserPermissions;
+    label: { ar: string; en: string };
+  }>;
+}
+
+const PERMISSION_GROUPS: PermissionCategory[] = [
+  {
+    title: { ar: 'الأسرّة وتدفق المرضى (Beds & Patient Flow)', en: 'Beds & Patient Flow' },
+    permissions: [
+      { key: 'beds.view', label: { ar: 'استعراض الأسرّة', en: 'View Beds (beds.view)' } },
+      { key: 'patients.view', label: { ar: 'استعراض ملفات المرضى', en: 'View Patients (patients.view)' } },
+      { key: 'patients.create', label: { ar: 'إدخال وتنويم مريض جديد', en: 'Admit Patient (patients.create)' } },
+      { key: 'patients.update', label: { ar: 'تعديل وتحديث ملف المريض', en: 'Update Patient (patients.update)' } },
+      { key: 'archive.view', label: { ar: 'استعراض الأرشيف وسجلات التخريج', en: 'View Archive (archive.view)' } },
+      { key: 'transfer.create', label: { ar: 'نقل مريض لسرير آخر', en: 'Transfer Patient (transfer.create)' } },
+      { key: 'bedSwap.create', label: { ar: 'تبديل أسرّة بين مريضين', en: 'Swap Beds (bedSwap.create)' } },
+      { key: 'discharge.create', label: { ar: 'تخريج المريض من العناية', en: 'Discharge Patient (discharge.create)' } },
+    ]
+  },
+  {
+    title: { ar: 'العلامات الحيوية والتوثيق الطبي (Telemetry & Clinical)', en: 'Telemetry & Clinical Records' },
+    permissions: [
+      { key: 'vitals.view', label: { ar: 'استعراض العلامات الحيوية والمضخات', en: 'View Vitals (vitals.view)' } },
+      { key: 'vitals.create', label: { ar: 'توثيق قراءات حيوية ومضخات جديدة', en: 'Record Vitals (vitals.create)' } },
+      { key: 'vitals.update', label: { ar: 'تعديل العلامات الحيوية والمضخات', en: 'Update Vitals (vitals.update)' } },
+      { key: 'labs.view', label: { ar: 'استعراض نتائج التحاليل المخبرية', en: 'View Labs (labs.view)' } },
+      { key: 'labs.create', label: { ar: 'توثيق وتسجيل نتائج تحاليل', en: 'Record Labs (labs.create)' } },
+      { key: 'labs.update', label: { ar: 'تعديل نتائج التحاليل', en: 'Update Labs (labs.update)' } },
+      { key: 'investigations.view', label: { ar: 'استعراض الأشعة والفحوصات', en: 'View Investigations (investigations.view)' } },
+      { key: 'investigations.create', label: { ar: 'توثيق أشعة وفحوصات', en: 'Record Investigations (investigations.create)' } },
+      { key: 'investigations.update', label: { ar: 'تعديل الأشعة والفحوصات', en: 'Update Investigations (investigations.update)' } },
+      { key: 'clinicalNotes.view', label: { ar: 'استعراض الملاحظات السريرية', en: 'View Clinical Notes (clinicalNotes.view)' } },
+      { key: 'clinicalNotes.create', label: { ar: 'كتابة وتوثيق ملاحظات طبية', en: 'Sign Clinical Notes (clinicalNotes.create)' } },
+      { key: 'clinicalNotes.update', label: { ar: 'إضافة ملاحق غير قابلة للحذف (SHA-256)', en: 'Add Note Addendum (clinicalNotes.update)' } },
+      { key: 'sbar.view', label: { ar: 'استعراض تقارير التسليم SBAR', en: 'View SBAR Handover (sbar.view)' } },
+      { key: 'sbar.create', label: { ar: 'إنشاء تقرير تسليم مناوبة SBAR', en: 'Create SBAR Handover (sbar.create)' } },
+      { key: 'sbar.update', label: { ar: 'اعتماد وتوقيع تقرير SBAR', en: 'Sign SBAR Handover (sbar.update)' } },
+    ]
+  },
+  {
+    title: { ar: 'إدارة المنظومة والصلاحيات والرقابة (Governance & Security)', en: 'Governance & Security' },
+    permissions: [
+      { key: 'chat.view', label: { ar: 'استعراض محادثات القسم', en: 'View Chat (chat.view)' } },
+      { key: 'chat.create', label: { ar: 'إرسال رسائل محادثة', en: 'Send Chat Messages (chat.create)' } },
+      { key: 'chat.delete', label: { ar: 'حذف رسائل المحادثة', en: 'Delete Chat Messages (chat.delete)' } },
+      { key: 'settings.view', label: { ar: 'استعراض إعدادات المنظومة', en: 'View Settings (settings.view)' } },
+      { key: 'settings.update', label: { ar: 'تعديل إعدادات المنظومة', en: 'Update Settings (settings.update)' } },
+      { key: 'sections.manage', label: { ar: 'إدارة وتخصيص أقسام النظام', en: 'Manage Sections (sections.manage)' } },
+      { key: 'cards.manage', label: { ar: 'إدارة وتخصيص بطاقات النظام', en: 'Manage Cards (cards.manage)' } },
+      { key: 'users.view', label: { ar: 'استعراض قائمة المستخدمين', en: 'View Users (users.view)' } },
+      { key: 'users.create', label: { ar: 'إضافة كوادر طبية جديدة', en: 'Create User (users.create)' } },
+      { key: 'users.update', label: { ar: 'تعديل بيانات وصلاحيات الكوادر', en: 'Update User (users.update)' } },
+      { key: 'users.disable', label: { ar: 'إيقاف وتعطيل حسابات الكوادر', en: 'Disable User (users.disable)' } },
+      { key: 'users.delete', label: { ar: 'حذف حسابات الكوادر نهائياً', en: 'Delete User (users.delete)' } },
+      { key: 'audit.view', label: { ar: 'الاطلاع على سجلات الرقابة CBAHI/JCI', en: 'View Audit Logs (audit.view)' } },
+    ]
+  }
+];
+
+  const canCreateUsers = hasPermission('users.create');
+  const canUpdateUsers = hasPermission('users.update');
+  const canDisableUsers = hasPermission('users.disable');
+  const canDeleteUsers = hasPermission('users.delete');
 
   return (
     <div className="w-full space-y-4 animate-in fade-in duration-300" dir={isRTL ? 'rtl' : 'ltr'}>
@@ -351,13 +405,15 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
                   <span>{lang === 'ar' ? 'رمز استعادة المدير' : 'Recovery Token'}</span>
                 </button>
 
-                <button
-                  onClick={handleOpenAdd}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-teal-600 to-teal-500 hover:from-teal-500 hover:to-teal-400 text-slate-950 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
-                >
-                  <UserPlus className="w-3.5 h-3.5" />
-                  <span>{lang === 'ar' ? 'إضافة كادر طبي' : 'Add Staff'}</span>
-                </button>
+                {canCreateUsers && (
+                  <button
+                    onClick={handleOpenAdd}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-teal-600 to-teal-500 hover:from-teal-500 hover:to-teal-400 text-slate-950 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
+                  >
+                    <UserPlus className="w-3.5 h-3.5" />
+                    <span>{lang === 'ar' ? 'إضافة كادر طبي' : 'Add Staff'}</span>
+                  </button>
+                )}
               </>
             )}
             <button
@@ -434,10 +490,10 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
                       type={showFormPassword ? 'text' : 'password'}
                       value={formPassword}
                       onChange={(e) => setFormPassword(e.target.value)}
-                      required
+                      required={!editingUser}
                       minLength={6}
                       className="w-full bg-[#0a1224] border border-slate-700 focus:border-teal-400 rounded-xl pl-3 pr-9 py-2 text-xs text-white focus:outline-none font-mono"
-                      placeholder="••••••••"
+                      placeholder={editingUser ? (lang === 'ar' ? 'اتركه فارغاً للإبقاء' : 'Leave empty to keep') : '••••••••'}
                     />
                     <button
                       type="button"
@@ -471,43 +527,62 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
                 </div>
               </div>
 
-              {/* System Pages Permission Matrix */}
-              <div className="mt-4 pt-3 border-t border-slate-800">
-                <div className="flex items-center justify-between mb-2">
+              {/* System Pages Permission Matrix Grouped by Canonical Scope */}
+              <div className="mt-4 pt-3 border-t border-slate-800 space-y-4">
+                <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-teal-300 flex items-center gap-1.5">
                     <Sliders className="w-3.5 h-3.5" />
                     <span>
                       {lang === 'ar' 
-                        ? `تخصيص صفحات النظام المسموحة قبل الإنشاء (${Object.values(formPermissions).filter(Boolean).length} من ${Object.keys(formPermissions).length} صفحة محددة)`
-                        : `System Permissions Allowed (${Object.values(formPermissions).filter(Boolean).length} of ${Object.keys(formPermissions).length} granted)`
+                        ? `مصفوفة الصلاحيات الموحدة (PAGE.ACTION) - (${Object.values(formPermissions).filter(Boolean).length} صلاحية مفعّلة)`
+                        : `Canonical Permission Matrix (PAGE.ACTION) - (${Object.values(formPermissions).filter(Boolean).length} granted)`
                       }
                     </span>
                   </span>
                   <button
                     type="button"
                     onClick={() => setFormPermissions(getDefaultPermissionsForRole(formRole))}
-                    className="text-[10px] text-teal-400 hover:underline"
+                    className="text-[10px] text-teal-400 hover:underline cursor-pointer"
                   >
                     {lang === 'ar' ? 'استعادة الافتراضي للدور' : 'Reset to Role Default'}
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {(Object.keys(permissionLabels) as Array<keyof UserPermissions>).map((key) => (
-                    <label
-                      key={key}
-                      className="p-2.5 rounded-xl bg-[#0a1224] border border-slate-800 hover:border-slate-700 flex items-center justify-between cursor-pointer transition-colors"
-                    >
-                      <span className="text-[11px] text-slate-300">
-                        {lang === 'ar' ? permissionLabels[key].ar : permissionLabels[key].en}
-                      </span>
-                      <input
-                        type="checkbox"
-                        checked={formPermissions[key] || false}
-                        onChange={(e) => setFormPermissions({ ...formPermissions, [key]: e.target.checked })}
-                        className="w-4 h-4 rounded text-teal-500 focus:ring-teal-400 bg-slate-900 border-slate-700"
-                      />
-                    </label>
+                <div className="space-y-3">
+                  {PERMISSION_GROUPS.map((group, gIdx) => (
+                    <div key={gIdx} className="bg-[#0a1224] p-3 rounded-2xl border border-slate-800/80 space-y-2">
+                      <div className="text-xs font-bold text-slate-300 flex items-center justify-between">
+                        <span>{lang === 'ar' ? group.title.ar : group.title.en}</span>
+                        <span className="text-[10px] font-mono text-teal-400">
+                          {group.permissions.filter(p => !!formPermissions[p.key]).length} / {group.permissions.length}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                        {group.permissions.map((p) => {
+                          const isChecked = !!formPermissions[p.key];
+                          return (
+                            <label
+                              key={p.key}
+                              className={`p-2 rounded-xl border flex items-center justify-between cursor-pointer transition-colors text-[11px] ${
+                                isChecked 
+                                  ? 'bg-teal-950/40 border-teal-800/60 text-teal-200' 
+                                  : 'bg-[#070d1a] border-slate-800/80 text-slate-400 hover:border-slate-700'
+                              }`}
+                            >
+                              <span className="truncate pr-2 font-medium">
+                                {lang === 'ar' ? p.label.ar : p.label.en}
+                              </span>
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={(e) => setFormPermissions({ ...formPermissions, [p.key]: e.target.checked })}
+                                className="w-4 h-4 rounded text-teal-500 focus:ring-teal-400 bg-slate-900 border-slate-700"
+                              />
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
                   ))}
                 </div>
               </div>
@@ -625,27 +700,31 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
                         </div>
 
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <button
-                            type="button"
-                            onClick={() => handleOpenEdit(user)}
-                            className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-teal-300 text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer border border-slate-700/60"
-                            title={lang === 'ar' ? 'تعديل البيانات والصلاحيات' : 'Edit profile & permissions'}
-                          >
-                            <Edit className="w-3.5 h-3.5 text-teal-400" />
-                            <span>{lang === 'ar' ? 'تعديل' : 'Edit'}</span>
-                          </button>
+                          {canUpdateUsers && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEdit(user)}
+                              className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-teal-300 text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer border border-slate-700/60"
+                              title={lang === 'ar' ? 'تعديل البيانات والصلاحيات' : 'Edit profile & permissions'}
+                            >
+                              <Edit className="w-3.5 h-3.5 text-teal-400" />
+                              <span>{lang === 'ar' ? 'تعديل' : 'Edit'}</span>
+                            </button>
+                          )}
 
-                          <button
-                            type="button"
-                            onClick={() => handleOpenChangePassword(user)}
-                            className="px-2.5 py-1 rounded-lg bg-[#0d2a2a] hover:bg-teal-900/60 text-teal-300 hover:text-teal-200 text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer border border-teal-800/40"
-                            title={lang === 'ar' ? 'تغيير كلمة السر' : 'Change Password'}
-                          >
-                            <KeyRound className="w-3.5 h-3.5 text-teal-400" />
-                            <span>{lang === 'ar' ? 'كلمة السر' : 'Password'}</span>
-                          </button>
+                          {canUpdateUsers && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenChangePassword(user)}
+                              className="px-2.5 py-1 rounded-lg bg-[#0d2a2a] hover:bg-teal-900/60 text-teal-300 hover:text-teal-200 text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer border border-teal-800/40"
+                              title={lang === 'ar' ? 'تغيير كلمة السر' : 'Change Password'}
+                            >
+                              <KeyRound className="w-3.5 h-3.5 text-teal-400" />
+                              <span>{lang === 'ar' ? 'كلمة السر' : 'Password'}</span>
+                            </button>
+                          )}
 
-                          {!isCurrent && (
+                          {!isCurrent && canDisableUsers && (
                             <button
                               type="button"
                               onClick={() => toggleUserStatus(user.uid)}
@@ -670,7 +749,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
                             </button>
                           )}
 
-                          {!isCurrent && (
+                          {!isCurrent && canDeleteUsers && (
                             <button
                               type="button"
                               onClick={() => setUserToDelete(user)}
@@ -700,21 +779,24 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
                         </div>
                       </div>
 
-                      {/* Key Permissions Badges */}
+                      {/* Key Canonical Permissions Badges */}
                       <div className="mt-2 flex flex-wrap gap-1">
-                        {user.permissions?.canAdmitPatient && (
+                        {(user.permissions?.['patients.create'] || user.permissions?.canAdmitPatient) && (
                           <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[9px]">Admission</span>
                         )}
-                        {user.permissions?.canSignNotes && (
+                        {(user.permissions?.['clinicalNotes.create'] || user.permissions?.canSignNotes) && (
                           <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[9px]">Clinical Notes</span>
                         )}
-                        {user.permissions?.canSignSbar && (
+                        {(user.permissions?.['sbar.create'] || user.permissions?.canSignSbar) && (
                           <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[9px]">SBAR</span>
                         )}
-                        {user.permissions?.canTitrateMedications && (
-                          <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[9px]">Pumps</span>
+                        {(user.permissions?.['vitals.create'] || user.permissions?.canEditVitals) && (
+                          <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[9px]">Vitals</span>
                         )}
-                        {user.permissions?.canManageUsers && (
+                        {(user.permissions?.['labs.create']) && (
+                          <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[9px]">Labs</span>
+                        )}
+                        {(user.permissions?.['users.view'] || user.permissions?.canManageUsers) && (
                           <span className="px-1.5 py-0.5 rounded bg-amber-950/60 border border-amber-800/40 text-amber-300 text-[9px]">RBAC</span>
                         )}
                       </div>

@@ -37,22 +37,13 @@ service cloud.firestore {
       );
     }
 
-    function isDoctor() {
+    function hasPerm(perm) {
       return isActiveUser() && (
-        getUserData().role == 'DOCTOR' || 
-        getUserData().role == 'CONSULTANT' || 
-        getUserData().role == 'SPECIALIST' || 
-        getUserData().role == 'RESIDENT' || 
-        isAdmin()
-      );
-    }
-
-    function isNurse() {
-      return isActiveUser() && (
-        getUserData().role == 'NURSE' || 
-        getUserData().role == 'BEDSIDE_RN' || 
-        getUserData().role == 'LEAD_RN' || 
-        isAdmin()
+        isAdmin() || (
+          'permissions' in getUserData() &&
+          perm in getUserData().permissions &&
+          getUserData().permissions[perm] == true
+        )
       );
     }
 
@@ -102,201 +93,233 @@ service cloud.firestore {
 
     // Users Collection (Disabled users cannot read users)
     match /users/{userId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && (isAdmin() || request.auth.uid == userId);
-      allow update: if isAuthenticated() && (
+      allow read: if isAuthenticated() && (isAdmin() || request.auth.uid == userId || hasPerm('users.view'));
+      allow create: if isAuthenticated() && (
         isAdmin() || (
-          request.auth.uid == userId
+          hasPerm('users.create') && 
+          (!('isSuperAdmin' in request.resource.data) || request.resource.data.isSuperAdmin == false) && 
+          request.resource.data.role != 'ADMIN'
+        ) ||
+        request.auth.uid == userId
+      );
+      allow update: if isAuthenticated() && (
+        isAdmin() || 
+        (
+          hasPerm('users.update') &&
+          (!('role' in request.resource.data) || request.resource.data.role == resource.data.role) &&
+          (!('permissions' in request.resource.data) || request.resource.data.permissions == resource.data.permissions) &&
+          (!('isSuperAdmin' in request.resource.data) || request.resource.data.isSuperAdmin == resource.data.isSuperAdmin) &&
+          (!('active' in request.resource.data) || request.resource.data.active == resource.data.active) &&
+          (!('isActive' in request.resource.data) || request.resource.data.isActive == resource.data.isActive)
+        ) ||
+        (
+          hasPerm('users.disable') &&
+          (!('role' in request.resource.data) || request.resource.data.role == resource.data.role) &&
+          (!('permissions' in request.resource.data) || request.resource.data.permissions == resource.data.permissions) &&
+          (!('isSuperAdmin' in request.resource.data) || request.resource.data.isSuperAdmin == resource.data.isSuperAdmin)
+        ) ||
+        (
+          request.auth.uid == userId &&
+          (!('role' in request.resource.data) || request.resource.data.role == resource.data.role) &&
+          (!('permissions' in request.resource.data) || request.resource.data.permissions == resource.data.permissions) &&
+          (!('isSuperAdmin' in request.resource.data) || request.resource.data.isSuperAdmin == resource.data.isSuperAdmin) &&
+          (!('active' in request.resource.data) || request.resource.data.active == resource.data.active) &&
+          (!('isActive' in request.resource.data) || request.resource.data.isActive == resource.data.isActive)
         )
       );
-      allow delete: if isAdmin();
+      allow delete: if isAdmin() || hasPerm('users.delete');
     }
 
     // Patients Collection
     match /patients/{patientId} {
-      allow read: if isClinician();
-      allow create, update: if isClinician();
+      allow read: if hasPerm('patients.view') || hasPerm('beds.view');
+      allow create: if hasPerm('patients.create');
+      allow update: if hasPerm('patients.update') || hasPerm('patients.create') || hasPerm('transfer.create') || hasPerm('bedSwap.create') || hasPerm('discharge.create');
       allow delete: if isAdmin();
     }
 
-    // Archived Patients
+    // Archived Patients (Client Read-Only for non-admin)
     match /archivedPatients/{patientId} {
-      allow read: if isClinician();
+      allow read: if hasPerm('archive.view');
       allow write: if isAdmin();
     }
 
-    // Beds Collection (Clinicians can admit, transfer, vacate beds)
+    // Beds Collection
     match /beds/{bedId} {
-      allow read: if isClinician();
-      allow create, update: if isClinician();
+      allow read: if hasPerm('beds.view') || hasPerm('patients.view');
+      allow create: if isAdmin();
+      allow update: if hasPerm('beds.view') || hasPerm('patients.create') || hasPerm('patients.update') || hasPerm('transfer.create') || hasPerm('bedSwap.create') || hasPerm('discharge.create');
       allow delete: if isAdmin();
     }
 
-    // Admission episodes are written in the same transaction as patients and beds.
-    // Omitting this match rejects the entire transaction with Permission Denied.
+    // Admission episodes
     match /episodes/{episodeId} {
-      allow read: if isClinician();
-      allow create, update: if isClinician();
+      allow read: if hasPerm('patients.view');
+      allow create: if hasPerm('patients.create');
+      allow update: if hasPerm('patients.update') || hasPerm('discharge.create');
       allow delete: if isAdmin();
     }
 
     // Transfers & Operations
     match /transfers/{transferId} {
-      allow read: if isClinician();
-      allow create, update: if isClinician();
+      allow read: if hasPerm('beds.view') || hasPerm('patients.view');
+      allow create, update: if hasPerm('transfer.create') || hasPerm('bedSwap.create');
       allow delete: if isAdmin();
     }
 
     match /operations/{operationId} {
-      allow read: if isClinician();
-      allow create, update: if isClinician();
+      allow read: if hasPerm('beds.view') || hasPerm('patients.view');
+      allow create, update: if hasPerm('transfer.create') || hasPerm('bedSwap.create') || hasPerm('discharge.create') || hasPerm('patients.create');
       allow delete: if isAdmin();
     }
 
     match /units/{unitId} {
-      allow read: if isClinician();
+      allow read: if isActiveUser();
       allow write: if isAdmin();
     }
 
     // Clinical Notes
     match /clinicalNotes/{noteId} {
-      allow read: if isClinician();
-      allow create: if isClinician();
-      allow update: if isClinician() && isValidMedicalRecordUpdate();
+      allow read: if hasPerm('clinicalNotes.view') || hasPerm('patients.view');
+      allow create: if hasPerm('clinicalNotes.create');
+      allow update: if hasPerm('clinicalNotes.update') && isValidMedicalRecordUpdate();
       allow delete: if isAdmin();
     }
 
     match /addendums/{addendumId} {
-      allow read: if isClinician();
-      allow create: if isClinician();
-      allow update: if isClinician() && isValidMedicalRecordUpdate();
+      allow read: if hasPerm('clinicalNotes.view') || hasPerm('patients.view');
+      allow create: if hasPerm('clinicalNotes.update') || hasPerm('clinicalNotes.create');
+      allow update: if false; // Immutable addendums
       allow delete: if isAdmin();
     }
 
     // SBAR Handovers & Shift Transitions
     match /sbarHandovers/{sbarId} {
-      allow read: if isClinician();
-      allow create: if isClinician();
-      allow update: if isClinician() && isValidMedicalRecordUpdate();
+      allow read: if hasPerm('sbar.view') || hasPerm('patients.view');
+      allow create: if hasPerm('sbar.create');
+      allow update: if (hasPerm('sbar.update') || hasPerm('sbar.create')) && isValidMedicalRecordUpdate();
       allow delete: if isAdmin();
     }
 
     match /handovers/{handoverId} {
-      allow read: if isClinician();
-      allow create: if isClinician();
-      allow update: if isClinician() && isValidMedicalRecordUpdate();
+      allow read: if hasPerm('sbar.view') || hasPerm('patients.view');
+      allow create: if hasPerm('sbar.create');
+      allow update: if (hasPerm('sbar.update') || hasPerm('sbar.create')) && isValidMedicalRecordUpdate();
       allow delete: if isAdmin();
     }
 
     // Telemetry Vitals, Ventilator, Infusions & Labs
     match /vitals/{vitalId} {
-      allow read: if isClinician();
-      allow create: if isClinician();
-      allow update: if isClinician() && isValidMedicalRecordUpdate();
+      allow read: if hasPerm('vitals.view') || hasPerm('beds.view') || hasPerm('patients.view');
+      allow create: if hasPerm('vitals.create');
+      allow update: if hasPerm('vitals.update') && isValidMedicalRecordUpdate();
       allow delete: if isAdmin();
     }
 
     match /ventilators/{id} {
-      allow read: if isClinician();
-      allow create: if isClinician();
-      allow update: if isClinician() && isValidMedicalRecordUpdate();
+      allow read: if hasPerm('vitals.view') || hasPerm('beds.view') || hasPerm('patients.view');
+      allow create: if hasPerm('vitals.create') || hasPerm('patients.update');
+      allow update: if (hasPerm('vitals.update') || hasPerm('patients.update')) && isValidMedicalRecordUpdate();
       allow delete: if isAdmin();
     }
 
     match /infusionPumps/{id} {
-      allow read: if isClinician();
-      allow create: if isClinician();
-      allow update: if isClinician() && isValidMedicalRecordUpdate();
+      allow read: if hasPerm('vitals.view') || hasPerm('beds.view') || hasPerm('patients.view');
+      allow create: if hasPerm('vitals.create') || hasPerm('patients.update');
+      allow update: if (hasPerm('vitals.update') || hasPerm('patients.update')) && isValidMedicalRecordUpdate();
       allow delete: if isAdmin();
     }
 
     match /infusion_pumps/{id} {
-      allow read: if isClinician();
-      allow create: if isClinician();
-      allow update: if isClinician() && isValidMedicalRecordUpdate();
+      allow read: if hasPerm('vitals.view') || hasPerm('beds.view') || hasPerm('patients.view');
+      allow create: if hasPerm('vitals.create') || hasPerm('patients.update');
+      allow update: if (hasPerm('vitals.update') || hasPerm('patients.update')) && isValidMedicalRecordUpdate();
       allow delete: if isAdmin();
     }
 
     match /patientAntibiotics/{id} {
-      allow read: if isClinician();
-      allow create: if isClinician();
-      allow update: if isClinician() && isValidMedicalRecordUpdate();
+      allow read: if hasPerm('vitals.view') || hasPerm('beds.view') || hasPerm('patients.view');
+      allow create: if hasPerm('vitals.create') || hasPerm('patients.update');
+      allow update: if (hasPerm('vitals.update') || hasPerm('patients.update')) && isValidMedicalRecordUpdate();
       allow delete: if isAdmin();
     }
 
     match /fluidBalances/{id} {
-      allow read: if isClinician();
-      allow create, update: if isClinician();
+      allow read: if hasPerm('vitals.view') || hasPerm('beds.view') || hasPerm('patients.view');
+      allow create: if hasPerm('vitals.create') || hasPerm('patients.update');
+      allow update: if (hasPerm('vitals.update') || hasPerm('patients.update')) && isValidMedicalRecordUpdate();
       allow delete: if isAdmin();
     }
 
     match /fluidBalances24H/{id} {
-      allow read: if isClinician();
-      allow create, update: if isClinician();
+      allow read: if hasPerm('vitals.view') || hasPerm('beds.view') || hasPerm('patients.view');
+      allow create: if hasPerm('vitals.create') || hasPerm('patients.update');
+      allow update: if (hasPerm('vitals.update') || hasPerm('patients.update')) && isValidMedicalRecordUpdate();
       allow delete: if isAdmin();
     }
 
     match /statLabs/{id} {
-      allow read: if isClinician();
-      allow create: if isClinician();
-      allow update: if isClinician() && isValidMedicalRecordUpdate();
+      allow read: if hasPerm('labs.view') || hasPerm('patients.view');
+      allow create: if hasPerm('labs.create');
+      allow update: if hasPerm('labs.update') && isValidMedicalRecordUpdate();
       allow delete: if isAdmin();
     }
 
     match /investigations/{id} {
-      allow read: if isClinician();
-      allow create: if isClinician();
-      allow update: if isClinician() && isValidMedicalRecordUpdate();
+      allow read: if hasPerm('investigations.view') || hasPerm('patients.view');
+      allow create: if hasPerm('investigations.create');
+      allow update: if hasPerm('investigations.update') && isValidMedicalRecordUpdate();
       allow delete: if isAdmin();
     }
 
     match /transfusions/{id} {
-      allow read: if isClinician();
-      allow create, update: if isClinician();
+      allow read: if hasPerm('patients.view');
+      allow create: if hasPerm('patients.update') || hasPerm('clinicalNotes.create');
+      allow update: if (hasPerm('patients.update') || hasPerm('clinicalNotes.update')) && isValidMedicalRecordUpdate();
       allow delete: if isAdmin();
     }
 
     match /medical_records/{recordId} {
-      allow read: if isClinician();
-      allow create: if isClinician();
-      allow update: if isClinician() && isValidMedicalRecordUpdate();
+      allow read: if hasPerm('patients.view');
+      allow create: if hasPerm('patients.update') || hasPerm('clinicalNotes.create');
+      allow update: if (hasPerm('patients.update') || hasPerm('clinicalNotes.update')) && isValidMedicalRecordUpdate();
       allow delete: if isAdmin();
     }
 
     match /dispositionRecords/{dispoId} {
-      allow read: if isClinician();
-      allow create, update: if isClinician() && isValidMedicalRecordUpdate();
+      allow read: if hasPerm('archive.view') || hasPerm('patients.view');
+      allow create, update: if hasPerm('discharge.create') && isValidMedicalRecordUpdate();
       allow delete: if isAdmin();
     }
 
     // Dynamic Sections & Cards Management
     match /sections/{sectionId} {
-      allow read: if isClinician();
-      allow write: if isAdmin();
+      allow read: if isActiveUser();
+      allow write: if isAdmin() || hasPerm('sections.manage');
     }
 
     match /cards/{cardId} {
-      allow read: if isClinician();
-      allow write: if isAdmin();
+      allow read: if isActiveUser();
+      allow write: if isAdmin() || hasPerm('cards.manage');
     }
 
     // Hospital Chat (1-to-1 & Department Chat)
     match /chats/{chatId} {
-      allow read: if isNotDisabledUser() && (
+      allow read: if isNotDisabledUser() && hasPerm('chat.view') && (
         isAdmin() ||
         resource.data.type == 'department' ||
         (resource.data.participantUids != null && request.auth.uid in resource.data.participantUids) ||
         (resource.data.participants != null && request.auth.uid in resource.data.participants)
       );
-      allow create: if isNotDisabledUser();
-      allow update: if isNotDisabledUser() && (
+      allow create: if isNotDisabledUser() && hasPerm('chat.create');
+      allow update: if isNotDisabledUser() && hasPerm('chat.create') && (
         isAdmin() ||
         resource.data.type == 'department' ||
         (resource.data.participantUids != null && request.auth.uid in resource.data.participantUids) ||
         (resource.data.participants != null && request.auth.uid in resource.data.participants)
       );
       allow delete: if isAdmin() || (
-        isNotDisabledUser() &&
+        isNotDisabledUser() && hasPerm('chat.delete') &&
         resource.data.type != 'department' && (
           resource.data.createdByUid == request.auth.uid ||
           (resource.data.participantUids != null && request.auth.uid in resource.data.participantUids) ||
@@ -306,18 +329,18 @@ service cloud.firestore {
     }
 
     match /chatMessages/{messageId} {
-      allow read: if isNotDisabledUser();
-      allow create: if isNotDisabledUser() && (
+      allow read: if isNotDisabledUser() && hasPerm('chat.view');
+      allow create: if isNotDisabledUser() && hasPerm('chat.create') && (
         request.resource.data.senderUid == request.auth.uid ||
         (isExistingUser() && request.resource.data.senderUid == getUserData().uid)
       );
-      allow update: if isNotDisabledUser() && (
+      allow update: if isNotDisabledUser() && hasPerm('chat.create') && (
         request.auth.uid == resource.data.senderUid ||
         (isExistingUser() && resource.data.senderUid == getUserData().uid) ||
         isAdmin()
       );
       allow delete: if isAdmin() || (
-        isNotDisabledUser() && (
+        isNotDisabledUser() && hasPerm('chat.delete') && (
           resource.data.senderUid == request.auth.uid ||
           (isExistingUser() && resource.data.senderUid == getUserData().uid)
         )
@@ -326,22 +349,21 @@ service cloud.firestore {
 
     // Audit Logs (Immutable ledger)
     match /auditLogs/{logId} {
-      allow read: if isAdmin();
+      allow read: if isAdmin() || hasPerm('audit.view');
       allow create: if isAuthenticated();
       allow update, delete: if false;
     }
 
     // Clinical & Operational Notifications
     match /notifications/{notifId} {
-      allow read: if isClinician();
-      allow create, update: if isClinician();
-      allow delete: if isClinician() || isAdmin();
+      allow read: if isActiveUser();
+      allow create, update, delete: if isActiveUser();
     }
 
     // System Settings
     match /system_settings/{settingId} {
-      allow read: if isClinician();
-      allow write: if isAdmin();
+      allow read: if isActiveUser() || hasPerm('settings.view');
+      allow write: if isAdmin() || hasPerm('settings.update');
     }
 
     match /admins/{userId} {
