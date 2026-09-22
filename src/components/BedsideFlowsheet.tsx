@@ -674,8 +674,17 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
 
   const handleSavePatientHistory = async () => {
     try {
+      const doctorName = patient.attendingPhysician?.name && patient.attendingPhysician.name !== 'غير محدد' && patient.attendingPhysician.name !== 'Unassigned'
+        ? patient.attendingPhysician.name
+        : (lang === 'ar' ? 'غير محدد' : 'Unassigned');
+
       const updatedPatient = {
         ...patient,
+        attendingPhysician: {
+          staffId: patient.attendingPhysician?.staffId || 'DOC-101',
+          name: doctorName,
+          role: patient.attendingPhysician?.role || StaffRole.CONSULTANT,
+        },
         history: historyInput,
         presentingComplaint: presentingComplaintInput,
         chronicDiseases: chronicDiseasesInput,
@@ -1597,6 +1606,14 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                       <div className="text-[10px] text-slate-500">{lang === 'ar' ? 'تاريخ دخول العناية' : 'ICU Admission Date'}</div>
                       <div className="text-teal-400 font-bold mt-1 text-xs">
                         {formatNumericDate(patient.admissionDate)}
+                      </div>
+                    </div>
+
+                    {/* Attending Physician */}
+                    <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800 col-span-2 sm:col-span-1">
+                      <div className="text-[10px] text-slate-500">{lang === 'ar' ? 'الطبيب المعالج / الاستشاري' : 'Attending Physician'}</div>
+                      <div className="text-indigo-400 font-bold mt-1 text-xs truncate" title={patient.attendingPhysician?.name && patient.attendingPhysician.name !== 'غير محدد' && patient.attendingPhysician.name !== 'Unassigned' ? patient.attendingPhysician.name : (lang === 'ar' ? 'غير محدد' : 'Unassigned')}>
+                        {patient.attendingPhysician?.name && patient.attendingPhysician.name !== 'غير محدد' && patient.attendingPhysician.name !== 'Unassigned' ? patient.attendingPhysician.name : (lang === 'ar' ? 'غير محدد' : 'Unassigned')}
                       </div>
                     </div>
                   </div>

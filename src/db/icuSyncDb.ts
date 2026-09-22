@@ -827,6 +827,61 @@ export async function ensureBedPatientSync(): Promise<void> {
     }
   }
 
+  // Medical Attribution: Strictly prioritize:
+  // 1. Last receiving doctor from SBAR Handover ("استلام مناوبة SBAR")
+  // 2. Doctor who admitted the patient first time if no SBAR handover exists yet
+  // If neither exists, DO NOT insert any fake doctor data. Display as 'غير محدد' / Unassigned.
+  for (const p of activePatients) {
+    let sbarDoctor = '';
+    try {
+      const sbars = await db.sbarHandovers.where('patientId').equals(p.id).toArray();
+      if (sbars && sbars.length > 0) {
+        sbars.sort((a, b) => new Date(b.outgoingDoctor?.signedAt || b.shiftDate || 0).getTime() - new Date(a.outgoingDoctor?.signedAt || a.shiftDate || 0).getTime());
+        sbarDoctor = sbars[0]?.incomingDoctor?.name?.trim() || sbars[0]?.outgoingDoctor?.name?.trim() || '';
+      }
+    } catch (e) {}
+
+    // If an SBAR handover exists, it reflects the current duty doctor who received the patient
+    if (sbarDoctor && sbarDoctor !== 'غير محدد' && sbarDoctor !== 'Unassigned') {
+      if (p.attendingPhysician?.name !== sbarDoctor) {
+        const updatedPhysician = {
+          staffId: p.attendingPhysician?.staffId || 'DOC-SBAR',
+          name: sbarDoctor,
+          role: (p.attendingPhysician?.role || StaffRole.CONSULTANT) as any,
+        };
+        p.attendingPhysician = updatedPhysician;
+        await db.patients.update(p.id, {
+          attendingPhysician: updatedPhysician,
+          updatedAt: new Date().toISOString()
+        });
+        try {
+          const { syncPatientToCloud } = await import('../services/firebase.ts');
+          await syncPatientToCloud(p);
+        } catch (err) {}
+      }
+    } else {
+      // If no SBAR exists, check if patient has a fake name from previous fallback
+      const currentName = p.attendingPhysician?.name?.trim();
+      if (currentName === 'د. هشام طلعت' || currentName === 'د. هشام طلعت (Dr. Hesham)') {
+        // Clean out fake data as requested by user - show 'غير محدد'
+        const cleanedPhysician = {
+          staffId: '',
+          name: 'غير محدد',
+          role: StaffRole.CONSULTANT as any,
+        };
+        p.attendingPhysician = cleanedPhysician;
+        await db.patients.update(p.id, {
+          attendingPhysician: cleanedPhysician,
+          updatedAt: new Date().toISOString()
+        });
+        try {
+          const { syncPatientToCloud } = await import('../services/firebase.ts');
+          await syncPatientToCloud(p);
+        } catch (err) {}
+      }
+    }
+  }
+
   for (const b of currentBeds) {
     let modified = false;
     const targetPatient = bedToActivePatientMap.get(b.bedNumber);

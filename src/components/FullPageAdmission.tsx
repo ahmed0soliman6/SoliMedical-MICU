@@ -98,6 +98,7 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
   const [intakePathway, setIntakePathway] = useState<IntakePathway>(IntakePathway.STAT_CRITICAL);
   const [primaryDiagnosisAr, setPrimaryDiagnosisAr] = useState<string>('');
   const [primaryDiagnosisEn, setPrimaryDiagnosisEn] = useState<string>('');
+  const [attendingDoctorName, setAttendingDoctorName] = useState<string>('');
   const [allergiesInput, setAllergiesInput] = useState<string>('None Known');
   const [isolation, setIsolation] = useState<string>('');
   const [candidateMatches, setCandidateMatches] = useState<PatientCandidateMatch[]>([]);
@@ -128,6 +129,9 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
       setIntakePathway(initialPatient.intakePathway || IntakePathway.STAT_CRITICAL);
       setPrimaryDiagnosisAr(initialPatient.primaryDiagnosisAr || '');
       setPrimaryDiagnosisEn(initialPatient.primaryDiagnosisEn || '');
+      if (initialPatient.attendingPhysician?.name) {
+        setAttendingDoctorName(initialPatient.attendingPhysician.name);
+      }
       if (initialPatient.allergies && initialPatient.allergies.length > 0) {
         setAllergiesInput(initialPatient.allergies.map(a => a.allergen).join(', '));
       } else {
@@ -143,6 +147,15 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
       } else {
         setIsolation('');
       }
+    } else {
+      try {
+        const storedUser = localStorage.getItem('icu_current_user') || localStorage.getItem('soli_logged_user');
+        if (storedUser) {
+          const parsed = JSON.parse(storedUser);
+          const name = parsed.nameAr || parsed.nameEn || parsed.name;
+          if (name) setAttendingDoctorName(name);
+        }
+      } catch (e) {}
     }
   }, [initialPatient?.id]);
 
@@ -275,8 +288,14 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
         const updatedWeight = parsedWeight;
         const updatedIbw = calculateIdealBodyWeight(updatedHeight, gender);
 
+        const finalDocName = attendingDoctorName.trim() || initialPatient.attendingPhysician?.name || (lang === 'ar' ? 'غير محدد' : 'Unassigned');
         const updatedPatient: PatientDossier = {
           ...initialPatient,
+          attendingPhysician: {
+            staffId: initialPatient.attendingPhysician?.staffId || (finalDocName !== 'غير محدد' && finalDocName !== 'Unassigned' ? 'DOC-ACTIVE' : ''),
+            name: finalDocName,
+            role: initialPatient.attendingPhysician?.role || StaffRole.CONSULTANT,
+          },
           fullNameAr: fullNameAr.trim(),
           fullNameEn: fullNameAr.trim(),
           nationalId: cleanNatId,
@@ -309,17 +328,24 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
       }
 
       // Detect current logged in physician / user in background
-      let docName = '';
+      let docName = attendingDoctorName.trim();
       let nurseName = '';
       try {
         const storedUser = localStorage.getItem('icu_current_user') || localStorage.getItem('soli_logged_user');
         if (storedUser) {
           const parsed = JSON.parse(storedUser);
-          if (parsed.nameAr || parsed.nameEn || parsed.name) {
+          if (!docName && (parsed.nameAr || parsed.nameEn || parsed.name)) {
             docName = parsed.nameAr || parsed.nameEn || parsed.name;
+          }
+          if (parsed.role === StaffRole.LEAD_RN || parsed.role === StaffRole.BEDSIDE_RN) {
+            nurseName = parsed.nameAr || parsed.nameEn || parsed.name;
           }
         }
       } catch (e) {}
+
+      if (!docName) {
+        docName = lang === 'ar' ? 'غير محدد' : 'Unassigned';
+      }
 
       await admitPatient({
         targetBed,
@@ -676,7 +702,20 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
             2. {lang === 'ar' ? 'التشخيص الطبي والمسار السريري للحالة' : 'Clinical Diagnosis & Intake Pathway'}
           </h3>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
+              <label className="text-[11px] text-slate-300 font-semibold block mb-1">
+                {lang === 'ar' ? 'الطبيب المعالج / الاستشاري (Attending)' : 'Attending Physician'}
+              </label>
+              <input
+                type="text"
+                value={attendingDoctorName}
+                onChange={(e) => setAttendingDoctorName(e.target.value)}
+                placeholder={lang === 'ar' ? 'اسم الطبيب المعالج أو اتركه فارغاً' : 'Attending Physician (or leave blank)'}
+                className="w-full bg-[#070c18] border border-slate-700 rounded-lg px-3 py-2 text-white font-bold text-indigo-300 focus:border-indigo-500 focus:outline-none text-xs"
+              />
+            </div>
+
             <div>
               <label className="text-[11px] text-slate-300 font-semibold block mb-1">
                 {lang === 'ar' ? 'حالة الإنعاش الطبي (Code Status)' : 'Code Status (Clinical Directive)'}

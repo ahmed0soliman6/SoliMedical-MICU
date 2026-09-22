@@ -64,6 +64,7 @@ export const BedMatrixCard: React.FC<BedMatrixCardProps> = ({
         return;
       }
       try {
+        // 1. First priority: The receiving doctor from the latest SBAR handover card (اسم آخر طبيب مستلم من بطاقة استلام مناوبة SBAR)
         const sbars = await db.sbarHandovers
           .where('patientId')
           .equals(patient.id)
@@ -72,27 +73,35 @@ export const BedMatrixCard: React.FC<BedMatrixCardProps> = ({
         if (sbars && sbars.length > 0) {
           sbars.sort((a, b) => new Date(b.outgoingDoctor?.signedAt || b.shiftDate || 0).getTime() - new Date(a.outgoingDoctor?.signedAt || a.shiftDate || 0).getTime());
           const latest = sbars[0];
-          if (latest?.outgoingDoctor?.name && isMounted) {
-            setLastHandoverDoctor(latest.outgoingDoctor.name);
+          // Doctor who received the shift / incoming doctor, or outgoing doctor
+          const sbarDoctor = latest?.incomingDoctor?.name?.trim() || latest?.outgoingDoctor?.name?.trim();
+          if (sbarDoctor && sbarDoctor !== 'غير محدد' && sbarDoctor !== 'Unassigned') {
+            if (isMounted) setLastHandoverDoctor(sbarDoctor);
             return;
           }
         }
 
-        if (isMounted) {
-          const attName = patient?.attendingPhysician?.name || '';
-          if (attName && !attName.includes('هشام طلعت')) {
-            setLastHandoverDoctor(attName);
-          } else {
-            setLastHandoverDoctor(null);
-          }
+        // 2. Second priority: The physician who registered/admitted the patient if no SBAR handover has occurred yet (الطبيب مسجل دخول للمريض أول مرة)
+        const admittingDoc = patient?.attendingPhysician?.name?.trim();
+        if (admittingDoc && admittingDoc !== 'غير محدد' && admittingDoc !== 'Unassigned' && admittingDoc !== 'Unknown') {
+          if (isMounted) setLastHandoverDoctor(admittingDoc);
+          return;
         }
-      } catch (e) {
+
+        // 3. If neither exists, show unassigned (بدون أي بيانات وهمية إطلاقاً)
         if (isMounted) setLastHandoverDoctor(null);
+      } catch (e) {
+        const fallback = patient?.attendingPhysician?.name?.trim();
+        if (fallback && fallback !== 'غير محدد' && fallback !== 'Unassigned') {
+          if (isMounted) setLastHandoverDoctor(fallback);
+        } else {
+          if (isMounted) setLastHandoverDoctor(null);
+        }
       }
     }
     fetchLastHandover();
     return () => { isMounted = false; };
-  }, [patient?.id, patient?.attendingPhysician?.name]);
+  }, [patient?.id, patient?.attendingPhysician?.name, lang]);
 
   const handleClick = () => {
     if (isOccupied || isTransferPending || isUnavailable || isDecontaminating || isIsolation) {
@@ -224,10 +233,10 @@ export const BedMatrixCard: React.FC<BedMatrixCardProps> = ({
               </div>
 
               {/* Physician */}
-              <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400 font-bold min-w-0 shrink-0" title={lang === 'ar' ? `الطبيب: ${lastHandoverDoctor || patient?.attendingPhysician?.name || ''}` : `Physician: ${lastHandoverDoctor || patient?.attendingPhysician?.name || ''}`}>
+              <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400 font-bold min-w-0 shrink-0" title={lang === 'ar' ? `الطبيب: ${lastHandoverDoctor || patient?.attendingPhysician?.name || 'غير محدد'}` : `Physician: ${lastHandoverDoctor || patient?.attendingPhysician?.name || 'Unassigned'}`}>
                 <UserCheck className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-600 dark:text-indigo-400 shrink-0" />
                 <span className="truncate text-[13px] sm:text-sm md:text-[15px]">
-                  {lastHandoverDoctor || patient?.attendingPhysician?.name || (lang === 'ar' ? 'غير محدد' : 'Unassigned')}
+                  {lastHandoverDoctor || (patient?.attendingPhysician?.name && patient.attendingPhysician.name !== 'غير محدد' && patient.attendingPhysician.name !== 'Unassigned' ? patient.attendingPhysician.name : (lang === 'ar' ? 'غير محدد' : 'Unassigned'))}
                 </span>
               </div>
             </div>
