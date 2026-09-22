@@ -361,21 +361,24 @@ export async function executeTransfer(
     }
 
     const isPatientIsolated = !!(
-      (patientData.isolationPrecautions && patientData.isolationPrecautions.length > 0) ||
-      (fromBed.isolation && fromBed.isolation.isIsolated) ||
-      fromBed.status === 'ISOLATION'
+      patientData.isolationPrecautions &&
+      patientData.isolationPrecautions.length > 0 &&
+      !patientData.isolationPrecautions.some((p: string) => 
+        p.toLowerCase().includes('standard') || 
+        p === 'None' || 
+        p === 'لا يوجد عزل' || 
+        p === 'NONE'
+      )
     );
 
     const isolationPayload = isPatientIsolated
-      ? (fromBed.isolation && fromBed.isolation.isIsolated
-          ? fromBed.isolation
-          : {
-              isIsolated: true,
-              type: 'Airborne',
-              reason: 'Clinical Isolation',
-              startDate: new Date().toISOString(),
-              precautions: patientData.isolationPrecautions || [],
-            })
+      ? {
+          isIsolated: true,
+          type: patientData.isolationPrecautions[0] || 'Airborne',
+          reason: 'Clinical Isolation',
+          startDate: new Date().toISOString(),
+          precautions: patientData.isolationPrecautions,
+        }
       : { isIsolated: false, precautions: [] };
 
     const operationId = generateId();
@@ -446,23 +449,25 @@ export async function executeTransfer(
 
   // Local cache update
   try {
-    const fromBed = await db.beds.get(fromBedId);
     const pat = await db.patients.get(patientId);
     const isIsolated = !!(
-      (pat?.isolationPrecautions && pat.isolationPrecautions.length > 0) ||
-      (fromBed?.isolation && fromBed.isolation.isIsolated) ||
-      fromBed?.status === BedStatus.ISOLATION
+      pat?.isolationPrecautions &&
+      pat.isolationPrecautions.length > 0 &&
+      !pat.isolationPrecautions.some((p: string) => 
+        p.toLowerCase().includes('standard') || 
+        p === 'None' || 
+        p === 'لا يوجد عزل' || 
+        p === 'NONE'
+      )
     );
     const isolationPayload = isIsolated
-      ? (fromBed?.isolation && fromBed.isolation.isIsolated
-          ? fromBed.isolation
-          : {
-              isIsolated: true,
-              type: 'Airborne',
-              reason: 'Clinical Isolation',
-              startDate: new Date().toISOString(),
-              precautions: pat?.isolationPrecautions || ['Contact Precautions'],
-            })
+      ? {
+          isIsolated: true,
+          type: pat?.isolationPrecautions?.[0] || 'Airborne',
+          reason: 'Clinical Isolation',
+          startDate: new Date().toISOString(),
+          precautions: pat?.isolationPrecautions || [],
+        }
       : { isIsolated: false, precautions: [] };
 
     await db.beds.update(fromBedId, {
@@ -479,7 +484,7 @@ export async function executeTransfer(
     });
     await db.patients.update(patientId, {
       currentBedId: toBedId as BedNumber,
-      isolationPrecautions: isIsolated ? (isolationPayload.precautions && isolationPayload.precautions.length > 0 ? isolationPayload.precautions : ['Contact Precautions']) : [],
+      isolationPrecautions: isIsolated ? (pat?.isolationPrecautions || []) : [],
       updatedAt: new Date().toISOString(),
     });
     await ensureBedPatientSync();
@@ -549,26 +554,44 @@ export async function executeBedSwap(
     const patientBData = patientBSnap.exists() ? (patientBSnap.data() as any) : {};
 
     const isPatientAIsolated = !!(
-      (patientAData.isolationPrecautions && patientAData.isolationPrecautions.length > 0) ||
-      (bedAData.isolation && bedAData.isolation.isIsolated) ||
-      bedAData.status === 'ISOLATION'
+      patientAData.isolationPrecautions &&
+      patientAData.isolationPrecautions.length > 0 &&
+      !patientAData.isolationPrecautions.some((p: string) => 
+        p.toLowerCase().includes('standard') || 
+        p === 'None' || 
+        p === 'لا يوجد عزل' || 
+        p === 'NONE'
+      )
     );
     const isPatientBIsolated = !!(
-      (patientBData.isolationPrecautions && patientBData.isolationPrecautions.length > 0) ||
-      (bedBData.isolation && bedBData.isolation.isIsolated) ||
-      bedBData.status === 'ISOLATION'
+      patientBData.isolationPrecautions &&
+      patientBData.isolationPrecautions.length > 0 &&
+      !patientBData.isolationPrecautions.some((p: string) => 
+        p.toLowerCase().includes('standard') || 
+        p === 'None' || 
+        p === 'لا يوجد عزل' || 
+        p === 'NONE'
+      )
     );
 
     const isolationA = isPatientAIsolated
-      ? (bedAData.isolation && bedAData.isolation.isIsolated
-          ? bedAData.isolation
-          : { isIsolated: true, type: 'Airborne', reason: 'Clinical Isolation', startDate: new Date().toISOString(), precautions: patientAData.isolationPrecautions || ['Contact Precautions'] })
+      ? {
+          isIsolated: true,
+          type: patientAData.isolationPrecautions[0] || 'Airborne',
+          reason: 'Clinical Isolation',
+          startDate: new Date().toISOString(),
+          precautions: patientAData.isolationPrecautions,
+        }
       : { isIsolated: false, precautions: [] };
 
     const isolationB = isPatientBIsolated
-      ? (bedBData.isolation && bedBData.isolation.isIsolated
-          ? bedBData.isolation
-          : { isIsolated: true, type: 'Airborne', reason: 'Clinical Isolation', startDate: new Date().toISOString(), precautions: patientBData.isolationPrecautions || ['Contact Precautions'] })
+      ? {
+          isIsolated: true,
+          type: patientBData.isolationPrecautions[0] || 'Airborne',
+          reason: 'Clinical Isolation',
+          startDate: new Date().toISOString(),
+          precautions: patientBData.isolationPrecautions,
+        }
       : { isIsolated: false, precautions: [] };
 
     const operationId = generateId();
@@ -654,7 +677,7 @@ export async function executeBedSwap(
 
     transaction.update(patientBRef, {
       currentBedId: bedAId,
-      isolationPrecautions: isPatientBIsolated ? (isolationB.precautions && isolationB.precautions.length > 0 ? isolationB.precautions : ['Contact Precautions']) : [],
+      isolationPrecautions: isPatientBIsolated ? patientBData.isolationPrecautions : [],
       updatedAt: serverTimestamp(),
       updatedByUid: doctorId,
     });
@@ -674,26 +697,44 @@ export async function executeBedSwap(
       const patB = await db.patients.get(patientBId);
 
       const isPatientAIsolated = !!(
-        (patA?.isolationPrecautions && patA.isolationPrecautions.length > 0) ||
-        (bedA?.isolation && bedA.isolation.isIsolated) ||
-        bedA?.status === BedStatus.ISOLATION
+        patA?.isolationPrecautions &&
+        patA.isolationPrecautions.length > 0 &&
+        !patA.isolationPrecautions.some((p: string) => 
+          p.toLowerCase().includes('standard') || 
+          p === 'None' || 
+          p === 'لا يوجد عزل' || 
+          p === 'NONE'
+        )
       );
       const isPatientBIsolated = !!(
-        (patB?.isolationPrecautions && patB.isolationPrecautions.length > 0) ||
-        (bedB?.isolation && bedB.isolation.isIsolated) ||
-        bedB?.status === BedStatus.ISOLATION
+        patB?.isolationPrecautions &&
+        patB.isolationPrecautions.length > 0 &&
+        !patB.isolationPrecautions.some((p: string) => 
+          p.toLowerCase().includes('standard') || 
+          p === 'None' || 
+          p === 'لا يوجد عزل' || 
+          p === 'NONE'
+        )
       );
 
       const isolationA = isPatientAIsolated
-        ? (bedA?.isolation && bedA.isolation.isIsolated
-            ? bedA.isolation
-            : { isIsolated: true, type: 'Airborne', reason: 'Clinical Isolation', startDate: new Date().toISOString(), precautions: patA?.isolationPrecautions || ['Contact Precautions'] })
+        ? {
+            isIsolated: true,
+            type: patA?.isolationPrecautions?.[0] || 'Airborne',
+            reason: 'Clinical Isolation',
+            startDate: new Date().toISOString(),
+            precautions: patA?.isolationPrecautions || [],
+          }
         : { isIsolated: false, precautions: [] };
 
       const isolationB = isPatientBIsolated
-        ? (bedB?.isolation && bedB.isolation.isIsolated
-            ? bedB.isolation
-            : { isIsolated: true, type: 'Airborne', reason: 'Clinical Isolation', startDate: new Date().toISOString(), precautions: patB?.isolationPrecautions || ['Contact Precautions'] })
+        ? {
+            isIsolated: true,
+            type: patB?.isolationPrecautions?.[0] || 'Airborne',
+            reason: 'Clinical Isolation',
+            startDate: new Date().toISOString(),
+            precautions: patB?.isolationPrecautions || [],
+          }
         : { isIsolated: false, precautions: [] };
 
       await db.beds.update(bedAId, {
@@ -710,12 +751,12 @@ export async function executeBedSwap(
       });
       await db.patients.update(patientAId, {
         currentBedId: bedBId as BedNumber,
-        isolationPrecautions: isPatientAIsolated ? (isolationA.precautions && isolationA.precautions.length > 0 ? isolationA.precautions : ['Contact Precautions']) : [],
+        isolationPrecautions: isPatientAIsolated ? (patA?.isolationPrecautions || []) : [],
         updatedAt: new Date().toISOString(),
       });
       await db.patients.update(patientBId, {
         currentBedId: bedAId as BedNumber,
-        isolationPrecautions: isPatientBIsolated ? (isolationB.precautions && isolationB.precautions.length > 0 ? isolationB.precautions : ['Contact Precautions']) : [],
+        isolationPrecautions: isPatientBIsolated ? (patB?.isolationPrecautions || []) : [],
         updatedAt: new Date().toISOString(),
       });
       await ensureBedPatientSync();

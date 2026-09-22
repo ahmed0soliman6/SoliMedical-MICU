@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   ShieldAlert, 
   X, 
@@ -44,6 +44,8 @@ export const BedIsolationModal: React.FC<BedIsolationModalProps> = ({
   const { lang, isRTL } = useTranslation();
   const { triggerNotification } = useAppNotifications();
 
+  const activeBedSessionRef = useRef<string | null>(null);
+
   const [selectedStatus, setSelectedStatus] = useState<BedStatus>(bed?.status || BedStatus.VACANT);
   const [isIsolated, setIsIsolated] = useState<boolean>(
     bed ? (bed.status === BedStatus.ISOLATION || bed.isolation?.isIsolated || false) : false
@@ -61,7 +63,54 @@ export const BedIsolationModal: React.FC<BedIsolationModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // Sync state cleanly whenever the modal opens
+  useEffect(() => {
+    if (isOpen && bed) {
+      const hasPatientPrecautions = !!(
+        patient?.isolationPrecautions &&
+        patient.isolationPrecautions.length > 0 &&
+        !patient.isolationPrecautions.some(p => p.toLowerCase().includes('standard') || p === 'None' || p === 'لا يوجد عزل' || p === 'NONE')
+      );
+      const wasCurrentlyIsolated = bed.status === BedStatus.ISOLATION || !!(bed.isolation && bed.isolation.isIsolated) || hasPatientPrecautions;
+      
+      // Fast Action Workflow:
+      // - If bed was isolated, user clicked "إنهاء العزل" -> initialize in End Isolation mode (isIsolated = false)
+      // - If bed was not isolated, user clicked "عزل" -> initialize in Isolation mode (isIsolated = true)
+      const targetIsolateAction = !wasCurrentlyIsolated;
+      
+      setSelectedStatus(targetIsolateAction ? BedStatus.ISOLATION : (patient ? BedStatus.OCCUPIED : BedStatus.VACANT));
+      setIsIsolated(targetIsolateAction);
+      setIsolationType(bed.isolation?.type || (hasPatientPrecautions && patient?.isolationPrecautions ? patient.isolationPrecautions[0] : 'Airborne'));
+      setReason(bed.isolation?.reason || (patient?.diagnosis ? `عزل طبي: ${patient.diagnosis}` : 'عزل طبي سريري'));
+      setStartDate(bed.isolation?.startDate || new Date().toISOString().split('T')[0]);
+      setEndDate(bed.isolation?.endDate || '');
+      setPrecautions(
+        (bed.isolation?.precautions && bed.isolation.precautions.length > 0)
+          ? bed.isolation.precautions
+          : (hasPatientPrecautions && patient?.isolationPrecautions ? patient.isolationPrecautions : ['n95', 'gloves', 'gown'])
+      );
+      setNotes(bed.isolation?.notes || '');
+      setErrorMessage(null);
+    }
+  }, [isOpen]);
+
   if (!isOpen || !bed) return null;
+
+  const handleSelectIsolation = () => {
+    setIsIsolated(true);
+    setSelectedStatus(BedStatus.ISOLATION);
+    if (!reason || reason.trim() === '') {
+      setReason(patient?.diagnosis ? `عزل طبي: ${patient.diagnosis}` : 'عزل سريري وقائي');
+    }
+    if (precautions.length === 0) {
+      setPrecautions(['n95', 'gloves', 'gown']);
+    }
+  };
+
+  const handleSelectEndIsolation = () => {
+    setIsIsolated(false);
+    setSelectedStatus(BedStatus.OCCUPIED);
+  };
 
   const togglePrecaution = (id: string) => {
     setPrecautions(prev => 
@@ -75,57 +124,68 @@ export const BedIsolationModal: React.FC<BedIsolationModalProps> = ({
     setErrorMessage(null);
 
     try {
-      let finalStatus = selectedStatus;
-      const hasAssignedPatient = !!(bed.currentPatientId || bed.activePatientId || patient?.id);
-      if (isIsolated && selectedStatus !== BedStatus.UNAVAILABLE) {
-        finalStatus = BedStatus.ISOLATION;
-      } else if (!isIsolated && selectedStatus === BedStatus.ISOLATION) {
-        finalStatus = hasAssignedPatient ? BedStatus.OCCUPIED : BedStatus.VACANT;
+      const targetPatientId = patient?.id || bed.currentPatientId || bed.activePatientId;
+      
+      const activePrecautions = isIsolated 
+        ? (precautions.length > 0 ? precautions : ['Contact Precautions']) 
+        : [];
+
+      const patientIsolationList = isIsolated 
+        ? [isolationType || 'Airborne', ...activePrecautions.filter(p => p !== isolationType)]
+        : [];
+
+      // 1. If patient exists in local Dexie, update all matching patient instances
+      const allPatients = await db.patients.toArray();
+      const matchingPatients = allPatients.filter(p => 
+        (targetPatientId && p.id === targetPatientId) ||
+        (p.currentBedId === bed.bedNumber && p.patientStatus === 'ACTIVE_ICU') ||
+        (p.currentBedId === bed.bedNumber)
+      );
+
+      for (const pat of matchingPatients) {
+        pat.isolationPrecautions = patientIsolationList;
+        pat.updatedAt = new Date().toISOString();
+        await db.patients.put(pat);
+        try {
+          await syncPatientToCloud(pat);
+        } catch (patErr) {
+          console.warn('Patient cloud sync warning:', patErr);
+        }
       }
+
+      // 2. Update local Dexie database for Bed
+      const existingBed = await db.beds.get(bed.bedNumber);
+      const hasAssignedPatient = matchingPatients.length > 0 || !!targetPatientId;
+      const finalStatus: BedStatus = isIsolated 
+        ? BedStatus.ISOLATION 
+        : (hasAssignedPatient ? BedStatus.OCCUPIED : BedStatus.VACANT);
 
       const isolationData: BedIsolationInfo = {
         isIsolated,
         type: isIsolated ? (isolationType || 'Airborne') : undefined,
-        reason: isIsolated ? reason.trim() : undefined,
+        reason: isIsolated ? (reason.trim() || 'عزل طبي سريري') : undefined,
         startDate: isIsolated ? startDate : undefined,
         endDate: isIsolated && endDate ? endDate : undefined,
-        precautions: isIsolated ? precautions : [],
+        precautions: activePrecautions,
         notes: isIsolated ? notes.trim() : undefined,
       };
 
-      // 1. Update local Dexie database
-      const existingBed = await db.beds.get(bed.bedNumber);
       const updatedBed: BedRecord = {
         ...(existingBed || bed),
         status: finalStatus,
         isolation: isolationData,
+        updatedAt: new Date().toISOString(),
       };
       await db.beds.put(updatedBed);
 
-      // If patient exists, update patient's isolation precautions too
-      if (patient?.id) {
-        try {
-          await db.patients.update(patient.id, {
-            isolationPrecautions: isIsolated ? precautions : [],
-            updatedAt: new Date().toISOString(),
-          });
-          const pat = await db.patients.get(patient.id);
-          if (pat) {
-            await syncPatientToCloud(pat);
-          }
-        } catch (e) {
-          console.warn('Patient isolation update error:', e);
-        }
-      }
-
-      // 2. Sync Bed to Cloud Firestore SSOT
+      // 3. Sync Bed to Cloud Firestore SSOT
       try {
         await syncBedToCloud(updatedBed);
       } catch (cloudErr) {
         console.warn('Firestore bed status update (offline cache will sync):', cloudErr);
       }
 
-      // 3. Trigger Notification (broadcasts to other clinicians in real time)
+      // 4. Trigger Notification (broadcasts to other clinicians in real time)
       if (isIsolated) {
         triggerNotification({
           type: 'ISOLATION_CHANGE',
@@ -154,7 +214,7 @@ export const BedIsolationModal: React.FC<BedIsolationModalProps> = ({
         });
       }
 
-      // 4. Ensure immediate local synchronization and dispatch events
+      // 5. Ensure immediate local synchronization and dispatch events
       await ensureBedPatientSync();
       window.dispatchEvent(new Event('icu-data-updated'));
       (onSuccess || onUpdated)?.();
@@ -181,10 +241,10 @@ export const BedIsolationModal: React.FC<BedIsolationModalProps> = ({
             </div>
             <div>
               <h2 className="text-base sm:text-lg font-bold text-white">
-                {lang === 'ar' ? `حالة السرير والتحكم بالعزل - سرير ${bed.bedNumber}` : `Bed Status & Isolation - Bed ${bed.bedNumber}`}
+                {lang === 'ar' ? `تدابير العزل - سرير ${bed.bedNumber}` : `Isolation Precautions - Bed ${bed.bedNumber}`}
               </h2>
               <p className="text-xs text-slate-400">
-                {lang === 'ar' ? 'عادي / عزل سريري / غير متاح' : 'Standard / Isolation / Unavailable'}
+                {lang === 'ar' ? 'عزل وقائي / إنهاء تدابير العزل' : 'Clinical Isolation / End Isolation'}
               </p>
             </div>
           </div>
@@ -206,76 +266,66 @@ export const BedIsolationModal: React.FC<BedIsolationModalProps> = ({
             </div>
           )}
 
-          {/* 3 Main Status Choices */}
+          {/* 2 Main Status Choices: Isolation vs End Isolation */}
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-2">
-              {lang === 'ar' ? 'حدد حالة السرير التشغيلية:' : 'Select Bed Operational Status:'}
+              {lang === 'ar' ? 'حدد الإجراء المطلوب للسرير:' : 'Select Isolation Action:'}
             </label>
-            <div className="grid grid-cols-3 gap-2">
-              {/* Normal / Standard */}
+            <div className="grid grid-cols-2 gap-3">
+              {/* Option 1: عزل (Isolation) */}
               <button
                 type="button"
-                onClick={() => {
-                  setIsIsolated(false);
-                  setSelectedStatus(bed.currentPatientId ? BedStatus.OCCUPIED : BedStatus.VACANT);
-                }}
-                className={`p-3 rounded-xl border text-center transition-all ${
-                  !isIsolated && selectedStatus !== BedStatus.UNAVAILABLE
-                    ? 'bg-teal-500/20 border-teal-500 text-white ring-2 ring-teal-500/40'
-                    : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                onClick={handleSelectIsolation}
+                className={`p-3.5 rounded-xl border text-center transition-all cursor-pointer ${
+                  isIsolated
+                    ? 'bg-amber-500/20 border-amber-500 text-amber-300 ring-2 ring-amber-500/40 shadow-lg shadow-amber-500/10'
+                    : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
                 }`}
               >
-                <div className="text-xs font-bold">{lang === 'ar' ? 'عادي' : 'Standard'}</div>
-                <div className="text-[10px] text-slate-400 mt-0.5">
-                  {bed.currentPatientId ? (lang === 'ar' ? 'مشغول' : 'Occupied') : (lang === 'ar' ? 'شاغر' : 'Vacant')}
-                </div>
-              </button>
-
-              {/* Isolation */}
-              <button
-                type="button"
-                onClick={() => {
-                  setIsIsolated(true);
-                  setSelectedStatus(BedStatus.ISOLATION);
-                }}
-                className={`p-3 rounded-xl border text-center transition-all ${
-                  isIsolated && selectedStatus !== BedStatus.UNAVAILABLE
-                    ? 'bg-amber-500/20 border-amber-500 text-amber-300 ring-2 ring-amber-500/40'
-                    : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
-                }`}
-              >
-                <div className="text-xs font-bold flex items-center justify-center gap-1">
-                  <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
+                <div className="text-sm font-bold flex items-center justify-center gap-1.5">
+                  <ShieldAlert className="w-4 h-4 text-amber-400" />
                   <span>{lang === 'ar' ? 'عزل' : 'Isolation'}</span>
                 </div>
-                <div className="text-[10px] text-amber-400/80 mt-0.5">
-                  {lang === 'ar' ? 'احتياطات خاصة' : 'Special Precautions'}
+                <div className="text-[11px] text-amber-400/80 mt-1 font-medium">
+                  {lang === 'ar' ? 'تفعيل تدابير واحتياطات العزل' : 'Activate Isolation Precautions'}
                 </div>
               </button>
 
-              {/* Unavailable */}
+              {/* Option 2: إنهاء العزل (End Isolation) */}
               <button
                 type="button"
-                onClick={() => {
-                  setIsIsolated(false);
-                  setSelectedStatus(BedStatus.UNAVAILABLE);
-                }}
-                className={`p-3 rounded-xl border text-center transition-all ${
-                  selectedStatus === BedStatus.UNAVAILABLE
-                    ? 'bg-red-500/20 border-red-500 text-red-300 ring-2 ring-red-500/40'
-                    : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                onClick={handleSelectEndIsolation}
+                className={`p-3.5 rounded-xl border text-center transition-all cursor-pointer ${
+                  !isIsolated
+                    ? 'bg-teal-500/20 border-teal-500 text-teal-300 ring-2 ring-teal-500/40 shadow-lg shadow-teal-500/10'
+                    : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
                 }`}
               >
-                <div className="text-xs font-bold flex items-center justify-center gap-1">
-                  <Lock className="w-3.5 h-3.5 text-red-400" />
-                  <span>{lang === 'ar' ? 'غير متاح' : 'Unavailable'}</span>
+                <div className="text-sm font-bold flex items-center justify-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4 text-teal-400" />
+                  <span>{lang === 'ar' ? 'إنهاء العزل' : 'End Isolation'}</span>
                 </div>
-                <div className="text-[10px] text-red-400/80 mt-0.5">
-                  {lang === 'ar' ? 'صيانة / تعقيم' : 'Decon / Tech'}
+                <div className="text-[11px] text-teal-400/80 mt-1 font-medium">
+                  {lang === 'ar' ? 'إلغاء العزل والعودة للوضع العادي' : 'Lift Precautions & Standard Care'}
                 </div>
               </button>
             </div>
           </div>
+
+          {/* If End Isolation is selected, show reassuring clinical info card */}
+          {!isIsolated && (
+            <div className="p-4 rounded-xl bg-teal-950/30 border border-teal-800/50 space-y-2 animate-in fade-in duration-150">
+              <div className="flex items-center gap-2 text-teal-300 text-xs font-bold">
+                <CheckCircle2 className="w-4 h-4 text-teal-400 shrink-0" />
+                <span>{lang === 'ar' ? 'إنهاء تدابير العزل والعودة للرعاية الاعتيادية' : 'End Isolation & Resume Standard ICU Care'}</span>
+              </div>
+              <p className="text-[11px] text-slate-300 leading-relaxed">
+                {lang === 'ar' 
+                  ? 'عند الحفظ، سيتم إلغاء حالة العزل بالكامل عن السرير والمريض، وتفريغ تدابير الوقاية الخاصة، واستعادة وضع الرعاية الاعتيادي للسرير (مشغول عادي).'
+                  : 'Upon saving, isolation precautions will be cleared from this bed and patient dossier, returning to standard occupied bed status.'}
+              </p>
+            </div>
+          )}
 
           {/* Isolation Details Section (Shown when Isolation is active) */}
           {isIsolated && (
@@ -411,17 +461,26 @@ export const BedIsolationModal: React.FC<BedIsolationModalProps> = ({
             <button
               type="submit"
               disabled={isSubmitting || (isIsolated && !reason.trim())}
-              className="flex items-center gap-2 px-5 py-2 text-xs font-bold text-slate-950 bg-amber-400 hover:bg-amber-300 rounded-xl transition-all shadow-md active:scale-95 disabled:opacity-50"
+              className={`flex items-center gap-2 px-5 py-2 text-xs font-bold text-slate-950 rounded-xl transition-all shadow-md active:scale-95 disabled:opacity-50 cursor-pointer ${
+                isIsolated 
+                  ? 'bg-amber-400 hover:bg-amber-300' 
+                  : 'bg-teal-400 hover:bg-teal-300'
+              }`}
             >
               {isSubmitting ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
                   <span>{lang === 'ar' ? 'جارِ الحفظ...' : 'Saving...'}</span>
                 </>
+              ) : isIsolated ? (
+                <>
+                  <ShieldAlert className="w-4 h-4" />
+                  <span>{lang === 'ar' ? 'حفظ تدابير العزل' : 'Save Isolation Precautions'}</span>
+                </>
               ) : (
                 <>
                   <CheckCircle2 className="w-4 h-4" />
-                  <span>{lang === 'ar' ? 'حفظ حالة السرير' : 'Save Bed Status'}</span>
+                  <span>{lang === 'ar' ? 'تأكيد إنهاء العزل' : 'Confirm End Isolation'}</span>
                 </>
               )}
             </button>

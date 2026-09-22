@@ -17,7 +17,8 @@ import {
   Clock,
   User,
   ArrowRight,
-  Maximize2
+  Maximize2,
+  Tag
 } from 'lucide-react';
 import { useTranslation } from '../services/i18n.ts';
 import { compressImageForOcr } from '../services/imageCompression.ts';
@@ -580,39 +581,57 @@ export const AiInvestigationScannerModal: React.FC<AiInvestigationScannerModalPr
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {/* Modality */}
+                  {/* Modality & Abbreviation */}
                   <div>
                     <label className="block text-xs font-semibold text-slate-300 mb-1">
-                      {lang === 'ar' ? 'نوع الفحص (Modality)' : 'Modality'}
+                      {lang === 'ar' ? 'مختصر ونوع الأشعة (Modality & Code)' : 'Modality & Abbreviation'}
                     </label>
                     <select
                       value={editModality}
                       onChange={(e) => setEditModality(e.target.value)}
-                      className="w-full px-3 py-2 text-xs rounded-xl bg-slate-950 border border-slate-700 text-white focus:outline-none focus:border-teal-500 cursor-pointer"
+                      className="w-full px-3 py-2 text-xs rounded-xl bg-slate-950 border border-slate-700 text-white focus:outline-none focus:border-teal-500 cursor-pointer font-medium"
                     >
-                      <option value="Chest X-Ray">Chest X-Ray (أشعة الصدر)</option>
-                      <option value="CT">CT (الأشعة المقطعية)</option>
-                      <option value="MRI">MRI (الرنين المغناطيسي)</option>
-                      <option value="Ultrasound">Ultrasound / POCUS (الموجات فوق الصوتية)</option>
-                      <option value="ECG">ECG (تخطيط القلب)</option>
-                      <option value="Echo">Echocardiography (السونار القلبي)</option>
-                      <option value="Other">Other Diagnostic Study (فحوصات أخرى)</option>
+                      <option value="Chest X-Ray">[CXR] Chest X-Ray (أشعة الصدر)</option>
+                      <option value="CT">[CT] CT Scan (الأشعة المقطعية)</option>
+                      <option value="MRI">[MRI] MRI Scan (الرنين المغناطيسي)</option>
+                      <option value="Ultrasound">[US/POCUS] Ultrasound (الموجات الصوتية / سونار)</option>
+                      <option value="ECG">[ECG] 12-Lead ECG (تخطيط القلب)</option>
+                      <option value="Echo">[ECHO] Echocardiography (السونار القلبي)</option>
+                      <option value="Other">[OTHER] Other Diagnostic Study (فحوصات أخرى)</option>
                     </select>
                   </div>
 
                   {/* Test Name */}
                   <div>
                     <label className="block text-xs font-semibold text-slate-300 mb-1">
-                      {lang === 'ar' ? 'اسم الفحص الدقيق' : 'Specific Study Name'}
+                      {lang === 'ar' ? 'اسم الأشعة والفحص (Radiology Study Name)' : 'Radiology Study Name'}
                     </label>
                     <input
                       type="text"
                       value={editTestName}
                       onChange={(e) => setEditTestName(e.target.value)}
-                      className="w-full px-3 py-2 text-xs rounded-xl bg-slate-950 border border-slate-700 text-white focus:outline-none focus:border-teal-500"
+                      className="w-full px-3 py-2 text-xs rounded-xl bg-slate-950 border border-slate-700 text-white focus:outline-none focus:border-teal-500 font-semibold"
                       required
                     />
                   </div>
+                </div>
+
+                {/* Live Preview Strip for Mobile & Desktop */}
+                <div className="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-[11px] flex items-center justify-between gap-2 text-slate-300">
+                  <span className="flex items-center gap-1 text-teal-300 font-mono font-bold shrink-0">
+                    <Tag className="w-3.5 h-3.5 text-teal-400" />
+                    <span>
+                      {editModality === 'Chest X-Ray' ? '[CXR]' :
+                       editModality === 'CT' ? '[CT]' :
+                       editModality === 'MRI' ? '[MRI]' :
+                       editModality === 'Ultrasound' ? '[US/POCUS]' :
+                       editModality === 'ECG' ? '[ECG]' :
+                       editModality === 'Echo' ? '[ECHO]' : '[RAD]'}
+                    </span>
+                  </span>
+                  <span className="truncate font-semibold text-white">
+                    {editTestName || (lang === 'ar' ? 'اسم الأشعة غير محدد' : 'Study name not set')}
+                  </span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

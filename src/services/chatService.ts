@@ -283,6 +283,29 @@ export async function deleteChatMessage(messageId: string): Promise<void> {
 }
 
 /**
+ * Deletes an entire direct chat conversation and its associated messages
+ */
+export async function deleteChatConversation(chatId: string): Promise<void> {
+  if (!chatId || chatId === 'dept_general') return;
+  try {
+    const colRef = collection(firestore, MESSAGES_COLLECTION);
+    const q = query(colRef, where('chatId', '==', chatId));
+    const snapshot = await getDocs(q);
+    const deletePromises = snapshot.docs.map(d => deleteDoc(d.ref).catch(() => {}));
+    await Promise.all(deletePromises);
+  } catch (err) {
+    console.warn('Error deleting conversation messages:', err);
+  }
+
+  try {
+    const chatRef = doc(firestore, CHATS_COLLECTION, chatId);
+    await deleteDoc(chatRef);
+  } catch (err) {
+    console.warn('Error deleting chat document:', err);
+  }
+}
+
+/**
  * Periodically deletes chat messages that are older than 3 months (90 days)
  */
 export async function cleanupOldMessages(): Promise<number> {

@@ -607,10 +607,18 @@ export default function App() {
 
   // Periodic Auto-Refresh for ICU Timelines & 24h Balances
   useEffect(() => {
+    const handleIcuDataUpdated = () => {
+      reloadData();
+    };
+    window.addEventListener('icu-data-updated', handleIcuDataUpdated);
+
     const refreshTimer = setInterval(() => {
       reloadData();
     }, 30000);
-    return () => clearInterval(refreshTimer);
+    return () => {
+      window.removeEventListener('icu-data-updated', handleIcuDataUpdated);
+      clearInterval(refreshTimer);
+    };
   }, [reloadData, lang]);
 
   if (!isAuthenticated && !isAuthLoading) {

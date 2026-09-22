@@ -16,10 +16,12 @@ import {
   ArrowLeft,
   ArrowRight,
   Plus,
-  CheckCheck
+  CheckCheck,
+  Trash2
 } from 'lucide-react';
 import { useAuth } from '../services/AuthContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
+import { auth } from '../services/firebase.ts';
 import { ChatConversation, ChatMessage, IcuUser } from '../types/schema.ts';
 import { 
   subscribeToUserChats, 
@@ -28,6 +30,7 @@ import {
   getOrCreateDirectChat,
   markChatAsRead,
   calculateTotalUnreadCount,
+  deleteChatMessage,
   DEFAULT_DEPARTMENTS 
 } from '../services/chatService.ts';
 
@@ -57,6 +60,7 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({ activeTa
   const [isSending, setIsSending] = useState<boolean>(false);
   const [isStaffDrawerOpen, setIsStaffDrawerOpen] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [selectedMsgId, setSelectedMsgId] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fabRef = useRef<HTMLDivElement>(null);
@@ -181,6 +185,22 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({ activeTa
 
   const unreadCount = currentUser?.uid ? calculateTotalUnreadCount(chats, currentUser.uid) : 0;
 
+  const handleDeleteMessage = async (messageId: string) => {
+    const confirmMsg = lang === 'ar' 
+      ? 'هل أنت متأكد من حذف هذه الرسالة؟' 
+      : 'Are you sure you want to delete this message?';
+    if (!window.confirm(confirmMsg)) return;
+    try {
+      await deleteChatMessage(messageId);
+      setMessages(prev => prev.filter(m => m.id !== messageId));
+      if (selectedMsgId === messageId) {
+        setSelectedMsgId(null);
+      }
+    } catch (err) {
+      console.warn('Failed to delete floating message:', err);
+    }
+  };
+
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!inputText.trim() || !currentUser || !activeChatId || isSending) return;
@@ -189,15 +209,19 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({ activeTa
       setIsSending(true);
       const text = inputText;
       setInputText('');
+      const activeSenderUid = auth.currentUser?.uid || currentUser.uid;
       await sendChatMessage(
         activeChatId,
-        currentUser.uid,
+        activeSenderUid,
         currentUser.displayName || (lang === 'ar' ? currentUser.nameAr : currentUser.nameEn) || 'Staff',
         currentUser.role,
         text
       );
       if (currentUser.uid) {
         markChatAsRead(activeChatId, currentUser.uid);
+      }
+      if (auth.currentUser?.uid && auth.currentUser.uid !== currentUser.uid) {
+        markChatAsRead(activeChatId, auth.currentUser.uid);
       }
     } catch (err) {
       console.warn('Failed to send floating message:', err);
@@ -456,26 +480,98 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({ activeTa
                       </div>
                     ) : (
                       messages.map((msg) => {
-                        const isMine = msg.senderUid === currentUser.uid;
+                        const isMine = msg.senderUid === currentUser.uid || 
+                          (auth.currentUser && msg.senderUid === auth.currentUser.uid) ||
+                          (Boolean(currentUser?.displayName) && msg.senderName === currentUser?.displayName);
+                        const isAdminUser = currentUser?.role === 'ADMIN' || currentUser?.isSuperAdmin === true || (currentUser?.role as any) === 'admin';
+                        const canDelete = isAdminUser || isMine;
+                        const isSelected = selectedMsgId === msg.id;
                         const formattedTime = new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
                         return (
                           <div 
                             key={msg.id} 
-                            className={`flex flex-col ${isMine ? 'items-end' : 'items-start'}`}
+                            className={`flex flex-col ${isMine ? 'items-end' : 'items-start'} group transition-all`}
                           >
                             <div className="flex items-center gap-1 mb-0.5 px-1 text-[10px]">
                               <span className="font-semibold text-slate-700 dark:text-slate-300">{msg.senderName}</span>
                               <span className="text-slate-400 dark:text-slate-500 text-[9px]">{formattedTime}</span>
                             </div>
 
-                            <div className={`max-w-[85%] p-2.5 rounded-xl text-[11px] leading-relaxed shadow-sm ${
-                              isMine
-                                ? 'bg-teal-600 text-white rounded-br-none border border-teal-500/50'
-                                : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-bl-none border border-slate-200 dark:border-slate-700'
-                            }`}>
-                              <p className="whitespace-pre-wrap break-words">{msg.message}</p>
+                            <div className="flex items-center gap-1.5 max-w-[90%]">
+                              {isMine && canDelete && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteMessage(msg.id);
+                                  }}
+                                  className={`p-1.5 rounded-lg bg-rose-500/10 text-rose-500 hover:bg-rose-500 hover:text-white dark:bg-rose-500/20 dark:text-rose-400 dark:hover:bg-rose-500 dark:hover:text-white cursor-pointer shrink-0 transition-all ${
+                                    isSelected ? 'opacity-100 scale-105 ring-1 ring-rose-500' : 'opacity-0 md:group-hover:opacity-100'
+                                  }`}
+                                  title={lang === 'ar' ? 'حذف الرسالة' : 'Delete Message'}
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              )}
+
+                              <div 
+                                onClick={() => setSelectedMsgId(isSelected ? null : msg.id)}
+                                className={`p-2.5 rounded-xl text-[11px] leading-relaxed shadow-sm cursor-pointer transition-all ${
+                                  isMine
+                                    ? 'bg-teal-600 text-white rounded-br-none border border-teal-500/50'
+                                    : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-bl-none border border-slate-200 dark:border-slate-700'
+                                } ${
+                                  isSelected ? 'ring-2 ring-rose-400 shadow-md' : ''
+                                }`}
+                                title={lang === 'ar' ? 'انقر للخيارات أو الحذف' : 'Click for delete option'}
+                              >
+                                <p className="whitespace-pre-wrap break-words">{msg.message}</p>
+                              </div>
+
+                              {!isMine && canDelete && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteMessage(msg.id);
+                                  }}
+                                  className={`p-1.5 rounded-lg bg-rose-500/10 text-rose-500 hover:bg-rose-500 hover:text-white dark:bg-rose-500/20 dark:text-rose-400 dark:hover:bg-rose-500 dark:hover:text-white cursor-pointer shrink-0 transition-all ${
+                                    isSelected ? 'opacity-100 scale-105 ring-1 ring-rose-500' : 'opacity-0 md:group-hover:opacity-100'
+                                  }`}
+                                  title={lang === 'ar' ? 'حذف الرسالة' : 'Delete Message'}
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              )}
                             </div>
+
+                            {/* Tap Action Bar when selected */}
+                            {isSelected && canDelete && (
+                              <div className="flex items-center gap-1.5 mt-1 px-1 animate-in fade-in duration-100">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteMessage(msg.id);
+                                  }}
+                                  className="flex items-center gap-1 px-2 py-1 rounded-md bg-rose-600 text-white text-[10px] font-bold shadow-sm cursor-pointer active:scale-95"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                  <span>{lang === 'ar' ? 'حذف' : 'Delete'}</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedMsgId(null);
+                                  }}
+                                  className="px-2 py-1 rounded-md bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[10px]"
+                                >
+                                  {lang === 'ar' ? 'إلغاء' : 'Cancel'}
+                                </button>
+                              </div>
+                            )}
                           </div>
                         );
                       })

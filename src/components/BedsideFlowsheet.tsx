@@ -1359,16 +1359,41 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                 </>
               )}
 
-              {settings.features.enableBedIsolationControls !== false && (
-                <button
-                  onClick={() => setIsIsolationModalOpen(true)}
-                  className="flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-[10px] xs:text-[11px] sm:text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer text-center min-w-0"
-                  title={lang === 'ar' ? 'تدابير العزل وحالة السرير' : 'Manage bed status & isolation'}
-                >
-                  <ShieldAlert className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-                  <span className="truncate">{lang === 'ar' ? 'العزل والحالة' : 'Bed Status'}</span>
-                </button>
-              )}
+              {settings.features.enableBedIsolationControls !== false && (() => {
+                const isCurrentlyIsolated = !!(
+                  (bed && (bed.status === BedStatus.ISOLATION || bed.status === 'ISOLATION' || bed.isolation?.isIsolated)) ||
+                  (patient?.isolationPrecautions &&
+                    patient.isolationPrecautions.length > 0 &&
+                    !patient.isolationPrecautions.some(p => p.toLowerCase().includes('standard') || p === 'None' || p === 'لا يوجد عزل' || p === 'NONE'))
+                );
+
+                return (
+                  <button
+                    onClick={() => setIsIsolationModalOpen(true)}
+                    className={`flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-[10px] xs:text-[11px] sm:text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer text-center min-w-0 ${
+                      isCurrentlyIsolated
+                        ? 'bg-teal-500/15 hover:bg-teal-500/25 text-teal-700 dark:text-teal-300 border-teal-500/40 shadow-teal-500/10'
+                        : 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-700 dark:text-amber-300 border-amber-500/30'
+                    }`}
+                    title={
+                      isCurrentlyIsolated
+                        ? (lang === 'ar' ? 'إنهاء تدابير العزل والعودة للوضع الاعتيادي' : 'End Isolation Precautions')
+                        : (lang === 'ar' ? 'تفعيل تدابير العزل للمريض' : 'Activate Isolation Precautions')
+                    }
+                  >
+                    {isCurrentlyIsolated ? (
+                      <CheckCircle2 className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
+                    ) : (
+                      <ShieldAlert className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                    )}
+                    <span className="truncate whitespace-nowrap">
+                      {isCurrentlyIsolated
+                        ? (lang === 'ar' ? 'إنهاء العزل' : 'End Isolation')
+                        : (lang === 'ar' ? 'عزل' : 'Isolation')}
+                    </span>
+                  </button>
+                );
+              })()}
             </div>
           </div>
         )}

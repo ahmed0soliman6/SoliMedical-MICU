@@ -18,7 +18,8 @@ import {
   Sparkles,
   Camera,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Tag
 } from 'lucide-react';
 import { InvestigationItem } from '../types/schema.ts';
 import { useTranslation } from '../services/i18n.ts';
@@ -38,15 +39,98 @@ interface InvestigationsSectionProps {
   readOnly?: boolean;
 }
 
-const MODALITY_PRESETS = [
-  { id: 'Chest X-Ray', labelAr: 'أشعة الصدر (Chest X-Ray)', labelEn: 'Chest X-Ray' },
-  { id: 'CT', labelAr: 'أشعة مقطعية (CT Scan)', labelEn: 'CT Scan' },
-  { id: 'MRI', labelAr: 'رنين مغناطيسي (MRI)', labelEn: 'MRI' },
-  { id: 'Ultrasound', labelAr: 'موجات صوتية / سونار (Ultrasound / POCUS)', labelEn: 'Ultrasound / POCUS' },
-  { id: 'ECG', labelAr: 'تخطيط قلب 12-قناة (12-Lead ECG)', labelEn: '12-Lead ECG' },
-  { id: 'Echo', labelAr: 'إيكو قلب (Echocardiography)', labelEn: 'Echocardiography' },
-  { id: 'Other', labelAr: 'فحص إضافي / حر', labelEn: 'Other Modality' },
+export interface ModalityPreset {
+  id: string;
+  code: string;       // مختصر الأشعة الطبي الدولي
+  labelAr: string;    // اسم الأشعة بالعربية
+  labelEn: string;    // اسم الأشعة بالإنجليزية
+  color: string;
+  badgeBg: string;
+}
+
+export const MODALITY_PRESETS: ModalityPreset[] = [
+  { 
+    id: 'Chest X-Ray', 
+    code: 'CXR', 
+    labelAr: 'أشعة الصدر العادية (CXR)', 
+    labelEn: 'Chest X-Ray (CXR)',
+    color: 'border-teal-500/50 bg-teal-500/10 text-teal-300',
+    badgeBg: 'bg-teal-500/20 text-teal-300 border-teal-500/40'
+  },
+  { 
+    id: 'CT', 
+    code: 'CT', 
+    labelAr: 'أشعة مقطعية (CT Scan)', 
+    labelEn: 'CT Scan',
+    color: 'border-cyan-500/50 bg-cyan-500/10 text-cyan-300',
+    badgeBg: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
+  },
+  { 
+    id: 'MRI', 
+    code: 'MRI', 
+    labelAr: 'رنين مغناطيسي (MRI)', 
+    labelEn: 'MRI Scan',
+    color: 'border-purple-500/50 bg-purple-500/10 text-purple-300',
+    badgeBg: 'bg-purple-500/20 text-purple-300 border-purple-500/40'
+  },
+  { 
+    id: 'Ultrasound', 
+    code: 'US / POCUS', 
+    labelAr: 'سونار وموجات صوتية (POCUS)', 
+    labelEn: 'Ultrasound / POCUS',
+    color: 'border-emerald-500/50 bg-emerald-500/10 text-emerald-300',
+    badgeBg: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+  },
+  { 
+    id: 'ECG', 
+    code: 'ECG', 
+    labelAr: 'تخطيط قلب 12-قناة (ECG)', 
+    labelEn: '12-Lead ECG',
+    color: 'border-amber-500/50 bg-amber-500/10 text-amber-300',
+    badgeBg: 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+  },
+  { 
+    id: 'Echo', 
+    code: 'ECHO', 
+    labelAr: 'إيكو قلب بجانب السرير (Echo)', 
+    labelEn: 'Bedside Echocardiography',
+    color: 'border-rose-500/50 bg-rose-500/10 text-rose-300',
+    badgeBg: 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+  },
+  { 
+    id: 'Other', 
+    code: 'OTHER', 
+    labelAr: 'فحص إشعاعي تشخيصي آخر', 
+    labelEn: 'Other Modality',
+    color: 'border-slate-500/50 bg-slate-500/10 text-slate-300',
+    badgeBg: 'bg-slate-500/20 text-slate-300 border-slate-500/40'
+  },
 ];
+
+export const getModalityInfo = (modality: string): ModalityPreset => {
+  const m = (modality || '').trim();
+  const found = MODALITY_PRESETS.find(p => p.id.toLowerCase() === m.toLowerCase() || p.code.toLowerCase() === m.toLowerCase());
+  if (found) return found;
+
+  const lower = m.toLowerCase();
+  if (lower.includes('chest') || lower.includes('cxr') || lower.includes('x-ray') || lower.includes('xray') || lower.includes('صدر')) {
+    return MODALITY_PRESETS[0];
+  }
+  if (lower.includes('ct') || lower.includes('مقطعية')) return MODALITY_PRESETS[1];
+  if (lower.includes('mri') || lower.includes('رنين')) return MODALITY_PRESETS[2];
+  if (lower.includes('ultra') || lower.includes('pocus') || lower.includes('سونار') || lower.includes('موجات')) return MODALITY_PRESETS[3];
+  if (lower.includes('ecg') || lower.includes('ekg') || lower.includes('تخطيط')) return MODALITY_PRESETS[4];
+  if (lower.includes('echo') || lower.includes('إيكو') || lower.includes('ايكو')) return MODALITY_PRESETS[5];
+
+  return {
+    id: m || 'Other',
+    code: (m.toUpperCase().slice(0, 8)) || 'RAD',
+    labelAr: m || 'فحص إشعاعي',
+    labelEn: m || 'Radiology Study',
+    color: 'border-teal-500/50 bg-teal-500/10 text-teal-300',
+    badgeBg: 'bg-teal-500/20 text-teal-300 border-teal-500/40'
+  };
+};
 
 const formatNumericDate = (dateVal?: string | Date | number): string => {
   if (!dateVal) return '—';
@@ -375,43 +459,108 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
                   const summaryLine = inv.resultReport 
                     ? inv.resultReport.split('\n')[0] 
                     : (inv.notes || (lang === 'ar' ? '— بدون تفاصيل إضافية —' : '— No additional details —'));
+                  const info = getModalityInfo(inv.modality);
 
                   return (
                     <div 
                       key={inv.id}
-                      className="p-3.5 rounded-xl bg-[#0d1527] border border-slate-800/80 hover:border-slate-700 transition-all space-y-2.5"
+                      className="p-3 sm:p-3.5 rounded-xl bg-[#0d1527] border border-slate-800/80 hover:border-slate-700 transition-all space-y-2.5"
                     >
                       {/* Collapsible Header */}
                       <div 
                         onClick={() => setExpandedReports(prev => ({ ...prev, [inv.id]: !isExpanded }))}
-                        className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 cursor-pointer select-none group"
+                        className="cursor-pointer select-none group space-y-2"
                       >
-                        {/* Left / Top: Modality, Test Name, Summary */}
-                        <div className="flex flex-col sm:flex-row sm:items-center gap-2 flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-teal-500/20 text-teal-300 border border-teal-500/40 font-mono shrink-0">
-                              {inv.modality}
+                        {/* Mobile Layout (sm:hidden) */}
+                        <div className="sm:hidden space-y-2">
+                          {/* Row 1: Abbreviation Badge, Status Badge, Chevron */}
+                          <div className="flex items-center justify-between gap-1.5">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {/* مختصر الأشعة */}
+                              <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-teal-500/20 text-teal-300 border border-teal-500/40 text-xs font-bold font-mono shadow-sm">
+                                <Tag className="w-3 h-3 text-teal-400" />
+                                <span>{lang === 'ar' ? `مختصر: ${info.code}` : `Abbr: ${info.code}`}</span>
+                              </div>
+                              <span className="text-[10px] text-slate-400 font-medium px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800">
+                                {lang === 'ar' ? info.labelAr : info.labelEn}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                inv.status === 'REPORTED'
+                                  ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                                  : inv.status === 'RESULTED'
+                                  ? 'bg-teal-950 text-teal-300 border border-teal-800'
+                                  : 'bg-amber-950 text-amber-300 border border-amber-800'
+                              }`}>
+                                {inv.status === 'REPORTED' ? (lang === 'ar' ? 'معتمد' : 'Reported') :
+                                 inv.status === 'RESULTED' ? (lang === 'ar' ? 'أولية' : 'Resulted') :
+                                 (lang === 'ar' ? 'معلق' : 'Ordered')}
+                              </span>
+                              <div className="p-1 rounded-lg bg-slate-800/80 text-slate-400 group-hover:text-white transition-colors">
+                                {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Row 2: اسم الأشعة بالتفصيل */}
+                          <div className="p-2.5 rounded-xl bg-slate-900/80 border border-slate-800/90 space-y-1">
+                            <span className="text-[10px] font-bold text-teal-400 flex items-center gap-1">
+                              <Scan className="w-3 h-3 text-teal-400" />
+                              <span>{lang === 'ar' ? 'اسم الأشعة / الفحص:' : 'Radiology Exam / Study:'}</span>
                             </span>
-                            <h4 className="text-xs font-bold text-white group-hover:text-teal-300 transition-colors">
-                              {inv.testName}
+                            <h4 className="text-sm font-bold text-white break-words leading-snug">
+                              {inv.testName || (lang === 'ar' ? 'غير محدد' : 'Unspecified')}
                             </h4>
                           </div>
-                          {!isExpanded && summaryLine && (
-                            <span className="text-[11px] text-slate-400 line-clamp-1 sm:line-clamp-none sm:truncate sm:max-w-xs font-sans">
-                              {summaryLine}
-                            </span>
+
+                          {/* Row 3 (when collapsed): summary & time */}
+                          {!isExpanded && (
+                            <div className="flex items-center justify-between gap-2 text-[10px] text-slate-400 pt-0.5">
+                              <div className="flex items-center gap-1 font-mono">
+                                <Clock className="w-3 h-3 text-slate-500" />
+                                <span>{formatNumericDate(inv.timestamp)} {new Date(inv.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                              </div>
+                              <span className="text-teal-400/90 font-medium">
+                                {lang === 'ar' ? 'اضغط لعرض التقرير' : 'Tap for details'}
+                              </span>
+                            </div>
                           )}
                         </div>
 
-                        {/* Right / Bottom: Timestamp, Status, Chevron */}
-                        <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0 pt-1.5 sm:pt-0 border-t sm:border-0 border-slate-800/60">
-                          {!isExpanded && (
-                            <span className="text-[10px] font-mono text-slate-400 flex items-center gap-1 bg-slate-900 px-2 py-0.5 rounded-lg border border-slate-800">
-                              <Clock className="w-3 h-3 text-slate-500" />
-                              <span>{formatNumericDate(inv.timestamp)} {new Date(inv.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        {/* Desktop Layout (hidden sm:flex) */}
+                        <div className="hidden sm:flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                            {/* مختصر الأشعة */}
+                            <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-teal-500/20 text-teal-300 border border-teal-500/40 font-mono shrink-0 flex items-center gap-1 shadow-sm">
+                              <Tag className="w-3 h-3 text-teal-400" />
+                              <span>{info.code}</span>
                             </span>
-                          )}
-                          <div className="flex items-center gap-2">
+
+                            {/* اسم الأشعة */}
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                              <span className="text-[11px] text-slate-400 shrink-0 font-medium">
+                                {lang === 'ar' ? 'اسم الأشعة:' : 'Study:'}
+                              </span>
+                              <h4 className="text-xs font-bold text-white group-hover:text-teal-300 transition-colors truncate">
+                                {inv.testName}
+                              </h4>
+                              {!isExpanded && summaryLine && (
+                                <span className="text-[11px] text-slate-400 truncate max-w-xs font-sans">
+                                  — {summaryLine}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            {!isExpanded && (
+                              <span className="text-[10px] font-mono text-slate-400 flex items-center gap-1 bg-slate-900 px-2 py-0.5 rounded-lg border border-slate-800">
+                                <Clock className="w-3 h-3 text-slate-500" />
+                                <span>{formatNumericDate(inv.timestamp)} {new Date(inv.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                              </span>
+                            )}
                             <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                               inv.status === 'REPORTED'
                                 ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
@@ -432,7 +581,32 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
 
                       {/* Expanded Full Report Details */}
                       {isExpanded && (
-                        <div className="space-y-3 pt-2 border-t border-slate-800/60 animate-in fade-in duration-200">
+                        <div className="space-y-3 pt-3 border-t border-slate-800/80 animate-in fade-in duration-200">
+                          {/* Top Info Banner */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-2.5 rounded-xl bg-slate-950/90 border border-slate-800 text-xs">
+                            <div className="space-y-0.5">
+                              <span className="text-[10px] text-teal-400/90 font-semibold uppercase tracking-wider block">
+                                {lang === 'ar' ? 'اسم الأشعة / الفحص الكامل:' : 'Full Radiology Exam / Study:'}
+                              </span>
+                              <p className="text-xs font-bold text-white break-words">
+                                {inv.testName}
+                              </p>
+                            </div>
+                            <div className="space-y-0.5 sm:text-end">
+                              <span className="text-[10px] text-teal-400/90 font-semibold uppercase tracking-wider block">
+                                {lang === 'ar' ? 'مختصر ونوع الأشعة:' : 'Modality & Abbreviation:'}
+                              </span>
+                              <div className="flex items-center sm:justify-end gap-1.5">
+                                <span className="px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-teal-500/20 text-teal-300 border border-teal-500/40">
+                                  {info.code}
+                                </span>
+                                <span className="text-slate-300 font-medium text-[11px]">
+                                  {lang === 'ar' ? info.labelAr : info.labelEn}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
                           <div className="flex items-center justify-end gap-2">
                             {!readOnly && (
                               <>
@@ -578,25 +752,35 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
               </button>
             </div>
 
-            <form onSubmit={handleSave} className="p-5 space-y-4 overflow-y-auto">
-              {/* Modality Selector */}
+            <form onSubmit={handleSave} className="p-4 sm:p-5 space-y-4 overflow-y-auto">
+              {/* Modality & Abbreviation Selector */}
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                  {lang === 'ar' ? 'نوع الفحص (Modality):' : 'Investigation Modality:'}
-                </label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-300">
+                    {lang === 'ar' ? 'مختصر ونوع الأشعة (Modality & Code):' : 'Radiology Modality & Abbreviation:'}
+                  </label>
+                  <span className="text-[11px] font-mono font-bold text-teal-400 bg-teal-950/60 px-2 py-0.5 rounded border border-teal-800/80">
+                    {getModalityInfo(modality).code}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {MODALITY_PRESETS.map(m => (
                     <button
                       type="button"
                       key={m.id}
                       onClick={() => handleModalityChange(m.id)}
-                      className={`p-2 rounded-xl text-xs text-center border transition-all cursor-pointer ${
+                      className={`p-2.5 rounded-xl text-xs text-start sm:text-center border transition-all cursor-pointer flex sm:flex-col items-center justify-between sm:justify-center gap-1.5 ${
                         modality === m.id
-                          ? 'bg-teal-500 text-slate-950 font-bold shadow'
+                          ? 'bg-teal-500 text-slate-950 font-bold shadow-md border-teal-400'
                           : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'
                       }`}
                     >
-                      {m.id}
+                      <span className={`font-mono font-bold text-[11px] px-1.5 py-0.5 rounded ${
+                        modality === m.id ? 'bg-black/20 text-slate-950' : 'bg-slate-800 text-teal-300'
+                      }`}>
+                        {m.code}
+                      </span>
+                      <span className="truncate text-[11px] font-medium">{lang === 'ar' ? m.labelAr : m.labelEn}</span>
                     </button>
                   ))}
                 </div>
@@ -604,17 +788,31 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
 
               {/* Test Name */}
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  {lang === 'ar' ? 'اسم الفحص الدقيق' : 'Study Specific Name'}
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-slate-300">
+                    {lang === 'ar' ? 'اسم الأشعة / الفحص المطلوب بالتفصيل:' : 'Radiology Study / Exam Name:'}
+                  </label>
+                  <span className="text-[10px] text-slate-400">
+                    {lang === 'ar' ? 'يظهر بالكامل في البطاقة' : 'Displayed in full'}
+                  </span>
+                </div>
                 <input
                   type="text"
                   value={testName}
                   onChange={(e) => setTestName(e.target.value)}
                   placeholder={lang === 'ar' ? 'مثال: Portable CXR AP view, CT Brain without contrast...' : 'e.g. Portable CXR, 12-lead ECG...'}
-                  className="w-full px-3 py-2 text-xs rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-teal-500"
+                  className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-teal-500"
                   required
                 />
+                <div className="mt-1.5 px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-[11px] flex items-center justify-between gap-2 text-slate-300">
+                  <span className="flex items-center gap-1 text-teal-300 font-mono font-bold shrink-0">
+                    <Tag className="w-3 h-3 text-teal-400" />
+                    <span>[{getModalityInfo(modality).code}]</span>
+                  </span>
+                  <span className="truncate font-semibold text-white">
+                    {testName || (lang === 'ar' ? '— يرجى كتابة اسم الأشعة —' : '— Enter study name —')}
+                  </span>
+                </div>
               </div>
 
               {/* Status & Timestamp */}

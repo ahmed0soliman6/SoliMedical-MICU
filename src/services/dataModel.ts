@@ -363,9 +363,23 @@ export async function admitPatient(input: DirectAdmissionInput): Promise<{ patie
       const archivedRef = doc(firestore, 'archivedPatients', patientId);
       transaction.delete(archivedRef);
 
+      const hasActiveIsolation = !!(
+        input.isolationPrecautions &&
+        input.isolationPrecautions.length > 0 &&
+        !input.isolationPrecautions.some(p => p.toLowerCase().includes('standard') || p === 'None' || p === 'لا يوجد عزل' || p === 'NONE')
+      );
+
       const cleanBedUpdate = {
         activePatientId: patientId,
-        status: 'OCCUPIED',
+        status: hasActiveIsolation ? 'ISOLATION' : 'OCCUPIED',
+        isolation: hasActiveIsolation
+          ? {
+              isIsolated: true,
+              type: input.isolationPrecautions![0] || 'Airborne',
+              precautions: input.isolationPrecautions,
+              startDate: nowIso,
+            }
+          : { isIsolated: false, precautions: [] },
         lastTelemetryPingUtc: nowIso,
       };
       transaction.set(bedRef, sanitizeForFirestore(cleanBedUpdate), { merge: true });
@@ -396,9 +410,23 @@ export async function admitPatient(input: DirectAdmissionInput): Promise<{ patie
     // Put patient
     await db.patients.put(newPatient);
 
+    const hasActiveIsolation = !!(
+      input.isolationPrecautions &&
+      input.isolationPrecautions.length > 0 &&
+      !input.isolationPrecautions.some(p => p.toLowerCase().includes('standard') || p === 'None' || p === 'لا يوجد عزل' || p === 'NONE')
+    );
+
     // Update Bed in Dexie
     await db.beds.update(input.targetBed, {
-      status: BedStatus.OCCUPIED,
+      status: hasActiveIsolation ? BedStatus.ISOLATION : BedStatus.OCCUPIED,
+      isolation: hasActiveIsolation
+        ? {
+            isIsolated: true,
+            type: input.isolationPrecautions![0] || 'Airborne',
+            precautions: input.isolationPrecautions,
+            startDate: nowIso,
+          }
+        : { isIsolated: false, precautions: [] },
       activePatientId: patientId,
       currentPatientId: patientId, // For local Dexie compatibility
       lastTelemetryPingUtc: nowIso,

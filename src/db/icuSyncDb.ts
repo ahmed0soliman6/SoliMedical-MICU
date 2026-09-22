@@ -892,47 +892,37 @@ export async function ensureBedPatientSync(): Promise<void> {
         b.activePatientId = targetPatient.id;
         modified = true;
       }
-      const isBedCurrentlyIsolated = b.status === BedStatus.ISOLATION || !!(b.isolation && b.isolation.isIsolated);
-      const isPatientIsolated = !!(
-        targetPatient.isolationPrecautions && targetPatient.isolationPrecautions.length > 0
-      ) || isBedCurrentlyIsolated;
 
-      if (isPatientIsolated) {
+      // Clinical Rule: Isolation is strictly driven by the patient's valid clinical orders
+      const hasClinicalIsolation = !!(
+        targetPatient.isolationPrecautions &&
+        targetPatient.isolationPrecautions.length > 0 &&
+        !targetPatient.isolationPrecautions.some(p => 
+          p.toLowerCase().includes('standard') || 
+          p === 'None' || 
+          p === 'لا يوجد عزل' ||
+          p === 'NONE'
+        )
+      );
+
+      if (hasClinicalIsolation) {
         if (b.status !== BedStatus.ISOLATION) {
           b.status = BedStatus.ISOLATION;
           modified = true;
         }
+        const patientPrecautions = targetPatient.isolationPrecautions || [];
         if (!b.isolation || !b.isolation.isIsolated) {
           b.isolation = {
             isIsolated: true,
-            type: b.isolation?.type || 'Airborne',
+            type: patientPrecautions[0] || 'Airborne',
             reason: b.isolation?.reason || 'Clinical Isolation',
             startDate: b.isolation?.startDate || new Date().toISOString(),
-            precautions: targetPatient.isolationPrecautions || b.isolation?.precautions || ['n95', 'gloves', 'gown'],
+            precautions: patientPrecautions,
           };
           modified = true;
         }
-        // Dual-directional: Sync back to target patient's isolation precautions if they are empty
-        if (!targetPatient.isolationPrecautions || targetPatient.isolationPrecautions.length === 0) {
-          const defaultPrecautions = b.isolation.precautions && b.isolation.precautions.length > 0 
-            ? b.isolation.precautions 
-            : ['n95', 'gloves', 'gown'];
-          targetPatient.isolationPrecautions = defaultPrecautions;
-          
-          // Background update and sync
-          db.patients.update(targetPatient.id, {
-            isolationPrecautions: defaultPrecautions,
-            updatedAt: new Date().toISOString()
-          }).then(async () => {
-            const freshPat = await db.patients.get(targetPatient.id);
-            if (freshPat) {
-              const { syncPatientToCloud } = await import('../services/firebase.ts');
-              await syncPatientToCloud(freshPat);
-            }
-          }).catch(err => console.warn('Delayed background patient isolation sync error:', err));
-        }
       } else {
-        // Patient is NOT in isolation -> strictly reset and clear bed isolation
+        // Patient has NO clinical isolation precautions -> strictly ensure bed isolation is cleared
         if (b.isolation && b.isolation.isIsolated) {
           b.isolation = { isIsolated: false, precautions: [] };
           modified = true;

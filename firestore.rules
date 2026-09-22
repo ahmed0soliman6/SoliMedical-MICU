@@ -282,27 +282,46 @@ service cloud.firestore {
 
     // Hospital Chat (1-to-1 & Department Chat)
     match /chats/{chatId} {
-      allow read: if isActiveUser() && (
+      allow read: if isNotDisabledUser() && (
         isAdmin() ||
         resource.data.type == 'department' ||
         (resource.data.participantUids != null && request.auth.uid in resource.data.participantUids) ||
         (resource.data.participants != null && request.auth.uid in resource.data.participants)
       );
-      allow create: if isActiveUser();
-      allow update: if isActiveUser() && (
+      allow create: if isNotDisabledUser();
+      allow update: if isNotDisabledUser() && (
         isAdmin() ||
         resource.data.type == 'department' ||
         (resource.data.participantUids != null && request.auth.uid in resource.data.participantUids) ||
         (resource.data.participants != null && request.auth.uid in resource.data.participants)
       );
-      allow delete: if isAdmin();
+      allow delete: if isAdmin() || (
+        isNotDisabledUser() &&
+        resource.data.type != 'department' && (
+          resource.data.createdByUid == request.auth.uid ||
+          (resource.data.participantUids != null && request.auth.uid in resource.data.participantUids) ||
+          (resource.data.participants != null && request.auth.uid in resource.data.participants)
+        )
+      );
     }
 
     match /chatMessages/{messageId} {
-      allow read: if isActiveUser();
-      allow create: if isActiveUser() && request.resource.data.senderUid == request.auth.uid;
-      allow update: if isActiveUser() && request.auth.uid == resource.data.senderUid;
-      allow delete: if isAdmin() || (isActiveUser() && resource.data.senderUid == request.auth.uid);
+      allow read: if isNotDisabledUser();
+      allow create: if isNotDisabledUser() && (
+        request.resource.data.senderUid == request.auth.uid ||
+        (isExistingUser() && request.resource.data.senderUid == getUserData().uid)
+      );
+      allow update: if isNotDisabledUser() && (
+        request.auth.uid == resource.data.senderUid ||
+        (isExistingUser() && resource.data.senderUid == getUserData().uid) ||
+        isAdmin()
+      );
+      allow delete: if isAdmin() || (
+        isNotDisabledUser() && (
+          resource.data.senderUid == request.auth.uid ||
+          (isExistingUser() && resource.data.senderUid == getUserData().uid)
+        )
+      );
     }
 
     // Audit Logs (Immutable ledger)

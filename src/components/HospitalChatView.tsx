@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../services/AuthContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
+import { auth } from '../services/firebase.ts';
 import { ChatConversation, ChatMessage, IcuUser } from '../types/schema.ts';
 import { 
   subscribeToUserChats, 
@@ -32,6 +33,7 @@ import {
   ensureDefaultDepartmentChats,
   markChatAsRead,
   deleteChatMessage,
+  deleteChatConversation,
   cleanupOldMessages,
   DEFAULT_DEPARTMENTS 
 } from '../services/chatService.ts';
@@ -48,6 +50,7 @@ export const HospitalChatView: React.FC = () => {
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
   const [isUsersDrawerOpen, setIsUsersDrawerOpen] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
   
   // Responsive mobile navigation state - default to true so chat box appears directly
   const [showMobileChat, setShowMobileChat] = useState<boolean>(true);
@@ -123,8 +126,32 @@ export const HospitalChatView: React.FC = () => {
     if (!window.confirm(confirmMsg)) return;
     try {
       await deleteChatMessage(messageId);
-    } catch (err) {
+      setMessages(prev => prev.filter(m => m.id !== messageId));
+      if (selectedMessageId === messageId) {
+        setSelectedMessageId(null);
+      }
+    } catch (err: any) {
       console.warn('Failed to delete message:', err);
+      window.alert(lang === 'ar' ? 'تعذر حذف الرسالة، تحقق من الصلاحيات أو الاتصال بالشبكة' : 'Failed to delete message. Check permissions or network.');
+    }
+  };
+
+  const handleDeleteConversation = async (chatId: string) => {
+    if (!chatId || chatId === 'dept_general') return;
+    const confirmMsg = lang === 'ar'
+      ? 'هل أنت متأكد من حذف هذه المحادثة بالكامل؟ لا يمكن التراجع عن هذا الإجراء.'
+      : 'Are you sure you want to delete this entire conversation? This action cannot be undone.';
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      await deleteChatConversation(chatId);
+      setChats(prev => prev.filter(c => c.id !== chatId));
+      if (activeChatId === chatId) {
+        setActiveChatId('dept_general');
+      }
+    } catch (err: any) {
+      console.warn('Failed to delete conversation:', err);
+      window.alert(lang === 'ar' ? 'تعذر حذف المحادثة، تحقق من الصلاحيات' : 'Failed to delete conversation.');
     }
   };
 
@@ -136,15 +163,19 @@ export const HospitalChatView: React.FC = () => {
       setIsSending(true);
       const text = inputText;
       setInputText('');
+      const activeSenderUid = auth.currentUser?.uid || currentUser.uid;
       await sendChatMessage(
         activeChatId,
-        currentUser.uid,
+        activeSenderUid,
         currentUser.displayName || (lang === 'ar' ? currentUser.nameAr : currentUser.nameEn) || 'Staff',
         currentUser.role,
         text
       );
       if (currentUser?.uid) {
         markChatAsRead(activeChatId, currentUser.uid);
+      }
+      if (auth.currentUser?.uid && auth.currentUser.uid !== currentUser.uid) {
+        markChatAsRead(activeChatId, auth.currentUser.uid);
       }
     } catch (err) {
       console.warn('Failed to send message:', err);
@@ -302,23 +333,29 @@ export const HospitalChatView: React.FC = () => {
             chats.filter(c => c.type === 'DIRECT').map((chat) => {
               const isActive = chat.id === activeChatId;
               const cUnread = currentUser?.uid ? (chat.unreadCounts?.[currentUser.uid] || 0) : 0;
+              const isAdmin = currentUser?.role === 'ADMIN' || currentUser?.isSuperAdmin === true || (currentUser?.role as any) === 'admin';
+              const canDeleteThisChat = isAdmin || (chat.createdByUid === currentUser?.uid || chat.participantUids?.includes(currentUser?.uid || '') || (auth.currentUser && chat.participantUids?.includes(auth.currentUser.uid)));
+
               return (
-                <button
+                <div
                   key={chat.id}
-                  onClick={() => {
-                    setActiveChatId(chat.id);
-                    setShowMobileChat(true);
-                    if (currentUser?.uid) {
-                      markChatAsRead(chat.id, currentUser.uid);
-                    }
-                  }}
-                  className={`w-full flex items-center justify-between p-3 rounded-xl text-left transition-all cursor-pointer ${
+                  className={`group/chat w-full flex items-center justify-between p-2.5 sm:p-3 rounded-xl transition-all ${
                     isActive
                       ? 'bg-teal-50 border border-teal-300 text-teal-950 font-semibold shadow-sm dark:bg-teal-500/20 dark:border-teal-500/50 dark:text-white'
                       : 'text-slate-700 hover:bg-slate-200/60 dark:text-slate-300 dark:hover:bg-slate-800/60 dark:hover:text-white border border-transparent'
                   }`}
                 >
-                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveChatId(chat.id);
+                      setShowMobileChat(true);
+                      if (currentUser?.uid) {
+                        markChatAsRead(chat.id, currentUser.uid);
+                      }
+                    }}
+                    className="flex items-center gap-2.5 min-w-0 flex-1 text-left cursor-pointer"
+                  >
                     <div className={`p-2 rounded-lg shrink-0 ${isActive ? 'bg-teal-200 text-teal-800 dark:bg-teal-500/30 dark:text-teal-200' : 'bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>
                       <User className="w-4 h-4" />
                     </div>
@@ -328,14 +365,30 @@ export const HospitalChatView: React.FC = () => {
                         {chat.lastMessage || (lang === 'ar' ? 'لا توجد رسائل بعد' : 'No messages yet')}
                       </p>
                     </div>
-                  </div>
+                  </button>
 
-                  {cUnread > 0 && !isActive && (
-                    <span className="w-5 h-5 rounded-full bg-rose-500 text-white text-[10px] font-black flex items-center justify-center shrink-0 ml-2 animate-pulse">
-                      {cUnread}
-                    </span>
-                  )}
-                </button>
+                  <div className="flex items-center gap-1.5 shrink-0 ml-1.5">
+                    {cUnread > 0 && !isActive && (
+                      <span className="w-5 h-5 rounded-full bg-rose-500 text-white text-[10px] font-black flex items-center justify-center shrink-0 animate-pulse">
+                        {cUnread}
+                      </span>
+                    )}
+
+                    {canDeleteThisChat && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteConversation(chat.id);
+                        }}
+                        className="opacity-0 group-hover/chat:opacity-100 transition-opacity p-1.5 rounded-lg bg-rose-500/10 text-rose-500 hover:bg-rose-500 hover:text-white dark:bg-rose-500/20 dark:text-rose-400 cursor-pointer"
+                        title={lang === 'ar' ? 'حذف المحادثة' : 'Delete Conversation'}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
               );
             })
           )}
@@ -391,17 +444,29 @@ export const HospitalChatView: React.FC = () => {
           <div className="flex items-center gap-2">
             {/* If in direct 1-to-1 chat, provide button to return to General Chat */}
             {activeChat.id !== 'dept_general' && (
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveChatId('dept_general');
-                  setShowMobileChat(true);
-                }}
-                className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center gap-1.5 text-xs font-bold transition-colors cursor-pointer"
-              >
-                <MessageSquare className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
-                <span className="hidden sm:inline">{lang === 'ar' ? 'الدردشة العامة' : 'Team Chat'}</span>
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveChatId('dept_general');
+                    setShowMobileChat(true);
+                  }}
+                  className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center gap-1.5 text-xs font-bold transition-colors cursor-pointer"
+                >
+                  <MessageSquare className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                  <span className="hidden sm:inline">{lang === 'ar' ? 'الدردشة العامة' : 'Team Chat'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleDeleteConversation(activeChat.id)}
+                  className="px-2.5 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/30 flex items-center gap-1.5 text-xs font-bold transition-colors cursor-pointer"
+                  title={lang === 'ar' ? 'حذف هذه المحادثة بالكامل' : 'Delete Entire Conversation'}
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                  <span className="hidden sm:inline">{lang === 'ar' ? 'حذف المحادثة' : 'Delete Chat'}</span>
+                </button>
+              </>
             )}
 
             {/* Three-line menu button to open staff/users list */}
@@ -498,15 +563,18 @@ export const HospitalChatView: React.FC = () => {
             </div>
           ) : (
             messages.map((msg) => {
-              const isMine = msg.senderUid === currentUser?.uid;
-              const isAdminUser = currentUser?.role === 'ADMIN' || currentUser?.isSuperAdmin === true;
+              const isMine = msg.senderUid === currentUser?.uid || 
+                (auth.currentUser && msg.senderUid === auth.currentUser.uid) ||
+                (Boolean(currentUser?.displayName) && msg.senderName === currentUser?.displayName);
+              const isAdminUser = currentUser?.role === 'ADMIN' || currentUser?.isSuperAdmin === true || (currentUser?.role as any) === 'admin';
               const canDelete = isAdminUser || isMine;
+              const isSelected = selectedMessageId === msg.id;
               const formattedTime = new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
               return (
                 <div 
                   key={msg.id} 
-                  className={`flex flex-col ${isMine ? 'items-end' : 'items-start'} group`}
+                  className={`flex flex-col ${isMine ? 'items-end' : 'items-start'} group transition-all`}
                 >
                   <div className="flex items-center gap-1.5 mb-1 px-1 text-[11px]">
                     <span className="font-semibold text-slate-700 dark:text-slate-300">{msg.senderName}</span>
@@ -518,37 +586,82 @@ export const HospitalChatView: React.FC = () => {
                     <span className="text-slate-400 dark:text-slate-500 text-[10px]">{formattedTime}</span>
                   </div>
 
-                  <div className="flex items-center gap-2 max-w-[88%] sm:max-w-lg">
+                  <div className="flex items-center gap-2 max-w-[92%] sm:max-w-lg">
                     {isMine && canDelete && (
                       <button
                         type="button"
-                        onClick={() => handleDeleteMessage(msg.id)}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 hover:text-rose-600 cursor-pointer shrink-0"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteMessage(msg.id);
+                        }}
+                        className={`transition-all p-2 rounded-xl bg-rose-500/10 text-rose-500 hover:bg-rose-500 hover:text-white dark:bg-rose-500/20 dark:text-rose-400 dark:hover:bg-rose-500 dark:hover:text-white cursor-pointer shrink-0 min-w-[34px] min-h-[34px] flex items-center justify-center ${
+                          isSelected ? 'opacity-100 scale-105 ring-2 ring-rose-500/50' : 'opacity-0 md:group-hover:opacity-100'
+                        }`}
                         title={lang === 'ar' ? 'حذف الرسالة' : 'Delete Message'}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     )}
 
-                    <div className={`p-3 rounded-2xl text-xs leading-relaxed shadow-sm flex-1 ${
-                      isMine
-                        ? 'bg-teal-600 text-white rounded-br-none border border-teal-500/50'
-                        : 'bg-white dark:bg-slate-800/90 text-slate-800 dark:text-slate-100 rounded-bl-none border border-slate-200 dark:border-slate-700'
-                    }`}>
+                    <div 
+                      onClick={() => setSelectedMessageId(isSelected ? null : msg.id)}
+                      className={`p-3 rounded-2xl text-xs leading-relaxed shadow-sm flex-1 cursor-pointer transition-all select-none ${
+                        isMine
+                          ? 'bg-teal-600 text-white rounded-br-none border border-teal-500/50'
+                          : 'bg-white dark:bg-slate-800/90 text-slate-800 dark:text-slate-100 rounded-bl-none border border-slate-200 dark:border-slate-700'
+                      } ${
+                        isSelected 
+                          ? 'ring-2 ring-rose-400/80 dark:ring-rose-500 shadow-md scale-[1.01]' 
+                          : ''
+                      }`}
+                      title={lang === 'ar' ? 'انقر لعرض خيارات الحذف' : 'Click to show delete option'}
+                    >
                       <p className="whitespace-pre-wrap break-words">{msg.message}</p>
                     </div>
 
                     {!isMine && canDelete && (
                       <button
                         type="button"
-                        onClick={() => handleDeleteMessage(msg.id)}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 hover:text-rose-600 cursor-pointer shrink-0"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteMessage(msg.id);
+                        }}
+                        className={`transition-all p-2 rounded-xl bg-rose-500/10 text-rose-500 hover:bg-rose-500 hover:text-white dark:bg-rose-500/20 dark:text-rose-400 dark:hover:bg-rose-500 dark:hover:text-white cursor-pointer shrink-0 min-w-[34px] min-h-[34px] flex items-center justify-center ${
+                          isSelected ? 'opacity-100 scale-105 ring-2 ring-rose-500/50' : 'opacity-0 md:group-hover:opacity-100'
+                        }`}
                         title={lang === 'ar' ? 'حذف الرسالة' : 'Delete Message'}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     )}
                   </div>
+
+                  {/* Mobile Tap Action Strip for Deletion */}
+                  {isSelected && canDelete && (
+                    <div className="flex items-center gap-2 mt-1.5 px-1 animate-in fade-in slide-in-from-top-1 duration-150">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteMessage(msg.id);
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-sm active:scale-95 cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>{lang === 'ar' ? 'حذف الرسالة' : 'Delete Message'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedMessageId(null);
+                        }}
+                        className="px-2.5 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-medium cursor-pointer"
+                      >
+                        {lang === 'ar' ? 'إلغاء' : 'Cancel'}
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })

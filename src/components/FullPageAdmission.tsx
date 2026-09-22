@@ -15,7 +15,7 @@ import {
 import { admitPatient, calculateIdealBodyWeight, toggleBedOperationalStatus } from '../services/dataModel.ts';
 import { searchExistingPatients, PatientCandidateMatch } from '../services/operations.ts';
 import { useTranslation } from '../services/i18n.ts';
-import { db } from '../db/icuSyncDb.ts';
+import { db, ensureBedPatientSync } from '../db/icuSyncDb.ts';
 import { toEnglishDigits, parseEnglishFloat, parseEnglishInt } from '../services/numberUtils.ts';
 import { useAppNotifications } from '../services/NotificationContext.tsx';
 
@@ -312,7 +312,7 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
           primaryDiagnosisAr: primaryDiagnosisAr.trim(),
           primaryDiagnosisEn: primaryDiagnosisEn.trim() || primaryDiagnosisAr.trim(),
           allergies: allergiesList,
-          isolationPrecautions: isolation && isolation.trim() !== '' && !isolation.toLowerCase().includes('standard') ? [isolation.trim()] : [],
+          isolationPrecautions: isolation && isolation.trim() !== '' && !isolation.toLowerCase().includes('standard') && isolation !== 'لا يوجد عزل' && isolation !== 'NONE' ? [isolation.trim()] : [],
           updatedAt: new Date().toISOString(),
         };
 
@@ -322,6 +322,40 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
         // Sync to cloud Firestore before reporting success.
         const patientRef = doc(firestore, 'patients', updatedPatient.id);
         await setDoc(patientRef, updatedPatient, { merge: true });
+
+        // Synchronize bed isolation status directly
+        const targetBedNum = initialPatient.currentBedId || targetBed;
+        const hasIsolation = updatedPatient.isolationPrecautions && updatedPatient.isolationPrecautions.length > 0;
+        if (targetBedNum) {
+          try {
+            const bedRecord = await db.beds.get(targetBedNum);
+            if (bedRecord) {
+              const updatedBed: BedRecord = {
+                ...bedRecord,
+                status: hasIsolation ? BedStatus.ISOLATION : (bedRecord.status === BedStatus.UNAVAILABLE ? BedStatus.UNAVAILABLE : BedStatus.OCCUPIED),
+                isolation: hasIsolation
+                  ? {
+                      isIsolated: true,
+                      type: updatedPatient.isolationPrecautions[0] || 'Airborne',
+                      reason: bedRecord.isolation?.reason || 'Clinical Isolation',
+                      startDate: bedRecord.isolation?.startDate || new Date().toISOString(),
+                      precautions: updatedPatient.isolationPrecautions,
+                    }
+                  : { isIsolated: false, precautions: [] },
+              };
+              await db.beds.put(updatedBed);
+              const { syncBedToCloud } = await import('../services/firebase.ts');
+              await syncBedToCloud(updatedBed);
+            }
+          } catch (e) {
+            console.warn('Error syncing bed status on patient update:', e);
+          }
+        }
+
+        await ensureBedPatientSync();
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('icu-data-updated'));
+        }
 
         onAdmissionSuccess();
         return;
