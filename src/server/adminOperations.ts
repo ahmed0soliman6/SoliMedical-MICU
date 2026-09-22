@@ -277,9 +277,7 @@ export async function verifyAdminCallerToken(authHeader?: string): Promise<{ isA
         const callerData = callerDoc.data() as any;
         isCallerActive = callerData.active !== false && callerData.isActive !== false;
         isCallerAdmin = callerData.role === 'ADMIN' || 
-                        callerData.isSuperAdmin === true || 
-                        callerData.permissions?.['users.delete'] === true ||
-                        callerData.permissions?.['users.update'] === true;
+                        callerData.isSuperAdmin === true;
       } else {
         const adminDoc = await db.collection('admins').doc(callerUid).get();
         if (adminDoc.exists) {

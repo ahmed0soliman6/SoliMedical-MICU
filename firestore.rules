@@ -91,43 +91,35 @@ service cloud.firestore {
       allow write: if isAuthenticated();
     }
 
-    // Users Collection (Disabled users cannot read users)
+    // Users Collection
     match /users/{userId} {
-      allow read: if isAuthenticated() && (isAdmin() || request.auth.uid == userId || hasPerm('users.view'));
-      allow create: if isAuthenticated() && (
-        isAdmin() || (
-          hasPerm('users.create') && 
-          (!('isSuperAdmin' in request.resource.data) || request.resource.data.isSuperAdmin == false) && 
-          request.resource.data.role != 'ADMIN'
-        ) ||
-        request.auth.uid == userId
+      allow read: if isAuthenticated() && (
+        isAdmin() ||
+        request.auth.uid == userId ||
+        hasPerm('users.view')
       );
-      allow update: if isAuthenticated() && (
-        isAdmin() || 
-        (
-          hasPerm('users.update') &&
-          (!('role' in request.resource.data) || request.resource.data.role == resource.data.role) &&
-          (!('permissions' in request.resource.data) || request.resource.data.permissions == resource.data.permissions) &&
-          (!('isSuperAdmin' in request.resource.data) || request.resource.data.isSuperAdmin == resource.data.isSuperAdmin) &&
-          (!('active' in request.resource.data) || request.resource.data.active == resource.data.active) &&
-          (!('isActive' in request.resource.data) || request.resource.data.isActive == resource.data.isActive)
-        ) ||
-        (
-          hasPerm('users.disable') &&
-          (!('role' in request.resource.data) || request.resource.data.role == resource.data.role) &&
-          (!('permissions' in request.resource.data) || request.resource.data.permissions == resource.data.permissions) &&
-          (!('isSuperAdmin' in request.resource.data) || request.resource.data.isSuperAdmin == resource.data.isSuperAdmin)
-        ) ||
-        (
-          request.auth.uid == userId &&
-          (!('role' in request.resource.data) || request.resource.data.role == resource.data.role) &&
-          (!('permissions' in request.resource.data) || request.resource.data.permissions == resource.data.permissions) &&
-          (!('isSuperAdmin' in request.resource.data) || request.resource.data.isSuperAdmin == resource.data.isSuperAdmin) &&
-          (!('active' in request.resource.data) || request.resource.data.active == resource.data.active) &&
-          (!('isActive' in request.resource.data) || request.resource.data.isActive == resource.data.isActive)
-        )
+
+      allow create: if isAdmin() || (
+        hasPerm('users.create') &&
+        request.resource.data.role != 'ADMIN' &&
+        request.resource.data.isSuperAdmin != true
       );
-      allow delete: if isAdmin() || hasPerm('users.delete');
+
+      allow update: if isAdmin() || (
+        request.auth.uid == userId &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'displayName',
+          'nameAr',
+          'nameEn',
+          'phone',
+          'specialty',
+          'department',
+          'licenseNumber',
+          'updatedAt'
+        ])
+      );
+
+      allow delete: if isAdmin();
     }
 
     // Patients Collection

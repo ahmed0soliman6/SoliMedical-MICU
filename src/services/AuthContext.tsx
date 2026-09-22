@@ -473,7 +473,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Change password for any user account via Firebase Admin SDK / Cloud Function endpoint (Admin only)
   const changeUserPassword = async (uid: string, newPassword: string, confirmPassword?: string): Promise<{ success: boolean; message?: string }> => {
-    const isAdmin = currentUser?.isSuperAdmin || currentUser?.role === StaffRole.ADMIN || hasPermission('users.update');
+    const isAdmin = currentUser?.isSuperAdmin || currentUser?.role === StaffRole.ADMIN || (currentUser?.role as any) === 'ADMIN';
     if (!isAdmin) {
       return { success: false, message: 'صلاحية تغيير كلمة المرور متاحة للمشرف (Admin) فقط (Permission Denied).' };
     }
@@ -521,7 +521,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
-      // Always update profile document in Firestore user document and Dexie cache
+      if (!authPasswordUpdated) {
+        return {
+          success: false,
+          message: 'فشل تغيير كلمة المرور في Firebase Authentication. لم يتم تغيير كلمة المرور.'
+        };
+      }
+
+      // Update profile document in Firestore user document and Dexie cache only if Firebase Auth change succeeded
       const targetUser = allUsers.find(u => u.uid === uid);
       if (targetUser) {
         const updatedUser = {
@@ -537,9 +544,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await refreshUsers();
       return {
         success: true,
-        message: authPasswordUpdated
-          ? 'تم تغيير وتحديث كلمة المرور بنجاح في Firebase Authentication.'
-          : 'تم تحديث كلمة المرور بنجاح.'
+        message: 'تم تغيير كلمة المرور بنجاح في Firebase Authentication.'
       };
     } catch (err: any) {
       return { success: false, message: err?.message || 'حدث خطأ أثناء تحديث كلمة المرور.' };
@@ -738,6 +743,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Comprehensive Permission Checking Engine (Canonical PAGE.ACTION)
   const hasPermission = (permission: string | keyof UserPermissions): boolean => {
     if (!currentUser) return false;
+
     if (
       currentUser.isSuperAdmin || 
       currentUser.role === StaffRole.ADMIN || 
@@ -746,18 +752,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return true;
     }
     
-    // Direct canonical lookup in user document
-    if (currentUser.permissions && (currentUser.permissions as any)[permission] !== undefined) {
-      return !!(currentUser.permissions as any)[permission];
-    }
-
-    // Role default fallback if not explicitly customized
-    const defaultPerms = getDefaultPermissionsForRole(currentUser.role as StaffRole);
-    if (defaultPerms && (defaultPerms as any)[permission] !== undefined) {
-      return !!(defaultPerms as any)[permission];
-    }
-
-    return false;
+    return (currentUser.permissions as any)?.[permission] === true;
   };
 
   return (
