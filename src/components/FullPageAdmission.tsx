@@ -855,68 +855,6 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
           </div>
         </div>
 
-        {/* Section 3: Initial Telemetry Baseline */}
-        <div className="space-y-4">
-          <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider border-b border-slate-800 pb-2">
-            3. {lang === 'ar' ? 'العلامات الحيوية الأولية لتشغيل المونيتور' : 'Initial Telemetry Monitor Baseline'}
-          </h3>
-
-          <div className="bg-[#070c18] p-4 rounded-xl border border-slate-800/60 space-y-2">
-            <span className="text-[11px] text-teal-300 block font-semibold">
-              {lang === 'ar' ? 'تجهيز قراءات شاشة المراقبة بجانب السرير (Bedside Telemetry Init)' : 'Initial Admission Baseline Vitals'}
-            </span>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 font-mono">
-              <div>
-                <label className="text-[10px] text-slate-400 block mb-1">MAP (mmHg)</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={initialMap}
-                  onChange={(e) => setInitialMap(toEnglishDigits(e.target.value))}
-                  placeholder="65"
-                  className="w-full bg-[#0b1224] border border-slate-700 rounded-lg px-3 py-2 text-white font-bold text-xs"
-                />
-              </div>
-
-              <div>
-                <label className="text-[10px] text-slate-400 block mb-1">HR (bpm)</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={initialHr}
-                  onChange={(e) => setInitialHr(toEnglishDigits(e.target.value))}
-                  placeholder="110"
-                  className="w-full bg-[#0b1224] border border-slate-700 rounded-lg px-3 py-2 text-white font-bold text-xs"
-                />
-              </div>
-
-              <div>
-                <label className="text-[10px] text-slate-400 block mb-1">SpO₂ (%)</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={initialSpo2}
-                  onChange={(e) => setInitialSpo2(toEnglishDigits(e.target.value))}
-                  placeholder="90"
-                  className="w-full bg-[#0b1224] border border-slate-700 rounded-lg px-3 py-2 text-white font-bold text-xs"
-                />
-              </div>
-
-              <div>
-                <label className="text-[10px] text-slate-400 block mb-1">FiO₂ (%)</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={initialFio2}
-                  onChange={(e) => setInitialFio2(toEnglishDigits(e.target.value))}
-                  placeholder="50"
-                  className="w-full bg-[#0b1224] border border-slate-700 rounded-lg px-3 py-2 text-white font-bold text-xs"
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-
         {/* Action Controls */}
         <div className="pt-4 border-t border-slate-800 flex items-center justify-end gap-3">
           <button

@@ -22,7 +22,7 @@ import {
   deleteDoc,
   Unsubscribe 
 } from 'firebase/firestore';
-import { firestore, setDoc, updateDoc } from './firebase.ts';
+import { firestore, setDoc, updateDoc, handleFirestoreError, OperationType } from './firebase.ts';
 import { COLLECTIONS } from '../types/contracts.ts';
 import { ChatConversation, ChatMessage, IcuUser } from '../types/schema.ts';
 
@@ -94,7 +94,7 @@ export function subscribeToUserChats(
 
     callback(list);
   }, (err) => {
-    console.warn('Real-time chat list subscription warning:', err);
+    handleFirestoreError(err, OperationType.GET, CHATS_COLLECTION);
     callback([]);
   });
 }
@@ -122,7 +122,7 @@ export function subscribeToChatMessages(
     msgs.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
     callback(msgs);
   }, (err) => {
-    console.warn('Real-time chat messages subscription warning:', err);
+    handleFirestoreError(err, OperationType.GET, MESSAGES_COLLECTION);
     callback([]);
   });
 }

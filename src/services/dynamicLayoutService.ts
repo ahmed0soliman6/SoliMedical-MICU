@@ -18,7 +18,7 @@ import {
   orderBy, 
   Unsubscribe 
 } from 'firebase/firestore';
-import { firestore, setDoc, updateDoc } from './firebase.ts';
+import { firestore, setDoc, updateDoc, handleFirestoreError, OperationType } from './firebase.ts';
 import { DynamicSection, DynamicBedsideCard } from '../types/schema.ts';
 
 const SECTIONS_COLLECTION = 'sections';
@@ -239,7 +239,7 @@ export function subscribeToSections(callback: (sections: DynamicSection[]) => vo
     list.sort((a, b) => a.displayOrder - b.displayOrder);
     callback(list.length > 0 ? list : DEFAULT_DYNAMIC_SECTIONS);
   }, (err) => {
-    console.warn('Sections snapshot notice:', err);
+    handleFirestoreError(err, OperationType.GET, SECTIONS_COLLECTION);
     callback(DEFAULT_DYNAMIC_SECTIONS);
   });
 }
@@ -257,7 +257,7 @@ export function subscribeToBedsideCards(callback: (cards: DynamicBedsideCard[]) 
     list.sort((a, b) => a.displayOrder - b.displayOrder);
     callback(list.length > 0 ? list : DEFAULT_DYNAMIC_CARDS);
   }, (err) => {
-    console.warn('Bedside cards snapshot notice:', err);
+    handleFirestoreError(err, OperationType.GET, CARDS_COLLECTION);
     callback(DEFAULT_DYNAMIC_CARDS);
   });
 }

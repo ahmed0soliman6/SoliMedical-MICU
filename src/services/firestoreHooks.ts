@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { collection, query, onSnapshot, Query, DocumentData, getDocs } from 'firebase/firestore';
-import { firestore } from './firebase.ts';
+import { firestore, handleFirestoreError, OperationType } from './firebase.ts';
 
 export function useFirestoreQuery<T>(q: Query<DocumentData>) {
   const [data, setData] = useState<T[] | undefined>(undefined);
@@ -20,7 +20,7 @@ export function useFirestoreQuery<T>(q: Query<DocumentData>) {
         setLoading(false);
       },
       (err) => {
-        console.error('Firestore Query Error:', err);
+        handleFirestoreError(err, OperationType.GET, 'query');
         setError(err);
         setLoading(false);
       }
@@ -50,6 +50,7 @@ export function useFirestoreCollection<T>(collectionName: string) {
         setLoading(false);
       },
       (err) => {
+        handleFirestoreError(err, OperationType.GET, collectionName);
         setError(err);
         setLoading(false);
       }

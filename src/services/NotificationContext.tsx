@@ -13,7 +13,7 @@ import { AppNotification, NotificationType, AppNotificationTarget } from '../typ
 import { useSystemSettings } from './SettingsContext.tsx';
 import { useAuth } from './AuthContext.tsx';
 import { playGentleNotificationTone, isAudioGloballyMuted } from './NotificationAudio.ts';
-import { firestore, sanitizeForFirestore } from './firebase.ts';
+import { firestore, sanitizeForFirestore, handleFirestoreError, OperationType } from './firebase.ts';
 
 const NOTIFICATIONS_STORAGE_KEY = 'soli_icu_notifications_queue_v2';
 const MAX_NOTIFICATIONS = 25;
@@ -206,7 +206,7 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
           return merged.slice(0, MAX_NOTIFICATIONS);
         });
       }, (err) => {
-        console.warn('Notifications stream note (offline / retry):', err);
+        handleFirestoreError(err, OperationType.GET, 'notifications');
       });
 
       return () => unsubscribe();

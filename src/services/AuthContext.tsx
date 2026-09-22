@@ -19,7 +19,9 @@ import {
   syncAdminAccountToFirebaseConsole,
   getFirebaseAuthErrorMessage,
   firestore,
-  setDoc
+  setDoc,
+  handleFirestoreError,
+  OperationType
 } from './firebase.ts';
 import { 
   signInWithPopup, 
@@ -185,7 +187,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
     }, (err) => {
-      console.warn('Real-time users subscription warning:', err);
+      handleFirestoreError(err, OperationType.GET, 'users');
     });
 
     return () => {

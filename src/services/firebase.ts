@@ -18,7 +18,9 @@ import {
   Unsubscribe,
   getDocFromServer,
   updateDoc as fupdateDoc,
-  deleteField
+  deleteField,
+  disableNetwork,
+  setLogLevel
 } from 'firebase/firestore';
 import {
   getAuth,
@@ -73,6 +75,10 @@ try {
 
 // Bind directly to default Cloud Firestore database instance
 export const firestore = firestoreInstance;
+try {
+  setLogLevel('silent');
+} catch {}
+
 export const auth = getAuth(firebaseApp);
 export const googleProvider = new GoogleAuthProvider();
 
@@ -96,7 +102,8 @@ export async function testFirestoreConnection(): Promise<boolean> {
     ]);
     return docSnap !== null;
   } catch (error) {
-    // Expected when running offline
+    handleFirestoreError(error, OperationType.GET, 'test/connection');
+    // Expected when running offline or quota exceeded
     return false;
   }
 }
@@ -130,18 +137,42 @@ export interface FirestoreErrorInfo {
   };
 }
 
+let quotaExceededHandled = false;
+
+export async function handleQuotaExceeded() {
+  if (quotaExceededHandled) return;
+  quotaExceededHandled = true;
+  console.info('[ICU-Sync Local Persistence] Firestore Quota limit reached (resource-exhausted). Switching to local Dexie IndexedDB mode.');
+  try {
+    await disableNetwork(firestore);
+  } catch {}
+}
+
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
   const errMsg = error instanceof Error ? error.message : String(error);
   const errCode = (error as any)?.code;
 
-  // Gracefully handle offline / unavailable state without raising loud console errors
+  if (
+    errCode === 'resource-exhausted' ||
+    errMsg.includes('resource-exhausted') ||
+    errMsg.includes('Quota exceeded')
+  ) {
+    handleQuotaExceeded();
+    console.info(`[ICU-Sync Local Persistence] Firestore operating in offline/local-first mode for path: ${path || 'root'} (resource-exhausted)`);
+    return;
+  }
+
+  // Gracefully handle offline / unavailable / permission-denied state without raising loud console errors
   if (
     errCode === 'unavailable' ||
+    errCode === 'permission-denied' ||
     errMsg.includes('offline') ||
     errMsg.includes('unavailable') ||
+    errMsg.includes('permission-denied') ||
+    errMsg.includes('Permission denied') ||
     errMsg.includes('Could not reach Cloud Firestore')
   ) {
-    console.info(`[ICU-Sync Offline Cache] Firestore operates in local-first offline mode for path: ${path || 'root'}`);
+    console.info(`[ICU-Sync Local Persistence] Firestore operating in offline/local-first mode for path: ${path || 'root'} (${errCode || 'local-fallback'})`);
     return;
   }
 
