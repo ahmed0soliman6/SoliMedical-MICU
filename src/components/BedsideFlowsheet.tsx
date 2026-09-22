@@ -1896,13 +1896,14 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                   <table className={`w-full text-xs ${isRTL ? 'text-right' : 'text-left'}`}>
                     <thead>
                       <tr className="border-b border-slate-800 text-slate-400 font-mono">
-                        <th className="py-2 px-3">{lang === 'ar' ? 'التاريخ والوقت' : 'Date & Time'}</th>
-                        <th className="py-2 px-3">BP (Sys/Dia)</th>
-                        <th className="py-2 px-3">HR (bpm)</th>
-                        <th className="py-2 px-3">SpO₂ (%)</th>
-                        <th className="py-2 px-3">RR (cpm)</th>
-                        <th className="py-2 px-3">{lang === 'ar' ? 'الضغط الوريدي CVP' : 'CVP'}</th>
-                        <th className="py-2 px-3">{lang === 'ar' ? 'المسجل والتعديل' : 'Staff / Actions'}</th>
+                        <th className="py-2 px-3">Date & Time</th>
+                        <th className="py-2 px-3">BP</th>
+                        <th className="py-2 px-3">HR</th>
+                        <th className="py-2 px-3">SpO₂</th>
+                        <th className="py-2 px-3">RR</th>
+                        <th className="py-2 px-3">CVP</th>
+                        <th className="py-2 px-3">BG</th>
+                        <th className="py-2 px-3">Staff / Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/60 font-mono">
@@ -1932,6 +1933,9 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                             </td>
                             <td className="py-2.5 px-3 text-blue-400">
                               {v.cvpMmHg !== undefined && v.cvpMmHg !== null ? `${v.cvpMmHg} mmHg` : '—'}
+                            </td>
+                            <td className="py-2.5 px-3 text-amber-300">
+                              {v.bloodGlucoseMgDl !== undefined && v.bloodGlucoseMgDl !== null ? `${v.bloodGlucoseMgDl}` : '—'}
                             </td>
                             <td className="py-2.5 px-3">
                               <div className="flex items-center justify-between gap-2">

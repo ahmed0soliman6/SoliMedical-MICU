@@ -767,6 +767,19 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
   }, [drugNameEn, drugNameAr, currentCrCl]);
 
   const presetsList = settings.antibioticsPresets || [];
+  const getRecommendedDuration = (name: string): number => {
+    const lower = name.toLowerCase();
+    if (lower.includes('meropenem') || lower.includes('meronem') || lower.includes('ميرونام') || lower.includes('ميروبينيم')) return 5;
+    if (lower.includes('metronidazole') || lower.includes('flagyl') || lower.includes('فلاجيل') || lower.includes('مترونيدازول')) return 7;
+    if (lower.includes('vancomycin') || lower.includes('vancocin') || lower.includes('فانكومايسين')) return 10;
+    if (lower.includes('colistin') || lower.includes('كوليستين')) return 10;
+    if (lower.includes('fluconazole') || lower.includes('diflucan') || lower.includes('فلوكونازول') || lower.includes('ديفلوكان')) return 14;
+    if (lower.includes('linezolid') || lower.includes('لينزوليد')) return 10;
+    if (lower.includes('tazocin') || lower.includes('piperacillin')) return 7;
+    if (lower.includes('ceftriaxone') || lower.includes('rocephin') || lower.includes('سفترياكسون')) return 7;
+    return 7;
+  };
+
   const availableDoses = getAvailableDosesForDrug(drugNameEn || drugNameAr, presetsList);
 
   // Unified helper to apply antibiotic dosing & Cockcroft-Gault renal adjustment
@@ -778,6 +791,7 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
   ) => {
     const rec = evaluateRenalDosingMatrix(drugName, crClVal);
     const matchedDoses = getAvailableDosesForDrug(drugName, presetsList);
+    setPlannedDurationDays(getRecommendedDuration(drugName));
 
     if (rec && rec.requiresAdjustment && crClVal !== null) {
       if (rec.recommendedDose) {
@@ -1408,11 +1422,11 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                               </button>
                               <button
                                 onClick={() => handleUpdateStatus(abx, 'COMPLETED')}
-                                className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-emerald-950 text-emerald-400 hover:border-emerald-700 border border-slate-700 text-[11px] transition-all cursor-pointer flex items-center gap-1"
+                                className="px-2.5 py-1 rounded-lg bg-emerald-950 hover:bg-emerald-900 text-emerald-300 hover:text-emerald-200 border border-emerald-700/80 text-[11px] font-semibold transition-all cursor-pointer flex items-center gap-1.5 shadow-sm"
                                 title={lang === 'ar' ? 'إكمال الكورس' : 'Mark Completed'}
                               >
-                                <CheckCircle2 className="w-3.5 h-3.5" />
-                                <span className="hidden sm:inline">{lang === 'ar' ? 'إكمال' : 'Complete'}</span>
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                                <span>{lang === 'ar' ? 'إكمال' : 'Complete'}</span>
                               </button>
                             </>
                           )}
@@ -1569,12 +1583,12 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                 )}
               </div>
 
-              {/* Dose, Route, Frequency */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {/* Row 1: Available Dose & Route */}
+              <div className="grid grid-cols-2 gap-2">
                 {/* Dynamic Dose Dropdown */}
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300">
                       {lang === 'ar' ? 'الجرعة المتوفرة *' : 'Available Dose *'}
                     </label>
                     <span className="text-[10px] text-amber-600 dark:text-amber-400 font-mono font-medium">
@@ -1593,7 +1607,7 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                         }
                       }
                     }}
-                    className="w-full bg-slate-50 dark:bg-[#070c18] border border-amber-400 dark:border-amber-500/50 rounded-xl px-3 py-2 text-xs text-amber-900 dark:text-amber-300 font-bold font-mono focus:outline-none focus:border-amber-500 cursor-pointer shadow-inner"
+                    className="w-full bg-slate-50 dark:bg-[#070c18] border border-amber-400 dark:border-amber-500/50 rounded-xl px-2.5 py-1.5 text-xs text-amber-900 dark:text-amber-300 font-bold font-mono focus:outline-none focus:border-amber-500 cursor-pointer shadow-inner"
                   >
                     <option value="" disabled>{lang === 'ar' ? '-- اختر الجرعة المتوفرة --' : '-- Select Available Dose --'}</option>
                     {availableDoses.map(d => (
@@ -1601,44 +1615,48 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                         {d}
                       </option>
                     ))}
-                    <option value="CUSTOM">{lang === 'ar' ? '✏️ إدخال جرعة مخصصة أخرى...' : '✏️ Custom / Other Dose...'}</option>
+                    <option value="CUSTOM">{lang === 'ar' ? '✏️ مخصص...' : '✏️ Custom...'}</option>
                   </select>
 
                   {/* Custom manual dose entry input if chosen or not in predefined list */}
                   {(!availableDoses.includes(dose) || dose === '') && (
-                    <div className="mt-1.5 animate-in fade-in duration-200">
+                    <div className="mt-1 animate-in fade-in duration-200">
                       <input
                         type="text"
                         required
                         value={dose}
                         onChange={(e) => setDose(e.target.value)}
-                        placeholder={lang === 'ar' ? 'اكتب الجرعة (مثال: 500 mg أو 1 g)' : 'Enter custom dose (e.g. 500 mg or 1 g)'}
-                        className="w-full bg-slate-50 dark:bg-[#070c18] border border-amber-400 dark:border-amber-500/60 rounded-xl px-3 py-1.5 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-amber-500 font-mono"
+                        placeholder={lang === 'ar' ? 'اكتب الجرعة' : 'Enter dose'}
+                        className="w-full bg-slate-50 dark:bg-[#070c18] border border-amber-400 dark:border-amber-500/60 rounded-xl px-2.5 py-1 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-amber-500 font-mono"
                       />
                     </div>
                   )}
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     {lang === 'ar' ? 'طريقة الإعطاء' : 'Route'}
                   </label>
                   <select
                     value={route}
                     onChange={(e) => setRoute(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-[#070c18] border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-amber-500"
+                    className="w-full bg-slate-50 dark:bg-[#070c18] border border-slate-300 dark:border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-amber-500"
                   >
                     <option value="IV">IV (Intravenous)</option>
                     <option value="PO">PO (Oral)</option>
-                    <option value="Inhalation">Inhalation / Nebulizer</option>
+                    <option value="Inhalation">Inhalation</option>
                     <option value="Intrathecal">Intrathecal</option>
                     <option value="IM">IM (Intramuscular)</option>
                     <option value="Topical">Topical</option>
                   </select>
                 </div>
+              </div>
+
+              {/* Row 2: Frequency & Indication */}
+              <div className="grid grid-cols-2 gap-2">
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                      {lang === 'ar' ? 'التكرار / الجدول' : 'Frequency / Interval'}
+                    <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300">
+                      {lang === 'ar' ? 'التكرار / الجدول' : 'Frequency'}
                     </label>
                     <button
                       type="button"
@@ -1648,9 +1666,9 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                           setFrequency('');
                         }
                       }}
-                      className="text-[11px] text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 font-bold cursor-pointer hover:underline flex items-center gap-1"
+                      className="text-[10px] text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 font-bold cursor-pointer hover:underline flex items-center gap-0.5"
                     >
-                      {isCustomFrequency ? (lang === 'ar' ? '📋 قائمة جاهزة' : '📋 Presets') : (lang === 'ar' ? '✏️ مخصص' : '✏️ Custom')}
+                      {isCustomFrequency ? (lang === 'ar' ? '📋 قائمة' : '📋 Presets') : (lang === 'ar' ? '✏️ مخصص' : '✏️ Custom')}
                     </button>
                   </div>
 
@@ -1666,19 +1684,19 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                           setFrequency(val);
                         }
                       }}
-                      className="w-full bg-slate-50 dark:bg-[#070c18] border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-amber-500 font-mono cursor-pointer"
+                      className="w-full bg-slate-50 dark:bg-[#070c18] border border-slate-300 dark:border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-amber-500 font-mono cursor-pointer"
                     >
-                      <option value="Q6H">{lang === 'ar' ? 'كل 6 س (Q6H)' : 'Every 6 hrs (Q6H)'}</option>
-                      <option value="Q8H">{lang === 'ar' ? 'كل 8 س (Q8H)' : 'Every 8 hrs (Q8H)'}</option>
-                      <option value="Q12H">{lang === 'ar' ? 'كل 12 س (Q12H)' : 'Every 12 hrs (Q12H)'}</option>
-                      <option value="Q24H">{lang === 'ar' ? 'كل 24 س (Q24H / Daily)' : 'Every 24 hrs (Q24H / Daily)'}</option>
-                      <option value="Q48H">{lang === 'ar' ? 'كل 48 س (Q48H)' : 'Every 48 hrs (Q48H)'}</option>
-                      <option value="Q36H">{lang === 'ar' ? 'كل 36 س (Q36H)' : 'Every 36 hrs (Q36H)'}</option>
-                      <option value="Q72H">{lang === 'ar' ? 'كل 72 س (Q72H)' : 'Every 72 hrs (Q72H)'}</option>
-                      <option value="Continuous">{lang === 'ar' ? 'تسريب مستمر (Continuous Infusion)' : 'Continuous Infusion'}</option>
-                      <option value="Once / STAT">{lang === 'ar' ? 'جرعة واحدة (Stat / Single Dose)' : 'Once / STAT'}</option>
-                      <option value="Post-HD">{lang === 'ar' ? 'بعد الغسيل الكلوي (Post-HD)' : 'Post-Hemodialysis (Post-HD)'}</option>
-                      <option value="CUSTOM">{lang === 'ar' ? '✏️ توقيت مخصص آخر...' : '✏️ Custom Interval...'}</option>
+                      <option value="Q6H">Q6H (كل 6 س)</option>
+                      <option value="Q8H">Q8H (كل 8 س)</option>
+                      <option value="Q12H">Q12H (كل 12 س)</option>
+                      <option value="Q24H">Q24H (يومي)</option>
+                      <option value="Q48H">Q48H (كل 48 س)</option>
+                      <option value="Q36H">Q36H (كل 36 س)</option>
+                      <option value="Q72H">Q72H (كل 72 س)</option>
+                      <option value="Continuous">Continuous</option>
+                      <option value="Once / STAT">STAT / Single</option>
+                      <option value="Post-HD">Post-HD</option>
+                      <option value="CUSTOM">{lang === 'ar' ? '✏️ مخصص...' : '✏️ Custom...'}</option>
                     </select>
                   ) : (
                     <div className="animate-in fade-in duration-200">
@@ -1687,36 +1705,88 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                         required
                         value={frequency}
                         onChange={(e) => setFrequency(e.target.value)}
-                        placeholder={lang === 'ar' ? 'اكتب التكرار المخصص (مثال: كل 4 س أو كل 18 س أو يوم بعد يوم)' : 'Enter custom frequency (e.g. Q4H, Q18H, or Alternate days)'}
-                        className="w-full bg-slate-50 dark:bg-[#070c18] border border-amber-400 dark:border-amber-500/60 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-amber-500 font-mono"
+                        placeholder={lang === 'ar' ? 'أدخل التكرار' : 'Enter frequency'}
+                        className="w-full bg-slate-50 dark:bg-[#070c18] border border-amber-400 dark:border-amber-500/60 rounded-xl px-2.5 py-1 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-amber-500 font-mono"
                       />
                     </div>
                   )}
                 </div>
-              </div>
-
-              {/* Indication & Category */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    {lang === 'ar' ? 'دواعي الاستخدام / مصدر العدوى' : 'Indication / Infection Source'}
+                  <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    {lang === 'ar' ? 'دواعي الاستخدام' : 'Indication'}
                   </label>
                   <input
                     type="text"
                     value={indication}
                     onChange={(e) => setIndication(e.target.value)}
-                    placeholder="e.g. VAP, Septic Shock, Intra-abdominal"
-                    className="w-full bg-slate-50 dark:bg-[#070c18] border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-amber-500"
+                    placeholder="e.g. VAP, Sepsis"
+                    className="w-full bg-slate-50 dark:bg-[#070c18] border border-slate-300 dark:border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-amber-500"
                   />
                 </div>
+              </div>
+
+              {/* Row 3: Course Duration (1-14 dropdown) & Start Date */}
+              <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    {lang === 'ar' ? 'مدة الكورس (أيام)' : 'Duration (Days)'}
+                  </label>
+                  <select
+                    value={[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21].includes(plannedDurationDays) ? plannedDurationDays : 'CUSTOM'}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val !== 'CUSTOM') {
+                        setPlannedDurationDays(Number(val));
+                      }
+                    }}
+                    className="w-full bg-slate-50 dark:bg-[#070c18] border border-amber-400 dark:border-amber-500/40 rounded-xl px-2.5 py-1.5 text-xs text-amber-900 dark:text-amber-300 font-bold font-mono focus:outline-none focus:border-amber-500 cursor-pointer shadow-inner"
+                  >
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21].map(d => (
+                      <option key={d} value={d}>
+                        {d} {lang === 'ar' ? (d === 1 ? 'يوم' : d === 2 ? 'يومين' : 'أيام') : (d === 1 ? 'day' : 'days')}
+                      </option>
+                    ))}
+                    <option value="CUSTOM">{lang === 'ar' ? '✏️ مخصص...' : '✏️ Custom...'}</option>
+                  </select>
+
+                  {!([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21].includes(plannedDurationDays)) && (
+                    <div className="mt-1">
+                      <input
+                        type="number"
+                        min="1"
+                        max="90"
+                        value={plannedDurationDays}
+                        onChange={(e) => setPlannedDurationDays(Number(e.target.value))}
+                        placeholder={lang === 'ar' ? 'عدد الأيام' : 'Days'}
+                        className="w-full bg-slate-50 dark:bg-[#070c18] border border-amber-400 dark:border-amber-500/60 rounded-xl px-2.5 py-1 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-amber-500 font-mono"
+                      />
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    {lang === 'ar' ? 'تاريخ البدء' : 'Start Date'}
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-[#070c18] border border-slate-300 dark:border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-amber-500 font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Row 4: Category & Status */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     {lang === 'ar' ? 'تصنيف المضاد' : 'Category'}
                   </label>
                   <select
                     value={category}
                     onChange={(e) => setCategory(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-[#070c18] border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-amber-500"
+                    className="w-full bg-slate-50 dark:bg-[#070c18] border border-slate-300 dark:border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-amber-500"
                   >
                     <option value="Beta-Lactam / Carbapenem">Beta-Lactam / Carbapenem</option>
                     <option value="Glycopeptide / Lipopeptide">Glycopeptide / Lipopeptide</option>
@@ -1725,51 +1795,22 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                     <option value="Macrolide">Macrolide</option>
                     <option value="Antifungal">Antifungal</option>
                     <option value="Polymyxin">Polymyxin</option>
-                    <option value="Other">Other / Miscellaneous</option>
+                    <option value="Other">Other</option>
                   </select>
                 </div>
-              </div>
-
-              {/* Dates & Duration */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    {lang === 'ar' ? 'تاريخ البدء' : 'Start Date'}
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-[#070c18] border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-amber-500 font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    {lang === 'ar' ? 'مدة الكورس (أيام)' : 'Course Duration (Days)'}
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="60"
-                    value={plannedDurationDays}
-                    onChange={(e) => setPlannedDurationDays(Number(e.target.value))}
-                    className="w-full bg-slate-50 dark:bg-[#070c18] border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-amber-500 font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    {lang === 'ar' ? 'الحالة الحالية' : 'Regimen Status'}
+                  <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    {lang === 'ar' ? 'الحالة الحالية' : 'Status'}
                   </label>
                   <select
                     value={status}
                     onChange={(e) => setStatus(e.target.value as any)}
-                    className="w-full bg-slate-50 dark:bg-[#070c18] border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-amber-500 font-bold"
+                    className="w-full bg-slate-50 dark:bg-[#070c18] border border-slate-300 dark:border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-amber-500 font-bold"
                   >
-                    <option value="ACTIVE" className="text-emerald-600 dark:text-emerald-400">ACTIVE (جاري)</option>
-                    <option value="PAUSED" className="text-amber-600 dark:text-yellow-400">PAUSED (مؤقت)</option>
-                    <option value="COMPLETED" className="text-blue-600 dark:text-blue-400">COMPLETED (مكتمل)</option>
-                    <option value="DISCONTINUED" className="text-rose-600 dark:text-rose-400">DISCONTINUED (ملغي)</option>
+                    <option value="ACTIVE" className="text-emerald-600 dark:text-emerald-400">ACTIVE</option>
+                    <option value="PAUSED" className="text-amber-600 dark:text-yellow-400">PAUSED</option>
+                    <option value="COMPLETED" className="text-blue-600 dark:text-blue-400">COMPLETED</option>
+                    <option value="DISCONTINUED" className="text-rose-600 dark:text-rose-400">DISCONTINUED</option>
                   </select>
                 </div>
               </div>
