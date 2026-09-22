@@ -229,7 +229,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
     const userEmail = cleanUsername.includes('@') ? cleanUsername : `${cleanUsername}@solimedical-micu.org`;
     const cleanDisplayName = formDisplayName.trim() || cleanUsername;
     
-    if (formPassword.length < 6) {
+    if (!editingUser && formPassword.length < 6) {
       setStatusMsg({ type: 'error', text: lang === 'ar' ? 'كلمة المرور يجب ألا تقل عن 6 أحرف أو أرقام (auth/weak-password).' : 'Password must be at least 6 characters (auth/weak-password).' });
       return;
     }

@@ -114,6 +114,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           if (resolvedUser && resolvedUser.isActive !== false && resolvedUser.active !== false) {
             resolvedUser.uid = fbUser.uid;
+            resolvedUser.permissions = {
+              ...getDefaultPermissionsForRole(resolvedUser.role as StaffRole),
+              ...(resolvedUser.permissions || {})
+            };
             setCurrentUser(resolvedUser);
             localStorage.setItem('soli_icu_active_user', JSON.stringify(resolvedUser));
             // Keep local Dexie cache synchronized with Firestore SSOT
@@ -151,9 +155,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const seen = new Set<string>();
 
       for (const u of remoteUsers) {
-        if (u && u.uid && !seen.has(u.uid)) {
-          seen.add(u.uid);
-          uniqueUsers.push(u);
+        if (u && u.uid) {
+          u.permissions = {
+            ...getDefaultPermissionsForRole(u.role as StaffRole),
+            ...(u.permissions || {})
+          };
+          if (!seen.has(u.uid)) {
+            seen.add(u.uid);
+            uniqueUsers.push(u);
+          }
         }
       }
 
@@ -428,6 +438,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       const now = new Date().toISOString();
+      const roleDefaults = getDefaultPermissionsForRole(role as StaffRole);
+      const fullPermissions: UserPermissions = {
+        ...roleDefaults,
+        ...(userData.permissions || {})
+      };
 
       const newUser: IcuUser = {
         uid,
@@ -442,7 +457,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isSuperAdmin: role === StaffRole.ADMIN,
         createdAt: now,
         lastLoginAt: now,
-        permissions: userData.permissions || getDefaultPermissionsForRole(role as StaffRole),
+        permissions: fullPermissions,
       };
 
       // 2. Save to Firestore and Dexie SSOT
@@ -462,10 +477,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, message: 'ليس لديك صلاحية لتعديل بيانات هذا المستخدم (Permission Denied: users.update)' };
     }
 
-    await saveUserAccount(user);
-    if (currentUser?.uid === user.uid) {
-      setCurrentUser(user);
-      localStorage.setItem('soli_icu_active_user', JSON.stringify(user));
+    const roleDefaults = getDefaultPermissionsForRole(user.role as StaffRole);
+    const updatedUser: IcuUser = {
+      ...user,
+      permissions: {
+        ...roleDefaults,
+        ...(user.permissions || {})
+      }
+    };
+
+    await saveUserAccount(updatedUser);
+    if (currentUser?.uid === updatedUser.uid) {
+      setCurrentUser(updatedUser);
+      localStorage.setItem('soli_icu_active_user', JSON.stringify(updatedUser));
     }
     await refreshUsers();
     return { success: true };

@@ -11,6 +11,7 @@ import {
 } from 'firebase/firestore';
 import { AppNotification, NotificationType, AppNotificationTarget } from '../types/notification.ts';
 import { useSystemSettings } from './SettingsContext.tsx';
+import { useAuth } from './AuthContext.tsx';
 import { playGentleNotificationTone, isAudioGloballyMuted } from './NotificationAudio.ts';
 import { firestore, sanitizeForFirestore } from './firebase.ts';
 
@@ -70,6 +71,7 @@ function saveNotificationsToStorage(list: AppNotification[]) {
 
 export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const { settings } = useSystemSettings();
+  const { currentUser } = useAuth();
   const [notifications, setNotifications] = useState<AppNotification[]>(loadSavedNotifications);
   const [activeBanner, setActiveBanner] = useState<AppNotification | null>(null);
   const [navHandler, setNavHandler] = useState<((target: AppNotificationTarget) => void) | null>(null);
@@ -113,6 +115,12 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
   // Real-Time Multi-User Clinical Notification Listener from Firestore
   // --------------------------------------------------------------------------
   useEffect(() => {
+    isInitialSnapshotRef.current = true;
+
+    if (!currentUser?.uid) {
+      return;
+    }
+
     try {
       const notifsCol = collection(firestore, 'notifications');
       const notifsQuery = query(notifsCol, orderBy('timestamp', 'desc'), limit(MAX_NOTIFICATIONS));
@@ -205,7 +213,7 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
     } catch (e) {
       console.warn('Could not initialize notifications Firestore listener:', e);
     }
-  }, [settings.notifications]);
+  }, [settings.notifications, currentUser?.uid]);
 
   const setNavigationHandler = useCallback((handler: (target: AppNotificationTarget) => void) => {
     setNavHandler(() => handler);
