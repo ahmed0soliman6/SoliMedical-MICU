@@ -1134,18 +1134,19 @@ export async function fetchPatientHistoricalDataFromCloud(patientId: string): Pr
       transfusionsSnap,
       addendumsSnap
     ] = await Promise.all([
-      getDocs(query(collection(firestore, 'clinicalNotes'), where('patientId', '==', patientId))).catch(() => null),
-      getDocs(query(collection(firestore, 'sbarHandovers'), where('patientId', '==', patientId))).catch(() => null),
-      getDocs(query(collection(firestore, 'ventilators'), where('patientId', '==', patientId))).catch(() => null),
-      getDocs(query(collection(firestore, 'infusionPumps'), where('patientId', '==', patientId))).catch(() => null),
-      getDocs(query(collection(firestore, 'fluidBalances'), where('patientId', '==', patientId))).catch(() => null),
-      getDocs(query(collection(firestore, 'statLabs'), where('patientId', '==', patientId))).catch(() => null),
-      getDocs(query(collection(firestore, 'patientAntibiotics'), where('patientId', '==', patientId))).catch(() => null),
-      getDocs(query(collection(firestore, 'medical_records'), where('patientId', '==', patientId))).catch(() => null),
-      getDocs(query(collection(firestore, 'labResults'), where('patientId', '==', patientId))).catch(() => null),
-      getDocs(query(collection(firestore, 'investigations'), where('patientId', '==', patientId))).catch(() => null),
-      getDocs(query(collection(firestore, 'transfusions'), where('patientId', '==', patientId))).catch(() => null),
-      getDocs(query(collection(firestore, 'addendums'), where('patientId', '==', patientId))).catch(() => null),
+      getDocs(query(collection(firestore, 'clinicalNotes'), where('patientId', '==', patientId), limit(4))).catch(() => null),
+      getDocs(query(collection(firestore, 'sbarHandovers'), where('patientId', '==', patientId), limit(4))).catch(() => null),
+      getDocs(query(collection(firestore, 'ventilators'), where('patientId', '==', patientId), limit(4))).catch(() => null),
+      getDocs(query(collection(firestore, 'infusionPumps'), where('patientId', '==', patientId), limit(4))).catch(() => null),
+      getDocs(query(collection(firestore, 'fluidBalances'), where('patientId', '==', patientId), limit(4))).catch(() => null),
+      // Exception: Lab Results & STAT Labs keep up to 30 records to support side-by-side comparative panel views
+      getDocs(query(collection(firestore, 'statLabs'), where('patientId', '==', patientId), limit(30))).catch(() => null),
+      getDocs(query(collection(firestore, 'patientAntibiotics'), where('patientId', '==', patientId), limit(15))).catch(() => null),
+      getDocs(query(collection(firestore, 'medical_records'), where('patientId', '==', patientId), limit(4))).catch(() => null),
+      getDocs(query(collection(firestore, 'labResults'), where('patientId', '==', patientId), limit(60))).catch(() => null),
+      getDocs(query(collection(firestore, 'investigations'), where('patientId', '==', patientId), limit(4))).catch(() => null),
+      getDocs(query(collection(firestore, 'transfusions'), where('patientId', '==', patientId), limit(4))).catch(() => null),
+      getDocs(query(collection(firestore, 'addendums'), where('patientId', '==', patientId), limit(4))).catch(() => null),
     ]);
 
     if (notesSnap && !notesSnap.empty) {
@@ -1205,6 +1206,108 @@ export async function fetchPatientHistoricalDataFromCloud(patientId: string): Pr
     }
   } catch (err) {
     handleFirestoreError(err, OperationType.GET, `patient/${patientId}`);
+  }
+}
+
+/**
+ * On-demand full fetch for specific categories when clicking "Show More" / opening full views
+ */
+export async function fetchFullCategoryFromCloud(patientId: string, category: 'vitals' | 'sbar' | 'fluids' | 'notes' | 'vent' | 'pumps' | 'labs' | 'investigations'): Promise<void> {
+  if (!patientId) return;
+  try {
+    switch (category) {
+      case 'vitals': {
+        const snap = await getDocs(query(collection(firestore, 'vitals'), where('patientId', '==', patientId))).catch(() => null);
+        if (snap && !snap.empty) {
+          const list: TelemetryVitals[] = [];
+          snap.forEach(d => list.push(d.data() as TelemetryVitals));
+          await db.vitals.bulkPut(list);
+        }
+        break;
+      }
+      case 'sbar': {
+        const snap = await getDocs(query(collection(firestore, 'sbarHandovers'), where('patientId', '==', patientId))).catch(() => null);
+        if (snap && !snap.empty) {
+          const list: SbarHandoverReport[] = [];
+          snap.forEach(d => list.push(d.data() as SbarHandoverReport));
+          await db.sbarHandovers.bulkPut(list);
+        }
+        break;
+      }
+      case 'fluids': {
+        const snap = await getDocs(query(collection(firestore, 'fluidBalances'), where('patientId', '==', patientId))).catch(() => null);
+        if (snap && !snap.empty) {
+          const list: FluidBalance24H[] = [];
+          snap.forEach(d => list.push(d.data() as FluidBalance24H));
+          await db.fluidBalances.bulkPut(list);
+        }
+        break;
+      }
+      case 'notes': {
+        const snap = await getDocs(query(collection(firestore, 'clinicalNotes'), where('patientId', '==', patientId))).catch(() => null);
+        if (snap && !snap.empty) {
+          const list: ClinicalNote[] = [];
+          snap.forEach(d => list.push(d.data() as ClinicalNote));
+          await db.clinicalNotes.bulkPut(list);
+        }
+        break;
+      }
+      case 'vent': {
+        const snap = await getDocs(query(collection(firestore, 'ventilators'), where('patientId', '==', patientId))).catch(() => null);
+        if (snap && !snap.empty) {
+          const list: VentilatorParameters[] = [];
+          snap.forEach(d => list.push(d.data() as VentilatorParameters));
+          await db.ventilators.bulkPut(list);
+        }
+        break;
+      }
+      case 'pumps': {
+        const snap = await getDocs(query(collection(firestore, 'infusionPumps'), where('patientId', '==', patientId))).catch(() => null);
+        if (snap && !snap.empty) {
+          const list: InfusionPumpLine[] = [];
+          snap.forEach(d => list.push(d.data() as InfusionPumpLine));
+          await db.infusionPumps.bulkPut(list);
+        }
+        break;
+      }
+      case 'labs': {
+        const [statSnap, directSnap, abxSnap] = await Promise.all([
+          getDocs(query(collection(firestore, 'statLabs'), where('patientId', '==', patientId))).catch(() => null),
+          getDocs(query(collection(firestore, 'labResults'), where('patientId', '==', patientId))).catch(() => null),
+          getDocs(query(collection(firestore, 'patientAntibiotics'), where('patientId', '==', patientId))).catch(() => null),
+        ]);
+        if (statSnap && !statSnap.empty) {
+          const list: StatLabPanel[] = [];
+          statSnap.forEach(d => list.push(d.data() as StatLabPanel));
+          await db.statLabs.bulkPut(list);
+        }
+        if (directSnap && !directSnap.empty) {
+          const list: LabResultItem[] = [];
+          directSnap.forEach(d => list.push(d.data() as LabResultItem));
+          await db.labResults.bulkPut(list);
+        }
+        if (abxSnap && !abxSnap.empty) {
+          const list: PatientAntibiotic[] = [];
+          abxSnap.forEach(d => list.push(d.data() as PatientAntibiotic));
+          await db.patientAntibiotics.bulkPut(list);
+        }
+        break;
+      }
+      case 'investigations': {
+        const snap = await getDocs(query(collection(firestore, 'investigations'), where('patientId', '==', patientId))).catch(() => null);
+        if (snap && !snap.empty) {
+          const list: InvestigationItem[] = [];
+          snap.forEach(d => list.push(d.data() as InvestigationItem));
+          await db.investigations.bulkPut(list);
+        }
+        break;
+      }
+    }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('icu-data-updated'));
+    }
+  } catch (err) {
+    console.warn(`Could not fetch full ${category} category from cloud:`, err);
   }
 }
 

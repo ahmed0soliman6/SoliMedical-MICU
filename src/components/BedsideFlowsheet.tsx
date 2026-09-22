@@ -69,7 +69,7 @@ import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
 import { useAuth } from '../services/AuthContext.tsx';
 import { useAppNotifications } from '../services/NotificationContext.tsx';
-import { syncStatLabsToCloud, deleteStatLabFromCloud, syncLabResultToCloud, syncPatientToCloud, syncPumpToCloud, deletePumpFromCloud, firestore, fetchPatientHistoricalDataFromCloud } from '../services/firebase.ts';
+import { syncStatLabsToCloud, deleteStatLabFromCloud, syncLabResultToCloud, syncPatientToCloud, syncPumpToCloud, deletePumpFromCloud, firestore, fetchPatientHistoricalDataFromCloud, fetchFullCategoryFromCloud } from '../services/firebase.ts';
 import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { FullPageAdmission } from './FullPageAdmission.tsx';
 import { LabFlowsheetSection } from './LabFlowsheetSection.tsx';
@@ -1486,7 +1486,20 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
+                onClick={() => {
+                  const tabId = tab.id;
+                  setActiveTab(tabId as any);
+                  if (patient?.id) {
+                    if (tabId === 'vitals') fetchFullCategoryFromCloud(patient.id, 'vitals');
+                    else if (tabId === 'sbar') fetchFullCategoryFromCloud(patient.id, 'sbar');
+                    else if (tabId === 'fluids') fetchFullCategoryFromCloud(patient.id, 'fluids');
+                    else if (tabId === 'notes') fetchFullCategoryFromCloud(patient.id, 'notes');
+                    else if (tabId === 'vent') fetchFullCategoryFromCloud(patient.id, 'vent');
+                    else if (tabId === 'pumps') fetchFullCategoryFromCloud(patient.id, 'pumps');
+                    else if (tabId === 'labs' || tabId === 'antibiotics') fetchFullCategoryFromCloud(patient.id, 'labs');
+                    else if (tabId === 'investigations') fetchFullCategoryFromCloud(patient.id, 'investigations');
+                  }
+                }}
                 className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl whitespace-nowrap transition-all font-semibold ${
                   isActive
                     ? 'bg-teal-500/15 text-teal-800 dark:text-teal-300 border border-teal-500/40 shadow-sm font-bold'
@@ -2016,7 +2029,12 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                   <div className="flex justify-center pt-2">
                     <button
                       type="button"
-                      onClick={() => setShowAllVitals(!showAllVitals)}
+                      onClick={() => {
+                        if (!showAllVitals && patient?.id) {
+                          fetchFullCategoryFromCloud(patient.id, 'vitals');
+                        }
+                        setShowAllVitals(!showAllVitals);
+                      }}
                       className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-teal-300 font-bold text-xs border border-slate-700 transition-all cursor-pointer shadow-sm active:scale-95"
                     >
                       <span>
@@ -3662,7 +3680,12 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                       {allFluidBalances.length > 4 && (
                         <button
                           type="button"
-                          onClick={() => setShowMoreBedsideFluids(!showMoreBedsideFluids)}
+                          onClick={() => {
+                            if (!showMoreBedsideFluids && patient?.id) {
+                              fetchFullCategoryFromCloud(patient.id, 'fluids');
+                            }
+                            setShowMoreBedsideFluids(!showMoreBedsideFluids);
+                          }}
                           className="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 hover:bg-slate-700 text-teal-300 border border-teal-500/30 whitespace-nowrap shrink-0 transition-all cursor-pointer"
                         >
                           {showMoreBedsideFluids 
@@ -3873,7 +3896,12 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                     <div className="pt-1 text-center">
                       <button
                         type="button"
-                        onClick={() => setShowMoreBedsideFluids(!showMoreBedsideFluids)}
+                        onClick={() => {
+                          if (!showMoreBedsideFluids && patient?.id) {
+                            fetchFullCategoryFromCloud(patient.id, 'fluids');
+                          }
+                          setShowMoreBedsideFluids(!showMoreBedsideFluids);
+                        }}
                         className="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-teal-300 border border-teal-500/30 text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5"
                       >
                         {showMoreBedsideFluids
@@ -4094,7 +4122,12 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                     <div className="pt-2 text-center">
                       <button
                         type="button"
-                        onClick={() => setShowMoreSbars(!showMoreSbars)}
+                        onClick={() => {
+                          if (!showMoreSbars && patient?.id) {
+                            fetchFullCategoryFromCloud(patient.id, 'sbar');
+                          }
+                          setShowMoreSbars(!showMoreSbars);
+                        }}
                         className="px-5 py-2 rounded-xl bg-teal-500/20 hover:bg-teal-500/30 border border-teal-500/40 text-teal-300 font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-2 mx-auto active:scale-95 shadow-md"
                       >
                         <span>
