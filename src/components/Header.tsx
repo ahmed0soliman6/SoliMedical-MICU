@@ -54,8 +54,6 @@ interface HeaderProps {
   onTriggerCloudSync?: () => void;
   activeTab: string;
   onTabChange: (tab: string) => void;
-  activeAlertMessage?: string | null;
-  onDismissAlert?: () => void;
   canGoBack?: boolean;
   onGoBack?: () => void;
 }
@@ -87,8 +85,6 @@ export const Header: React.FC<HeaderProps> = ({
   onTriggerCloudSync,
   activeTab,
   onTabChange,
-  activeAlertMessage,
-  onDismissAlert,
   canGoBack,
   onGoBack,
 }) => {
@@ -215,8 +211,7 @@ export const Header: React.FC<HeaderProps> = ({
     }
   };
 
-  const hasActiveEmergency = !!activeAlertMessage;
-  const totalAlertBadgeCount = unreadCount + (activeAlertMessage ? 1 : 0);
+  const totalAlertBadgeCount = unreadCount;
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 dark:bg-[#0a1122]/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800/80 px-2.5 sm:px-6 py-2 shadow-sm dark:shadow-lg transition-colors">
@@ -369,27 +364,13 @@ export const Header: React.FC<HeaderProps> = ({
                 }
               }}
               className={`relative flex items-center gap-2 px-3 py-1.5 sm:py-2 rounded-xl border text-xs font-semibold transition-all active:scale-95 shadow-sm cursor-pointer ${
-                hasActiveEmergency
-                  ? 'bg-red-100 dark:bg-red-950/80 border-red-400 dark:border-red-500 text-red-800 dark:text-red-200 hover:bg-red-200 dark:hover:bg-red-900 ring-2 ring-red-500/30'
-                  : unreadCount > 0
+                unreadCount > 0
                   ? 'bg-teal-50 dark:bg-teal-950/70 border-teal-400 dark:border-teal-500/60 text-teal-800 dark:text-teal-200 hover:bg-teal-100 dark:hover:bg-teal-900/60 ring-1 ring-teal-500/40'
                   : 'bg-white hover:bg-slate-100 dark:bg-[#0b1325] dark:hover:bg-[#111d38] border-slate-200 dark:border-slate-700/80 text-slate-700 dark:text-slate-300'
               }`}
-              title={
-                hasActiveEmergency
-                  ? (lang === 'ar' ? 'تنبيه طارئ نشط - انقر للتفاصيل' : 'Active Emergency Alert - Click for details')
-                  : (lang === 'ar' ? 'نظام الإشعارات والتنبيهات' : 'System Notifications')
-              }
+              title={lang === 'ar' ? 'نظام الإشعارات والتنبيهات' : 'System Notifications'}
             >
-              {hasActiveEmergency ? (
-                <>
-                  <BellRing className="w-4 h-4 text-red-600 dark:text-red-400 animate-bounce" />
-                  <span className="hidden sm:inline">{lang === 'ar' ? 'تنبيه طارئ' : 'Emergency Alert'}</span>
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-[11px] font-black text-white shadow-md animate-pulse">
-                    {unreadCount > 0 ? unreadCount : 1}
-                  </span>
-                </>
-              ) : unreadCount > 0 ? (
+              {unreadCount > 0 ? (
                 <>
                   <BellRing className="w-4 h-4 text-teal-600 dark:text-teal-400" />
                   <span className="hidden sm:inline">{lang === 'ar' ? 'التنبيهات' : 'Alerts'}</span>
@@ -489,49 +470,8 @@ export const Header: React.FC<HeaderProps> = ({
 
                 {/* Popover Content */}
                 <div className="mt-3 space-y-2.5 max-h-[420px] overflow-y-auto text-xs pr-0.5 custom-scrollbar">
-                  {/* Active STAT Alert Banner */}
-                  {activeAlertMessage && (
-                    <div 
-                      onClick={() => {
-                        const match = activeAlertMessage.match(/(?:السرير|Bed)\s*(\d+)/i);
-                        if (match && match[1]) {
-                          const bNum = match[1].padStart(2, '0') as BedNumber;
-                          onSelectBed?.(bNum);
-                          onTabChange('beds');
-                          setIsNotificationMenuOpen(false);
-                          if (onDismissAlert) onDismissAlert();
-                        }
-                      }}
-                      className="p-3 bg-red-50 dark:bg-red-950/80 border border-red-300 dark:border-red-500/80 text-red-900 dark:text-red-200 rounded-xl space-y-2 animate-pulse shadow-sm cursor-pointer hover:bg-red-100 dark:hover:bg-red-900/90 transition-colors"
-                    >
-                      <div className="flex items-start gap-2 font-bold">
-                        <ShieldAlert className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
-                        <div className="leading-snug">
-                          {activeAlertMessage}
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between pt-1 border-t border-red-200 dark:border-red-800/60 text-[10px]">
-                        <span className="font-semibold text-red-700 dark:text-red-300">
-                          {lang === 'ar' ? '🎯 انقر للانتقال المباشر لملف السرير' : '🎯 Click to view bed dossier'}
-                        </span>
-                        {onDismissAlert && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onDismissAlert();
-                            }}
-                            className="px-2 py-0.5 bg-red-600 hover:bg-red-700 dark:bg-red-900 dark:hover:bg-red-800 text-white font-bold rounded transition-colors cursor-pointer"
-                          >
-                            {lang === 'ar' ? 'إلغاء التنبيه' : 'Dismiss Alert'}
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
                   {/* Notifications Queue List */}
-                  {notifications.length === 0 && !activeAlertMessage ? (
+                  {notifications.length === 0 ? (
                     <div className="py-8 text-center text-slate-400 dark:text-slate-500 text-xs">
                       {lang === 'ar' ? 'لا توجد تنبيهات جديدة مسجلة حالياً.' : 'No alerts logged in the queue.'}
                     </div>

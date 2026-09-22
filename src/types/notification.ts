@@ -3,12 +3,9 @@ import { BedNumber } from './schema.ts';
 export type NotificationType = 
   | 'ADMISSION' 
   | 'DISCHARGE' 
-  | 'DEATH' 
-  | 'TRANSFER' 
   | 'SBAR_HANDOVER' 
   | 'SBAR_RECEIVED' 
-  | 'ISOLATION_CHANGE' 
-  | 'CRITICAL_TELEMETRY';
+  | 'ISOLATION_CHANGE';
 
 export interface AppNotificationTarget {
   action: 'OPEN_ARCHIVE' | 'OPEN_SBAR' | 'OPEN_BED' | 'OPEN_ISOLATION';

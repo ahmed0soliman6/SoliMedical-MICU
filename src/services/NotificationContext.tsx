@@ -105,7 +105,7 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
     const isMuted = settings.notifications.isMuted || isAudioGloballyMuted();
     if (unreadCount > 0 && !isMuted && settings.notifications.masterAudio) {
       const timer = setTimeout(() => {
-        playGentleNotificationTone('CRITICAL_TELEMETRY');
+        playGentleNotificationTone('SBAR_HANDOVER');
       }, 700);
       return () => clearTimeout(timer);
     }
@@ -168,11 +168,10 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
             if (!locallyTriggeredIdsRef.current.has(notifId) && ageMs < 45000) {
               let eventKey: keyof typeof notifSettings.events = 'admission';
               if (incoming.type === 'ADMISSION') eventKey = 'admission';
-              else if (incoming.type === 'DISCHARGE' || incoming.type === 'DEATH' || incoming.type === 'TRANSFER') eventKey = 'discharge';
+              else if (incoming.type === 'DISCHARGE') eventKey = 'discharge';
               else if (incoming.type === 'SBAR_HANDOVER') eventKey = 'sbarHandover';
               else if (incoming.type === 'SBAR_RECEIVED') eventKey = 'sbarReceived';
               else if (incoming.type === 'ISOLATION_CHANGE') eventKey = 'isolationChange';
-              else if (incoming.type === 'CRITICAL_TELEMETRY') eventKey = 'criticalTelemetry';
 
               const eventConfig = notifSettings.events[eventKey] || { visual: true, audio: true };
               const shouldShowVisual = notifSettings.masterVisual && eventConfig.visual;
@@ -250,11 +249,10 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
 
       let eventKey: keyof typeof notifSettings.events = 'admission';
       if (type === 'ADMISSION') eventKey = 'admission';
-      else if (type === 'DISCHARGE' || type === 'DEATH' || type === 'TRANSFER') eventKey = 'discharge';
+      else if (type === 'DISCHARGE') eventKey = 'discharge';
       else if (type === 'SBAR_HANDOVER') eventKey = 'sbarHandover';
       else if (type === 'SBAR_RECEIVED') eventKey = 'sbarReceived';
       else if (type === 'ISOLATION_CHANGE') eventKey = 'isolationChange';
-      else if (type === 'CRITICAL_TELEMETRY') eventKey = 'criticalTelemetry';
 
       const eventConfig = notifSettings.events[eventKey] || { visual: true, audio: true };
       const shouldShowVisual = forceVisual || (notifSettings.masterVisual && eventConfig.visual);

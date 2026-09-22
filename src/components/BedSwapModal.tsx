@@ -135,7 +135,7 @@ export const BedSwapModal: React.FC<BedSwapModalProps> = ({
       );
 
       triggerNotification({
-        type: 'TRANSFER',
+        type: 'DISCHARGE',
         titleAr: `تبديل أسِرّة - سرير ${bedAId} ⇋ سرير ${bedBId}`,
         titleEn: `Bed Swap - Bed ${bedAId} ⇋ Bed ${bedBId}`,
         messageAr: `تم تبديل موقع السرير ${bedAId} (${patientA?.fullNameAr || 'مريض'}) مع السرير ${bedBId} (${patientB?.fullNameAr || 'مريض'}).`,

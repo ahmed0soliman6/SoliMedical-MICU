@@ -105,16 +105,6 @@ export default function App() {
   // Robust persistent navigation state across reloads
   const [activeTab, setActiveTab] = useState<NavigationTab>(() => getInitialNavigationState().tab);
   const [selectedBedNumber, setSelectedBedNumber] = useState<BedNumber | null>(() => getInitialNavigationState().bed);
-  const [activeAlertMessage, setActiveAlertMessage] = useState<string | null>(null);
-  const [currentAlertKey, setCurrentAlertKey] = useState<string | null>(null);
-  const [dismissedAlertKeys, setDismissedAlertKeys] = useState<Set<string>>(() => {
-    try {
-      const saved = localStorage.getItem('soli_icu_dismissed_alerts');
-      return saved ? new Set(JSON.parse(saved)) : new Set();
-    } catch {
-      return new Set();
-    }
-  });
 
   // Sync navigation state with localStorage and URL hash on changes
   useEffect(() => {
@@ -272,7 +262,7 @@ export default function App() {
     if (vacantBed) {
       setSelectedBedNumber(vacantBed.bedNumber as BedNumber);
     } else {
-      setActiveAlertMessage(
+      alert(
         lang === 'ar' 
           ? '⚠️ تنبيه سريري: جميع أسِرّة العناية المركزة الستة (6/6) مشغولة حالياً بالكامل. يرجى تخريج مريض أو نقل حالة لإتاحة سرير شاغر.'
           : '⚠️ Clinical Alert: All 6 ICU beds are currently occupied. Please discharge or transfer a patient to make a bed available.'
@@ -332,14 +322,6 @@ export default function App() {
       const res = await toggleBedOperationalStatus(bedNumber);
       if (res.success) {
         await reloadData();
-        triggerNotification({
-          type: 'BED_STATUS_CHANGE',
-          titleAr: 'تحديث حالة السرير التشغيلية',
-          titleEn: 'Bed Operational Status',
-          messageAr: res.message,
-          messageEn: res.message,
-          target: { action: 'OPEN_BED', bedNumber },
-        });
       } else {
         alert(res.message);
       }
@@ -415,185 +397,6 @@ export default function App() {
   }, [reloadData, currentUser?.uid]);
 
   // Dismiss active alert and prevent recurrence for this reading instance
-  const handleDismissAlert = useCallback(async () => {
-    let bedNumToPurge = '02';
-    if (activeAlertMessage) {
-      const match = activeAlertMessage.match(/(?:السرير|Bed)\s*(\d+)/i);
-      if (match && match[1]) {
-        bedNumToPurge = match[1];
-      }
-    }
-
-    // 1. Purge corrupted vitals from IndexedDB and normalize bed reading
-    await purgePhantomCriticalVitals(bedNumToPurge);
-    await reloadData();
-
-    // 2. Persist dismissed alert keys in state & localStorage
-    setDismissedAlertKeys(prev => {
-      const updated = new Set(prev);
-      if (currentAlertKey) updated.add(currentAlertKey);
-      const rawNum = bedNumToPurge;
-      const paddedNum = rawNum.padStart(2, '0');
-      const intNum = Number(rawNum);
-      updated.add(`bed-${rawNum}`);
-      updated.add(`bed-${paddedNum}`);
-      updated.add(`bed-${intNum}`);
-      updated.add(`bed-${paddedNum}-latest`);
-      updated.add(`bed-${intNum}-latest`);
-      updated.add(`bed-${paddedNum}-vit-bed-${paddedNum}`);
-      updated.add(`bed-${intNum}-vit-bed-${paddedNum}`);
-      try {
-        localStorage.setItem('soli_icu_dismissed_alerts', JSON.stringify(Array.from(updated)));
-      } catch (e) {
-        console.warn('Unable to persist dismissed alerts:', e);
-      }
-      return updated;
-    });
-
-    // 3. Prune critical telemetry notification entries for this bed from storage
-    try {
-      const rawNotifs = localStorage.getItem('soli_icu_notifications_queue_v2');
-      if (rawNotifs) {
-        const notifs = JSON.parse(rawNotifs);
-        if (Array.isArray(notifs)) {
-          const filtered = notifs.filter((n: any) => {
-            const isStat = n.type === 'CRITICAL_TELEMETRY';
-            const matchesBed = n.target?.bedNumber === bedNumToPurge || n.target?.bedNumber === bedNumToPurge.padStart(2, '0');
-            return !(isStat && matchesBed);
-          });
-          localStorage.setItem('soli_icu_notifications_queue_v2', JSON.stringify(filtered));
-        }
-      }
-    } catch (e) {
-      console.warn('Unable to prune notifications queue:', e);
-    }
-
-    setActiveAlertMessage(null);
-    setCurrentAlertKey(null);
-  }, [currentAlertKey, activeAlertMessage, reloadData]);
-
-  // Periodic Telemetry MAP, BP & Desaturation Safety Monitor with Customizable Thresholds
-  useEffect(() => {
-    const thresholds = settings.notifications?.vitalThresholds || DEFAULT_VITAL_THRESHOLDS;
-    if (!thresholds.enableTelemetryAlerts) {
-      if (activeAlertMessage && activeAlertMessage.startsWith('🚨 STAT ALERT')) {
-        setActiveAlertMessage(null);
-        setCurrentAlertKey(null);
-      }
-      return;
-    }
-
-    const checkCriticalVitals = () => {
-      // Only evaluate beds that are actively OCCUPIED with an admitted patient
-      const occupiedBeds = (beds || []).filter(b => b.status === BedStatus.OCCUPIED && b.currentPatientId);
-      if (occupiedBeds.length === 0) {
-        if (activeAlertMessage && activeAlertMessage.startsWith('🚨 STAT ALERT')) {
-          setActiveAlertMessage(null);
-          setCurrentAlertKey(null);
-        }
-        return;
-      }
-
-      let foundAlert: { 
-        key: string; 
-        message: string; 
-        bedNumber: BedNumber; 
-        patientId?: string;
-        issueAr: string; 
-        issueEn: string 
-      } | null = null;
-
-      for (const bed of occupiedBeds) {
-        const bedNum = bed.bedNumber;
-        const v = latestVitalsMap[bedNum];
-        if (!v) continue;
-
-        const vitId = v.id || v.timestamp || 'latest';
-        const alertKey = `bed-${bedNum}-${vitId}`;
-        const isDismissed = 
-          dismissedAlertKeys.has(alertKey) || 
-          dismissedAlertKeys.has(`bed-${bedNum}`) || 
-          dismissedAlertKeys.has(`bed-${Number(bedNum)}`) || 
-          dismissedAlertKeys.has(`bed-${String(bedNum).padStart(2, '0')}`);
-        if (isDismissed) continue;
-
-        const sys = Number(v.systolicBpMmHg || (v as any).systolicBloodPressureMmHg || (v as any).systolicBp || 120);
-        const dia = Number(v.diastolicBpMmHg || (v as any).diastolicBloodPressureMmHg || (v as any).diastolicBp || 80);
-        const calculatedMap = Math.round((sys + 2 * dia) / 3);
-        const rawMap = Number(v.meanArterialPressureMmHg || calculatedMap);
-        // Ensure MAP is clinically consistent with Sys/Dia (fallback to calculated if inconsistent or corrupted)
-        const map = (rawMap > 0 && Math.abs(rawMap - calculatedMap) <= 20) ? rawMap : calculatedMap;
-        const spo2 = Number(v.spo2Percent || (v as any).oxygenSaturationPercent || 98);
-        const hr = Number(v.heartRateBpm || (v as any).pulseBpm || 75);
-
-        const isHypotensive = false; // Disabled per user request
-        const isHypoxic = spo2 < thresholds.minSpo2;
-        const isBrady = hr < thresholds.minHeartRate;
-        const isTachy = hr > thresholds.maxHeartRate;
-
-        if (isHypotensive || isHypoxic || isBrady || isTachy) {
-          const bedLabel = lang === 'ar' ? `السرير ${bedNum}` : `Bed ${bedNum}`;
-          let issueAr = '';
-          let issueEn = '';
-
-          if (isHypotensive) {
-            issueAr = `انخفاض حاد في ضغط الدم (${sys}/${dia} ملم زئبق، MAP ${map})`;
-            issueEn = `Severe Hypotension (BP ${sys}/${dia}, MAP ${map} mmHg)`;
-          } else if (isHypoxic) {
-            issueAr = `هبوط حاد في تشبع الأكسجين SpO₂ (${spo2}%)`;
-            issueEn = `Critical Hypoxemia SpO₂ (${spo2}%)`;
-          } else if (isBrady) {
-            issueAr = `تباطؤ نبض حاد (${hr} bpm)`;
-            issueEn = `Severe Bradycardia (${hr} bpm)`;
-          } else if (isTachy) {
-            issueAr = `تسارع نبض حاد (${hr} bpm)`;
-            issueEn = `Severe Tachycardia (${hr} bpm)`;
-          }
-
-          foundAlert = {
-            key: alertKey,
-            bedNumber: bedNum,
-            patientId: bed.currentPatientId || undefined,
-            issueAr,
-            issueEn,
-            message: `🚨 STAT ALERT [${bedLabel}]: ${lang === 'ar' ? issueAr : issueEn} — ${lang === 'ar' ? 'يتطلب تدخلاً سريرياً عاجلاً!' : 'Immediate intervention required!'}`
-          };
-          break;
-        }
-      }
-
-      if (foundAlert) {
-        if (currentAlertKey !== foundAlert.key) {
-          setCurrentAlertKey(foundAlert.key);
-          setActiveAlertMessage(foundAlert.message);
-
-          // Trigger system-wide notification connected to NotificationSettingsCard
-          triggerNotification({
-            type: 'CRITICAL_TELEMETRY',
-            titleAr: `تنبيه طارئ STAT [سرير ${foundAlert.bedNumber}]`,
-            titleEn: `STAT ALERT [Bed ${foundAlert.bedNumber}]`,
-            messageAr: foundAlert.issueAr,
-            messageEn: foundAlert.issueEn,
-            target: {
-              action: 'OPEN_BED',
-              bedNumber: foundAlert.bedNumber,
-              patientId: foundAlert.patientId,
-            },
-          });
-        }
-      } else {
-        if (activeAlertMessage && activeAlertMessage.startsWith('🚨 STAT ALERT')) {
-          setActiveAlertMessage(null);
-          setCurrentAlertKey(null);
-        }
-      }
-    };
-
-    checkCriticalVitals();
-    const alertInterval = setInterval(checkCriticalVitals, 15000);
-    return () => clearInterval(alertInterval);
-  }, [beds, latestVitalsMap, lang, settings.notifications?.vitalThresholds, dismissedAlertKeys, activeAlertMessage]);
-
   // Handle ESC key to exit Bedside Flowsheet back to Central 6-Bed Console
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -744,8 +547,6 @@ export default function App() {
               setActiveTab(tab);
             }
           }}
-          activeAlertMessage={activeAlertMessage}
-          onDismissAlert={handleDismissAlert}
           canGoBack={canGoBack}
           onGoBack={handleGoBack}
         />

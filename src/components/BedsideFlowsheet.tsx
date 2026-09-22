@@ -1140,7 +1140,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                          dispType === DispositionType.TRANSFER_SURGERY || 
                          dispType === DispositionType.TRANSFER_CARDIOLOGY || 
                          dispType === DispositionType.TRANSFER_EXTERNAL_HOSPITAL;
-      const notifType = isDeceased ? 'DEATH' : isTransfer ? 'TRANSFER' : 'DISCHARGE';
+      const notifType = 'DISCHARGE';
       const patientName = patient.fullNameAr || patient.fullNameEn || `Bed ${bed.bedNumber}`;
 
       triggerNotification({

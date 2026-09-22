@@ -194,8 +194,6 @@ export function playGentleNotificationTone(type: NotificationType, ignoreMute: b
         break;
 
       case 'DISCHARGE':
-      case 'DEATH':
-      case 'TRANSFER':
         // E5 (659.25 Hz) -> C5 (523.25 Hz) - Soft resolution tone
         playTonePair(ctx, 659.25, 523.25, 0.12, 0.18);
         break;
@@ -213,10 +211,6 @@ export function playGentleNotificationTone(type: NotificationType, ignoreMute: b
       case 'ISOLATION_CHANGE':
         // B4 (493.88 Hz) -> D#5 (622.25 Hz) - Warm caution indicator
         playTonePair(ctx, 493.88, 622.25, 0.14, 0.16);
-        break;
-
-      case 'CRITICAL_TELEMETRY':
-        // Silent per user request to remove critical telemetry / stat alarm chime
         break;
 
       default:

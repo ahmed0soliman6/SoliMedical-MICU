@@ -102,7 +102,7 @@ export const PatientTransferModal: React.FC<PatientTransferModalProps> = ({
       );
 
       triggerNotification({
-        type: 'TRANSFER',
+        type: 'DISCHARGE',
         titleAr: `تحويل مريض - سرير ${effectiveSourceBed.bedNumber} ⬅️ ${targetBedId}`,
         titleEn: `Patient Transfer - Bed ${effectiveSourceBed.bedNumber} ⬅️ ${targetBedId}`,
         messageAr: `تم نقل المريض ${patient.fullNameAr || patient.fullNameEn} إلى السرير رقم ${targetBedId}.`,

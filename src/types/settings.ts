@@ -140,7 +140,6 @@ export interface NotificationSettings {
     sbarHandover: NotificationEventConfig;      // عند تسليم مناوبة SBAR
     sbarReceived: NotificationEventConfig;      // عند استلام مناوبة SBAR
     isolationChange: NotificationEventConfig;   // عند تحويل الحالة إلى عزل أو تعديل العزل
-    criticalTelemetry: NotificationEventConfig; // عند هبوط المؤشرات الحيوية الطارئ
   };
 }
 
@@ -155,7 +154,6 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
     sbarHandover: { visual: true, audio: true },
     sbarReceived: { visual: true, audio: true },
     isolationChange: { visual: true, audio: true },
-    criticalTelemetry: { visual: true, audio: true },
   },
 };
 

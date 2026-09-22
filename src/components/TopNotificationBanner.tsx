@@ -26,18 +26,10 @@ const getNotificationStyle = (type: NotificationType) => {
         Icon: UserPlus,
       };
     case 'DISCHARGE':
-    case 'TRANSFER':
       return {
         bg: 'bg-indigo-950/95 dark:bg-indigo-950/95 text-indigo-100 border-indigo-500/60 shadow-indigo-900/30',
         iconBg: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40',
         badge: 'bg-indigo-900/80 text-indigo-200 border-indigo-600/60',
-        Icon: LogOut,
-      };
-    case 'DEATH':
-      return {
-        bg: 'bg-slate-900/95 dark:bg-slate-900/95 text-slate-100 border-slate-600/60 shadow-black/40',
-        iconBg: 'bg-slate-800 text-slate-300 border-slate-700',
-        badge: 'bg-slate-800 text-slate-300 border-slate-700',
         Icon: LogOut,
       };
     case 'SBAR_HANDOVER':
@@ -55,19 +47,12 @@ const getNotificationStyle = (type: NotificationType) => {
         Icon: CheckCircle2,
       };
     case 'ISOLATION_CHANGE':
+    default:
       return {
         bg: 'bg-amber-950/95 dark:bg-amber-950/95 text-amber-100 border-amber-500/60 shadow-amber-900/30',
         iconBg: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
         badge: 'bg-amber-900/80 text-amber-200 border-amber-600/60',
         Icon: ShieldAlert,
-      };
-    case 'CRITICAL_TELEMETRY':
-    default:
-      return {
-        bg: 'bg-rose-950/95 dark:bg-rose-950/95 text-rose-100 border-rose-500/70 shadow-rose-900/30',
-        iconBg: 'bg-rose-500/20 text-rose-300 border-rose-500/40',
-        badge: 'bg-rose-900/80 text-rose-200 border-rose-600/60',
-        Icon: Activity,
       };
   }
 };

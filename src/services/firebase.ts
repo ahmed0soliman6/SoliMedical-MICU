@@ -970,23 +970,8 @@ export function playIcuAlarmAudio(urgency: 'HIGH' | 'MEDIUM' = 'HIGH') {
   }
 }
 
-export function triggerExternalCriticalNotification(title: string, body: string, bedNumber: string) {
-  if (!isAudioGloballyMuted()) {
-    playIcuAlarmAudio('HIGH');
-  }
-
-  if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-    try {
-      new Notification(`🚨 ICU STAT Alert [سرير ${bedNumber}]: ${title}`, {
-        body,
-        icon: '/icon-192.png',
-        tag: `icu-alert-${bedNumber}-${Date.now()}`,
-        requireInteraction: true,
-      });
-    } catch (e) {
-      console.warn('Could not launch system notification:', e);
-    }
-  }
+export function triggerExternalCriticalNotification(_title: string, _body: string, _bedNumber: string) {
+  // External critical telemetry notifications disabled per notification whitelist
 }
 
 // -------------------------------------------------------------
@@ -1099,30 +1084,6 @@ export function subscribeToRealtimeFirestore(
         if (change.type === 'added' || change.type === 'modified') {
           const v = change.doc.data() as TelemetryVitals;
           remoteVitals.push(v);
-          
-          if (!isAudioGloballyMuted()) {
-            if (v.meanArterialPressureMmHg < 65) {
-              triggerExternalCriticalNotification(
-                'Severe Hypotension (MAP < 65 mmHg)',
-                `مريض السرير ${v.bedId}: الضغط الشرياني انخفض إلى ${v.meanArterialPressureMmHg} mmHg (${v.systolicBpMmHg}/${v.diastolicBpMmHg})`,
-                v.bedId
-              );
-              if (onCriticalAlarm) {
-                onCriticalAlarm({
-                  bedNumber: v.bedId,
-                  message: `انخفاض حرج في MAP (${v.meanArterialPressureMmHg} mmHg)`,
-                  type: 'HEMODYNAMIC_STAT'
-                });
-              }
-            }
-            if (v.spo2Percent < 88) {
-              triggerExternalCriticalNotification(
-                'Hypoxemia Desaturation (SpO₂ < 88%)',
-                `مريض السرير ${v.bedId}: تشبع الأكسجين انخفض إلى ${v.spo2Percent}%`,
-                v.bedId
-              );
-            }
-          }
         }
       });
 
