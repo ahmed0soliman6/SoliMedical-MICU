@@ -731,56 +731,55 @@ export interface PatientDossier {
 }
 
 export interface UserPermissions {
-  // Canonical dot-notation permissions (PAGE.ACTION)
   'beds.view'?: boolean;
+
   'patients.view'?: boolean;
   'patients.create'?: boolean;
   'patients.update'?: boolean;
+
   'archive.view'?: boolean;
+
   'vitals.view'?: boolean;
   'vitals.create'?: boolean;
   'vitals.update'?: boolean;
+
   'labs.view'?: boolean;
   'labs.create'?: boolean;
   'labs.update'?: boolean;
+
   'investigations.view'?: boolean;
   'investigations.create'?: boolean;
   'investigations.update'?: boolean;
+
   'clinicalNotes.view'?: boolean;
   'clinicalNotes.create'?: boolean;
   'clinicalNotes.update'?: boolean;
+
   'sbar.view'?: boolean;
   'sbar.create'?: boolean;
   'sbar.update'?: boolean;
+
   'transfer.create'?: boolean;
   'bedSwap.create'?: boolean;
   'discharge.create'?: boolean;
+
   'chat.view'?: boolean;
   'chat.create'?: boolean;
   'chat.delete'?: boolean;
+
   'settings.view'?: boolean;
   'settings.update'?: boolean;
+
   'sections.manage'?: boolean;
   'cards.manage'?: boolean;
+
   'users.view'?: boolean;
   'users.create'?: boolean;
   'users.update'?: boolean;
   'users.disable'?: boolean;
   'users.delete'?: boolean;
-  'audit.view'?: boolean;
 
-  // Legacy boolean flags for backwards compatibility
-  canAdmitPatient?: boolean;
-  canDischargePatient?: boolean;
-  canSignNotes?: boolean;
-  canAddAddendum?: boolean;
-  canSignSbar?: boolean;
-  canTitrateMedications?: boolean;
-  canManageUsers?: boolean;
-  canManageSettings?: boolean;
-  canViewAuditLogs?: boolean;
-  canEditVitals?: boolean;
-  [key: string]: boolean | undefined;
+  'audit.view'?: boolean;
 }
 
 export type CanonicalRole = 'ADMIN' | 'CONSULTANT' | 'DOCTOR' | 'NURSE';

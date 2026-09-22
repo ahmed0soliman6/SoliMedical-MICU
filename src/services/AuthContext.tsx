@@ -370,8 +370,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Create User
   const createUser = async (userData: Partial<IcuUser>): Promise<{ success: boolean; message?: string }> => {
-    if (!currentUser?.permissions.canManageUsers && !currentUser?.isSuperAdmin) {
-      return { success: false, message: 'ليس لديك صلاحية لإضافة مستخدمين جدد (Permission Denied)' };
+    if (!hasPermission('users.create')) {
+      return { success: false, message: 'ليس لديك صلاحية لإضافة مستخدمين جدد (Permission Denied: users.create)' };
     }
 
     const role = userData.role || StaffRole.BEDSIDE_RN;
@@ -458,8 +458,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Update User
   const updateUser = async (user: IcuUser): Promise<{ success: boolean; message?: string }> => {
-    if (!currentUser?.permissions.canManageUsers && !currentUser?.isSuperAdmin && currentUser?.uid !== user.uid) {
-      return { success: false, message: 'ليس لديك صلاحية لتعديل بيانات هذا المستخدم (Permission Denied)' };
+    if (!hasPermission('users.update') && currentUser?.uid !== user.uid) {
+      return { success: false, message: 'ليس لديك صلاحية لتعديل بيانات هذا المستخدم (Permission Denied: users.update)' };
     }
 
     await saveUserAccount(user);
@@ -473,7 +473,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Change password for any user account via Firebase Admin SDK / Cloud Function endpoint (Admin only)
   const changeUserPassword = async (uid: string, newPassword: string, confirmPassword?: string): Promise<{ success: boolean; message?: string }> => {
-    const isAdmin = currentUser?.isSuperAdmin || currentUser?.role === StaffRole.ADMIN;
+    const isAdmin = currentUser?.isSuperAdmin || currentUser?.role === StaffRole.ADMIN || hasPermission('users.update');
     if (!isAdmin) {
       return { success: false, message: 'صلاحية تغيير كلمة المرور متاحة للمشرف (Admin) فقط (Permission Denied).' };
     }
@@ -626,6 +626,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Toggle user status directly in Firestore. Auth token revocation requires a backend.
   const toggleUserStatus = async (uid: string) => {
+    if (!hasPermission('users.disable')) return;
     const user = allUsers.find(u => u.uid === uid);
     if (!user) return;
     if (user.isSuperAdmin || user.role === StaffRole.ADMIN) return;
@@ -642,10 +643,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Delete User Account (Strict: Firebase Authentication is Primary; No Firestore-only fallback)
   const deleteUser = async (uid: string): Promise<{ success: boolean; message?: string }> => {
-    const canDelete = currentUser?.isSuperAdmin || 
-      currentUser?.role === StaffRole.ADMIN || 
-      (currentUser?.permissions as any)?.['users.delete'] || 
-      currentUser?.permissions?.canManageUsers;
+    const canDelete = hasPermission('users.delete');
 
     if (!canDelete) {
       return { success: false, message: 'ليس لديك صلاحية لحذف المستخدمين (Permission Denied: users.delete)' };

@@ -781,22 +781,22 @@ const PERMISSION_GROUPS: PermissionCategory[] = [
 
                       {/* Key Canonical Permissions Badges */}
                       <div className="mt-2 flex flex-wrap gap-1">
-                        {(user.permissions?.['patients.create'] || user.permissions?.canAdmitPatient) && (
+                        {user.permissions?.['patients.create'] && (
                           <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[9px]">Admission</span>
                         )}
-                        {(user.permissions?.['clinicalNotes.create'] || user.permissions?.canSignNotes) && (
+                        {user.permissions?.['clinicalNotes.create'] && (
                           <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[9px]">Clinical Notes</span>
                         )}
-                        {(user.permissions?.['sbar.create'] || user.permissions?.canSignSbar) && (
+                        {user.permissions?.['sbar.create'] && (
                           <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[9px]">SBAR</span>
                         )}
-                        {(user.permissions?.['vitals.create'] || user.permissions?.canEditVitals) && (
+                        {user.permissions?.['vitals.create'] && (
                           <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[9px]">Vitals</span>
                         )}
-                        {(user.permissions?.['labs.create']) && (
+                        {user.permissions?.['labs.create'] && (
                           <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[9px]">Labs</span>
                         )}
-                        {(user.permissions?.['users.view'] || user.permissions?.canManageUsers) && (
+                        {user.permissions?.['users.view'] && (
                           <span className="px-1.5 py-0.5 rounded bg-amber-950/60 border border-amber-800/40 text-amber-300 text-[9px]">RBAC</span>
                         )}
                       </div>

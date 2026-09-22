@@ -209,7 +209,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
 
         {/* 4. Staff RBAC & User Management */}
-        {hasPermission('canManageUsers') && onOpenUserManagement && (
+        {hasPermission('users.view') && onOpenUserManagement && (
           <button
             onClick={() => handleSelectTab('users')}
             className={`w-full flex items-center justify-between p-3 rounded-xl text-xs font-semibold transition-all cursor-pointer ${

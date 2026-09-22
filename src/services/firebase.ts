@@ -171,7 +171,6 @@ export function getDefaultPermissionsForRole(role: StaffRole): UserPermissions {
   switch (role) {
     case StaffRole.ADMIN:
       return {
-        // Canonical dot-notation
         'beds.view': true,
         'patients.view': true,
         'patients.create': true,
@@ -208,18 +207,6 @@ export function getDefaultPermissionsForRole(role: StaffRole): UserPermissions {
         'users.disable': true,
         'users.delete': true,
         'audit.view': true,
-
-        // Legacy compatibility
-        canAdmitPatient: true,
-        canDischargePatient: true,
-        canSignNotes: true,
-        canAddAddendum: true,
-        canSignSbar: true,
-        canTitrateMedications: true,
-        canManageUsers: true,
-        canManageSettings: true,
-        canViewAuditLogs: true,
-        canEditVitals: true,
       };
     case StaffRole.CONSULTANT:
     case StaffRole.SPECIALIST:
@@ -260,17 +247,6 @@ export function getDefaultPermissionsForRole(role: StaffRole): UserPermissions {
         'users.disable': false,
         'users.delete': false,
         'audit.view': true,
-
-        canAdmitPatient: true,
-        canDischargePatient: true,
-        canSignNotes: true,
-        canAddAddendum: true,
-        canSignSbar: true,
-        canTitrateMedications: true,
-        canManageUsers: false,
-        canManageSettings: true,
-        canViewAuditLogs: true,
-        canEditVitals: true,
       };
     case StaffRole.RESIDENT:
       return {
@@ -310,17 +286,6 @@ export function getDefaultPermissionsForRole(role: StaffRole): UserPermissions {
         'users.disable': false,
         'users.delete': false,
         'audit.view': false,
-
-        canAdmitPatient: true,
-        canDischargePatient: false,
-        canSignNotes: true,
-        canAddAddendum: true,
-        canSignSbar: true,
-        canTitrateMedications: true,
-        canManageUsers: false,
-        canManageSettings: false,
-        canViewAuditLogs: true,
-        canEditVitals: true,
       };
     case StaffRole.LEAD_RN:
       return {
@@ -360,17 +325,6 @@ export function getDefaultPermissionsForRole(role: StaffRole): UserPermissions {
         'users.disable': false,
         'users.delete': false,
         'audit.view': true,
-
-        canAdmitPatient: true,
-        canDischargePatient: false,
-        canSignNotes: true,
-        canAddAddendum: true,
-        canSignSbar: true,
-        canTitrateMedications: true,
-        canManageUsers: false,
-        canManageSettings: false,
-        canViewAuditLogs: true,
-        canEditVitals: true,
       };
     case StaffRole.BEDSIDE_RN:
       return {
@@ -410,17 +364,6 @@ export function getDefaultPermissionsForRole(role: StaffRole): UserPermissions {
         'users.disable': false,
         'users.delete': false,
         'audit.view': false,
-
-        canAdmitPatient: false,
-        canDischargePatient: false,
-        canSignNotes: true,
-        canAddAddendum: true,
-        canSignSbar: true,
-        canTitrateMedications: true,
-        canManageUsers: false,
-        canManageSettings: false,
-        canViewAuditLogs: false,
-        canEditVitals: true,
       };
     case StaffRole.CLINICAL_PHARMACIST:
       return {
@@ -460,17 +403,6 @@ export function getDefaultPermissionsForRole(role: StaffRole): UserPermissions {
         'users.disable': false,
         'users.delete': false,
         'audit.view': false,
-
-        canAdmitPatient: false,
-        canDischargePatient: false,
-        canSignNotes: true,
-        canAddAddendum: true,
-        canSignSbar: false,
-        canTitrateMedications: true,
-        canManageUsers: false,
-        canManageSettings: false,
-        canViewAuditLogs: true,
-        canEditVitals: false,
       };
     case StaffRole.RESPIRATORY_THERAPIST:
       return {
@@ -510,17 +442,6 @@ export function getDefaultPermissionsForRole(role: StaffRole): UserPermissions {
         'users.disable': false,
         'users.delete': false,
         'audit.view': false,
-
-        canAdmitPatient: false,
-        canDischargePatient: false,
-        canSignNotes: true,
-        canAddAddendum: true,
-        canSignSbar: true,
-        canTitrateMedications: false,
-        canManageUsers: false,
-        canManageSettings: false,
-        canViewAuditLogs: false,
-        canEditVitals: true,
       };
     case StaffRole.AUDITOR:
       return {
@@ -560,17 +481,6 @@ export function getDefaultPermissionsForRole(role: StaffRole): UserPermissions {
         'users.disable': false,
         'users.delete': false,
         'audit.view': true,
-
-        canAdmitPatient: false,
-        canDischargePatient: false,
-        canSignNotes: false,
-        canAddAddendum: false,
-        canSignSbar: false,
-        canTitrateMedications: false,
-        canManageUsers: false,
-        canManageSettings: false,
-        canViewAuditLogs: true,
-        canEditVitals: false,
       };
     default:
       return {
@@ -610,17 +520,6 @@ export function getDefaultPermissionsForRole(role: StaffRole): UserPermissions {
         'users.disable': false,
         'users.delete': false,
         'audit.view': false,
-
-        canAdmitPatient: false,
-        canDischargePatient: false,
-        canSignNotes: false,
-        canAddAddendum: false,
-        canSignSbar: false,
-        canTitrateMedications: false,
-        canManageUsers: false,
-        canManageSettings: false,
-        canViewAuditLogs: false,
-        canEditVitals: false,
       };
   }
 }
