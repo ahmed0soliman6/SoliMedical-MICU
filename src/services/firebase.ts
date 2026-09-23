@@ -13,6 +13,7 @@ import {
   onSnapshot, 
   query, 
   where,
+  or,
   orderBy, 
   limit, 
   startAfter,
@@ -993,36 +994,9 @@ export function subscribeToRealtimeFirestore(
   };
 
   try {
-    // 1. Subscribe to Beds
+    // 1. Subscribe to Beds (Dynamic bed count - no hardcoded seeding in listener)
     const bedsCol = collection(firestore, 'beds');
-    let isInitialBedsSnapshot = true;
     const unsubBeds = onSnapshot(bedsCol, async (snapshot) => {
-      if (snapshot.empty && isInitialBedsSnapshot) {
-        try {
-          const totalBedsCount = 6;
-          const bedIds = Array.from({ length: totalBedsCount }, (_, i) => String(i + 1).padStart(2, '0'));
-          for (let idx = 0; idx < bedIds.length; idx++) {
-            const num = bedIds[idx];
-            const cleanBed: BedRecord = {
-              id: num,
-              unitId: 'MICU-MAIN',
-              bedNumber: num as BedNumber,
-              bayName: `Critical Care Bay ${num}`,
-              isActive: true,
-              displayOrder: idx,
-              status: idx === (totalBedsCount - 1) ? BedStatus.UNAVAILABLE : BedStatus.VACANT,
-              currentPatientId: null,
-              activePatientId: null,
-              lastCleanedAt: new Date().toISOString()
-            };
-            await syncBedToCloud(cleanBed);
-          }
-        } catch (seedErr) {
-          console.warn('Auto-seed default beds notice:', seedErr);
-        }
-      }
-      isInitialBedsSnapshot = false;
-
       for (const change of snapshot.docChanges()) {
         if (change.type === 'added' || change.type === 'modified') {
           const remoteBed = change.doc.data() as BedRecord;
@@ -1052,25 +1026,40 @@ export function subscribeToRealtimeFirestore(
           await db.beds.delete(change.doc.id);
         }
       }
-      await ensureBedPatientSync();
+      await ensureBedPatientSync({ syncToCloud: false });
       notifyUpdate();
     }, (err) => handleFirestoreError(err, OperationType.GET, 'beds'));
     unsubscribers.push(unsubBeds);
 
-    // 2. Subscribe to Patients (all active & unit patients, handling status variants seamlessly)
-    const patientsCol = collection(firestore, 'patients');
-    const unsubPatients = onSnapshot(patientsCol, async (snapshot) => {
+    // 2. Subscribe to Active Patients Query (scoped strictly to ACTIVE_ICU, avoiding historical records)
+    const activePatientsQuery = query(
+      collection(firestore, 'patients'),
+      or(
+        where('patientStatus', '==', 'ACTIVE_ICU'),
+        where('status', '==', 'ACTIVE_ICU'),
+        where('currentStatus', '==', 'ACTIVE_ICU')
+      )
+    );
+    const unsubPatients = onSnapshot(activePatientsQuery, async (snapshot) => {
       for (const change of snapshot.docChanges()) {
         if (change.type === 'added' || change.type === 'modified') {
           const remotePatient = change.doc.data() as PatientDossier;
           const patientId = remotePatient.id || (remotePatient as any).patientId || change.doc.id;
           if (patientId) {
+            // Filter by unitId if specified on the document
+            if (remotePatient.unitId && remotePatient.unitId !== 'MICU-MAIN') {
+              continue;
+            }
+
             const localPatient = await db.patients.get(patientId);
-            const resolvedStatus = 
+            const remoteStatus = 
               remotePatient.patientStatus || 
               (remotePatient as any).status || 
-              (remotePatient as any).currentStatus || 
-              'ACTIVE_ICU';
+              (remotePatient as any).currentStatus;
+
+            // Use the actual status present in the document; retain local only if remote omitted status
+            // NEVER invent 'ACTIVE_ICU' if no status was provided!
+            const resolvedStatus = remoteStatus || localPatient?.patientStatus;
 
             const resolvedBed = 
               remotePatient.currentBedId || 
@@ -1082,20 +1071,88 @@ export function subscribeToRealtimeFirestore(
               ...localPatient,
               ...remotePatient,
               id: patientId,
-              patientStatus: resolvedStatus,
-              status: resolvedStatus,
-              currentStatus: resolvedStatus,
               currentBedId: resolvedBed,
             };
+
+            if (resolvedStatus) {
+              mergedPatient.patientStatus = resolvedStatus;
+              (mergedPatient as any).status = resolvedStatus;
+              (mergedPatient as any).currentStatus = resolvedStatus;
+            }
+
             await db.patients.put(mergedPatient);
           }
         } else if (change.type === 'removed') {
-          await db.patients.delete(change.doc.id);
+          // Patient is no longer in ACTIVE_ICU scope (discharged/transferred/removed)
+          const removedPatientId = change.doc.id;
+          const localPat = await db.patients.get(removedPatientId);
+          if (localPat) {
+            await db.patients.put({
+              ...localPat,
+              patientStatus: 'DISCHARGED_HOME',
+              status: 'DISCHARGED',
+              currentStatus: 'DISCHARGED',
+              currentBedId: undefined
+            });
+          }
         }
       }
-      await ensureBedPatientSync();
+      await ensureBedPatientSync({ syncToCloud: false });
       notifyUpdate();
-    }, (err) => handleFirestoreError(err, OperationType.GET, 'patients'));
+    }, (err) => {
+      handleFirestoreError(err, OperationType.GET, 'patients');
+      // Resilient fallback in case 'or' disjunction encounters unexpected index requirement
+      try {
+        const fallbackActiveQuery = query(
+          collection(firestore, 'patients'),
+          where('patientStatus', '==', 'ACTIVE_ICU')
+        );
+        const fallbackUnsub = onSnapshot(fallbackActiveQuery, async (snap) => {
+          for (const change of snap.docChanges()) {
+            if (change.type === 'added' || change.type === 'modified') {
+              const remotePatient = change.doc.data() as PatientDossier;
+              const patientId = remotePatient.id || (remotePatient as any).patientId || change.doc.id;
+              if (patientId) {
+                if (remotePatient.unitId && remotePatient.unitId !== 'MICU-MAIN') continue;
+                const localPatient = await db.patients.get(patientId);
+                const remoteStatus = remotePatient.patientStatus || (remotePatient as any).status || (remotePatient as any).currentStatus;
+                const resolvedStatus = remoteStatus || localPatient?.patientStatus;
+                const resolvedBed = remotePatient.currentBedId || (remotePatient as any).bedNumber || (remotePatient as any).bedId || localPatient?.currentBedId;
+                const mergedPatient: PatientDossier = {
+                  ...localPatient,
+                  ...remotePatient,
+                  id: patientId,
+                  currentBedId: resolvedBed
+                };
+                if (resolvedStatus) {
+                  mergedPatient.patientStatus = resolvedStatus;
+                  (mergedPatient as any).status = resolvedStatus;
+                  (mergedPatient as any).currentStatus = resolvedStatus;
+                }
+                await db.patients.put(mergedPatient);
+              }
+            } else if (change.type === 'removed') {
+              const removedPatientId = change.doc.id;
+              const localPat = await db.patients.get(removedPatientId);
+              if (localPat) {
+                await db.patients.put({
+                  ...localPat,
+                  patientStatus: 'DISCHARGED_HOME',
+                  status: 'DISCHARGED',
+                  currentStatus: 'DISCHARGED',
+                  currentBedId: undefined
+                });
+              }
+            }
+          }
+          await ensureBedPatientSync({ syncToCloud: false });
+          notifyUpdate();
+        }, () => {});
+        unsubscribers.push(fallbackUnsub);
+      } catch (fbErr) {
+        console.warn('Fallback active patients query failed:', fbErr);
+      }
+    });
     unsubscribers.push(unsubPatients);
 
     // 3. Subscribe to Real-Time Vitals with Alarm Checks (Ordered by newest timestamp)

@@ -807,7 +807,8 @@ export async function initializeDatabaseSeed(): Promise<void> {
   await ensureBedPatientSync();
 }
 
-export async function ensureBedPatientSync(): Promise<void> {
+export async function ensureBedPatientSync(options?: { syncToCloud?: boolean }): Promise<void> {
+  const syncToCloud = options?.syncToCloud ?? false;
   // Reconcile and synchronize bed occupancy state with active patients in IndexedDB
   const currentBeds = await db.beds.toArray();
   const allPatients = await db.patients.toArray();
@@ -878,10 +879,12 @@ export async function ensureBedPatientSync(): Promise<void> {
           attendingPhysician: updatedPhysician,
           updatedAt: new Date().toISOString()
         });
-        try {
-          const { syncPatientToCloud } = await import('../services/firebase.ts');
-          await syncPatientToCloud(p);
-        } catch (err) {}
+        if (syncToCloud) {
+          try {
+            const { syncPatientToCloud } = await import('../services/firebase.ts');
+            await syncPatientToCloud(p);
+          } catch (err) {}
+        }
       }
     }
   }
@@ -968,11 +971,13 @@ export async function ensureBedPatientSync(): Promise<void> {
 
     if (modified) {
       await db.beds.put(b);
-      try {
-        const { syncBedToCloud } = await import('../services/firebase.ts');
-        await syncBedToCloud(b);
-      } catch (e) {
-        // Safe fallback if offline or during circular load
+      if (syncToCloud) {
+        try {
+          const { syncBedToCloud } = await import('../services/firebase.ts');
+          await syncBedToCloud(b);
+        } catch (e) {
+          // Safe fallback if offline or during circular load
+        }
       }
     }
   }
