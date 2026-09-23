@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   Activity, 
   Search, 
@@ -32,10 +32,12 @@ import {
   ArrowLeft,
   Wifi,
   WifiOff,
-  CloudOff
+  CloudOff,
+  Loader2,
+  AlertTriangle
 } from 'lucide-react';
 import { BedRecord, PatientDossier, BedNumber } from '../types/schema.ts';
-import { requestNotificationPermission, playIcuAlarmAudio } from '../services/firebase.ts';
+import { requestNotificationPermission, playIcuAlarmAudio, checkConnectionHealth, ConnectionHealthResult } from '../services/firebase.ts';
 import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
 import { getPatientForBed } from '../services/dataModel.ts';
@@ -116,38 +118,81 @@ export const Header: React.FC<HeaderProps> = ({
   const [isExpanded, setIsExpanded] = useState(false);
   const notifMenuRef = useRef<HTMLDivElement>(null);
 
-  // Live Interactive Connection Status (Online / Offline)
-  const [isOnline, setIsOnline] = useState<boolean>(() => {
-    return typeof navigator !== 'undefined' ? navigator.onLine : true;
-  });
+  // Live Interactive Connection Status (ONLINE / CONNECTING / OFFLINE)
+  type ConnectionStatus = 'ONLINE' | 'CONNECTING' | 'OFFLINE';
+  type OfflineReason = 'NO_INTERNET' | 'CLOUD_UNREACHABLE';
+
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('CONNECTING');
+  const [offlineReason, setOfflineReason] = useState<OfflineReason | null>(null);
+
+  const verifyConnectionHealth = useCallback(async (isSilent = true) => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setConnectionStatus('OFFLINE');
+      setOfflineReason('NO_INTERNET');
+      return { status: 'OFFLINE' as const, reason: 'NO_INTERNET' as const };
+    }
+
+    if (!isSilent) {
+      setConnectionStatus('CONNECTING');
+    }
+
+    try {
+      const result = await checkConnectionHealth();
+      if (result.status === 'ONLINE') {
+        setConnectionStatus('ONLINE');
+        setOfflineReason(null);
+        // Clear any old offline toast
+        setSyncToastMessage(null);
+        return result;
+      } else {
+        setConnectionStatus('OFFLINE');
+        setOfflineReason(result.reason);
+        return result;
+      }
+    } catch {
+      const isNetOnline = typeof navigator !== 'undefined' ? navigator.onLine : false;
+      const r = isNetOnline ? ('CLOUD_UNREACHABLE' as const) : ('NO_INTERNET' as const);
+      setConnectionStatus('OFFLINE');
+      setOfflineReason(r);
+      return { status: 'OFFLINE' as const, reason: r };
+    }
+  }, []);
 
   useEffect(() => {
+    // Initial verification on mount
+    verifyConnectionHealth(false);
+
     const handleOnline = () => {
-      setIsOnline(true);
-      const msg = lang === 'ar' 
-        ? '✅ تم استعادة الاتصال بالإنترنت والمزامنة السحابية اللحظية (Firebase)' 
-        : '✅ Internet connection restored - Cloud sync online';
-      setSyncToastMessage(msg);
-      setTimeout(() => setSyncToastMessage(null), 4000);
+      setConnectionStatus('CONNECTING');
+      verifyConnectionHealth(false);
     };
 
     const handleOffline = () => {
-      setIsOnline(false);
-      const msg = lang === 'ar' 
-        ? '⚠️ انقطع الاتصال بالإنترنت! المنظومة تعمل بوضع عدم الاتصال (Offline Resilience) محلياً لحفظ كافة البيانات' 
-        : '⚠️ Connection lost! Operating in local resilient offline mode (Dexie)';
-      setSyncToastMessage(msg);
-      setTimeout(() => setSyncToastMessage(null), 5000);
+      setConnectionStatus('OFFLINE');
+      setOfflineReason('NO_INTERNET');
+      setSyncToastMessage(
+        lang === 'ar'
+          ? '⚠️ تم فقدان الاتصال بالإنترنت. النظام يعمل الآن بوضع التخزين المحلي الآمن (Offline Dexie) لحفظ كافة البيانات.'
+          : '⚠️ Internet disconnected. System is operating safely in local offline resilience mode (Dexie).'
+      );
     };
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
+    // Periodic gentle background health check every 30s
+    const healthInterval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        verifyConnectionHealth(true);
+      }
+    }, 30000);
+
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+      clearInterval(healthInterval);
     };
-  }, [lang]);
+  }, [verifyConnectionHealth, lang]);
 
   const INITIAL_VISIBLE_COUNT = 6;
   const displayedNotifications = isExpanded ? notifications : notifications.slice(0, INITIAL_VISIBLE_COUNT);
@@ -189,29 +234,44 @@ export const Header: React.FC<HeaderProps> = ({
     }
   };
 
-  const handleCloudSyncClick = () => {
-    const currentOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
-    setIsOnline(currentOnline);
-
-    if (currentOnline) {
+  const handleCloudSyncClick = async () => {
+    // 1. If currently ONLINE: Silently sync with cloud and DO NOT show any intrusive popup
+    if (connectionStatus === 'ONLINE') {
       if (onTriggerCloudSync) {
         onTriggerCloudSync();
       }
-      const msg = lang === 'ar' 
-        ? '✅ الاتصال السحابي نشط: المزامنة اللحظية مع Firebase Firestore تعمل بكفاءة' 
-        : '✅ Cloud Connection Active: Realtime sync with Firebase Firestore is running smoothly';
-      setSyncToastMessage(msg);
-      setTimeout(() => {
-        setSyncToastMessage(null);
-      }, 3500);
+      setSyncToastMessage(null);
+      // Run background silent health check
+      verifyConnectionHealth(true);
+      return;
+    }
+
+    // 2. If currently CONNECTING: re-verify and don't spam
+    if (connectionStatus === 'CONNECTING') {
+      await verifyConnectionHealth(false);
+      return;
+    }
+
+    // 3. If OFFLINE: re-verify and show diagnostic explanation of the exact failure cause
+    const checkResult = await verifyConnectionHealth(false);
+    if (checkResult.status === 'ONLINE') {
+      // Reconnected successfully!
+      if (onTriggerCloudSync) onTriggerCloudSync();
+      setSyncToastMessage(null);
     } else {
-      const msg = lang === 'ar' 
-        ? '⚠️ غير متصل بالإنترنت! المنظومة تعمل بنظام التخزين المحلي الفوري (Dexie) لحفظ كافة البيانات السريرية بأمان' 
-        : '⚠️ Offline! System operates in local offline resilience mode (Dexie) - no data will be lost';
-      setSyncToastMessage(msg);
+      const isNoInternet = checkResult.reason === 'NO_INTERNET' || (typeof navigator !== 'undefined' && !navigator.onLine);
+      const diagnosticMsg = isNoInternet
+        ? (lang === 'ar'
+            ? '⚠️ سبب المشكلة: تم فقدان الاتصال بشبكة الإنترنت (Wi-Fi / No Internet Connection). النظام يعمل الآن محلياً بنظام الأمان والمقاومة (Dexie IndexedDB) ولن يفقد أي بيانات.'
+            : '⚠️ Issue Cause: No Internet Connection detected. System is running safely in local offline resilience mode (Dexie) - no data will be lost.')
+        : (lang === 'ar'
+            ? '⚠️ سبب المشكلة: يتوفر اتصال بالإنترنت ولكن تعذر الوصول إلى خوادم المزامنة السحابية (Firebase Cloud Sync). يتم حفظ كافة التعديلات محلياً وسيتم رفعها تلقائياً فور استقرار الخادم.'
+            : '⚠️ Issue Cause: Internet is available, but Firebase Cloud Sync servers are unreachable. All records are saved locally and will auto-sync upon reconnection.');
+
+      setSyncToastMessage(diagnosticMsg);
       setTimeout(() => {
         setSyncToastMessage(null);
-      }, 4500);
+      }, 7000);
     }
   };
 
@@ -281,33 +341,43 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Interactive Online/Offline Connection Status Button (Desktop) */}
           <button
             type="button"
-              id="header-connection-status-btn-desktop"
-              onClick={handleCloudSyncClick}
-              className={`border px-3 py-1.5 rounded-xl flex items-center gap-2 shadow-sm transition-all active:scale-95 group cursor-pointer text-xs font-bold ${
-                isOnline
-                  ? 'bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 border-emerald-300 dark:border-emerald-700/60 text-emerald-800 dark:text-emerald-300'
-                  : 'bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/80 dark:hover:bg-rose-900/90 border-rose-400 dark:border-rose-600 text-rose-800 dark:text-rose-200 ring-2 ring-rose-500/40 animate-pulse'
-              }`}
-              title={
-                isOnline
-                  ? (lang === 'ar' ? '✅ متصل: الاتصال بالشبكة والمزامنة السحابية اللحظية (Firebase) نشطة. انقر للتحديث' : '✅ Online: Connected to Network & Firebase Cloud Sync active. Click to verify')
-                  : (lang === 'ar' ? '🚨 غير متصل: انقطع الاتصال بالإنترنت! المنظومة تعمل بوضع عدم الاتصال (Offline Dexie) محلياً لحماية البيانات' : '🚨 Offline: Internet connection disconnected! System operates in local offline resilience mode (Dexie)')
-              }
-            >
-              {isOnline ? (
-                <>
-                  <Wifi className="w-4 h-4 text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform flex-shrink-0" />
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 dark:bg-emerald-400 animate-ping inline-block"></span>
-                  <span className="font-mono">{lang === 'ar' ? 'متصل' : 'Online'}</span>
-                </>
-              ) : (
-                <>
-                  <WifiOff className="w-4 h-4 text-rose-600 dark:text-rose-400 animate-bounce flex-shrink-0" />
-                  <span className="w-2 h-2 rounded-full bg-rose-600 dark:bg-rose-400 animate-ping inline-block"></span>
-                  <span className="font-mono text-rose-700 dark:text-rose-300 font-extrabold">{lang === 'ar' ? 'غير متصل' : 'Offline'}</span>
-                </>
-              )}
-            </button>
+            id="header-connection-status-btn-desktop"
+            onClick={handleCloudSyncClick}
+            className={`border px-3 py-1.5 rounded-xl flex items-center gap-2 shadow-sm transition-all active:scale-95 group cursor-pointer text-xs font-bold ${
+              connectionStatus === 'ONLINE'
+                ? 'bg-emerald-50 hover:bg-emerald-100/80 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 border-emerald-300 dark:border-emerald-700/60 text-emerald-800 dark:text-emerald-300'
+                : connectionStatus === 'CONNECTING'
+                ? 'bg-amber-50 hover:bg-amber-100/80 dark:bg-amber-950/40 dark:hover:bg-amber-900/60 border-amber-300 dark:border-amber-700/60 text-amber-800 dark:text-amber-300'
+                : 'bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/80 dark:hover:bg-rose-900/90 border-rose-400 dark:border-rose-600 text-rose-800 dark:text-rose-200 ring-2 ring-rose-500/40 animate-pulse'
+            }`}
+            title={
+              connectionStatus === 'ONLINE'
+                ? (lang === 'ar' ? '✅ متصل: المزامنة السحابية اللحظية (Firebase) نشطة ومستقرة' : '✅ Online: Realtime Firebase cloud sync is active')
+                : connectionStatus === 'CONNECTING'
+                ? (lang === 'ar' ? '⏳ جارٍ الاتصال: جاري التحقق من المزامنة السحابية...' : '⏳ Connecting: Verifying cloud sync...')
+                : (lang === 'ar' ? '🚨 غير متصل: انقر لمعرفة سبب انقطاع الاتصال' : '🚨 Offline: Click to diagnose connection issue')
+            }
+          >
+            {connectionStatus === 'ONLINE' ? (
+              <>
+                <Wifi className="w-4 h-4 text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform flex-shrink-0" />
+                <span className="w-2 h-2 rounded-full bg-emerald-500 dark:bg-emerald-400 animate-ping inline-block"></span>
+                <span className="font-mono">{lang === 'ar' ? 'متصل' : 'Online'}</span>
+              </>
+            ) : connectionStatus === 'CONNECTING' ? (
+              <>
+                <Loader2 className="w-4 h-4 text-amber-600 dark:text-amber-400 animate-spin flex-shrink-0" />
+                <span className="w-2 h-2 rounded-full bg-amber-500 dark:bg-amber-400 animate-pulse inline-block"></span>
+                <span className="font-mono text-amber-700 dark:text-amber-300">{lang === 'ar' ? 'جارٍ الإتصال' : 'Connecting...'}</span>
+              </>
+            ) : (
+              <>
+                <WifiOff className="w-4 h-4 text-rose-600 dark:text-rose-400 animate-bounce flex-shrink-0" />
+                <span className="w-2 h-2 rounded-full bg-rose-600 dark:bg-rose-400 animate-ping inline-block"></span>
+                <span className="font-mono text-rose-700 dark:text-rose-300 font-extrabold">{lang === 'ar' ? 'غير متصل' : 'Offline'}</span>
+              </>
+            )}
+          </button>
         </div>
 
         {/* Action Controls: Mobile Connection Indicator, Search, Alerts & Settings */}
@@ -315,33 +385,43 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Mobile Connection Indicator */}
           <button
             type="button"
-              id="header-connection-status-btn-mobile"
-              onClick={handleCloudSyncClick}
-              className={`md:hidden border px-2.5 py-1.5 rounded-xl flex items-center gap-1.5 shadow-sm transition-all active:scale-95 text-xs font-bold ${
-                isOnline
-                  ? 'bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 border-emerald-300 dark:border-emerald-700/60 text-emerald-800 dark:text-emerald-300'
-                  : 'bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/80 dark:hover:bg-rose-900/90 border-rose-400 dark:border-rose-600 text-rose-800 dark:text-rose-200 ring-2 ring-rose-500/40 animate-pulse'
-              }`}
-              title={
-                isOnline
-                  ? (lang === 'ar' ? '✅ متصل: انقر للتحديث' : '✅ Online: Click to sync')
-                  : (lang === 'ar' ? '🚨 غير متصل: يعمل محلياً' : '🚨 Offline: Local mode')
-              }
-            >
-              {isOnline ? (
-                <>
-                  <Wifi className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping inline-block"></span>
-                  <span className="font-mono text-[11px]">{lang === 'ar' ? 'متصل' : 'Online'}</span>
-                </>
-              ) : (
-                <>
-                  <WifiOff className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400 animate-bounce flex-shrink-0" />
-                  <span className="w-1.5 h-1.5 rounded-full bg-rose-600 animate-ping inline-block"></span>
-                  <span className="font-mono text-[11px] text-rose-700 dark:text-rose-300 font-extrabold">{lang === 'ar' ? 'غير متصل' : 'Offline'}</span>
-                </>
-              )}
-            </button>
+            id="header-connection-status-btn-mobile"
+            onClick={handleCloudSyncClick}
+            className={`md:hidden border px-2.5 py-1.5 rounded-xl flex items-center gap-1.5 shadow-sm transition-all active:scale-95 text-xs font-bold ${
+              connectionStatus === 'ONLINE'
+                ? 'bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 border-emerald-300 dark:border-emerald-700/60 text-emerald-800 dark:text-emerald-300'
+                : connectionStatus === 'CONNECTING'
+                ? 'bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-900/60 border-amber-300 dark:border-amber-700/60 text-amber-800 dark:text-amber-300'
+                : 'bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/80 dark:hover:bg-rose-900/90 border-rose-400 dark:border-rose-600 text-rose-800 dark:text-rose-200 ring-2 ring-rose-500/40 animate-pulse'
+            }`}
+            title={
+              connectionStatus === 'ONLINE'
+                ? (lang === 'ar' ? '✅ متصل' : '✅ Online')
+                : connectionStatus === 'CONNECTING'
+                ? (lang === 'ar' ? '⏳ جارٍ الاتصال...' : '⏳ Connecting...')
+                : (lang === 'ar' ? '🚨 غير متصل: انقر لمعرفة السبب' : '🚨 Offline: Click to diagnose')
+            }
+          >
+            {connectionStatus === 'ONLINE' ? (
+              <>
+                <Wifi className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping inline-block"></span>
+                <span className="font-mono text-[11px]">{lang === 'ar' ? 'متصل' : 'Online'}</span>
+              </>
+            ) : connectionStatus === 'CONNECTING' ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 animate-spin flex-shrink-0" />
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse inline-block"></span>
+                <span className="font-mono text-[11px] text-amber-700 dark:text-amber-300">{lang === 'ar' ? 'جارٍ الإتصال' : 'Connecting'}</span>
+              </>
+            ) : (
+              <>
+                <WifiOff className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400 animate-bounce flex-shrink-0" />
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-600 animate-ping inline-block"></span>
+                <span className="font-mono text-[11px] text-rose-700 dark:text-rose-300 font-extrabold">{lang === 'ar' ? 'غير متصل' : 'Offline'}</span>
+              </>
+            )}
+          </button>
           {/* Universal Search Icon Button */}
           {settings.features.enableArchiveSearch && (
             <button
@@ -599,16 +679,17 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
-      {/* Sync Status Toast Banner */}
+      {/* Sync Status Diagnostic Toast Banner (Shown ONLY on actual connection error) */}
       {syncToastMessage && (
-        <div className="max-w-7xl mx-auto mt-2 bg-teal-950/90 border border-teal-500/80 text-teal-200 text-xs px-3 py-1.5 rounded-lg flex items-center justify-between animate-fade-in shadow-md">
-          <div className="flex items-center gap-2">
-            <Cloud className="w-3.5 h-3.5 text-teal-400" />
-            <span>{syncToastMessage}</span>
+        <div className="max-w-[1600px] mx-auto mt-2 bg-rose-950/95 dark:bg-rose-950/95 border border-rose-500/70 text-rose-100 text-xs px-3.5 py-2 rounded-xl flex items-center justify-between gap-3 animate-fade-in shadow-lg">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 animate-pulse" />
+            <span className="font-semibold leading-relaxed break-words">{syncToastMessage}</span>
           </div>
           <button
             onClick={() => setSyncToastMessage(null)}
-            className="text-teal-400 hover:text-white text-xs font-bold px-1"
+            className="text-rose-300 hover:text-white text-xs font-bold px-2 py-1 rounded bg-rose-900/60 hover:bg-rose-800 transition-colors shrink-0 cursor-pointer"
+            title={lang === 'ar' ? 'إغلاق التنبيه' : 'Dismiss'}
           >
             ✕
           </button>

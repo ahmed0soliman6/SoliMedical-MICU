@@ -107,6 +107,34 @@ export async function testFirestoreConnection(): Promise<boolean> {
   }
 }
 
+export type ConnectionHealthResult = 
+  | { status: 'ONLINE' }
+  | { status: 'OFFLINE'; reason: 'NO_INTERNET' | 'CLOUD_UNREACHABLE'; details?: string };
+
+export async function checkConnectionHealth(): Promise<ConnectionHealthResult> {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    return { status: 'OFFLINE', reason: 'NO_INTERNET' };
+  }
+
+  try {
+    const docRef = doc(firestore, 'test', 'connection');
+    await Promise.race([
+      getDoc(docRef),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Connection timeout')), 3000))
+    ]);
+    return { status: 'ONLINE' };
+  } catch (err: any) {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      return { status: 'OFFLINE', reason: 'NO_INTERNET' };
+    }
+    return { 
+      status: 'OFFLINE', 
+      reason: 'CLOUD_UNREACHABLE', 
+      details: err?.message || 'Firestore connection timeout' 
+    };
+  }
+}
+
 // -------------------------------------------------------------
 // Standardized Firestore Error Handler
 // -------------------------------------------------------------
