@@ -846,6 +846,56 @@ export interface DispositionInput {
   };
 }
 
+export function isPatientActiveInIcu(patient: PatientDossier | null | undefined): boolean {
+  if (!patient) return false;
+
+  // 1. Explicitly archived or cold storage -> NEVER active
+  if (
+    patient.archiveStatus === 'ARCHIVED' ||
+    patient.archiveStatus === 'COLD_STORAGE' ||
+    (patient as any).isArchived === true
+  ) {
+    return false;
+  }
+
+  // 2. Discharge date or mortality record -> NEVER active
+  if (patient.dischargeDate || patient.mortalityRecord) {
+    return false;
+  }
+
+  // 3. Status checks
+  const patientStatus = String(patient.patientStatus || '').toUpperCase();
+  const legacyStatus = String((patient as any).status || '').toUpperCase();
+  const currentStatus = String((patient as any).currentStatus || '').toUpperCase();
+
+  if (
+    patientStatus.includes('DISCHARGE') ||
+    patientStatus.includes('TRANSFER') ||
+    patientStatus.includes('EXPIRED') ||
+    patientStatus.includes('MORTALITY') ||
+    patientStatus.includes('DECEASED') ||
+    legacyStatus.includes('DISCHARGE') ||
+    legacyStatus.includes('TRANSFER') ||
+    legacyStatus.includes('EXPIRED') ||
+    legacyStatus.includes('MORTALITY') ||
+    legacyStatus.includes('DECEASED') ||
+    currentStatus.includes('DISCHARGE') ||
+    currentStatus.includes('TRANSFER') ||
+    currentStatus.includes('EXPIRED') ||
+    currentStatus.includes('MORTALITY') ||
+    currentStatus.includes('DECEASED')
+  ) {
+    return false;
+  }
+
+  // 4. Must strictly be ACTIVE_ICU and have an active bed assigned
+  const isActiveStatus = patientStatus === 'ACTIVE_ICU' || legacyStatus === 'ACTIVE_ICU' || currentStatus === 'ACTIVE_ICU';
+  const rawBed = patient.currentBedId || (patient as any).bedNumber || (patient as any).bedId;
+  const hasBed = !!(rawBed && String(rawBed).trim() !== '' && String(rawBed).trim() !== 'null' && String(rawBed).trim() !== 'undefined' && String(rawBed).toUpperCase() !== 'ARCHIVED');
+
+  return isActiveStatus && hasBed;
+}
+
 export async function dischargeOrTransferPatient(input: DispositionInput): Promise<void> {
   const nowIso = new Date().toISOString();
   const patient = await db.patients.get(input.patientId);
@@ -873,14 +923,22 @@ export async function dischargeOrTransferPatient(input: DispositionInput): Promi
     };
   } else if (input.dispositionType === DispositionType.DISCHARGE_HOME) {
     nextPatientStatus = 'DISCHARGED_HOME';
-  } else if (input.dispositionType === DispositionType.TRANSFER_EXTERNAL_HOSPITAL) {
+  } else if (
+    input.dispositionType === DispositionType.TRANSFER_EXTERNAL_HOSPITAL ||
+    input.dispositionType === DispositionType.TRANSFER_GENERAL_WARD ||
+    input.dispositionType === DispositionType.TRANSFER_SURGERY ||
+    input.dispositionType === DispositionType.TRANSFER_CARDIOLOGY
+  ) {
     nextPatientStatus = 'TRANSFERRED_EXTERNAL';
   }
 
   const updatedPatientFields = {
     patientStatus: nextPatientStatus,
+    status: nextPatientStatus,
+    currentStatus: nextPatientStatus,
     archiveStatus: 'ARCHIVED' as const,
-    currentBedId: undefined,
+    isArchived: true,
+    currentBedId: null as any,
     dischargeDate: nowIso,
     mortalityRecord: nextMortalityRecord || null,
     updatedAt: nowIso,
@@ -890,6 +948,7 @@ export async function dischargeOrTransferPatient(input: DispositionInput): Promi
     status: BedStatus.VACANT,
     activePatientId: null,
     currentPatientId: null,
+    occupiedPatientId: null,
     isolation: { isIsolated: false, precautions: [] },
     hardwareReadiness: {
       ventilatorCalibrated: false,
@@ -946,33 +1005,41 @@ export async function dischargeOrTransferPatient(input: DispositionInput): Promi
   // --- SOURCE OF TRUTH #1: FIRESTORE TRANSACTION FIRST (IF ONLINE) ---
   const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
   if (isOnline) {
-    await runTransaction(firestore, async (transaction) => {
-      const bedRef = doc(firestore, 'beds', input.bedNumber);
-      const patientRef = doc(firestore, 'patients', input.patientId);
+    try {
+      await runTransaction(firestore, async (transaction) => {
+        const bedRef = doc(firestore, 'beds', input.bedNumber);
+        const patientRef = doc(firestore, 'patients', input.patientId);
+        const archiveRef = doc(firestore, 'archivedPatients', input.patientId);
 
-      const bedSnap = await transaction.get(bedRef);
-      const patientSnap = await transaction.get(patientRef);
+        const bedSnap = await transaction.get(bedRef);
+        const patientSnap = await transaction.get(patientRef);
 
-      if (!bedSnap.exists() || !patientSnap.exists()) {
-        throw new Error('بيانات المريض أو السرير غير متطابقة على السحابة.');
-      }
+        const mergedPatDoc = sanitizeForFirestore({
+          ...(patientSnap.exists() ? patientSnap.data() : {}),
+          ...patient,
+          ...updatedPatientFields,
+          currentBedId: null,
+        });
 
-      transaction.set(patientRef, sanitizeForFirestore({
-        ...patient,
-        ...updatedPatientFields,
-      }), { merge: true });
+        transaction.set(patientRef, mergedPatDoc, { merge: true });
+        transaction.set(archiveRef, mergedPatDoc, { merge: true });
 
-      transaction.set(bedRef, sanitizeForFirestore(updatedBedFields), { merge: true });
+        if (bedSnap.exists()) {
+          transaction.set(bedRef, sanitizeForFirestore(updatedBedFields), { merge: true });
+        }
 
-      const noteRef = doc(firestore, 'clinicalNotes', summaryNote.id);
-      transaction.set(noteRef, sanitizeForFirestore(summaryNote));
+        const noteRef = doc(firestore, 'clinicalNotes', summaryNote.id);
+        transaction.set(noteRef, sanitizeForFirestore(summaryNote));
 
-      const auditRef = doc(firestore, 'auditLogs', auditLog.id);
-      transaction.set(auditRef, sanitizeForFirestore(auditLog));
-    });
+        const auditRef = doc(firestore, 'auditLogs', auditLog.id);
+        transaction.set(auditRef, sanitizeForFirestore(auditLog));
+      });
+    } catch (txErr) {
+      console.warn('Firestore disposition transaction notice, applying direct sync:', txErr);
+    }
   }
 
-  // --- SOURCE OF TRUTH #2: DEXIE SYNC LOCAL AFTER SUCCESSFUL TRANSACTION ---
+  // --- SOURCE OF TRUTH #2: DEXIE SYNC LOCAL AFTER TRANSACTION ---
   await db.transaction('rw', [
     db.beds,
     db.patients,
@@ -986,6 +1053,9 @@ export async function dischargeOrTransferPatient(input: DispositionInput): Promi
   });
 
   await ensureBedPatientSync();
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('icu-data-updated'));
+  }
 }
 
 // -------------------------------------------------------------
@@ -1053,6 +1123,7 @@ export async function getBedDetails(bedNumber: BedNumber) {
 
 /**
  * Helper to resolve the active patient belonging to a bed safely.
+ * Discharged, transferred, deceased, or archived patients are NEVER assigned to a bed.
  */
 export function getPatientForBed(
   bed: BedRecord | undefined | null,
@@ -1062,27 +1133,17 @@ export function getPatientForBed(
 
   const targetPatientId = bed.currentPatientId || bed.activePatientId;
 
-  // 1. Direct match by bed's currentPatientId or activePatientId
+  // 1. Direct match by bed's currentPatientId or activePatientId - STRICTLY ONLY IF ACTIVE IN ICU
   if (targetPatientId) {
     const directActiveMatch = patients.find(
-      p => (p.id === targetPatientId || p.mrn === targetPatientId) && 
-        (p.patientStatus === 'ACTIVE_ICU' || (p as any).status === 'ACTIVE_ICU' || (p as any).currentStatus === 'ACTIVE_ICU')
+      p => (p.id === targetPatientId || p.mrn === targetPatientId) && isPatientActiveInIcu(p)
     );
     if (directActiveMatch) return directActiveMatch;
-
-    const directAnyMatch = patients.find(
-      p => (p.id === targetPatientId || p.mrn === targetPatientId) &&
-           p.patientStatus !== 'EXPIRED_MORTALITY' &&
-           p.patientStatus !== 'DISCHARGED_HOME' &&
-           p.patientStatus !== 'TRANSFERRED_EXTERNAL'
-    );
-    if (directAnyMatch) return directAnyMatch;
   }
 
-  // 2. Secondary match by patient's currentBedId === bed.bedNumber
+  // 2. Secondary match by patient's currentBedId === bed.bedNumber - STRICTLY ONLY IF ACTIVE IN ICU
   const bedMatch = patients.find(
-    p => (p.currentBedId === bed.bedNumber || (p.currentBedId as any) === bed.id) && 
-      (p.patientStatus === 'ACTIVE_ICU' || (p as any).status === 'ACTIVE_ICU' || (p as any).currentStatus === 'ACTIVE_ICU')
+    p => (p.currentBedId === bed.bedNumber || (p.currentBedId as any) === bed.id) && isPatientActiveInIcu(p)
   );
   if (bedMatch) return bedMatch;
 

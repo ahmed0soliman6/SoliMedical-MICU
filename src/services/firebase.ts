@@ -1061,11 +1061,19 @@ export function subscribeToRealtimeFirestore(
             // NEVER invent 'ACTIVE_ICU' if no status was provided!
             const resolvedStatus = remoteStatus || localPatient?.patientStatus;
 
-            const resolvedBed = 
-              remotePatient.currentBedId || 
-              (remotePatient as any).bedNumber || 
-              (remotePatient as any).bedId || 
-              localPatient?.currentBedId;
+            const isRemoteDischarged = 
+              remotePatient.archiveStatus === 'ARCHIVED' || 
+              remotePatient.archiveStatus === 'COLD_STORAGE' ||
+              (remotePatient as any).isArchived === true ||
+              !!remotePatient.dischargeDate ||
+              !!remotePatient.mortalityRecord ||
+              String(resolvedStatus || '').toUpperCase().includes('DISCHARGE') ||
+              String(resolvedStatus || '').toUpperCase().includes('TRANSFER') ||
+              String(resolvedStatus || '').toUpperCase().includes('EXPIRED') ||
+              String(resolvedStatus || '').toUpperCase().includes('MORTALITY');
+
+            const remoteBed = remotePatient.currentBedId || (remotePatient as any).bedNumber || (remotePatient as any).bedId;
+            const resolvedBed = isRemoteDischarged ? undefined : (remoteBed || undefined);
 
             const mergedPatient: PatientDossier = {
               ...localPatient,
@@ -1117,7 +1125,20 @@ export function subscribeToRealtimeFirestore(
                 const localPatient = await db.patients.get(patientId);
                 const remoteStatus = remotePatient.patientStatus || (remotePatient as any).status || (remotePatient as any).currentStatus;
                 const resolvedStatus = remoteStatus || localPatient?.patientStatus;
-                const resolvedBed = remotePatient.currentBedId || (remotePatient as any).bedNumber || (remotePatient as any).bedId || localPatient?.currentBedId;
+                const isRemoteDischarged = 
+                  remotePatient.archiveStatus === 'ARCHIVED' || 
+                  remotePatient.archiveStatus === 'COLD_STORAGE' ||
+                  (remotePatient as any).isArchived === true ||
+                  !!remotePatient.dischargeDate ||
+                  !!remotePatient.mortalityRecord ||
+                  String(resolvedStatus || '').toUpperCase().includes('DISCHARGE') ||
+                  String(resolvedStatus || '').toUpperCase().includes('TRANSFER') ||
+                  String(resolvedStatus || '').toUpperCase().includes('EXPIRED') ||
+                  String(resolvedStatus || '').toUpperCase().includes('MORTALITY');
+
+                const remoteBed = remotePatient.currentBedId || (remotePatient as any).bedNumber || (remotePatient as any).bedId;
+                const resolvedBed = isRemoteDischarged ? undefined : (remoteBed || undefined);
+
                 const mergedPatient: PatientDossier = {
                   ...localPatient,
                   ...remotePatient,

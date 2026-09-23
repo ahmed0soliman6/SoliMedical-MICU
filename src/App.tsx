@@ -736,11 +736,13 @@ export default function App() {
         />
       )}
 
-      {/* Global Real-Time Floating Chat Widget - conditionally hidden when activeTab is chat */}
-      <FloatingChatWidget 
-        activeTab={activeTab} 
-        onOpenFullChatPage={() => setActiveTab('chat')} 
-      />
+      {/* Global Real-Time Floating Chat Widget - only when enabled by user (disabled by default) */}
+      {settings.features.enableFloatingChatWidget && (
+        <FloatingChatWidget 
+          activeTab={activeTab} 
+          onOpenFullChatPage={() => setActiveTab('chat')} 
+        />
+      )}
 
       {/* Accidental Exit Guard Modal */}
       <ExitConfirmationModal

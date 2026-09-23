@@ -699,6 +699,9 @@ export interface PatientDossier {
   primaryDiagnosisAr?: string;
   intakePathway: IntakePathway;
   admissionDate: string;
+  dischargeDate?: string | null;
+  isArchived?: boolean;
+  bedNumber?: BedNumber | string;
   currentBedId?: BedNumber;
   currentEpisodeId?: string | null;
   acuityLevel: AcuityLevel;

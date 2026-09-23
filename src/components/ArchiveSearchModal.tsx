@@ -12,6 +12,7 @@ import { firestore } from '../services/firebase.ts';
 import { useTranslation } from '../services/i18n.ts';
 import { useAuth } from '../services/AuthContext.tsx';
 import { canDeleteMortalityRecord } from '../services/medicalRecordPermissions.ts';
+import { isPatientActiveInIcu } from '../services/dataModel.ts';
 
 interface ArchiveSearchModalProps {
   isOpen: boolean;
@@ -218,11 +219,15 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
 
     if (!matchesSearch) return false;
 
-    // Status filtering
-    const isDeceased = p.patientStatus === 'EXPIRED_MORTALITY' || (p as any).currentStatus === 'EXPIRED';
-    const isActive = p.patientStatus === 'ACTIVE_ICU' || (p as any).currentStatus === 'ACTIVE_ICU';
+    // Unified Status Classification
+    const isActive = isPatientActiveInIcu(p);
+    const isDeceased = p.patientStatus === 'EXPIRED_MORTALITY' || 
+                       (p as any).currentStatus === 'EXPIRED' ||
+                       (p as any).currentStatus === 'EXPIRED_MORTALITY' ||
+                       !!p.mortalityRecord;
     const isTransferred = p.patientStatus === 'TRANSFERRED_EXTERNAL' || 
                           (p as any).currentStatus === 'TRANSFERRED' ||
+                          (p as any).currentStatus === 'TRANSFERRED_EXTERNAL' ||
                           (typeof p.patientStatus === 'string' && p.patientStatus.includes('TRANSFER')) ||
                           (typeof (p as any).currentStatus === 'string' && (p as any).currentStatus.includes('TRANSFER'));
     const isDischarged = (
@@ -233,7 +238,8 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
       (p as any).currentStatus === 'DISCHARGED_STEPDOWN' ||
       (typeof p.patientStatus === 'string' && p.patientStatus.includes('DISCHARGE')) ||
       (typeof (p as any).currentStatus === 'string' && (p as any).currentStatus.includes('DISCHARGE')) ||
-      (!isActive && !isDeceased && !isTransferred && p.archiveStatus !== 'ARCHIVED' && p.archiveStatus !== 'COLD_STORAGE')
+      !!p.dischargeDate ||
+      (!isActive && !isDeceased && !isTransferred)
     );
     const isArchived = p.archiveStatus === 'ARCHIVED' || p.archiveStatus === 'COLD_STORAGE' || (p as any).isArchived === true;
 
@@ -331,10 +337,14 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
             </div>
           ) : (
             filteredPatients.map((patient) => {
-              const isDeceased = patient.patientStatus === 'EXPIRED_MORTALITY' || (patient as any).currentStatus === 'EXPIRED';
-              const isActive = patient.patientStatus === 'ACTIVE_ICU' || (patient as any).currentStatus === 'ACTIVE_ICU';
+              const isActive = isPatientActiveInIcu(patient);
+              const isDeceased = patient.patientStatus === 'EXPIRED_MORTALITY' || 
+                                 (patient as any).currentStatus === 'EXPIRED' ||
+                                 (patient as any).currentStatus === 'EXPIRED_MORTALITY' ||
+                                 !!patient.mortalityRecord;
               const isTransferred = patient.patientStatus === 'TRANSFERRED_EXTERNAL' || 
                                     (patient as any).currentStatus === 'TRANSFERRED' ||
+                                    (patient as any).currentStatus === 'TRANSFERRED_EXTERNAL' ||
                                     (typeof patient.patientStatus === 'string' && patient.patientStatus.includes('TRANSFER')) ||
                                     (typeof (patient as any).currentStatus === 'string' && (patient as any).currentStatus.includes('TRANSFER'));
               const isDischarged = !isActive && !isDeceased && !isTransferred;
@@ -402,7 +412,7 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
 
                   {/* Actions */}
                   <div className="flex items-center gap-2 flex-shrink-0 font-sans">
-                    {isActive && patient.currentBedId && (
+                    {isActive && patient.currentBedId ? (
                       <button
                         onClick={() => {
                           onSelectPatientBed(patient.currentBedId!);
@@ -412,9 +422,7 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
                       >
                         {lang === 'ar' ? `فتح سرير ${patient.currentBedId}` : `Open Bed ${patient.currentBedId}`}
                       </button>
-                    )}
-
-                    {!isActive && (
+                    ) : (
                       <button
                         onClick={() => {
                           onViewReadOnlyPatient(patient);

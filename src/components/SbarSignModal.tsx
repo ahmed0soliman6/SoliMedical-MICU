@@ -524,7 +524,11 @@ export const SbarSignModal: React.FC<SbarSignModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-[#091122] w-screen h-screen overflow-hidden animate-in fade-in duration-200" dir={isRTL ? 'rtl' : 'ltr'}>
+    <div 
+      className="fixed inset-0 z-50 flex flex-col bg-[#091122] w-screen h-[100dvh] max-h-[100dvh] overflow-hidden animate-in fade-in duration-200" 
+      style={{ height: '100dvh', maxHeight: '100dvh' }}
+      dir={isRTL ? 'rtl' : 'ltr'}
+    >
       <div className="w-full h-full bg-[#091122] flex flex-col overflow-hidden">
         {/* Header */}
         <div className="px-4 py-3 bg-[#060b17] border-b border-slate-800 flex items-center justify-between shrink-0">
@@ -692,7 +696,7 @@ export const SbarSignModal: React.FC<SbarSignModalProps> = ({
 
         {/* Body Content based on active tab */}
         {modalTab === 'RECEIVE' ? (
-          <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1 text-xs">
+          <div className="p-4 sm:p-5 pb-40 sm:pb-24 space-y-4 overflow-y-auto flex-1 text-xs overscroll-contain">
             {pendingHandover ? (
               <div className="space-y-4">
                 {/* Banner */}
@@ -832,7 +836,7 @@ export const SbarSignModal: React.FC<SbarSignModalProps> = ({
                 </div>
 
                 {/* Accept / Acknowledge Shift Button */}
-                <div className="pt-3">
+                <div className="pt-4 pb-14 sm:pb-8">
                   <button
                     type="button"
                     onClick={handleAcknowledgeShift}
@@ -873,7 +877,7 @@ export const SbarSignModal: React.FC<SbarSignModalProps> = ({
           </div>
         ) : (
           /* Main Form Body for New Handover */
-          <form onSubmit={handleSubmit} className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1 text-xs">
+          <form onSubmit={handleSubmit} className="p-4 sm:p-5 pb-40 sm:pb-24 space-y-4 overflow-y-auto flex-1 text-xs overscroll-contain">
             {/* Warning Banner if pending handover exists */}
             {pendingHandover && (
               <div className="p-3.5 rounded-xl bg-amber-950/90 border border-amber-600/80 text-amber-200 text-xs flex items-center justify-between gap-3 shadow-md">
@@ -1213,7 +1217,7 @@ export const SbarSignModal: React.FC<SbarSignModalProps> = ({
           </div>
 
           {/* Action Footer */}
-          <div className="pt-2 flex items-center justify-between gap-3 border-t border-slate-800 flex-wrap">
+          <div className="pt-3 pb-14 sm:pb-8 flex items-center justify-between gap-3 border-t border-slate-800 flex-wrap">
             <div className="flex items-center gap-2 text-[11px] text-slate-400 font-mono">
               <Lock className="w-3.5 h-3.5 text-emerald-400" />
               <span>{lang === 'ar' ? 'التوثيق يخضع للتشفير SHA-256 وغير قابل للتعديل بعد التوقيع' : 'SHA-256 cryptographically immutable record'}</span>

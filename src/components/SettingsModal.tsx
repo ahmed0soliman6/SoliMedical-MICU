@@ -216,6 +216,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
       color: 'text-cyan-400',
     },
     {
+      key: 'enableFloatingChatWidget',
+      category: 'modules',
+      labelAr: 'زر الدردشة العائم (Floating Chat Button)',
+      labelEn: 'Floating Quick-Chat Widget',
+      descriptionAr: 'إظهار زر دردشة عائم وسريع في الزاوية السفلية من الشاشة للوصول السريع للمحادثات (معطل افتراضياً).',
+      descriptionEn: 'Display a floating quick-access chat action button at the bottom corner of the screen (disabled by default).',
+      icon: MessageSquare,
+      color: 'text-indigo-400',
+    },
+    {
       key: 'enableSystemSettingsPage',
       category: 'modules',
       labelAr: 'لوحة إعدادات وتخصيص النظام (System Settings)',

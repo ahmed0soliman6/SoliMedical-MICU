@@ -807,16 +807,71 @@ export async function initializeDatabaseSeed(): Promise<void> {
   await ensureBedPatientSync();
 }
 
+export function isPatientActiveInIcu(patient: PatientDossier | null | undefined): boolean {
+  if (!patient) return false;
+
+  // 1. Explicitly archived or cold storage -> NEVER active
+  if (
+    patient.archiveStatus === 'ARCHIVED' ||
+    patient.archiveStatus === 'COLD_STORAGE' ||
+    (patient as any).isArchived === true
+  ) {
+    return false;
+  }
+
+  // 2. Discharge date or mortality record -> NEVER active
+  if (patient.dischargeDate || patient.mortalityRecord) {
+    return false;
+  }
+
+  // 3. Status checks
+  const patientStatus = String(patient.patientStatus || '').toUpperCase();
+  const legacyStatus = String((patient as any).status || '').toUpperCase();
+  const currentStatus = String((patient as any).currentStatus || '').toUpperCase();
+
+  if (
+    patientStatus.includes('DISCHARGE') ||
+    patientStatus.includes('TRANSFER') ||
+    patientStatus.includes('EXPIRED') ||
+    patientStatus.includes('MORTALITY') ||
+    patientStatus.includes('DECEASED') ||
+    legacyStatus.includes('DISCHARGE') ||
+    legacyStatus.includes('TRANSFER') ||
+    legacyStatus.includes('EXPIRED') ||
+    legacyStatus.includes('MORTALITY') ||
+    legacyStatus.includes('DECEASED') ||
+    currentStatus.includes('DISCHARGE') ||
+    currentStatus.includes('TRANSFER') ||
+    currentStatus.includes('EXPIRED') ||
+    currentStatus.includes('MORTALITY') ||
+    currentStatus.includes('DECEASED')
+  ) {
+    return false;
+  }
+
+  // 4. Must strictly be ACTIVE_ICU and have an active bed assigned
+  const isActiveStatus = patientStatus === 'ACTIVE_ICU' || legacyStatus === 'ACTIVE_ICU' || currentStatus === 'ACTIVE_ICU';
+  const rawBed = patient.currentBedId || (patient as any).bedNumber || (patient as any).bedId;
+  const hasBed = !!(rawBed && String(rawBed).trim() !== '' && String(rawBed).trim() !== 'null' && String(rawBed).trim() !== 'undefined' && String(rawBed).toUpperCase() !== 'ARCHIVED');
+
+  return isActiveStatus && hasBed;
+}
+
 export async function ensureBedPatientSync(options?: { syncToCloud?: boolean }): Promise<void> {
   const syncToCloud = options?.syncToCloud ?? false;
   // Reconcile and synchronize bed occupancy state with active patients in IndexedDB
   const currentBeds = await db.beds.toArray();
   const allPatients = await db.patients.toArray();
-  const activePatients = allPatients.filter(p => 
-    p.patientStatus === 'ACTIVE_ICU' || 
-    (p as any).status === 'ACTIVE_ICU' || 
-    (p as any).currentStatus === 'ACTIVE_ICU'
-  );
+
+  // Clean up any stale currentBedId for inactive patients
+  for (const p of allPatients) {
+    if (!isPatientActiveInIcu(p) && p.currentBedId) {
+      await db.patients.update(p.id, { currentBedId: null as any });
+      p.currentBedId = undefined;
+    }
+  }
+
+  const activePatients = allPatients.filter(p => isPatientActiveInIcu(p));
 
   // Build a map of bedNumber -> active patient (Patient dossier is primary source of truth)
   const bedToActivePatientMap = new Map<string, PatientDossier>();

@@ -271,47 +271,52 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* User Profile Footer */}
       {currentUser && (
-        <div className="p-3 bg-slate-50 dark:bg-[#0a1224] border-t border-slate-200 dark:border-slate-800/80 space-y-2">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2.5 truncate">
-              <div className="w-9 h-9 rounded-xl bg-teal-100 dark:bg-teal-500/20 border border-teal-300 dark:border-teal-500/40 flex items-center justify-center font-bold text-teal-800 dark:text-teal-300 text-xs font-mono shrink-0">
-                {currentUser.nameEn.slice(0, 2).toUpperCase()}
+        <div className="p-3 bg-slate-50 dark:bg-[#0a1224] border-t border-slate-200 dark:border-slate-800/80 space-y-2.5">
+          <div className="flex items-start gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-teal-100 dark:bg-teal-500/20 border border-teal-300 dark:border-teal-500/40 flex items-center justify-center font-bold text-teal-800 dark:text-teal-300 text-xs font-mono shrink-0 mt-0.5 shadow-sm">
+              {(currentUser.nameEn || currentUser.username || 'DR').slice(0, 2).toUpperCase()}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span 
+                  className="text-xs font-bold text-slate-900 dark:text-white leading-tight break-words"
+                  title={currentUser.nameAr || currentUser.nameEn || currentUser.username}
+                >
+                  {currentUser.nameAr || currentUser.nameEn || currentUser.username}
+                </span>
+                <span className="text-[9px] px-1.5 py-0.5 rounded bg-teal-100 dark:bg-teal-500/20 text-teal-850 dark:text-teal-300 border border-teal-300 dark:border-teal-500/40 font-mono font-semibold shrink-0">
+                  {currentUser.role}
+                </span>
               </div>
-              <div className="truncate">
-                <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5 truncate">
-                  <span className="truncate">{currentUser.nameAr || currentUser.nameEn}</span>
-                  <span className="text-[9px] px-1.5 py-0.2 rounded bg-teal-100 dark:bg-teal-500/20 text-teal-850 dark:text-teal-300 border border-teal-300 dark:border-teal-500/40 font-mono font-semibold shrink-0">
-                    {currentUser.role}
-                  </span>
-                </div>
-                <div className="text-[10px] text-teal-600 dark:text-teal-400 font-mono flex items-center gap-1 mt-0.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400"></span>
-                  <span>{lang === 'ar' ? 'الطبيب متاح' : 'Available'}</span>
-                </div>
+              <div className="text-[10px] text-teal-600 dark:text-teal-400 font-mono flex items-center gap-1 mt-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400 animate-pulse"></span>
+                <span>{lang === 'ar' ? 'الطبيب متاح / متصل' : 'Available / Online'}</span>
               </div>
             </div>
+          </div>
 
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => setShowChangePassModal(true)}
-                className="p-2 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-teal-700 dark:text-teal-300 transition-colors cursor-pointer shrink-0"
-                title={lang === 'ar' ? 'تغيير كلمة المرور' : 'Change Password'}
-              >
-                <KeyRound className="w-4 h-4" />
-              </button>
+          <div className="flex items-center gap-2 pt-1 border-t border-slate-200/60 dark:border-slate-800/60">
+            <button
+              type="button"
+              onClick={() => setShowChangePassModal(true)}
+              className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-xl bg-white dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-teal-700 dark:text-teal-300 text-[11px] font-semibold transition-colors cursor-pointer shadow-sm"
+              title={lang === 'ar' ? 'تغيير كلمة المرور' : 'Change Password'}
+            >
+              <KeyRound className="w-3.5 h-3.5" />
+              <span>{lang === 'ar' ? 'كلمة المرور' : 'Password'}</span>
+            </button>
 
-              <button
-                onClick={() => {
-                  logout();
-                  onClose();
-                }}
-                className="p-2 rounded-xl bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/60 border border-red-200 dark:border-red-800/60 text-red-600 dark:text-red-300 transition-colors cursor-pointer shrink-0"
-                title={lang === 'ar' ? 'تسجيل الخروج' : 'Logout'}
-              >
-                <LogOut className="w-4 h-4" />
-              </button>
-            </div>
+            <button
+              onClick={() => {
+                logout();
+                onClose();
+              }}
+              className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-xl bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/60 border border-red-200 dark:border-red-800/60 text-red-600 dark:text-red-300 text-[11px] font-semibold transition-colors cursor-pointer shadow-sm"
+              title={lang === 'ar' ? 'تسجيل الخروج' : 'Logout'}
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>{lang === 'ar' ? 'خروج' : 'Logout'}</span>
+            </button>
           </div>
         </div>
       )}

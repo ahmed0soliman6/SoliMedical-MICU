@@ -5,6 +5,7 @@ export interface SystemFeatureFlags {
   enableClinicalNotes: boolean;       // الملاحظات الطبية المشفرة
   enableArchiveSearch: boolean;       // البحث في الأرشيف الطبي
   enableClinicalChat: boolean;        // الدردشة السريرية المباشرة (Clinical Chat)
+  enableFloatingChatWidget?: boolean;// زر الدردشة السريرية العائم (Floating Chat Button)
   enableSystemSettingsPage: boolean;  // إعدادات وتخصيص النظام (System Settings)
   enableAdmissions: boolean;          // إدخال مرضى جدد
 
@@ -408,6 +409,7 @@ export const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
     enableClinicalNotes: true,
     enableArchiveSearch: true,
     enableClinicalChat: true,
+    enableFloatingChatWidget: false,
     enableSystemSettingsPage: true,
     enableAdmissions: true,
     enableTelemetryVitals: true,

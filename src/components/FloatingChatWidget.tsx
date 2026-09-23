@@ -47,9 +47,9 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({ activeTa
   const { lang, isRTL } = useTranslation();
 
   const [isVisible, setIsVisible] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return true;
+    if (typeof window === 'undefined') return false;
     const saved = localStorage.getItem(VISIBILITY_STORAGE_KEY);
-    return saved !== null ? saved === 'true' : true;
+    return saved !== null ? saved === 'true' : false;
   });
 
   const [isOpen, setIsOpen] = useState<boolean>(false);
