@@ -57,7 +57,7 @@ interface AuthContextType {
   updateUser: (user: IcuUser) => Promise<{ success: boolean; message?: string }>;
   changeUserPassword: (uid: string, newPassword: string, confirmPassword?: string) => Promise<{ success: boolean; message?: string }>;
   changeMyOwnPassword: (oldPassword: string, newPassword: string, confirmPassword?: string) => Promise<{ success: boolean; message?: string }>;
-  toggleUserStatus: (uid: string) => Promise<void>;
+  toggleUserStatus: (uid: string) => Promise<{ success: boolean; message?: string }>;
   deleteUser: (uid: string) => Promise<{ success: boolean; message?: string }>;
   hasPermission: (permission: keyof UserPermissions) => boolean;
   refreshUsers: () => Promise<void>;
@@ -167,7 +167,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               ...(u.permissions || {})
             };
             if (u.isActive === false || u.active === false) {
-              firebaseSignOut(auth);
+              firebaseSignOut(auth).catch(() => {});
               setCurrentUser(null);
               localStorage.removeItem('soli_icu_active_user');
             } else {
@@ -175,16 +175,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               localStorage.setItem('soli_icu_active_user', JSON.stringify(u));
             }
           }
-        }, (err) => {
-          handleFirestoreError(err, OperationType.GET, `users/${fbUser.uid}`);
+        }, async (err: any) => {
+          // If firestore rules deny read (e.g. user was disabled and isActiveUser() is false):
+          try {
+            await fbUser.getIdToken(true);
+          } catch (tokenErr: any) {
+            const code = tokenErr?.code || '';
+            if (code === 'auth/user-disabled' || code === 'auth/user-token-revoked') {
+              await firebaseSignOut(auth).catch(() => {});
+              setCurrentUser(null);
+              localStorage.removeItem('soli_icu_active_user');
+            }
+          }
         });
       }
     });
+
+    // Background validation timer: verify token status with Firebase Auth every 20 seconds
+    const sessionValidationTimer = setInterval(async () => {
+      const currentAuthUser = auth.currentUser;
+      if (currentAuthUser) {
+        try {
+          await currentAuthUser.getIdToken(true);
+        } catch (authErr: any) {
+          const code = authErr?.code || '';
+          if (code === 'auth/user-disabled' || code === 'auth/user-token-revoked') {
+            await firebaseSignOut(auth).catch(() => {});
+            setCurrentUser(null);
+            localStorage.removeItem('soli_icu_active_user');
+          }
+        }
+      }
+    }, 20000);
 
     return () => {
       unsubscribeAuth();
       unsubscribeAuthUser();
       if (activeUserUnsub) activeUserUnsub();
+      clearInterval(sessionValidationTimer);
     };
   }, [checkInitialSetup]);
 
@@ -354,7 +382,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (matchedUser.isActive === false || matchedUser.active === false) {
         await firebaseSignOut(auth);
-        return { success: false, message: 'حسابك معطل حالياً من قبل الإدارة.' };
+        return { success: false, message: 'هذا الحساب معطل من قبل الإدارة.' };
       }
 
       matchedUser.lastLoginAt = new Date().toISOString();
@@ -367,6 +395,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem('soli_icu_active_user', JSON.stringify(matchedUser));
       return { success: true };
     } catch (err: any) {
+      if (err?.code === 'auth/user-disabled') {
+        return { success: false, message: 'هذا الحساب معطل من قبل الإدارة.' };
+      }
       console.warn('Google Sign-in error:', err);
       return { success: false, message: err?.message || 'فشل تسجيل الدخول عبر Google' };
     }
@@ -647,21 +678,82 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // Toggle user status directly in Firestore. Auth token revocation requires a backend.
-  const toggleUserStatus = async (uid: string) => {
-    if (!hasPermission('users.disable')) return;
+  // Toggle user status via Backend Admin API (Firebase Auth + Firestore SSOT)
+  const toggleUserStatus = async (uid: string): Promise<{ success: boolean; message?: string }> => {
+    if (!hasPermission('users.disable')) {
+      return { success: false, message: 'ليس لديك صلاحية لتعديل حالة تفعيل المستخدمين (users.disable).' };
+    }
     const user = allUsers.find(u => u.uid === uid);
-    if (!user) return;
-    if (user.isSuperAdmin || user.role === StaffRole.ADMIN) return;
+    if (!user) {
+      return { success: false, message: 'المستخدم غير موجود في النظام.' };
+    }
+    if (user.isSuperAdmin || user.role === StaffRole.ADMIN) {
+      return { success: false, message: 'لا يمكن تعطيل حساب مدير النظام.' };
+    }
+    if (currentUser?.uid === uid) {
+      return { success: false, message: 'لا يمكنك تعطيل حسابك الحالي أثناء تسجيل الدخول منه.' };
+    }
+
+    const isCurrentlyActive = user.isActive !== false && user.active !== false;
+    const endpoint = isCurrentlyActive ? '/api/admin/users/disable' : '/api/admin/users/enable';
 
     try {
-      user.isActive = !user.isActive;
-      user.active = user.isActive;
-      await saveUserAccount(user);
-    } catch (e) {
-      console.error('Toggle status failed:', e);
+      const idToken = await auth.currentUser?.getIdToken(true).catch(() => null);
+      if (!idToken) {
+        return { 
+          success: false, 
+          message: 'تعذر الحصول على رمز مصادقة المدير (ID Token). يرجى إعادة تسجيل الدخول.' 
+        };
+      }
+
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify({
+          targetUid: uid,
+          reason: isCurrentlyActive ? 'تعطيل الحساب عبر لوحة تحكم المسؤول' : undefined
+        })
+      });
+
+      const resText = await response.text();
+      let data: any = null;
+      try {
+        data = JSON.parse(resText);
+      } catch {
+        // Non-JSON response
+      }
+
+      if (!response.ok || !data?.success) {
+        const errorMsg = data?.message || (response.status === 403
+          ? 'تم رفض الطلب: ليس لديك صلاحية مدير لتنفيذ هذا الإجراء.'
+          : `خطأ في استجابة الخادم (${response.status}) أثناء ${isCurrentlyActive ? 'تعطيل' : 'تفعيل'} المستخدم.`);
+        
+        return { success: false, message: errorMsg };
+      }
+
+      // Update local state and IndexedDB only upon backend success
+      const newActiveState = !isCurrentlyActive;
+      user.isActive = newActiveState;
+      user.active = newActiveState;
+      await db.users.update(uid, {
+        isActive: newActiveState,
+        active: newActiveState,
+        updatedAt: new Date().toISOString()
+      });
+
+      await refreshUsers();
+
+      return {
+        success: true,
+        message: data?.message || (isCurrentlyActive ? 'تم تعطيل الحساب بنجاح وإبطال جلساته.' : 'تم إعادة تفعيل الحساب بنجاح.')
+      };
+    } catch (e: any) {
+      console.error('Toggle user status failed:', e);
+      return { success: false, message: e?.message || 'حدث خطأ غير متوقع أثناء الاتصال بالخادم.' };
     }
-    await refreshUsers();
   };
 
   // Delete User Account (Strict: Firebase Authentication is Primary; No Firestore-only fallback)

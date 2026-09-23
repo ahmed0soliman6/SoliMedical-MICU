@@ -431,6 +431,15 @@ export async function disableUserWithToken(authHeader?: string, targetUid?: stri
 
     const nowIso = new Date().toISOString();
 
+    // 1. First, disable and revoke tokens in Firebase Authentication (Sole Source of Truth)
+    try {
+      await auth.revokeRefreshTokens(targetUid);
+      await auth.updateUser(targetUid, { disabled: true });
+    } catch (authErr: any) {
+      throw new Error(`فشل تعطيل المستخدم في Firebase Authentication: ${authErr?.message || authErr}`);
+    }
+
+    // 2. Synchronize Firestore users collection
     if (hasDbAccess) {
       try {
         const targetRef = db.collection('users').doc(targetUid);
@@ -443,16 +452,6 @@ export async function disableUserWithToken(authHeader?: string, targetUid?: stri
         });
       } catch (dbErr: any) {
         throw new Error(`Firestore user update failed: ${dbErr?.message || dbErr}`);
-      }
-    }
-
-    try {
-      await auth.revokeRefreshTokens(targetUid);
-      await auth.updateUser(targetUid, { disabled: true });
-    } catch (authErr: any) {
-      const isPermissionDenied = authErr?.message?.includes('PERMISSION_DENIED') || authErr?.code === 7 || authErr?.message?.includes('credential');
-      if (!isPermissionDenied) {
-        throw new Error(`Firebase Auth disable failed: ${authErr?.message || authErr}`);
       }
     }
 
@@ -475,10 +474,95 @@ export async function disableUserWithToken(authHeader?: string, targetUid?: stri
 
     return {
       success: true,
-      message: 'User account successfully disabled. Historic clinical records remain securely preserved.',
+      message: 'تم تعطيل الحساب وإبطال جلساته في Firebase Authentication وقاعدة البيانات بنجاح.',
     };
   } catch (error: any) {
-    return { success: false, message: error?.message || 'Failed to disable user.' };
+    return { success: false, message: error?.message || 'فشل تعطيل المستخدم.' };
+  }
+}
+
+export async function enableUserWithToken(authHeader?: string, targetUid?: string): Promise<AdminOpResult> {
+  const authCheck = await verifyAdminCallerToken(authHeader);
+  if (!authCheck.isAdmin || !authCheck.callerUid) {
+    return { success: false, message: authCheck.error || 'Permission Denied' };
+  }
+
+  const callerUid = authCheck.callerUid;
+
+  if (!targetUid) {
+    return { success: false, message: 'Target UID is required.' };
+  }
+
+  try {
+    const { db, auth } = requireAdminServices();
+
+    let targetSnap: any = null;
+    let hasDbAccess = true;
+    try {
+      const targetRef = db.collection('users').doc(targetUid);
+      targetSnap = await targetRef.get();
+    } catch (dbErr: any) {
+      const isPermissionDenied = dbErr?.message?.includes('PERMISSION_DENIED') || dbErr?.code === 7;
+      if (isPermissionDenied) {
+        hasDbAccess = false;
+      } else {
+        throw new Error(`Firestore user read failed: ${dbErr?.message || dbErr}`);
+      }
+    }
+
+    if (hasDbAccess && targetSnap && !targetSnap.exists) {
+      return { success: false, message: 'المستخدم غير موجود في النظام.' };
+    }
+
+    const nowIso = new Date().toISOString();
+
+    // 1. Re-enable in Firebase Authentication
+    try {
+      await auth.updateUser(targetUid, { disabled: false });
+    } catch (authErr: any) {
+      throw new Error(`فشل إعادة تفعيل المستخدم في Firebase Authentication: ${authErr?.message || authErr}`);
+    }
+
+    // 2. Synchronize Firestore users collection
+    if (hasDbAccess) {
+      try {
+        const targetRef = db.collection('users').doc(targetUid);
+        await targetRef.update({
+          active: true,
+          isActive: true,
+          updatedAt: nowIso,
+          updatedByUid: callerUid,
+          disabledReason: null,
+        });
+      } catch (dbErr: any) {
+        throw new Error(`Firestore user update failed: ${dbErr?.message || dbErr}`);
+      }
+    }
+
+    // 3. Write immutable audit log
+    if (hasDbAccess) {
+      try {
+        const auditId = `audit_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        await db.collection('auditLogs').doc(auditId).set({
+          id: auditId,
+          timestamp: nowIso,
+          eventType: 'USER_ACTIVATED',
+          description: `User account ${targetUid} re-activated by Admin ${callerUid}.`,
+          callerUid,
+          targetUid,
+          isImmutable: true,
+        });
+      } catch (dbErr: any) {
+        throw new Error(`Firestore audit log write failed: ${dbErr?.message || dbErr}`);
+      }
+    }
+
+    return {
+      success: true,
+      message: 'تم إعادة تفعيل الحساب في Firebase Authentication وقاعدة البيانات بنجاح.',
+    };
+  } catch (error: any) {
+    return { success: false, message: error?.message || 'فشل تفعيل المستخدم.' };
   }
 }
 

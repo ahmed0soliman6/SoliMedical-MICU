@@ -21,7 +21,8 @@ import {
   EyeOff,
   Trash2,
   AlertTriangle,
-  UserX
+  UserX,
+  Loader2
 } from 'lucide-react';
 import { useAuth } from '../services/AuthContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
@@ -134,6 +135,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
     getDefaultPermissionsForRole(StaffRole.BEDSIDE_RN)
   );
   const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [togglingUid, setTogglingUid] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
@@ -225,6 +227,35 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
       setStatusMsg({ type: 'error', text: res.message || (lang === 'ar' ? 'خطأ أثناء حذف الحساب' : 'Error deleting user') });
     }
     setUserToDelete(null);
+  };
+
+  const handleToggleUserStatus = async (targetUser: IcuUser) => {
+    if (togglingUid) return;
+    setTogglingUid(targetUser.uid);
+    setStatusMsg(null);
+    try {
+      const res = await toggleUserStatus(targetUser.uid);
+      if (res?.success) {
+        setStatusMsg({
+          type: 'success',
+          text: res.message || (targetUser.isActive 
+            ? (lang === 'ar' ? 'تم تعطيل الحساب وإبطال جلساته بنجاح.' : 'Account disabled successfully.')
+            : (lang === 'ar' ? 'تم إعادة تفعيل الحساب بنجاح.' : 'Account activated successfully.'))
+        });
+      } else {
+        setStatusMsg({
+          type: 'error',
+          text: res?.message || (lang === 'ar' ? 'فشل تعديل حالة الحساب.' : 'Failed to update user status.')
+        });
+      }
+    } catch (err: any) {
+      setStatusMsg({
+        type: 'error',
+        text: err?.message || (lang === 'ar' ? 'حدث خطأ أثناء الاتصال بالخادم.' : 'Error contacting server.')
+      });
+    } finally {
+      setTogglingUid(null);
+    }
   };
 
   const handleSaveUser = async (e: React.FormEvent) => {
@@ -733,15 +764,18 @@ const PERMISSION_GROUPS: PermissionCategory[] = [
                           {!isCurrent && canDisableUsers && (
                             <button
                               type="button"
-                              onClick={() => toggleUserStatus(user.uid)}
-                              className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer border ${
+                              disabled={togglingUid === user.uid}
+                              onClick={() => handleToggleUserStatus(user)}
+                              className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer border disabled:opacity-50 disabled:cursor-not-allowed ${
                                 user.isActive 
                                   ? 'bg-amber-950/50 hover:bg-amber-900/70 text-amber-300 border-amber-800/50' 
                                   : 'bg-emerald-950/50 hover:bg-emerald-900/70 text-emerald-300 border-emerald-800/50'
                               }`}
                               title={user.isActive ? (lang === 'ar' ? 'إيقاف الحساب مؤقتاً' : 'Deactivate') : (lang === 'ar' ? 'إعادة تفعيل الحساب' : 'Activate')}
                             >
-                              {user.isActive ? (
+                              {togglingUid === user.uid ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : user.isActive ? (
                                 <>
                                   <UserX className="w-3.5 h-3.5 text-amber-400" />
                                   <span>{lang === 'ar' ? 'تعطيل' : 'Disable'}</span>

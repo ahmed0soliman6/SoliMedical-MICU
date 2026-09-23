@@ -498,6 +498,7 @@ Ensure strict medical terminology and zero hallucination. If text is partially b
 import { 
   adminCreateUser,
   disableUserWithToken, 
+  enableUserWithToken,
   deleteUserWithToken, 
   adminChangeUserPassword, 
   adminPasswordRecovery,
@@ -525,12 +526,43 @@ app.post('/api/admin/users/disable', async (req, res) => {
     const authHeader = req.headers.authorization;
     const { targetUid, reason } = req.body;
     if (!targetUid) {
-      return res.status(200).json({ success: false, message: 'Missing targetUid.' });
+      return res.status(400).json({ success: false, message: 'Missing targetUid.' });
     }
     const result = await disableUserWithToken(authHeader, targetUid, reason);
-    return res.status(200).json(result);
+    const statusCode = result.success ? 200 : (result.message.includes('Permission Denied') || result.message.includes('Access denied') ? 403 : 400);
+    return res.status(statusCode).json(result);
   } catch (err: any) {
-    return res.status(200).json({ success: false, message: err?.message || 'Internal server error.' });
+    return res.status(500).json({ success: false, message: err?.message || 'Internal server error.' });
+  }
+});
+
+app.post('/api/admin/users/enable', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const { targetUid } = req.body;
+    if (!targetUid) {
+      return res.status(400).json({ success: false, message: 'Missing targetUid.' });
+    }
+    const result = await enableUserWithToken(authHeader, targetUid);
+    const statusCode = result.success ? 200 : (result.message.includes('Permission Denied') || result.message.includes('Access denied') ? 403 : 400);
+    return res.status(statusCode).json(result);
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err?.message || 'Internal server error.' });
+  }
+});
+
+app.post('/api/admin/users/activate', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const { targetUid } = req.body;
+    if (!targetUid) {
+      return res.status(400).json({ success: false, message: 'Missing targetUid.' });
+    }
+    const result = await enableUserWithToken(authHeader, targetUid);
+    const statusCode = result.success ? 200 : (result.message.includes('Permission Denied') || result.message.includes('Access denied') ? 403 : 400);
+    return res.status(statusCode).json(result);
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err?.message || 'Internal server error.' });
   }
 });
 
