@@ -143,22 +143,22 @@ service cloud.firestore {
     // Patients Collection
     match /patients/{patientId} {
       allow read: if hasPerm('patients.view') || hasPerm('beds.view');
-      allow create: if hasPerm('patients.create');
+      allow create: if hasPerm('patients.create') || hasPerm('patients.update') || hasPerm('beds.view');
       allow update: if hasPerm('patients.update') || hasPerm('patients.create') || hasPerm('sbar.update') || hasPerm('sbar.create') || hasPerm('transfer.create') || hasPerm('bedSwap.create') || hasPerm('discharge.create') || isAdmin();
       allow delete: if isAdmin();
     }
 
-    // Archived Patients (Client Read-Only for non-admin)
+    // Archived Patients
     match /archivedPatients/{patientId} {
-      allow read: if hasPerm('archive.view');
-      allow write: if isAdmin();
+      allow read: if hasPerm('archive.view') || hasPerm('patients.view') || hasPerm('patients.create');
+      allow write, create, update, delete: if hasPerm('patients.create') || hasPerm('discharge.create') || hasPerm('patients.update') || isAdmin();
     }
 
     // Beds Collection
     match /beds/{bedId} {
       allow read: if hasPerm('beds.view') || hasPerm('patients.view');
-      allow create: if isAdmin();
-      allow update: if hasPerm('beds.view') || hasPerm('patients.create') || hasPerm('patients.update') || hasPerm('sbar.update') || hasPerm('sbar.create') || hasPerm('transfer.create') || hasPerm('bedSwap.create') || hasPerm('discharge.create') || isAdmin();
+      allow create: if hasPerm('patients.create') || isAdmin();
+      allow update: if hasPerm('beds.view') || hasPerm('beds.update') || hasPerm('patients.create') || hasPerm('patients.update') || hasPerm('sbar.update') || hasPerm('sbar.create') || hasPerm('transfer.create') || hasPerm('bedSwap.create') || hasPerm('discharge.create') || isAdmin();
       allow delete: if isAdmin();
     }
 
@@ -191,14 +191,14 @@ service cloud.firestore {
     // Clinical Notes
     match /clinicalNotes/{noteId} {
       allow read: if hasPerm('clinicalNotes.view') || hasPerm('patients.view');
-      allow create: if hasPerm('clinicalNotes.create');
-      allow update: if hasPerm('clinicalNotes.update') && isValidMedicalRecordUpdate();
+      allow create: if hasPerm('clinicalNotes.create') || hasPerm('clinicalNotes.update') || hasPerm('patients.create');
+      allow update: if (hasPerm('clinicalNotes.update') || hasPerm('clinicalNotes.create') || hasPerm('patients.create')) && isValidMedicalRecordUpdate();
       allow delete: if isAdmin();
     }
 
     match /addendums/{addendumId} {
       allow read: if hasPerm('clinicalNotes.view') || hasPerm('patients.view');
-      allow create: if hasPerm('clinicalNotes.update') || hasPerm('clinicalNotes.create');
+      allow create: if hasPerm('clinicalNotes.update') || hasPerm('clinicalNotes.create') || hasPerm('patients.create');
       allow update: if false; // Immutable addendums
       allow delete: if isAdmin();
     }
@@ -206,14 +206,14 @@ service cloud.firestore {
     // SBAR Handovers & Shift Transitions (Collaborative Doctor-to-Doctor Shift Transfer)
     match /sbarHandovers/{sbarId} {
       allow read: if hasPerm('sbar.view') || hasPerm('patients.view');
-      allow create: if hasPerm('sbar.create') || hasPerm('sbar.update') || hasPerm('patients.update');
+      allow create: if hasPerm('sbar.create') || hasPerm('sbar.update') || hasPerm('patients.update') || hasPerm('patients.create');
       allow update: if hasPerm('sbar.update') || hasPerm('sbar.create') || hasPerm('patients.update') || isAdmin();
       allow delete: if isAdmin();
     }
 
     match /handovers/{handoverId} {
       allow read: if hasPerm('sbar.view') || hasPerm('patients.view');
-      allow create: if hasPerm('sbar.create') || hasPerm('sbar.update') || hasPerm('patients.update');
+      allow create: if hasPerm('sbar.create') || hasPerm('sbar.update') || hasPerm('patients.update') || hasPerm('patients.create');
       allow update: if hasPerm('sbar.update') || hasPerm('sbar.create') || hasPerm('patients.update') || isAdmin();
       allow delete: if isAdmin();
     }
@@ -221,8 +221,8 @@ service cloud.firestore {
     // Telemetry Vitals, Ventilator, Infusions & Labs
     match /vitals/{vitalId} {
       allow read: if hasPerm('vitals.view') || hasPerm('beds.view') || hasPerm('patients.view');
-      allow create: if hasPerm('vitals.create');
-      allow update: if hasPerm('vitals.update') || hasPerm('vitals.create') || isAdmin();
+      allow create: if hasPerm('vitals.create') || hasPerm('vitals.update') || hasPerm('patients.create');
+      allow update: if hasPerm('vitals.update') || hasPerm('vitals.create') || hasPerm('patients.create') || isAdmin();
       allow delete: if isAdmin();
     }
 

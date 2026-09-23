@@ -369,7 +369,7 @@ export function getDefaultPermissionsForRole(role: StaffRole): UserPermissions {
       return {
         'beds.view': true,
         'patients.view': true,
-        'patients.create': false,
+        'patients.create': true,
         'patients.update': true,
         'archive.view': true,
         'vitals.view': true,
