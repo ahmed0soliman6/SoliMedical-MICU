@@ -74,23 +74,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Initialize Auth & Check for Super Admin setup
   const checkInitialSetup = useCallback(async () => {
     try {
+      // 1. Immediately hydrate allUsers from Dexie local store so UI is never empty
+      const localUsers = await db.users.toArray().catch(() => [] as IcuUser[]);
+      if (localUsers.length > 0) {
+        setAllUsers(localUsers);
+      }
+
       const [remoteUsers, hasAdmin] = await Promise.all([
         fetchAllUsers().catch(() => [] as IcuUser[]),
         checkIfAnyAdminExists().catch(() => false)
       ]);
 
-      // Deduplicate strictly by uid
-      const uniqueRemote: IcuUser[] = [];
-      const seenRemote = new Set<string>();
-      for (const u of remoteUsers) {
-        if (u && u.uid && !seenRemote.has(u.uid)) {
-          seenRemote.add(u.uid);
-          uniqueRemote.push(u);
+      if (remoteUsers.length > 0) {
+        // Deduplicate strictly by uid
+        const uniqueRemote: IcuUser[] = [];
+        const seenRemote = new Set<string>();
+        for (const u of remoteUsers) {
+          if (u && u.uid && !seenRemote.has(u.uid)) {
+            seenRemote.add(u.uid);
+            uniqueRemote.push(u);
+          }
         }
+        setAllUsers(uniqueRemote);
       }
-
-      setAllUsers(uniqueRemote);
-      setNeedsInitialAdminSetup(!hasAdmin && uniqueRemote.length === 0);
+      setNeedsInitialAdminSetup(!hasAdmin && remoteUsers.length === 0 && localUsers.length === 0);
     } catch (e) {
       console.warn('Auth initial check notice:', e);
     } finally {
@@ -217,8 +224,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [checkInitialSetup]);
 
   const refreshUsers = useCallback(async () => {
-    const users = await fetchAllUsers();
-    setAllUsers(users);
+    try {
+      const users = await fetchAllUsers();
+      if (users.length > 0) {
+        setAllUsers(users);
+      } else {
+        const local = await db.users.toArray().catch(() => [] as IcuUser[]);
+        if (local.length > 0) {
+          setAllUsers(local);
+        }
+      }
+    } catch (err) {
+      console.warn('refreshUsers notice:', err);
+      const local = await db.users.toArray().catch(() => [] as IcuUser[]);
+      if (local.length > 0) {
+        setAllUsers(local);
+      }
+    }
   }, []);
 
   // Quick Demo Login (Disabled per security policy)
@@ -444,6 +466,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             'Authorization': idToken ? `Bearer ${idToken}` : ''
           },
           body: JSON.stringify({
+            action: 'create',
             email,
             password,
             pinCode: password,
@@ -557,7 +580,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               'Content-Type': 'application/json',
               'Authorization': `Bearer ${idToken}`
             },
-            body: JSON.stringify({ targetUid: uid, newPassword: cleanPass })
+            body: JSON.stringify({ action: 'change-password', targetUid: uid, newPassword: cleanPass })
           });
 
           const resText = await response.text();
@@ -818,6 +841,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             'Authorization': `Bearer ${idToken}`
           },
           body: JSON.stringify({
+            action: 'delete',
             targetUid: uid
           })
         }

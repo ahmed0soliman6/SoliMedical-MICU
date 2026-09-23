@@ -275,13 +275,6 @@ export default async function handler(req: VercelReq, res: VercelRes) {
 
     const callerUid = authCheck.callerUid;
     const body = await parseJsonBody(req);
-    const targetUid = body?.targetUid;
-
-    if (!targetUid || typeof targetUid !== 'string' || !targetUid.trim()) {
-      return sendJson(res, 400, { success: false, message: 'Missing targetUid in request body.' });
-    }
-
-    const cleanTargetUid = targetUid.trim();
     const url = (req.url || '').toLowerCase();
     const xForwardedUri = (req.headers['x-forwarded-uri'] as string || '').toLowerCase();
     const xMatchedPath = (req.headers['x-matched-path'] as string || '').toLowerCase();
@@ -291,7 +284,107 @@ export default async function handler(req: VercelReq, res: VercelRes) {
     const nowIso = new Date().toISOString();
 
     // -------------------------------------------------------------
-    // Route 1: DELETE USER
+    // Route 1: CREATE USER (action: 'create')
+    // -------------------------------------------------------------
+    if (action === 'create' || url.includes('/create') || xForwardedUri.includes('/create') || xMatchedPath.includes('/create')) {
+      const userData = body?.userData || body;
+      const rawEmail = String(userData?.email || '').trim().toLowerCase();
+      if (!rawEmail) {
+        return sendJson(res, 400, { success: false, message: 'Missing user email in request body.' });
+      }
+
+      const rawPass = userData?.pinCode || userData?.password || '123456';
+      if (rawPass.length < 6) {
+        return sendJson(res, 400, { success: false, message: 'كلمة المرور يجب ألا تقل عن 6 أحرف أو أرقام (auth/weak-password).' });
+      }
+
+      const cleanDisplayName = userData?.nameAr || userData?.nameEn || rawEmail.split('@')[0];
+
+      let fbUid: string;
+      try {
+        const created = await auth.createUser({
+          email: rawEmail,
+          password: rawPass,
+          displayName: cleanDisplayName
+        });
+        fbUid = created.uid;
+      } catch (authErr: any) {
+        if (authErr?.code === 'auth/email-already-exists' || authErr?.code === 'auth/email-already-in-use') {
+          const existing = await auth.getUserByEmail(rawEmail);
+          fbUid = existing.uid;
+          try {
+            await auth.updateUser(fbUid, {
+              password: rawPass,
+              displayName: cleanDisplayName,
+              disabled: false
+            });
+          } catch (updateErr: any) {
+            return sendJson(res, 500, { success: false, message: `Firebase Auth updateUser failed: ${updateErr?.message || updateErr}` });
+          }
+        } else {
+          return sendJson(res, 500, { success: false, message: `Firebase Auth createUser failed: ${authErr?.message || authErr}` });
+        }
+      }
+
+      const newUserRecord = {
+        ...userData,
+        uid: fbUid,
+        email: rawEmail,
+        isActive: true,
+        active: true,
+        createdAt: userData?.createdAt || nowIso,
+        lastLoginAt: nowIso,
+        createdByUid: callerUid,
+      };
+      delete newUserRecord.pinCode;
+      delete newUserRecord.password;
+      delete newUserRecord.action;
+      delete newUserRecord.userData;
+
+      try {
+        await db.collection('users').doc(fbUid).set(newUserRecord, { merge: true });
+        if (newUserRecord.role === 'ADMIN' || newUserRecord.isSuperAdmin) {
+          await db.collection('admins').doc(fbUid).set({
+            uid: fbUid,
+            email: rawEmail,
+            nameAr: newUserRecord.nameAr || '',
+            nameEn: newUserRecord.nameEn || '',
+            createdAt: nowIso,
+          }, { merge: true });
+        }
+
+        const auditId = `audit_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        await db.collection('auditLogs').doc(auditId).set({
+          id: auditId,
+          timestamp: nowIso,
+          eventType: 'USER_CREATED',
+          description: `User account ${fbUid} (${rawEmail}) created by Admin ${callerUid}.`,
+          callerUid,
+          targetUid: fbUid,
+          isImmutable: true,
+        });
+      } catch (dbErr: any) {
+        return sendJson(res, 500, { success: false, message: `Firestore user persistence failed: ${dbErr?.message || dbErr}` });
+      }
+
+      return sendJson(res, 200, {
+        success: true,
+        uid: fbUid,
+        user: newUserRecord,
+        message: 'تم إنشاء المستخدم بنجاح في Firebase Authentication وقاعدة البيانات.'
+      });
+    }
+
+    // For all other actions, targetUid is required
+    const targetUid = body?.targetUid;
+    if (!targetUid || typeof targetUid !== 'string' || !targetUid.trim()) {
+      return sendJson(res, 400, { success: false, message: 'Missing targetUid in request body.' });
+    }
+
+    const cleanTargetUid = targetUid.trim();
+
+    // -------------------------------------------------------------
+    // Route 2: DELETE USER (action: 'delete')
     // -------------------------------------------------------------
     if (action === 'delete' || url.includes('/delete') || xForwardedUri.includes('/delete') || xMatchedPath.includes('/delete')) {
       if (callerUid === cleanTargetUid) {
@@ -368,7 +461,7 @@ export default async function handler(req: VercelReq, res: VercelRes) {
     }
 
     // -------------------------------------------------------------
-    // Route 2: CHANGE PASSWORD
+    // Route 3: CHANGE PASSWORD (action: 'change-password')
     // -------------------------------------------------------------
     if (action === 'change-password' || url.includes('/change-password') || xForwardedUri.includes('/change-password') || xMatchedPath.includes('/change-password')) {
       const newPassword = body?.newPassword;
@@ -411,7 +504,7 @@ export default async function handler(req: VercelReq, res: VercelRes) {
     }
 
     // -------------------------------------------------------------
-    // Route 3: STATUS (DISABLE / ENABLE / ACTIVATE)
+    // Route 4: STATUS (DISABLE / ENABLE / ACTIVATE)
     // -------------------------------------------------------------
     let isDisable = false;
     if (action === 'disable' || body?.active === false || body?.isActive === false) {

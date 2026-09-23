@@ -21,6 +21,10 @@
       "destination": "/api/admin/recovery"
     },
     {
+      "source": "/api/admin/users/create",
+      "destination": "/api/admin/users"
+    },
+    {
       "source": "/api/admin/users/status",
       "destination": "/api/admin/users"
     },

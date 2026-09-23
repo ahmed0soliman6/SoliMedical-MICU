@@ -587,11 +587,18 @@ app.post('/api/admin/users/status', async (req, res) => {
 app.post('/api/admin/users', async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
-    const { targetUid, action, reason, active, isActive, newPassword } = req.body;
+    const { targetUid, action, reason, active, isActive, newPassword, ...userData } = req.body;
+    const cleanAction = String(action || '').toLowerCase();
+
+    if (cleanAction === 'create') {
+      const result = await adminCreateUser(authHeader, userData);
+      return res.status(result.success ? 200 : 400).json(result);
+    }
+
     if (!targetUid) {
       return res.status(400).json({ success: false, message: 'Missing targetUid.' });
     }
-    const cleanAction = String(action || '').toLowerCase();
+
     if (cleanAction === 'delete') {
       const result = await deleteUserWithToken(authHeader, targetUid, reason);
       return res.status(result.success ? 200 : 400).json(result);

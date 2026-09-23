@@ -17,23 +17,27 @@ service cloud.firestore {
     function isNotDisabledUser() {
       return isAuthenticated() && (
         !isExistingUser() || (
-          getUserData().active != false &&
-          getUserData().isActive != false
+          (!('active' in getUserData()) || getUserData().active != false) &&
+          (!('isActive' in getUserData()) || getUserData().isActive != false)
         )
       );
     }
 
     function isActiveUser() {
       return isAuthenticated() && isExistingUser() && (
-        getUserData().active != false && 
-        getUserData().isActive != false
+        (!('active' in getUserData()) || getUserData().active != false) &&
+        (!('isActive' in getUserData()) || getUserData().isActive != false)
       );
     }
 
     function isAdmin() {
-      return isActiveUser() && (
-        getUserData().role == 'ADMIN' || 
-        getUserData().isSuperAdmin == true
+      return isAuthenticated() && isExistingUser() && (
+        (!('active' in getUserData()) || getUserData().active != false) &&
+        (!('isActive' in getUserData()) || getUserData().isActive != false) &&
+        (
+          ('role' in getUserData() && getUserData().role == 'ADMIN') || 
+          ('isSuperAdmin' in getUserData() && getUserData().isSuperAdmin == true)
+        )
       );
     }
 
