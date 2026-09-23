@@ -1121,6 +1121,9 @@ export function subscribeToRealtimeFirestore(
 // -------------------------------------------------------------
 export async function fetchPatientHistoricalDataFromCloud(patientId: string): Promise<void> {
   if (!patientId) return;
+  // Clear stale pagination cache for this patient so new queries can be made
+  resetCategoryPagination(patientId);
+
   try {
     const [
       notesSnap,
@@ -1155,47 +1158,101 @@ export async function fetchPatientHistoricalDataFromCloud(patientId: string): Pr
       const list: ClinicalNote[] = [];
       notesSnap.forEach(d => list.push(d.data() as ClinicalNote));
       await db.clinicalNotes.bulkPut(list);
+      paginationMap.set(`${patientId}_notes`, {
+        lastDoc: notesSnap.docs[notesSnap.docs.length - 1],
+        hasMore: notesSnap.docs.length >= 4,
+        isFetching: false
+      });
     }
+
     if (sbarsSnap && !sbarsSnap.empty) {
       const list: SbarHandoverReport[] = [];
       sbarsSnap.forEach(d => list.push(d.data() as SbarHandoverReport));
       await db.sbarHandovers.bulkPut(list);
+      paginationMap.set(`${patientId}_sbar`, {
+        lastDoc: sbarsSnap.docs[sbarsSnap.docs.length - 1],
+        hasMore: sbarsSnap.docs.length >= 4,
+        isFetching: false
+      });
     }
+
     if (ventsSnap && !ventsSnap.empty) {
       const list: VentilatorParameters[] = [];
       ventsSnap.forEach(d => list.push(d.data() as VentilatorParameters));
       await db.ventilators.bulkPut(list);
+      paginationMap.set(`${patientId}_vent`, {
+        lastDoc: ventsSnap.docs[ventsSnap.docs.length - 1],
+        hasMore: ventsSnap.docs.length >= 4,
+        isFetching: false
+      });
     }
+
     if (pumpsSnap && !pumpsSnap.empty) {
       const list: InfusionPumpLine[] = [];
       pumpsSnap.forEach(d => list.push(d.data() as InfusionPumpLine));
       await db.infusionPumps.bulkPut(list);
+      paginationMap.set(`${patientId}_pumps`, {
+        lastDoc: pumpsSnap.docs[pumpsSnap.docs.length - 1],
+        hasMore: pumpsSnap.docs.length >= 4,
+        isFetching: false
+      });
     }
+
     if (fluidsSnap && !fluidsSnap.empty) {
       const list: FluidBalance24H[] = [];
       fluidsSnap.forEach(d => list.push(d.data() as FluidBalance24H));
       await db.fluidBalances.bulkPut(list);
+      paginationMap.set(`${patientId}_fluids`, {
+        lastDoc: fluidsSnap.docs[fluidsSnap.docs.length - 1],
+        hasMore: fluidsSnap.docs.length >= 4,
+        isFetching: false
+      });
     }
+
     if (statLabsSnap && !statLabsSnap.empty) {
       const list: StatLabPanel[] = [];
       statLabsSnap.forEach(d => list.push(d.data() as StatLabPanel));
       await db.statLabs.bulkPut(list);
+      paginationMap.set(`${patientId}_labs_stat`, {
+        lastDoc: statLabsSnap.docs[statLabsSnap.docs.length - 1],
+        hasMore: statLabsSnap.docs.length >= 30,
+        isFetching: false
+      });
     }
+
     if (abxSnap && !abxSnap.empty) {
       const list: PatientAntibiotic[] = [];
       abxSnap.forEach(d => list.push(d.data() as PatientAntibiotic));
       await db.patientAntibiotics.bulkPut(list);
+      paginationMap.set(`${patientId}_labs_abx`, {
+        lastDoc: abxSnap.docs[abxSnap.docs.length - 1],
+        hasMore: abxSnap.docs.length >= 15,
+        isFetching: false
+      });
     }
+
     if (directLabsSnap && !directLabsSnap.empty) {
       const list: LabResultItem[] = [];
       directLabsSnap.forEach(d => list.push(d.data() as LabResultItem));
       await db.labResults.bulkPut(list);
+      paginationMap.set(`${patientId}_labs_direct`, {
+        lastDoc: directLabsSnap.docs[directLabsSnap.docs.length - 1],
+        hasMore: directLabsSnap.docs.length >= 60,
+        isFetching: false
+      });
     }
+
     if (directInvsSnap && !directInvsSnap.empty) {
       const list: InvestigationItem[] = [];
       directInvsSnap.forEach(d => list.push(d.data() as InvestigationItem));
       await db.investigations.bulkPut(list);
+      paginationMap.set(`${patientId}_investigations`, {
+        lastDoc: directInvsSnap.docs[directInvsSnap.docs.length - 1],
+        hasMore: directInvsSnap.docs.length >= 4,
+        isFetching: false
+      });
     }
+
     if (transfusionsSnap && !transfusionsSnap.empty) {
       const list: TransfusionTracker[] = [];
       transfusionsSnap.forEach(d => list.push(d.data() as TransfusionTracker));
@@ -1209,6 +1266,121 @@ export async function fetchPatientHistoricalDataFromCloud(patientId: string): Pr
   } catch (err) {
     handleFirestoreError(err, OperationType.GET, `patient/${patientId}`);
   }
+}
+
+/**
+ * Real-time listener scoped specifically to the currently active patient's flowsheet.
+ * Subscribes to real-time updates for active patient clinical records (labs, abx, notes, vents, pumps, fluids, invs)
+ * while keeping Lazy Loading principles intact (only active open bed gets realtime stream, capped at small limit).
+ */
+export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: () => void): () => void {
+  if (!patientId) return () => {};
+
+  const unsubs: Unsubscribe[] = [];
+
+  const notify = () => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('icu-data-updated'));
+    }
+    if (onUpdate) onUpdate();
+  };
+
+  try {
+    // 1. STAT Labs (up to 30 newest)
+    const statQ = query(collection(firestore, 'statLabs'), where('patientId', '==', patientId), orderBy('timestamp', 'desc'), limit(30));
+    unsubs.push(onSnapshot(statQ, async (snap) => {
+      const items: StatLabPanel[] = [];
+      snap.forEach(d => items.push(d.data() as StatLabPanel));
+      if (items.length > 0) {
+        await db.statLabs.bulkPut(items);
+        notify();
+      }
+    }, () => {}));
+
+    // 2. Direct Lab Results (up to 60 newest)
+    const labsQ = query(collection(firestore, 'labResults'), where('patientId', '==', patientId), orderBy('timestamp', 'desc'), limit(60));
+    unsubs.push(onSnapshot(labsQ, async (snap) => {
+      const items: LabResultItem[] = [];
+      snap.forEach(d => items.push(d.data() as LabResultItem));
+      if (items.length > 0) {
+        await db.labResults.bulkPut(items);
+        notify();
+      }
+    }, () => {}));
+
+    // 3. Antibiotics (up to 15 newest)
+    const abxQ = query(collection(firestore, 'patientAntibiotics'), where('patientId', '==', patientId), orderBy('startDate', 'desc'), limit(15));
+    unsubs.push(onSnapshot(abxQ, async (snap) => {
+      const items: PatientAntibiotic[] = [];
+      snap.forEach(d => items.push(d.data() as PatientAntibiotic));
+      if (items.length > 0) {
+        await db.patientAntibiotics.bulkPut(items);
+        notify();
+      }
+    }, () => {}));
+
+    // 4. Clinical Notes (up to 10 newest)
+    const notesQ = query(collection(firestore, 'clinicalNotes'), where('patientId', '==', patientId), orderBy('timestamp', 'desc'), limit(10));
+    unsubs.push(onSnapshot(notesQ, async (snap) => {
+      const items: ClinicalNote[] = [];
+      snap.forEach(d => items.push(d.data() as ClinicalNote));
+      if (items.length > 0) {
+        await db.clinicalNotes.bulkPut(items);
+        notify();
+      }
+    }, () => {}));
+
+    // 5. Ventilators (up to 10 newest)
+    const ventQ = query(collection(firestore, 'ventilators'), where('patientId', '==', patientId), orderBy('timestamp', 'desc'), limit(10));
+    unsubs.push(onSnapshot(ventQ, async (snap) => {
+      const items: VentilatorParameters[] = [];
+      snap.forEach(d => items.push(d.data() as VentilatorParameters));
+      if (items.length > 0) {
+        await db.ventilators.bulkPut(items);
+        notify();
+      }
+    }, () => {}));
+
+    // 6. Infusion Pumps (up to 10 newest)
+    const pumpsQ = query(collection(firestore, 'infusionPumps'), where('patientId', '==', patientId), orderBy('id', 'desc'), limit(10));
+    unsubs.push(onSnapshot(pumpsQ, async (snap) => {
+      const items: InfusionPumpLine[] = [];
+      snap.forEach(d => items.push(d.data() as InfusionPumpLine));
+      if (items.length > 0) {
+        await db.infusionPumps.bulkPut(items);
+        notify();
+      }
+    }, () => {}));
+
+    // 7. Fluid Balances (up to 10 newest)
+    const fluidsQ = query(collection(firestore, 'fluidBalances'), where('patientId', '==', patientId), orderBy('periodStartTimestamp', 'desc'), limit(10));
+    unsubs.push(onSnapshot(fluidsQ, async (snap) => {
+      const items: FluidBalance24H[] = [];
+      snap.forEach(d => items.push(d.data() as FluidBalance24H));
+      if (items.length > 0) {
+        await db.fluidBalances.bulkPut(items);
+        notify();
+      }
+    }, () => {}));
+
+    // 8. Investigations (up to 10 newest)
+    const invQ = query(collection(firestore, 'investigations'), where('patientId', '==', patientId), orderBy('timestamp', 'desc'), limit(10));
+    unsubs.push(onSnapshot(invQ, async (snap) => {
+      const items: InvestigationItem[] = [];
+      snap.forEach(d => items.push(d.data() as InvestigationItem));
+      if (items.length > 0) {
+        await db.investigations.bulkPut(items);
+        notify();
+      }
+    }, () => {}));
+
+  } catch (err) {
+    console.warn(`Could not subscribe to active patient ${patientId}:`, err);
+  }
+
+  return () => {
+    unsubs.forEach(unsub => unsub());
+  };
 }
 
 interface CategoryCursorState {
@@ -1241,6 +1413,108 @@ export async function fetchFullCategoryFromCloud(
   pageSize: number = 10
 ): Promise<void> {
   if (!patientId) return;
+
+  if (category === 'labs') {
+    const statKey = `${patientId}_labs_stat`;
+    const directKey = `${patientId}_labs_direct`;
+    const abxKey = `${patientId}_labs_abx`;
+
+    const statState = paginationMap.get(statKey) || { lastDoc: null, hasMore: true, isFetching: false };
+    const directState = paginationMap.get(directKey) || { lastDoc: null, hasMore: true, isFetching: false };
+    const abxState = paginationMap.get(abxKey) || { lastDoc: null, hasMore: true, isFetching: false };
+
+    // Check if all sub-collections have no more data or are fetching
+    if ((!statState.hasMore && !directState.hasMore && !abxState.hasMore) ||
+        (statState.isFetching || directState.isFetching || abxState.isFetching)) {
+      return;
+    }
+
+    statState.isFetching = true;
+    directState.isFetching = true;
+    abxState.isFetching = true;
+    paginationMap.set(statKey, statState);
+    paginationMap.set(directKey, directState);
+    paginationMap.set(abxKey, abxState);
+
+    try {
+      const promises = [];
+
+      // statLabs query with independent statState cursor
+      if (statState.hasMore) {
+        let qStat = query(collection(firestore, 'statLabs'), where('patientId', '==', patientId), orderBy('timestamp', 'desc'));
+        qStat = statState.lastDoc ? query(qStat, startAfter(statState.lastDoc), limit(pageSize)) : query(qStat, limit(pageSize));
+        promises.push(getDocs(qStat).then(snap => ({ type: 'stat', snap })).catch(() => ({ type: 'stat', snap: null })));
+      } else {
+        promises.push(Promise.resolve({ type: 'stat', snap: null }));
+      }
+
+      // labResults query with independent directState cursor
+      if (directState.hasMore) {
+        let qDirect = query(collection(firestore, 'labResults'), where('patientId', '==', patientId), orderBy('timestamp', 'desc'));
+        qDirect = directState.lastDoc ? query(qDirect, startAfter(directState.lastDoc), limit(pageSize)) : query(qDirect, limit(pageSize));
+        promises.push(getDocs(qDirect).then(snap => ({ type: 'direct', snap })).catch(() => ({ type: 'direct', snap: null })));
+      } else {
+        promises.push(Promise.resolve({ type: 'direct', snap: null }));
+      }
+
+      // patientAntibiotics query with independent abxState cursor
+      if (abxState.hasMore) {
+        let qAbx = query(collection(firestore, 'patientAntibiotics'), where('patientId', '==', patientId), orderBy('startDate', 'desc'));
+        qAbx = abxState.lastDoc ? query(qAbx, startAfter(abxState.lastDoc), limit(pageSize)) : query(qAbx, limit(pageSize));
+        promises.push(getDocs(qAbx).then(snap => ({ type: 'abx', snap })).catch(() => ({ type: 'abx', snap: null })));
+      } else {
+        promises.push(Promise.resolve({ type: 'abx', snap: null }));
+      }
+
+      const results = await Promise.all(promises);
+
+      for (const res of results) {
+        if (res.type === 'stat' && res.snap && !res.snap.empty) {
+          const list: StatLabPanel[] = [];
+          res.snap.forEach(d => list.push(d.data() as StatLabPanel));
+          await db.statLabs.bulkPut(list);
+          statState.lastDoc = res.snap.docs[res.snap.docs.length - 1];
+          if (res.snap.docs.length < pageSize) statState.hasMore = false;
+        } else if (res.type === 'stat' && res.snap) {
+          statState.hasMore = false;
+        }
+
+        if (res.type === 'direct' && res.snap && !res.snap.empty) {
+          const list: LabResultItem[] = [];
+          res.snap.forEach(d => list.push(d.data() as LabResultItem));
+          await db.labResults.bulkPut(list);
+          directState.lastDoc = res.snap.docs[res.snap.docs.length - 1];
+          if (res.snap.docs.length < pageSize) directState.hasMore = false;
+        } else if (res.type === 'direct' && res.snap) {
+          directState.hasMore = false;
+        }
+
+        if (res.type === 'abx' && res.snap && !res.snap.empty) {
+          const list: PatientAntibiotic[] = [];
+          res.snap.forEach(d => list.push(d.data() as PatientAntibiotic));
+          await db.patientAntibiotics.bulkPut(list);
+          abxState.lastDoc = res.snap.docs[res.snap.docs.length - 1];
+          if (res.snap.docs.length < pageSize) abxState.hasMore = false;
+        } else if (res.type === 'abx' && res.snap) {
+          abxState.hasMore = false;
+        }
+      }
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('icu-data-updated'));
+      }
+    } catch (err) {
+      console.warn(`Could not fetch full labs category from cloud:`, err);
+    } finally {
+      statState.isFetching = false;
+      directState.isFetching = false;
+      abxState.isFetching = false;
+      paginationMap.set(statKey, statState);
+      paginationMap.set(directKey, directState);
+      paginationMap.set(abxKey, abxState);
+    }
+    return;
+  }
 
   const key = `${patientId}_${category}`;
   const state = paginationMap.get(key) || { lastDoc: null, hasMore: true, isFetching: false };
@@ -1377,55 +1651,6 @@ export async function fetchFullCategoryFromCloud(
             state.hasMore = false;
           }
         } else {
-          state.hasMore = false;
-        }
-        break;
-      }
-      case 'labs': {
-        let qStat = query(collection(firestore, 'statLabs'), where('patientId', '==', patientId), orderBy('timestamp', 'desc'));
-        let qDirect = query(collection(firestore, 'labResults'), where('patientId', '==', patientId), orderBy('timestamp', 'desc'));
-        let qAbx = query(collection(firestore, 'patientAntibiotics'), where('patientId', '==', patientId), orderBy('startDate', 'desc'));
-
-        if (state.lastDoc) {
-          qStat = query(qStat, startAfter(state.lastDoc), limit(pageSize));
-          qDirect = query(qDirect, startAfter(state.lastDoc), limit(pageSize));
-          qAbx = query(qAbx, startAfter(state.lastDoc), limit(pageSize));
-        } else {
-          qStat = query(qStat, limit(pageSize));
-          qDirect = query(qDirect, limit(pageSize));
-          qAbx = query(qAbx, limit(pageSize));
-        }
-
-        const [statSnap, directSnap, abxSnap] = await Promise.all([
-          getDocs(qStat).catch(() => null),
-          getDocs(qDirect).catch(() => null),
-          getDocs(qAbx).catch(() => null),
-        ]);
-
-        let hasNewData = false;
-
-        if (statSnap && !statSnap.empty) {
-          hasNewData = true;
-          const list: StatLabPanel[] = [];
-          statSnap.forEach(d => list.push(d.data() as StatLabPanel));
-          await db.statLabs.bulkPut(list);
-          state.lastDoc = statSnap.docs[statSnap.docs.length - 1];
-        }
-        if (directSnap && !directSnap.empty) {
-          hasNewData = true;
-          const list: LabResultItem[] = [];
-          directSnap.forEach(d => list.push(d.data() as LabResultItem));
-          await db.labResults.bulkPut(list);
-          state.lastDoc = directSnap.docs[directSnap.docs.length - 1];
-        }
-        if (abxSnap && !abxSnap.empty) {
-          hasNewData = true;
-          const list: PatientAntibiotic[] = [];
-          abxSnap.forEach(d => list.push(d.data() as PatientAntibiotic));
-          await db.patientAntibiotics.bulkPut(list);
-        }
-
-        if (!hasNewData) {
           state.hasMore = false;
         }
         break;
@@ -1649,6 +1874,7 @@ export async function syncSbarToCloud(sbar: SbarHandoverReport): Promise<void> {
 
 export async function syncClinicalNoteToCloud(note: ClinicalNote): Promise<void> {
   try {
+    if (note.patientId) resetCategoryPagination(note.patientId);
     const noteRef = doc(firestore, 'clinicalNotes', note.id);
     await setDoc(noteRef, sanitizeForFirestore(note), { merge: true });
   } catch (err) {
@@ -1658,6 +1884,7 @@ export async function syncClinicalNoteToCloud(note: ClinicalNote): Promise<void>
 
 export async function syncVentilatorToCloud(vent: VentilatorParameters): Promise<void> {
   try {
+    if (vent.patientId) resetCategoryPagination(vent.patientId);
     const ventRef = doc(firestore, 'ventilators', vent.id);
     await setDoc(ventRef, sanitizeForFirestore(vent), { merge: true });
   } catch (err) {
@@ -1667,6 +1894,7 @@ export async function syncVentilatorToCloud(vent: VentilatorParameters): Promise
 
 export async function syncPumpToCloud(pump: InfusionPumpLine): Promise<void> {
   try {
+    if (pump.patientId) resetCategoryPagination(pump.patientId);
     const pumpRef = doc(firestore, 'infusionPumps', pump.id);
     await setDoc(pumpRef, sanitizeForFirestore(pump), { merge: true });
     // Mirror to legacy collection name for cross-version compatibility
@@ -1696,6 +1924,7 @@ export async function deleteVentilatorFromCloud(ventId: string): Promise<void> {
 
 export async function syncFluidBalanceToCloud(fluid: FluidBalance24H): Promise<void> {
   try {
+    if (fluid.patientId) resetCategoryPagination(fluid.patientId);
     const fluidRef = doc(firestore, 'fluidBalances', fluid.id);
     await setDoc(fluidRef, fluid, { merge: true });
     const fluidRefLegacy = doc(firestore, 'fluid_balances', fluid.id);
@@ -1716,6 +1945,7 @@ export async function deleteFluidBalanceFromCloud(fluidId: string): Promise<void
 
 export async function syncStatLabsToCloud(labs: StatLabPanel): Promise<void> {
   try {
+    if (labs.patientId) resetCategoryPagination(labs.patientId);
     const labsRef = doc(firestore, 'statLabs', labs.id);
     await setDoc(labsRef, labs, { merge: true });
   } catch (err) {
@@ -1733,6 +1963,7 @@ export async function deleteStatLabFromCloud(labId: string): Promise<void> {
 
 export async function syncPatientAntibioticToCloud(abx: PatientAntibiotic): Promise<void> {
   try {
+    if (abx.patientId) resetCategoryPagination(abx.patientId);
     const abxRef = doc(firestore, 'patientAntibiotics', abx.id);
     await setDoc(abxRef, abx, { merge: true });
   } catch (err) {
@@ -1750,6 +1981,7 @@ export async function deletePatientAntibioticFromCloud(abxId: string): Promise<v
 
 export async function syncLabResultToCloud(labItem: LabResultItem): Promise<void> {
   try {
+    if (labItem.patientId) resetCategoryPagination(labItem.patientId);
     const docRef = doc(firestore, 'medical_records', labItem.id);
     await setDoc(docRef, {
       ...labItem,
@@ -1771,6 +2003,7 @@ export async function deleteLabResultFromCloud(labId: string): Promise<void> {
 
 export async function syncInvestigationToCloud(invItem: InvestigationItem): Promise<void> {
   try {
+    if (invItem.patientId) resetCategoryPagination(invItem.patientId);
     const docRef = doc(firestore, 'medical_records', invItem.id);
     await setDoc(docRef, {
       ...invItem,

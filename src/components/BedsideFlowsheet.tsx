@@ -69,7 +69,7 @@ import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
 import { useAuth } from '../services/AuthContext.tsx';
 import { useAppNotifications } from '../services/NotificationContext.tsx';
-import { syncStatLabsToCloud, deleteStatLabFromCloud, syncLabResultToCloud, syncPatientToCloud, syncPumpToCloud, deletePumpFromCloud, firestore, fetchPatientHistoricalDataFromCloud, fetchFullCategoryFromCloud } from '../services/firebase.ts';
+import { syncStatLabsToCloud, deleteStatLabFromCloud, syncLabResultToCloud, syncPatientToCloud, syncPumpToCloud, deletePumpFromCloud, firestore, fetchPatientHistoricalDataFromCloud, fetchFullCategoryFromCloud, subscribeToActivePatientFlowsheet } from '../services/firebase.ts';
 import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { FullPageAdmission } from './FullPageAdmission.tsx';
 import { LabFlowsheetSection } from './LabFlowsheetSection.tsx';
@@ -303,10 +303,15 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
     setPrimaryDiagnosisArInput(patient.primaryDiagnosisAr || '');
     setIsHistoryEditing(false);
 
+    let unsubActivePatientSync: (() => void) | null = null;
     if (patient?.id) {
       fetchPatientHistoricalDataFromCloud(patient.id).then(() => {
         loadBedsideData();
       }).catch(() => null);
+
+      unsubActivePatientSync = subscribeToActivePatientFlowsheet(patient.id, () => {
+        loadBedsideData();
+      });
     }
     loadBedsideData();
     const handleDataUpdate = () => loadBedsideData();
@@ -315,6 +320,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       loadBedsideData();
     }, 2500);
     return () => {
+      if (unsubActivePatientSync) unsubActivePatientSync();
       clearInterval(interval);
       window.removeEventListener('icu-data-updated', handleDataUpdate);
     };
