@@ -1225,6 +1225,105 @@ export function subscribeToRealtimeFirestore(
     }, (err) => handleFirestoreError(err, OperationType.GET, 'sbarHandovers'));
     unsubscribers.push(unsubSbar);
 
+    // 5. Global Real-Time Sync: Patient Antibiotics
+    try {
+      const abxCol = collection(firestore, 'patientAntibiotics');
+      const abxQuery = query(abxCol, limit(30));
+      const unsubAbx = onSnapshot(abxQuery, async (snapshot) => {
+        for (const change of snapshot.docChanges()) {
+          if (change.type === 'added' || change.type === 'modified') {
+            await db.patientAntibiotics.put(change.doc.data() as PatientAntibiotic);
+          } else if (change.type === 'removed') {
+            await db.patientAntibiotics.delete(change.doc.id);
+          }
+        }
+        notifyUpdate();
+      }, () => {});
+      unsubscribers.push(unsubAbx);
+    } catch {}
+
+    // 6. Global Real-Time Sync: Infusion Pumps
+    try {
+      const pumpsCol = collection(firestore, 'infusionPumps');
+      const pumpsQuery = query(pumpsCol, limit(30));
+      const unsubPumps = onSnapshot(pumpsQuery, async (snapshot) => {
+        for (const change of snapshot.docChanges()) {
+          if (change.type === 'added' || change.type === 'modified') {
+            await db.infusionPumps.put(change.doc.data() as InfusionPumpLine);
+          } else if (change.type === 'removed') {
+            await db.infusionPumps.delete(change.doc.id);
+          }
+        }
+        notifyUpdate();
+      }, () => {});
+      unsubscribers.push(unsubPumps);
+    } catch {}
+
+    // 7. Global Real-Time Sync: Ventilator Settings
+    try {
+      const ventCol = collection(firestore, 'ventilators');
+      const ventQuery = query(ventCol, limit(20));
+      const unsubVent = onSnapshot(ventQuery, async (snapshot) => {
+        for (const change of snapshot.docChanges()) {
+          if (change.type === 'added' || change.type === 'modified') {
+            await db.ventilators.put(change.doc.data() as VentilatorParameters);
+          } else if (change.type === 'removed') {
+            await db.ventilators.delete(change.doc.id);
+          }
+        }
+        notifyUpdate();
+      }, () => {});
+      unsubscribers.push(unsubVent);
+    } catch {}
+
+    // 8. Global Real-Time Sync: Fluid Balances
+    try {
+      const fluidsCol = collection(firestore, 'fluidBalances');
+      const fluidsQuery = query(fluidsCol, limit(20));
+      const unsubFluids = onSnapshot(fluidsQuery, async (snapshot) => {
+        for (const change of snapshot.docChanges()) {
+          if (change.type === 'added' || change.type === 'modified') {
+            await db.fluidBalances.put(change.doc.data() as FluidBalance24H);
+          } else if (change.type === 'removed') {
+            await db.fluidBalances.delete(change.doc.id);
+          }
+        }
+        notifyUpdate();
+      }, () => {});
+      unsubscribers.push(unsubFluids);
+    } catch {}
+
+    // 9. Global Real-Time Sync: Clinical Notes & Addendums
+    try {
+      const notesCol = collection(firestore, 'clinicalNotes');
+      const notesQuery = query(notesCol, limit(20));
+      const unsubNotes = onSnapshot(notesQuery, async (snapshot) => {
+        for (const change of snapshot.docChanges()) {
+          if (change.type === 'added' || change.type === 'modified') {
+            await db.clinicalNotes.put(change.doc.data() as ClinicalNote);
+          } else if (change.type === 'removed') {
+            await db.clinicalNotes.delete(change.doc.id);
+          }
+        }
+        notifyUpdate();
+      }, () => {});
+      unsubscribers.push(unsubNotes);
+
+      const addCol = collection(firestore, 'addendums');
+      const addQuery = query(addCol, limit(20));
+      const unsubAdd = onSnapshot(addQuery, async (snapshot) => {
+        for (const change of snapshot.docChanges()) {
+          if (change.type === 'added' || change.type === 'modified') {
+            await db.addendums.put(change.doc.data() as Addendum);
+          } else if (change.type === 'removed') {
+            await db.addendums.delete(change.doc.id);
+          }
+        }
+        notifyUpdate();
+      }, () => {});
+      unsubscribers.push(unsubAdd);
+    } catch {}
+
   } catch (e) {
     console.warn('Could not establish Firestore real-time listener:', e);
   }
@@ -1235,7 +1334,7 @@ export function subscribeToRealtimeFirestore(
 }
 
 // -------------------------------------------------------------
-// On-Demand Fetch for Patient Historical Records
+// On-Demand Fetch for Patient Historical Records (Strict 4 Records Limit)
 // -------------------------------------------------------------
 export async function fetchPatientHistoricalDataFromCloud(patientId: string): Promise<void> {
   if (!patientId) return;
@@ -1257,19 +1356,38 @@ export async function fetchPatientHistoricalDataFromCloud(patientId: string): Pr
       transfusionsSnap,
       addendumsSnap
     ] = await Promise.all([
-      getDocs(query(collection(firestore, 'clinicalNotes'), where('patientId', '==', patientId), orderBy('timestamp', 'desc'), limit(4))).catch(() => null),
-      getDocs(query(collection(firestore, 'sbarHandovers'), where('patientId', '==', patientId), orderBy('createdAt', 'desc'), limit(4))).catch(() => null),
-      getDocs(query(collection(firestore, 'ventilators'), where('patientId', '==', patientId), orderBy('timestamp', 'desc'), limit(4))).catch(() => null),
-      getDocs(query(collection(firestore, 'infusionPumps'), where('patientId', '==', patientId), orderBy('id', 'desc'), limit(4))).catch(() => null),
-      getDocs(query(collection(firestore, 'fluidBalances'), where('patientId', '==', patientId), orderBy('periodStartTimestamp', 'desc'), limit(4))).catch(() => null),
-      // Exception: Lab Results & STAT Labs keep up to 30/60 records with correct orderBy to support side-by-side comparative panel views
-      getDocs(query(collection(firestore, 'statLabs'), where('patientId', '==', patientId), orderBy('timestamp', 'desc'), limit(30))).catch(() => null),
-      getDocs(query(collection(firestore, 'patientAntibiotics'), where('patientId', '==', patientId), orderBy('startDate', 'desc'), limit(15))).catch(() => null),
-      getDocs(query(collection(firestore, 'medical_records'), where('patientId', '==', patientId), orderBy('createdAt', 'desc'), limit(4))).catch(() => null),
-      getDocs(query(collection(firestore, 'labResults'), where('patientId', '==', patientId), orderBy('timestamp', 'desc'), limit(60))).catch(() => null),
-      getDocs(query(collection(firestore, 'investigations'), where('patientId', '==', patientId), orderBy('timestamp', 'desc'), limit(4))).catch(() => null),
-      getDocs(query(collection(firestore, 'transfusions'), where('patientId', '==', patientId), orderBy('id', 'desc'), limit(4))).catch(() => null),
-      getDocs(query(collection(firestore, 'addendums'), where('patientId', '==', patientId), orderBy('timestamp', 'desc'), limit(4))).catch(() => null),
+      getDocs(query(collection(firestore, 'clinicalNotes'), where('patientId', '==', patientId), orderBy('timestamp', 'desc'), limit(4))).catch(() => 
+        getDocs(query(collection(firestore, 'clinicalNotes'), where('patientId', '==', patientId), limit(4))).catch(() => null)
+      ),
+      getDocs(query(collection(firestore, 'sbarHandovers'), where('patientId', '==', patientId), orderBy('createdAt', 'desc'), limit(4))).catch(() => 
+        getDocs(query(collection(firestore, 'sbarHandovers'), where('patientId', '==', patientId), limit(4))).catch(() => null)
+      ),
+      getDocs(query(collection(firestore, 'ventilators'), where('patientId', '==', patientId), orderBy('timestamp', 'desc'), limit(4))).catch(() => 
+        getDocs(query(collection(firestore, 'ventilators'), where('patientId', '==', patientId), limit(4))).catch(() => null)
+      ),
+      getDocs(query(collection(firestore, 'infusionPumps'), where('patientId', '==', patientId), limit(4))).catch(() => null),
+      getDocs(query(collection(firestore, 'fluidBalances'), where('patientId', '==', patientId), orderBy('periodStartTimestamp', 'desc'), limit(4))).catch(() => 
+        getDocs(query(collection(firestore, 'fluidBalances'), where('patientId', '==', patientId), limit(4))).catch(() => null)
+      ),
+      getDocs(query(collection(firestore, 'statLabs'), where('patientId', '==', patientId), orderBy('timestamp', 'desc'), limit(4))).catch(() => 
+        getDocs(query(collection(firestore, 'statLabs'), where('patientId', '==', patientId), limit(4))).catch(() => null)
+      ),
+      getDocs(query(collection(firestore, 'patientAntibiotics'), where('patientId', '==', patientId), orderBy('startDate', 'desc'), limit(4))).catch(() => 
+        getDocs(query(collection(firestore, 'patientAntibiotics'), where('patientId', '==', patientId), limit(4))).catch(() => null)
+      ),
+      getDocs(query(collection(firestore, 'medical_records'), where('patientId', '==', patientId), orderBy('createdAt', 'desc'), limit(4))).catch(() => 
+        getDocs(query(collection(firestore, 'medical_records'), where('patientId', '==', patientId), limit(4))).catch(() => null)
+      ),
+      getDocs(query(collection(firestore, 'labResults'), where('patientId', '==', patientId), orderBy('timestamp', 'desc'), limit(4))).catch(() => 
+        getDocs(query(collection(firestore, 'labResults'), where('patientId', '==', patientId), limit(4))).catch(() => null)
+      ),
+      getDocs(query(collection(firestore, 'investigations'), where('patientId', '==', patientId), orderBy('timestamp', 'desc'), limit(4))).catch(() => 
+        getDocs(query(collection(firestore, 'investigations'), where('patientId', '==', patientId), limit(4))).catch(() => null)
+      ),
+      getDocs(query(collection(firestore, 'transfusions'), where('patientId', '==', patientId), limit(4))).catch(() => null),
+      getDocs(query(collection(firestore, 'addendums'), where('patientId', '==', patientId), orderBy('timestamp', 'desc'), limit(4))).catch(() => 
+        getDocs(query(collection(firestore, 'addendums'), where('patientId', '==', patientId), limit(4))).catch(() => null)
+      ),
     ]);
 
     if (notesSnap && !notesSnap.empty) {
@@ -1333,7 +1451,7 @@ export async function fetchPatientHistoricalDataFromCloud(patientId: string): Pr
       await db.statLabs.bulkPut(list);
       paginationMap.set(`${patientId}_labs_stat`, {
         lastDoc: statLabsSnap.docs[statLabsSnap.docs.length - 1],
-        hasMore: statLabsSnap.docs.length >= 30,
+        hasMore: statLabsSnap.docs.length >= 4,
         isFetching: false
       });
     }
@@ -1342,9 +1460,9 @@ export async function fetchPatientHistoricalDataFromCloud(patientId: string): Pr
       const list: PatientAntibiotic[] = [];
       abxSnap.forEach(d => list.push(d.data() as PatientAntibiotic));
       await db.patientAntibiotics.bulkPut(list);
-      paginationMap.set(`${patientId}_labs_abx`, {
+      paginationMap.set(`${patientId}_abx`, {
         lastDoc: abxSnap.docs[abxSnap.docs.length - 1],
-        hasMore: abxSnap.docs.length >= 15,
+        hasMore: abxSnap.docs.length >= 4,
         isFetching: false
       });
     }
@@ -1355,7 +1473,7 @@ export async function fetchPatientHistoricalDataFromCloud(patientId: string): Pr
       await db.labResults.bulkPut(list);
       paginationMap.set(`${patientId}_labs_direct`, {
         lastDoc: directLabsSnap.docs[directLabsSnap.docs.length - 1],
-        hasMore: directLabsSnap.docs.length >= 60,
+        hasMore: directLabsSnap.docs.length >= 4,
         isFetching: false
       });
     }
@@ -1432,8 +1550,8 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
   };
 
   try {
-    // 1. STAT Labs (up to 30 newest)
-    const statQ = query(collection(firestore, 'statLabs'), where('patientId', '==', patientId), orderBy('timestamp', 'desc'), limit(30));
+    // 1. STAT Labs
+    const statQ = query(collection(firestore, 'statLabs'), where('patientId', '==', patientId), limit(20));
     unsubs.push(onSnapshot(statQ, async (snap) => {
       for (const change of snap.docChanges()) {
         if (change.type === 'added' || change.type === 'modified') {
@@ -1445,8 +1563,8 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
       notify();
     }, () => {}));
 
-    // 2. Direct Lab Results from labResults collection (up to 40 newest)
-    const labsQ = query(collection(firestore, 'labResults'), where('patientId', '==', patientId), orderBy('timestamp', 'desc'), limit(40));
+    // 2. Direct Lab Results from labResults collection
+    const labsQ = query(collection(firestore, 'labResults'), where('patientId', '==', patientId), limit(20));
     unsubs.push(onSnapshot(labsQ, async (snap) => {
       for (const change of snap.docChanges()) {
         if (change.type === 'added' || change.type === 'modified') {
@@ -1458,13 +1576,8 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
       notify();
     }, () => {}));
 
-    // 3. Medical Records (Unified Labs & Investigations written to medical_records) (up to 30 newest ordered by createdAt desc)
-    const medRecQ = query(
-      collection(firestore, 'medical_records'), 
-      where('patientId', '==', patientId), 
-      orderBy('createdAt', 'desc'), 
-      limit(30)
-    );
+    // 3. Medical Records (Unified Labs & Investigations)
+    const medRecQ = query(collection(firestore, 'medical_records'), where('patientId', '==', patientId), limit(20));
     unsubs.push(onSnapshot(medRecQ, async (snap) => {
       for (const change of snap.docChanges()) {
         const data = change.doc.data();
@@ -1483,37 +1596,10 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
         }
       }
       notify();
-    }, (err) => {
-      console.warn('medical_records query with orderBy failed, falling back to unordered limit query:', err);
-      try {
-        const fallbackMedRecQ = query(collection(firestore, 'medical_records'), where('patientId', '==', patientId), limit(30));
-        const fallbackUnsub = onSnapshot(fallbackMedRecQ, async (snap) => {
-          for (const change of snap.docChanges()) {
-            const data = change.doc.data();
-            if (change.type === 'added' || change.type === 'modified') {
-              if (data.recordType === 'INVESTIGATION') {
-                await db.investigations.put(data as InvestigationItem);
-              } else {
-                await db.labResults.put(data as LabResultItem);
-              }
-            } else if (change.type === 'removed') {
-              if (data.recordType === 'INVESTIGATION') {
-                await db.investigations.delete(change.doc.id);
-              } else {
-                await db.labResults.delete(change.doc.id);
-              }
-            }
-          }
-          notify();
-        }, () => {});
-        unsubs.push(fallbackUnsub);
-      } catch (fbErr) {
-        console.warn('Fallback medical_records query failed:', fbErr);
-      }
-    }));
+    }, () => {}));
 
-    // 4. Antibiotics (active patient antibiotics up to 15)
-    const abxQ = query(collection(firestore, 'patientAntibiotics'), where('patientId', '==', patientId), orderBy('startDate', 'desc'), limit(15));
+    // 4. Antibiotics (active patient antibiotics)
+    const abxQ = query(collection(firestore, 'patientAntibiotics'), where('patientId', '==', patientId), limit(20));
     unsubs.push(onSnapshot(abxQ, async (snap) => {
       for (const change of snap.docChanges()) {
         if (change.type === 'added' || change.type === 'modified') {
@@ -1525,8 +1611,8 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
       notify();
     }, () => {}));
 
-    // 5. Clinical Notes (up to 4 newest - lazy loading for older notes)
-    const notesQ = query(collection(firestore, 'clinicalNotes'), where('patientId', '==', patientId), orderBy('timestamp', 'desc'), limit(4));
+    // 5. Clinical Notes & Addendums
+    const notesQ = query(collection(firestore, 'clinicalNotes'), where('patientId', '==', patientId), limit(20));
     unsubs.push(onSnapshot(notesQ, async (snap) => {
       for (const change of snap.docChanges()) {
         if (change.type === 'added' || change.type === 'modified') {
@@ -1538,8 +1624,20 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
       notify();
     }, () => {}));
 
-    // 6. Ventilators (latest reading limit 1 sorted by timestamp)
-    const ventQ = query(collection(firestore, 'ventilators'), where('patientId', '==', patientId), orderBy('timestamp', 'desc'), limit(1));
+    const addQ = query(collection(firestore, 'addendums'), where('patientId', '==', patientId), limit(20));
+    unsubs.push(onSnapshot(addQ, async (snap) => {
+      for (const change of snap.docChanges()) {
+        if (change.type === 'added' || change.type === 'modified') {
+          await db.addendums.put(change.doc.data() as Addendum);
+        } else if (change.type === 'removed') {
+          await db.addendums.delete(change.doc.id);
+        }
+      }
+      notify();
+    }, () => {}));
+
+    // 6. Ventilators
+    const ventQ = query(collection(firestore, 'ventilators'), where('patientId', '==', patientId), limit(10));
     unsubs.push(onSnapshot(ventQ, async (snap) => {
       for (const change of snap.docChanges()) {
         if (change.type === 'added' || change.type === 'modified') {
@@ -1551,8 +1649,8 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
       notify();
     }, () => {}));
 
-    // 7. Infusion Pumps (unified infusionPumps collection, limit 10)
-    const pumpsQ = query(collection(firestore, 'infusionPumps'), where('patientId', '==', patientId), orderBy('id', 'desc'), limit(10));
+    // 7. Infusion Pumps
+    const pumpsQ = query(collection(firestore, 'infusionPumps'), where('patientId', '==', patientId), limit(20));
     unsubs.push(onSnapshot(pumpsQ, async (snap) => {
       for (const change of snap.docChanges()) {
         if (change.type === 'added' || change.type === 'modified') {
@@ -1564,8 +1662,8 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
       notify();
     }, () => {}));
 
-    // 8. Fluid Balances (latest records today & yesterday, limit 4)
-    const fluidsQ = query(collection(firestore, 'fluidBalances'), where('patientId', '==', patientId), orderBy('periodStartTimestamp', 'desc'), limit(4));
+    // 8. Fluid Balances
+    const fluidsQ = query(collection(firestore, 'fluidBalances'), where('patientId', '==', patientId), limit(20));
     unsubs.push(onSnapshot(fluidsQ, async (snap) => {
       for (const change of snap.docChanges()) {
         if (change.type === 'added' || change.type === 'modified') {
@@ -1577,8 +1675,8 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
       notify();
     }, () => {}));
 
-    // 9. Investigations (up to 4 newest)
-    const invQ = query(collection(firestore, 'investigations'), where('patientId', '==', patientId), orderBy('timestamp', 'desc'), limit(4));
+    // 9. Investigations
+    const invQ = query(collection(firestore, 'investigations'), where('patientId', '==', patientId), limit(20));
     unsubs.push(onSnapshot(invQ, async (snap) => {
       for (const change of snap.docChanges()) {
         if (change.type === 'added' || change.type === 'modified') {
@@ -1590,8 +1688,8 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
       notify();
     }, () => {}));
 
-    // 10. Patient SBAR handovers (up to 4 newest for this active patient)
-    const sbarPatQ = query(collection(firestore, 'sbarHandovers'), where('patientId', '==', patientId), orderBy('createdAt', 'desc'), limit(4));
+    // 10. Patient SBAR handovers
+    const sbarPatQ = query(collection(firestore, 'sbarHandovers'), where('patientId', '==', patientId), limit(20));
     unsubs.push(onSnapshot(sbarPatQ, async (snap) => {
       for (const change of snap.docChanges()) {
         if (change.type === 'added' || change.type === 'modified') {
@@ -1649,7 +1747,7 @@ export function resetCategoryPagination(patientId?: string): void {
  */
 export async function fetchFullCategoryFromCloud(
   patientId: string, 
-  category: 'vitals' | 'sbar' | 'fluids' | 'notes' | 'vent' | 'pumps' | 'labs' | 'investigations',
+  category: 'vitals' | 'sbar' | 'fluids' | 'notes' | 'vent' | 'pumps' | 'labs' | 'investigations' | 'abx',
   pageSize: number = 10
 ): Promise<void> {
   if (!patientId) return;
@@ -1657,24 +1755,20 @@ export async function fetchFullCategoryFromCloud(
   if (category === 'labs') {
     const statKey = `${patientId}_labs_stat`;
     const directKey = `${patientId}_labs_direct`;
-    const abxKey = `${patientId}_labs_abx`;
 
     const statState = paginationMap.get(statKey) || { lastDoc: null, hasMore: true, isFetching: false };
     const directState = paginationMap.get(directKey) || { lastDoc: null, hasMore: true, isFetching: false };
-    const abxState = paginationMap.get(abxKey) || { lastDoc: null, hasMore: true, isFetching: false };
 
-    // Check if all sub-collections have no more data or are fetching
-    if ((!statState.hasMore && !directState.hasMore && !abxState.hasMore) ||
-        (statState.isFetching || directState.isFetching || abxState.isFetching)) {
+    // Check if sub-collections have no more data or are fetching
+    if ((!statState.hasMore && !directState.hasMore) ||
+        (statState.isFetching || directState.isFetching)) {
       return;
     }
 
     statState.isFetching = true;
     directState.isFetching = true;
-    abxState.isFetching = true;
     paginationMap.set(statKey, statState);
     paginationMap.set(directKey, directState);
-    paginationMap.set(abxKey, abxState);
 
     try {
       const promises = [];
@@ -1695,15 +1789,6 @@ export async function fetchFullCategoryFromCloud(
         promises.push(getDocs(qDirect).then(snap => ({ type: 'direct', snap })).catch(() => ({ type: 'direct', snap: null })));
       } else {
         promises.push(Promise.resolve({ type: 'direct', snap: null }));
-      }
-
-      // patientAntibiotics query with independent abxState cursor
-      if (abxState.hasMore) {
-        let qAbx = query(collection(firestore, 'patientAntibiotics'), where('patientId', '==', patientId), orderBy('startDate', 'desc'));
-        qAbx = abxState.lastDoc ? query(qAbx, startAfter(abxState.lastDoc), limit(pageSize)) : query(qAbx, limit(pageSize));
-        promises.push(getDocs(qAbx).then(snap => ({ type: 'abx', snap })).catch(() => ({ type: 'abx', snap: null })));
-      } else {
-        promises.push(Promise.resolve({ type: 'abx', snap: null }));
       }
 
       const results = await Promise.all(promises);
@@ -1728,16 +1813,6 @@ export async function fetchFullCategoryFromCloud(
         } else if (res.type === 'direct' && res.snap) {
           directState.hasMore = false;
         }
-
-        if (res.type === 'abx' && res.snap && !res.snap.empty) {
-          const list: PatientAntibiotic[] = [];
-          res.snap.forEach(d => list.push(d.data() as PatientAntibiotic));
-          await db.patientAntibiotics.bulkPut(list);
-          abxState.lastDoc = res.snap.docs[res.snap.docs.length - 1];
-          if (res.snap.docs.length < pageSize) abxState.hasMore = false;
-        } else if (res.type === 'abx' && res.snap) {
-          abxState.hasMore = false;
-        }
       }
 
       if (typeof window !== 'undefined') {
@@ -1748,10 +1823,8 @@ export async function fetchFullCategoryFromCloud(
     } finally {
       statState.isFetching = false;
       directState.isFetching = false;
-      abxState.isFetching = false;
       paginationMap.set(statKey, statState);
       paginationMap.set(directKey, directState);
-      paginationMap.set(abxKey, abxState);
     }
     return;
   }
@@ -1769,6 +1842,34 @@ export async function fetchFullCategoryFromCloud(
 
   try {
     switch (category) {
+      case 'abx': {
+        let q = query(collection(firestore, 'patientAntibiotics'), where('patientId', '==', patientId), orderBy('startDate', 'desc'));
+        if (state.lastDoc) {
+          q = query(q, startAfter(state.lastDoc), limit(pageSize));
+        } else {
+          q = query(q, limit(pageSize));
+        }
+        let snap = await getDocs(q).catch(() => null);
+        if (!snap) {
+          // Fallback if orderBy requires composite index
+          const fallbackQ = state.lastDoc 
+            ? query(collection(firestore, 'patientAntibiotics'), where('patientId', '==', patientId), startAfter(state.lastDoc), limit(pageSize))
+            : query(collection(firestore, 'patientAntibiotics'), where('patientId', '==', patientId), limit(pageSize));
+          snap = await getDocs(fallbackQ).catch(() => null);
+        }
+        if (snap && !snap.empty) {
+          const list: PatientAntibiotic[] = [];
+          snap.forEach(d => list.push(d.data() as PatientAntibiotic));
+          await db.patientAntibiotics.bulkPut(list);
+          state.lastDoc = snap.docs[snap.docs.length - 1];
+          if (snap.docs.length < pageSize) {
+            state.hasMore = false;
+          }
+        } else {
+          state.hasMore = false;
+        }
+        break;
+      }
       case 'vitals': {
         let q = query(collection(firestore, 'vitals'), where('patientId', '==', patientId), orderBy('timestamp', 'desc'));
         if (state.lastDoc) {
@@ -1818,7 +1919,13 @@ export async function fetchFullCategoryFromCloud(
         } else {
           q = query(q, limit(pageSize));
         }
-        const snap = await getDocs(q).catch(() => null);
+        let snap = await getDocs(q).catch(() => null);
+        if (!snap) {
+          const fallbackQ = state.lastDoc
+            ? query(collection(firestore, 'fluidBalances'), where('patientId', '==', patientId), startAfter(state.lastDoc), limit(pageSize))
+            : query(collection(firestore, 'fluidBalances'), where('patientId', '==', patientId), limit(pageSize));
+          snap = await getDocs(fallbackQ).catch(() => null);
+        }
         if (snap && !snap.empty) {
           const list: FluidBalance24H[] = [];
           snap.forEach(d => list.push(d.data() as FluidBalance24H));
@@ -1839,7 +1946,13 @@ export async function fetchFullCategoryFromCloud(
         } else {
           q = query(q, limit(pageSize));
         }
-        const snap = await getDocs(q).catch(() => null);
+        let snap = await getDocs(q).catch(() => null);
+        if (!snap) {
+          const fallbackQ = state.lastDoc
+            ? query(collection(firestore, 'clinicalNotes'), where('patientId', '==', patientId), startAfter(state.lastDoc), limit(pageSize))
+            : query(collection(firestore, 'clinicalNotes'), where('patientId', '==', patientId), limit(pageSize));
+          snap = await getDocs(fallbackQ).catch(() => null);
+        }
         if (snap && !snap.empty) {
           const list: ClinicalNote[] = [];
           snap.forEach(d => list.push(d.data() as ClinicalNote));
@@ -1851,6 +1964,15 @@ export async function fetchFullCategoryFromCloud(
         } else {
           state.hasMore = false;
         }
+        // Also fetch addendums for patient
+        try {
+          const addSnap = await getDocs(query(collection(firestore, 'addendums'), where('patientId', '==', patientId), limit(pageSize)));
+          if (addSnap && !addSnap.empty) {
+            const addList: Addendum[] = [];
+            addSnap.forEach(d => addList.push(d.data() as Addendum));
+            await db.addendums.bulkPut(addList);
+          }
+        } catch {}
         break;
       }
       case 'vent': {
@@ -1860,7 +1982,13 @@ export async function fetchFullCategoryFromCloud(
         } else {
           q = query(q, limit(pageSize));
         }
-        const snap = await getDocs(q).catch(() => null);
+        let snap = await getDocs(q).catch(() => null);
+        if (!snap) {
+          const fallbackQ = state.lastDoc
+            ? query(collection(firestore, 'ventilators'), where('patientId', '==', patientId), startAfter(state.lastDoc), limit(pageSize))
+            : query(collection(firestore, 'ventilators'), where('patientId', '==', patientId), limit(pageSize));
+          snap = await getDocs(fallbackQ).catch(() => null);
+        }
         if (snap && !snap.empty) {
           const list: VentilatorParameters[] = [];
           snap.forEach(d => list.push(d.data() as VentilatorParameters));
@@ -1875,11 +2003,9 @@ export async function fetchFullCategoryFromCloud(
         break;
       }
       case 'pumps': {
-        let q = query(collection(firestore, 'infusionPumps'), where('patientId', '==', patientId), orderBy('id', 'desc'));
+        let q = query(collection(firestore, 'infusionPumps'), where('patientId', '==', patientId), limit(pageSize));
         if (state.lastDoc) {
           q = query(q, startAfter(state.lastDoc), limit(pageSize));
-        } else {
-          q = query(q, limit(pageSize));
         }
         const snap = await getDocs(q).catch(() => null);
         if (snap && !snap.empty) {
@@ -1902,7 +2028,13 @@ export async function fetchFullCategoryFromCloud(
         } else {
           q = query(q, limit(pageSize));
         }
-        const snap = await getDocs(q).catch(() => null);
+        let snap = await getDocs(q).catch(() => null);
+        if (!snap) {
+          const fallbackQ = state.lastDoc
+            ? query(collection(firestore, 'investigations'), where('patientId', '==', patientId), startAfter(state.lastDoc), limit(pageSize))
+            : query(collection(firestore, 'investigations'), where('patientId', '==', patientId), limit(pageSize));
+          snap = await getDocs(fallbackQ).catch(() => null);
+        }
         if (snap && !snap.empty) {
           const list: InvestigationItem[] = [];
           snap.forEach(d => list.push(d.data() as InvestigationItem));
@@ -2120,8 +2252,32 @@ export async function syncClinicalNoteToCloud(note: ClinicalNote): Promise<void>
     if (note.patientId) resetCategoryPagination(note.patientId);
     const noteRef = doc(firestore, 'clinicalNotes', note.id);
     await setDoc(noteRef, sanitizeForFirestore(note), { merge: true });
+    // Also sync nested addendums if present
+    if (note.addendums && note.addendums.length > 0) {
+      for (const addendum of note.addendums) {
+        await syncAddendumToCloud(addendum).catch(() => {});
+      }
+    }
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `clinicalNotes/${note.id}`);
+  }
+}
+
+export async function syncAddendumToCloud(addendum: Addendum): Promise<void> {
+  try {
+    if (addendum.patientId) resetCategoryPagination(addendum.patientId);
+    const addRef = doc(firestore, 'addendums', addendum.id);
+    await setDoc(addRef, sanitizeForFirestore(addendum), { merge: true });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, `addendums/${addendum.id}`);
+  }
+}
+
+export async function deleteAddendumFromCloud(addendumId: string): Promise<void> {
+  try {
+    await deleteDoc(doc(firestore, 'addendums', addendumId));
+  } catch (err) {
+    console.warn('Delete addendum from cloud notice:', err);
   }
 }
 

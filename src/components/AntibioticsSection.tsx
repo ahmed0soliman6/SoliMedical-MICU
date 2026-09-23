@@ -32,8 +32,7 @@ import { useTranslation } from '../services/i18n.ts';
 import { useAuth } from '../services/AuthContext.tsx';
 import { canEditRecord, canDeleteRecord, preserveRecordOwnership } from '../services/medicalRecordPermissions.ts';
 import { db } from '../db/icuSyncDb.ts';
-import { doc, deleteDoc } from 'firebase/firestore';
-import { firestore, setDoc } from '../services/firebase.ts';
+import { syncPatientAntibioticToCloud, deletePatientAntibioticFromCloud, fetchFullCategoryFromCloud } from '../services/firebase.ts';
 
 // Dictionary of standard ICU antimicrobial doses & parameters
 export const COMMON_ANTIBIOTIC_DOSES_MAP: Record<string, { doses: string[]; defaultRoute?: string; defaultFreq?: string; category?: string }> = {
@@ -716,6 +715,8 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
   const [activeFilter, setActiveFilter] = useState<'ALL' | 'ACTIVE' | 'COMPLETED_DISCONTINUED'>('ACTIVE');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingAbx, setEditingAbx] = useState<PatientAntibiotic | null>(null);
+  const [showAllAbx, setShowAllAbx] = useState(false);
+  const [isLoadingMoreAbx, setIsLoadingMoreAbx] = useState(false);
 
   // Form State
   const [selectedPresetId, setSelectedPresetId] = useState<string>('');
@@ -1022,12 +1023,9 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
 
     try {
       await db.patientAntibiotics.put(record);
-      try {
-        const abxRef = doc(firestore, 'patientAntibiotics', record.id);
-        await setDoc(abxRef, record, { merge: true });
-      } catch (err) {
+      await syncPatientAntibioticToCloud(record).catch(err => {
         console.warn('Firestore antibiotic sync notice:', err);
-      }
+      });
       setIsAddModalOpen(false);
       onDataUpdated();
     } catch (err) {
@@ -1050,12 +1048,9 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
         discontinueReason: newStatus === 'DISCONTINUED' ? (abx.discontinueReason || 'Discontinued by Attending') : abx.discontinueReason,
       };
       await db.patientAntibiotics.put(updated);
-      try {
-        const abxRef = doc(firestore, 'patientAntibiotics', abx.id);
-        await setDoc(abxRef, updated, { merge: true });
-      } catch (e) {
+      await syncPatientAntibioticToCloud(updated).catch(e => {
         console.warn('Firestore update antibiotic status error:', e);
-      }
+      });
       onDataUpdated();
     } catch (err) {
       console.error('Failed to update antibiotic status:', err);
@@ -1073,15 +1068,26 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
     }
     try {
       await db.patientAntibiotics.delete(abx.id);
-      try {
-        const abxRef = doc(firestore, 'patientAntibiotics', abx.id);
-        await deleteDoc(abxRef);
-      } catch (e) {
+      await deletePatientAntibioticFromCloud(abx.id).catch(e => {
         console.warn('Firestore delete antibiotic sync error:', e);
-      }
+      });
       onDataUpdated();
     } catch (err) {
       console.error('Failed to delete antibiotic:', err);
+    }
+  };
+
+  const handleFetchMoreAbx = async () => {
+    if (!patient?.id || isLoadingMoreAbx) return;
+    setIsLoadingMoreAbx(true);
+    try {
+      await fetchFullCategoryFromCloud(patient.id, 'abx', 10);
+      setShowAllAbx(true);
+      onDataUpdated();
+    } catch (err) {
+      console.warn('Could not fetch more antibiotics from cloud:', err);
+    } finally {
+      setIsLoadingMoreAbx(false);
     }
   };
 
@@ -1090,6 +1096,8 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
     if (activeFilter === 'COMPLETED_DISCONTINUED') return abx.status === 'COMPLETED' || abx.status === 'DISCONTINUED';
     return true;
   });
+
+  const displayedAntibiotics = showAllAbx ? filteredAntibiotics : filteredAntibiotics.slice(0, 4);
 
   const activeCount = antibiotics.filter(a => a.status === 'ACTIVE').length;
 
@@ -1236,8 +1244,9 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-              {filteredAntibiotics.map(abx => {
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                {displayedAntibiotics.map(abx => {
                 const dot = calculateDot(abx.startDate, abx.plannedDurationDays);
                 const isActive = abx.status === 'ACTIVE';
                 const isPaused = abx.status === 'PAUSED';
@@ -1462,6 +1471,32 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                   </div>
                 );
               })}
+              </div>
+
+              {/* Show More / Show Less Pagination Button */}
+              {(filteredAntibiotics.length > 4 || (!showAllAbx && filteredAntibiotics.length >= 4)) && (
+                <div className="flex justify-center pt-2">
+                  <button
+                    type="button"
+                    onClick={showAllAbx ? () => setShowAllAbx(false) : handleFetchMoreAbx}
+                    disabled={isLoadingMoreAbx}
+                    className="px-4 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-400 border border-slate-700 hover:border-amber-500/50 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm disabled:opacity-50"
+                  >
+                    {isLoadingMoreAbx ? (
+                      <div className="w-3.5 h-3.5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                    ) : showAllAbx ? (
+                      <ChevronUp className="w-4 h-4" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4" />
+                    )}
+                    <span>
+                      {showAllAbx 
+                        ? (lang === 'ar' ? 'عرض أقل' : 'Show Less') 
+                        : (lang === 'ar' ? 'إظهار المزيد من السجلات' : 'Show More Records')}
+                    </span>
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
