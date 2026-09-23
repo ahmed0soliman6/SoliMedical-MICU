@@ -1,12 +1,12 @@
 {
   "projectId": "solimedical-micu",
-  "appId": "1:356354051601:web:dbd4be1b6a39d5954dabb0",
+  "appId": "1:356354051601:web:f2e0510dc522804d4dabb0",
   "apiKey": "AIzaSyA5NDAjz9mgzpkia99CIMkUSiEPg3hLQ9U",
   "authDomain": "solimedical-micu.firebaseapp.com",
-  "firestoreDatabaseId": "",
+  "firestoreDatabaseId": "ai-studio-solimedicalmicui-9b334c16-cfe5-4e8c-8776-bce8cce4f0a6",
   "storageBucket": "solimedical-micu.firebasestorage.app",
   "messagingSenderId": "356354051601",
-  "measurementId": "G-3GR8J6EPJT",
-  "oAuthClientId": "",
+  "measurementId": "",
+  "oAuthClientId": "356354051601-tuu7jot999f756udam8t3anog7i4orlb.apps.googleusercontent.com",
   "recaptchaSiteKey": ""
 }
