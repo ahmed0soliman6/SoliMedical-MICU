@@ -25,8 +25,8 @@ service cloud.firestore {
 
     function isActiveUser() {
       return isAuthenticated() && isExistingUser() && (
-        getUserData().active == true || 
-        getUserData().isActive == true
+        getUserData().active != false && 
+        getUserData().isActive != false
       );
     }
 
@@ -124,6 +124,7 @@ service cloud.firestore {
           'specialty',
           'department',
           'licenseNumber',
+          'lastLoginAt',
           'updatedAt'
         ])
       );

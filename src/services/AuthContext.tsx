@@ -352,7 +352,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       user.lastLoginAt = new Date().toISOString();
       user.uid = fbUser.uid;
       
-      await setDoc(doc(firestore, 'users', fbUser.uid), { lastLoginAt: user.lastLoginAt }, { merge: true });
+      try {
+        await setDoc(doc(firestore, 'users', fbUser.uid), { lastLoginAt: user.lastLoginAt }, { merge: true });
+      } catch (loginTimestampErr) {
+        console.warn('Non-fatal: could not update lastLoginAt in Firestore:', loginTimestampErr);
+      }
       await db.users.put(user);
       
       setCurrentUser(user);
@@ -388,7 +392,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       matchedUser.lastLoginAt = new Date().toISOString();
       matchedUser.uid = fbUser.uid;
       
-      await setDoc(doc(firestore, 'users', fbUser.uid), { lastLoginAt: matchedUser.lastLoginAt }, { merge: true });
+      try {
+        await setDoc(doc(firestore, 'users', fbUser.uid), { lastLoginAt: matchedUser.lastLoginAt }, { merge: true });
+      } catch (loginTimestampErr) {
+        console.warn('Non-fatal: could not update lastLoginAt in Firestore:', loginTimestampErr);
+      }
       await db.users.put(matchedUser);
       
       setCurrentUser(matchedUser);
@@ -695,6 +703,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     const isCurrentlyActive = user.isActive !== false && user.active !== false;
+    const nextActive = !isCurrentlyActive;
     const endpoint = isCurrentlyActive ? '/api/admin/users/disable' : '/api/admin/users/enable';
 
     try {
@@ -714,6 +723,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         },
         body: JSON.stringify({
           targetUid: uid,
+          action: isCurrentlyActive ? 'disable' : 'enable',
+          active: nextActive,
+          isActive: nextActive,
           reason: isCurrentlyActive ? 'تعطيل الحساب عبر لوحة تحكم المسؤول' : undefined
         })
       });
@@ -735,7 +747,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       // Update local state and IndexedDB only upon backend success
-      const newActiveState = !isCurrentlyActive;
+      const newActiveState = nextActive;
       user.isActive = newActiveState;
       user.active = newActiveState;
       await db.users.update(uid, {
@@ -743,6 +755,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         active: newActiveState,
         updatedAt: new Date().toISOString()
       });
+
+      try {
+        await setDoc(doc(firestore, 'users', uid), {
+          isActive: newActiveState,
+          active: newActiveState,
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+      } catch (fsSyncErr) {
+        console.info('Client Firestore sync notice (server already handled):', fsSyncErr);
+      }
 
       await refreshUsers();
 

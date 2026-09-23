@@ -566,6 +566,51 @@ app.post('/api/admin/users/activate', async (req, res) => {
   }
 });
 
+app.post('/api/admin/users/status', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const { targetUid, action, reason, active, isActive } = req.body;
+    if (!targetUid) {
+      return res.status(400).json({ success: false, message: 'Missing targetUid.' });
+    }
+    const shouldDisable = action === 'disable' || active === false || isActive === false;
+    const result = shouldDisable 
+      ? await disableUserWithToken(authHeader, targetUid, reason)
+      : await enableUserWithToken(authHeader, targetUid);
+    const statusCode = result.success ? 200 : (result.message.includes('Permission Denied') || result.message.includes('Access denied') ? 403 : 400);
+    return res.status(statusCode).json(result);
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err?.message || 'Internal server error.' });
+  }
+});
+
+app.post('/api/admin/users', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const { targetUid, action, reason, active, isActive, newPassword } = req.body;
+    if (!targetUid) {
+      return res.status(400).json({ success: false, message: 'Missing targetUid.' });
+    }
+    const cleanAction = String(action || '').toLowerCase();
+    if (cleanAction === 'delete') {
+      const result = await deleteUserWithToken(authHeader, targetUid, reason);
+      return res.status(result.success ? 200 : 400).json(result);
+    }
+    if (cleanAction === 'change-password') {
+      const result = await adminChangeUserPassword(authHeader, targetUid, newPassword);
+      return res.status(result.success ? 200 : 400).json(result);
+    }
+    const shouldDisable = cleanAction === 'disable' || active === false || isActive === false;
+    const result = shouldDisable 
+      ? await disableUserWithToken(authHeader, targetUid, reason)
+      : await enableUserWithToken(authHeader, targetUid);
+    const statusCode = result.success ? 200 : 400;
+    return res.status(statusCode).json(result);
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err?.message || 'Internal server error.' });
+  }
+});
+
 app.post('/api/admin/users/delete', async (req, res) => {
   try {
     const authHeader = req.headers.authorization;

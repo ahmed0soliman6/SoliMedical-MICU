@@ -9,6 +9,42 @@
   ],
   "rewrites": [
     {
+      "source": "/api/ai/scan-lab",
+      "destination": "/api/scan-lab"
+    },
+    {
+      "source": "/api/ai/scan-investigation",
+      "destination": "/api/scan-investigation"
+    },
+    {
+      "source": "/api/admin/recovery/set",
+      "destination": "/api/admin/recovery"
+    },
+    {
+      "source": "/api/admin/users/status",
+      "destination": "/api/admin/users"
+    },
+    {
+      "source": "/api/admin/users/disable",
+      "destination": "/api/admin/users"
+    },
+    {
+      "source": "/api/admin/users/enable",
+      "destination": "/api/admin/users"
+    },
+    {
+      "source": "/api/admin/users/activate",
+      "destination": "/api/admin/users"
+    },
+    {
+      "source": "/api/admin/users/delete",
+      "destination": "/api/admin/users"
+    },
+    {
+      "source": "/api/admin/users/change-password",
+      "destination": "/api/admin/users"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }

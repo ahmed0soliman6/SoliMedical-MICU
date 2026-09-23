@@ -443,13 +443,13 @@ export async function disableUserWithToken(authHeader?: string, targetUid?: stri
     if (hasDbAccess) {
       try {
         const targetRef = db.collection('users').doc(targetUid);
-        await targetRef.update({
+        await targetRef.set({
           active: false,
           isActive: false,
           updatedAt: nowIso,
           updatedByUid: callerUid,
           disabledReason: reason || 'Disabled by Administrator',
-        });
+        }, { merge: true });
       } catch (dbErr: any) {
         throw new Error(`Firestore user update failed: ${dbErr?.message || dbErr}`);
       }
@@ -527,13 +527,13 @@ export async function enableUserWithToken(authHeader?: string, targetUid?: strin
     if (hasDbAccess) {
       try {
         const targetRef = db.collection('users').doc(targetUid);
-        await targetRef.update({
+        await targetRef.set({
           active: true,
           isActive: true,
           updatedAt: nowIso,
           updatedByUid: callerUid,
           disabledReason: null,
-        });
+        }, { merge: true });
       } catch (dbErr: any) {
         throw new Error(`Firestore user update failed: ${dbErr?.message || dbErr}`);
       }

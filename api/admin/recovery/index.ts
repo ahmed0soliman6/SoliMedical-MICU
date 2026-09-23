@@ -203,6 +203,56 @@ async function parseJsonBody(req: any): Promise<any> {
   });
 }
 
+async function verifyAdminCaller(authHeader: string | undefined): Promise<{ isAdmin: boolean; callerUid?: string; error?: string }> {
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return { isAdmin: false, error: 'Unauthorized: Missing or invalid Bearer token.' };
+  }
+
+  const token = authHeader.split('Bearer ')[1]?.trim();
+  if (!token) {
+    return { isAdmin: false, error: 'Unauthorized: Token is empty.' };
+  }
+
+  try {
+    const { auth, db } = getAdminServices();
+    const decodedToken = await auth.verifyIdToken(token);
+    const callerUid = decodedToken?.uid;
+
+    if (!callerUid) {
+      return { isAdmin: false, error: 'Invalid token payload: missing caller UID.' };
+    }
+
+    let isCallerAdmin = false;
+    let isCallerActive = false;
+
+    try {
+      const callerDoc = await db.collection('users').doc(callerUid).get();
+      if (callerDoc.exists) {
+        const callerData = callerDoc.data() as any;
+        isCallerActive = callerData.active !== false && callerData.isActive !== false;
+        isCallerAdmin = callerData.role === 'ADMIN' || callerData.isSuperAdmin === true;
+      } else {
+        const adminDoc = await db.collection('admins').doc(callerUid).get();
+        if (adminDoc.exists) {
+          isCallerAdmin = true;
+          isCallerActive = true;
+        }
+      }
+    } catch (dbErr) {
+      console.error('[Recovery] Firestore admin check error:', dbErr);
+      return { isAdmin: false, callerUid, error: 'Access denied: Unable to verify administrator permissions.' };
+    }
+
+    if (!isCallerActive || !isCallerAdmin) {
+      return { isAdmin: false, callerUid, error: 'Access denied: Caller does not have active administrator permissions.' };
+    }
+
+    return { isAdmin: true, callerUid };
+  } catch (err: any) {
+    return { isAdmin: false, error: `Authentication verification failed: ${err?.message || err}` };
+  }
+}
+
 export default async function handler(req: VercelReq, res: VercelRes) {
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -221,7 +271,40 @@ export default async function handler(req: VercelReq, res: VercelRes) {
   }
 
   try {
+    const url = (req.url || '').toLowerCase();
+    const xForwardedUri = ((req.headers['x-forwarded-uri'] as string) || '').toLowerCase();
+    const xMatchedPath = ((req.headers['x-matched-path'] as string) || '').toLowerCase();
     const body = await parseJsonBody(req);
+
+    // Branch A: Set Recovery Code
+    if (url.includes('/set') || xForwardedUri.includes('/set') || xMatchedPath.includes('/set') || body?.newRecoveryCode || body?.action === 'set') {
+      const authHeader = (req.headers.authorization || req.headers.Authorization) as string | undefined;
+      const authCheck = await verifyAdminCaller(authHeader);
+      if (!authCheck.isAdmin) {
+        return sendJson(res, 403, { success: false, message: authCheck.error || 'Permission Denied: Admin token required.' });
+      }
+
+      const { newRecoveryCode } = body || {};
+      if (!newRecoveryCode || typeof newRecoveryCode !== 'string' || newRecoveryCode.trim().length < 8) {
+        return sendJson(res, 400, { success: false, message: 'رمز الاستعادة الجديد يجب ألا يقل عن 8 أحرف/أرقام.' });
+      }
+
+      const salt = crypto.randomBytes(16).toString('hex');
+      const codeHash = hashRecoveryCode(newRecoveryCode, salt);
+
+      const { db } = getAdminServices();
+      await db.collection('_system').doc('recovery').set({
+        salt,
+        codeHash,
+        updatedAt: new Date().toISOString(),
+        updatedByUid: authCheck.callerUid || 'system',
+        isImmutable: true
+      }, { merge: true });
+
+      return sendJson(res, 200, { success: true, message: 'تم تحديث رمز التشفير بنجاح في النظام.' });
+    }
+
+    // Branch B: Recover Password using code
     const { username, recoveryCode, newPassword } = body || {};
 
     const rawUser = String(username || '').trim().toLowerCase();
