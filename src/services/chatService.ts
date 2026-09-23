@@ -71,8 +71,9 @@ export function subscribeToUserChats(
   callback: (chats: ChatConversation[]) => void
 ): Unsubscribe {
   const colRef = collection(firestore, CHATS_COLLECTION);
+  const q = query(colRef, limit(25));
   
-  return onSnapshot(colRef, (snapshot) => {
+  return onSnapshot(q, (snapshot) => {
     const list: ChatConversation[] = [];
     snapshot.forEach((d) => {
       const data = d.data() as ChatConversation;
@@ -110,7 +111,7 @@ export function subscribeToChatMessages(
   const q = query(
     colRef,
     where('chatId', '==', chatId),
-    limit(100)
+    limit(50)
   );
 
   return onSnapshot(q, (snapshot) => {

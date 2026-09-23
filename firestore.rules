@@ -371,6 +371,11 @@ service cloud.firestore {
       allow write: if isAdmin() || hasPerm('settings.update');
     }
 
+    match /settings/{settingId} {
+      allow read: if isActiveUser() || hasPerm('settings.view');
+      allow write: if isAdmin() || hasPerm('settings.update');
+    }
+
     match /admins/{userId} {
       allow read: if isAuthenticated();
       allow write: if isAdmin();

@@ -1,5 +1,6 @@
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
 import { SystemSettings, DEFAULT_SYSTEM_SETTINGS, DEFAULT_NOTIFICATION_SETTINGS, NotificationSettings } from '../types/settings.ts';
+import { subscribeToSystemSettings, syncSystemSettingsToCloud } from './firebase.ts';
 
 const SETTINGS_STORAGE_KEY = 'soli_medical_icu_settings_v1';
 
@@ -71,6 +72,44 @@ const SettingsContext = createContext<SettingsContextType | null>(null);
 export const SettingsProvider = ({ children }: { children: ReactNode }) => {
   const [settings, setSettings] = useState<SystemSettings>(loadSavedSettings);
 
+  // Single-doc real-time listener for Settings from Cloud Firestore
+  useEffect(() => {
+    const unsub = subscribeToSystemSettings((cloudSettings) => {
+      if (cloudSettings) {
+        setSettings((prev) => {
+          const merged: SystemSettings = {
+            ...prev,
+            ...cloudSettings,
+            features: {
+              ...prev.features,
+              ...(cloudSettings.features || {}),
+            },
+            unit: {
+              ...prev.unit,
+              ...(cloudSettings.unit || {}),
+            },
+            notifications: {
+              ...prev.notifications,
+              ...(cloudSettings.notifications || {}),
+              vitalThresholds: {
+                ...prev.notifications.vitalThresholds,
+                ...(cloudSettings.notifications?.vitalThresholds || {}),
+              },
+              events: {
+                ...prev.notifications.events,
+                ...(cloudSettings.notifications?.events || {}),
+              }
+            },
+          };
+          saveSettingsToStorage(merged);
+          return merged;
+        });
+      }
+    });
+
+    return () => unsub();
+  }, []);
+
   useEffect(() => {
     saveSettingsToStorage(settings);
     if (typeof document !== 'undefined') {
@@ -88,11 +127,14 @@ export const SettingsProvider = ({ children }: { children: ReactNode }) => {
   const toggleTheme = () => {
     setSettings((prev) => {
       const nextTheme = prev.theme === 'dark' ? 'light' : 'dark';
-      return {
+      const updated = {
         ...prev,
         theme: nextTheme,
         lastUpdated: new Date().toISOString(),
       };
+      saveSettingsToStorage(updated);
+      syncSystemSettingsToCloud(updated);
+      return updated;
     });
   };
 
@@ -120,6 +162,7 @@ export const SettingsProvider = ({ children }: { children: ReactNode }) => {
         lastUpdated: new Date().toISOString(),
       };
       saveSettingsToStorage(updated);
+      syncSystemSettingsToCloud(updated);
       return updated;
     });
   };
@@ -139,6 +182,7 @@ export const SettingsProvider = ({ children }: { children: ReactNode }) => {
         lastUpdated: new Date().toISOString(),
       };
       saveSettingsToStorage(updated);
+      syncSystemSettingsToCloud(updated);
       return updated;
     });
   };
@@ -154,6 +198,7 @@ export const SettingsProvider = ({ children }: { children: ReactNode }) => {
         lastUpdated: new Date().toISOString(),
       };
       saveSettingsToStorage(updated);
+      syncSystemSettingsToCloud(updated);
       return updated;
     });
   };
@@ -161,6 +206,7 @@ export const SettingsProvider = ({ children }: { children: ReactNode }) => {
   const resetToDefaults = () => {
     setSettings(DEFAULT_SYSTEM_SETTINGS);
     saveSettingsToStorage(DEFAULT_SYSTEM_SETTINGS);
+    syncSystemSettingsToCloud(DEFAULT_SYSTEM_SETTINGS);
   };
 
   return (

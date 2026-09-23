@@ -153,9 +153,9 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({ activeTa
     }
   };
 
-  // Subscribe to chats
+  // Subscribe to chats only when open and visible
   useEffect(() => {
-    if (!currentUser?.uid || !isVisible) return;
+    if (!currentUser?.uid || !isVisible || !isOpen) return;
     const unsub = subscribeToUserChats(currentUser.uid, (list) => {
       setChats(list);
       if (list.length > 0 && !list.some(c => c.id === activeChatId)) {
@@ -163,7 +163,7 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({ activeTa
       }
     });
     return () => unsub();
-  }, [currentUser, isVisible, activeChatId]);
+  }, [currentUser, isVisible, isOpen, activeChatId]);
 
   // Subscribe to messages in active chat
   useEffect(() => {

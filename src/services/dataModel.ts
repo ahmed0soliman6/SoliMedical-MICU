@@ -816,7 +816,10 @@ export async function acknowledgeSbarHandover(
     await db.auditLogs.put(auditLog);
   });
 
-  syncSbarToCloud(updated);
+  await syncSbarToCloud(updated);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('icu-data-updated'));
+  }
   return updated;
 }
 

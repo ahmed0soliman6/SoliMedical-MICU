@@ -31,8 +31,7 @@ import { useTranslation } from '../services/i18n.ts';
 import { useAuth } from '../services/AuthContext.tsx';
 import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { db } from '../db/icuSyncDb.ts';
-import { collection, doc, deleteDoc } from 'firebase/firestore';
-import { firestore, setDoc } from '../services/firebase.ts';
+import { syncLabResultToCloud, deleteLabResultFromCloud } from '../services/firebase.ts';
 import { COLLECTIONS } from '../types/contracts.ts';
 import { AiLabScannerModal } from './AiLabScannerModal.tsx';
 import { toEnglishDigits } from '../services/numberUtils.ts';
@@ -441,16 +440,7 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
       await db.labResults.put(newRecord);
 
       // 2. Write to Firestore SSOT
-      try {
-        const docRef = doc(firestore, 'medical_records', labId);
-        await setDoc(docRef, {
-          ...newRecord,
-          recordType: 'LAB',
-          createdAt: Date.now(),
-        });
-      } catch (cloudErr) {
-        console.warn('Firestore lab record sync:', cloudErr);
-      }
+      await syncLabResultToCloud(newRecord);
 
       onLabAdded();
       setIsAddModalOpen(false);
@@ -487,17 +477,7 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
       };
 
       await db.labResults.put(newRecord);
-
-      try {
-        const docRef = doc(firestore, 'medical_records', labId);
-        await setDoc(docRef, {
-          ...newRecord,
-          recordType: 'LAB',
-          createdAt: Date.now(),
-        });
-      } catch (cloudErr) {
-        console.warn('Firestore lab quick sync:', cloudErr);
-      }
+      await syncLabResultToCloud(newRecord);
 
       onLabAdded();
       setQuickAddTest(null);
@@ -540,12 +520,7 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
       const items = groupedLabs.get(deleteConfirmTest) || [];
       for (const item of items) {
         await db.labResults.delete(item.id);
-        try {
-          const docRef = doc(firestore, 'medical_records', item.id);
-          await deleteDoc(docRef);
-        } catch (cloudErr) {
-          console.warn('Firestore deletion sync failed:', cloudErr);
-        }
+        await deleteLabResultFromCloud(item.id);
       }
 
       onLabAdded();
@@ -585,17 +560,7 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
       };
 
       await db.labResults.put(updatedRecord);
-
-      try {
-        const docRef = doc(firestore, 'medical_records', rec.id);
-        await setDoc(docRef, {
-          ...updatedRecord,
-          recordType: 'LAB',
-          updatedAt: Date.now(),
-        }, { merge: true });
-      } catch (cloudErr) {
-        console.warn('Firestore update sync failed:', cloudErr);
-      }
+      await syncLabResultToCloud(updatedRecord);
 
       onLabAdded();
       setEditingRecordId(null);
@@ -1525,16 +1490,7 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
             if (newItems.length > 0) {
               await db.labResults.bulkPut(newItems);
               for (const item of newItems) {
-                try {
-                  const docRef = doc(firestore, COLLECTIONS.MEDICAL_RECORDS, item.id);
-                  await setDoc(docRef, {
-                    ...item,
-                    recordType: 'LAB',
-                    createdAt: Date.now(),
-                  });
-                } catch (e) {
-                  console.warn('Sync lab result to cloud failed:', e);
-                }
+                await syncLabResultToCloud(item);
               }
             }
             onLabAdded();

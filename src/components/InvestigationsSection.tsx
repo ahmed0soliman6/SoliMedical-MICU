@@ -26,8 +26,7 @@ import { useTranslation } from '../services/i18n.ts';
 import { useAuth } from '../services/AuthContext.tsx';
 import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { db } from '../db/icuSyncDb.ts';
-import { doc, deleteDoc } from 'firebase/firestore';
-import { firestore, setDoc } from '../services/firebase.ts';
+import { syncInvestigationToCloud, deleteInvestigationFromCloud } from '../services/firebase.ts';
 import { AiInvestigationScannerModal } from './AiInvestigationScannerModal.tsx';
 
 interface InvestigationsSectionProps {
@@ -218,17 +217,8 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
     // 1. Dexie local database
     await db.investigations.put(newRecord);
 
-    // 2. Firestore SSOT
-    try {
-      const docRef = doc(firestore, 'medical_records', invId);
-      await setDoc(docRef, {
-        ...newRecord,
-        recordType: 'INVESTIGATION',
-        createdAt: Date.now(),
-      });
-    } catch (cloudErr) {
-      console.warn('Firestore investigation sync error:', cloudErr);
-    }
+    // 2. Firestore SSOT (both investigations & medical_records)
+    await syncInvestigationToCloud(newRecord);
   };
 
   const handleModalityChange = (m: string) => {
@@ -284,12 +274,7 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
     }
     try {
       await db.investigations.delete(inv.id);
-      try {
-        const docRef = doc(firestore, 'medical_records', inv.id);
-        await deleteDoc(docRef);
-      } catch (cloudErr) {
-        console.warn('Firestore delete investigation error:', cloudErr);
-      }
+      await deleteInvestigationFromCloud(inv.id);
       onInvestigationAdded();
     } catch (err) {
       console.error('Failed to delete investigation:', err);
@@ -323,16 +308,7 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
         await db.investigations.put(updatedRecord);
 
         // 2. Firestore update
-        try {
-          const docRef = doc(firestore, 'medical_records', editingItem.id);
-          await setDoc(docRef, {
-            ...updatedRecord,
-            recordType: 'INVESTIGATION',
-            updatedAt: Date.now(),
-          }, { merge: true });
-        } catch (cloudErr) {
-          console.warn('Firestore investigation sync update error:', cloudErr);
-        }
+        await syncInvestigationToCloud(updatedRecord);
       } else {
         // Add new record
         const invId = `inv-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
@@ -354,16 +330,7 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
         await db.investigations.put(newRecord);
 
         // 2. Firestore SSOT
-        try {
-          const docRef = doc(firestore, 'medical_records', invId);
-          await setDoc(docRef, {
-            ...newRecord,
-            recordType: 'INVESTIGATION',
-            createdAt: Date.now(),
-          });
-        } catch (cloudErr) {
-          console.warn('Firestore investigation sync error:', cloudErr);
-        }
+        await syncInvestigationToCloud(newRecord);
       }
 
       onInvestigationAdded();
