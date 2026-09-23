@@ -102,15 +102,8 @@ export const BedMatrixCard: React.FC<BedMatrixCardProps> = ({
         return;
       }
 
-      // 1. Primary Source: patient.attendingPhysician?.name
-      const primaryDoc = getValidDoctorName(patient.attendingPhysician);
-      if (primaryDoc) {
-        if (isMounted) setResolvedDoctor(primaryDoc);
-        return;
-      }
-
       try {
-        // 2. Fallback 1: Latest SBAR Handover linked to patientId -> incomingDoctor.name then outgoingDoctor.name
+        // 1. Primary Source: Latest SBAR Handover linked to patientId (Current Active Physician on Duty)
         const sbars = await db.sbarHandovers
           .where('patientId')
           .equals(patient.id)
@@ -122,14 +115,26 @@ export const BedMatrixCard: React.FC<BedMatrixCardProps> = ({
             new Date(a.incomingDoctor?.signedAt || a.outgoingDoctor?.signedAt || a.shiftDate || 0).getTime()
           );
           const latest = sbars[0];
-          const sbarDoctor = getValidDoctorName(latest?.incomingDoctor) || getValidDoctorName(latest?.outgoingDoctor);
-          if (sbarDoctor) {
-            if (isMounted) setResolvedDoctor(sbarDoctor);
+          // If the shift was acknowledged by the incoming doctor, they are the active physician on duty
+          // Otherwise, if still pending receipt, show the outgoing doctor who handed over the shift
+          const activeSbarDoctor = latest?.incomingDoctor?.signedAt
+            ? getValidDoctorName(latest.incomingDoctor)
+            : (getValidDoctorName(latest?.outgoingDoctor) || getValidDoctorName(latest?.incomingDoctor));
+          
+          if (activeSbarDoctor) {
+            if (isMounted) setResolvedDoctor(activeSbarDoctor);
             return;
           }
         }
 
-        // 3. Fallback 2: Latest Clinical Note linked to patientId -> authorName
+        // 2. Secondary Source: patient.attendingPhysician?.name
+        const primaryDoc = getValidDoctorName(patient.attendingPhysician);
+        if (primaryDoc) {
+          if (isMounted) setResolvedDoctor(primaryDoc);
+          return;
+        }
+
+        // 3. Fallback: Latest Clinical Note linked to patientId -> authorName
         const notes = await db.clinicalNotes
           .where('patientId')
           .equals(patient.id)
@@ -148,7 +153,7 @@ export const BedMatrixCard: React.FC<BedMatrixCardProps> = ({
           }
         }
 
-        // 4. Final Fallback: patient.attendingPhysician
+        // 4. Final Fallback
         const fallback = getValidDoctorName(patient.attendingPhysician);
         if (isMounted) setResolvedDoctor(fallback || null);
       } catch (err) {

@@ -1302,7 +1302,8 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
 
         {/* Responsive Mobile-Friendly Shift Handover Buttons Row */}
         {settings.features.enableSbarHandover && (() => {
-          const pendingSbar = sbarList.find(s => !s.incomingDoctor?.signedAt);
+          const latestSbar = sbarList && sbarList.length > 0 ? sbarList[0] : null;
+          const pendingSbar = (latestSbar && !latestSbar.incomingDoctor?.signedAt) ? latestSbar : null;
           return (
             <div className="pt-2 border-t border-slate-200 dark:border-slate-800/80 flex items-center gap-2 flex-wrap sm:flex-nowrap w-full">
               {/* Receive Shift Button */}
@@ -3979,7 +3980,8 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
 
                 <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
                   {(() => {
-                    const pendingSbar = sbarList.find(s => !s.incomingDoctor?.signedAt);
+                    const latestSbar = sbarList && sbarList.length > 0 ? sbarList[0] : null;
+                    const pendingSbar = (latestSbar && !latestSbar.incomingDoctor?.signedAt) ? latestSbar : null;
                     return (
                       <>
                         {pendingSbar && (

@@ -800,9 +800,48 @@ export async function acknowledgeSbarHandover(
     },
   };
 
-  await db.transaction('rw', [db.sbarHandovers, db.auditLogs], async () => {
+  await db.transaction('rw', [db.sbarHandovers, db.patients, db.beds, db.auditLogs], async () => {
+    // 1. Save updated SBAR
     await db.sbarHandovers.put(updated);
 
+    // 2. Also mark any other unacknowledged older handovers for this patient as acknowledged to prevent hanging state
+    if (sbar.patientId) {
+      const pendingOlders = await db.sbarHandovers.where('patientId').equals(sbar.patientId).toArray();
+      for (const oldSbar of pendingOlders) {
+        if (!oldSbar.incomingDoctor?.signedAt && oldSbar.id !== sbar.id) {
+          oldSbar.incomingDoctor = updated.incomingDoctor;
+          await db.sbarHandovers.put(oldSbar);
+          syncSbarToCloud(oldSbar).catch(() => {});
+        }
+      }
+
+      // 3. Update Patient's Active Attending Physician to the Incoming Doctor
+      const patient = await db.patients.get(sbar.patientId);
+      if (patient) {
+        const updatedPatient: PatientDossier = {
+          ...patient,
+          attendingPhysician: {
+            staffId: incomingDoctor.staffId,
+            name: incomingDoctor.name,
+            role: incomingDoctor.role,
+          },
+          updatedAt: nowIso,
+        };
+        await db.patients.put(updatedPatient);
+        syncPatientToCloud(updatedPatient).catch(() => {});
+      }
+    }
+
+    // 4. Update Bed's Active Status & Broadcast
+    if (sbar.bedId) {
+      const bed = await db.beds.get(sbar.bedId);
+      if (bed) {
+        await db.beds.put(bed);
+        syncBedToCloud(bed).catch(() => {});
+      }
+    }
+
+    // 5. Audit Log
     const auditLog: WardAuditLog = {
       id: `audit-ack-${Date.now()}`,
       timestamp: nowIso,
@@ -819,6 +858,7 @@ export async function acknowledgeSbarHandover(
   await syncSbarToCloud(updated);
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new Event('icu-data-updated'));
+    window.dispatchEvent(new Event('storage'));
   }
   return updated;
 }

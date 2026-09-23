@@ -133,8 +133,13 @@ export const SbarSignModal: React.FC<SbarSignModalProps> = ({
 
   // Compute pending unacknowledged handover from previous colleague
   const pendingHandover = useMemo(() => {
-    return previousHandovers.find(h => !h.incomingDoctor?.signedAt);
-  }, [previousHandovers]);
+    if (templateSbar && !templateSbar.incomingDoctor?.signedAt) return templateSbar;
+    if (previousHandovers && previousHandovers.length > 0) {
+      const latest = previousHandovers[0];
+      if (latest && !latest.incomingDoctor?.signedAt) return latest;
+    }
+    return null;
+  }, [previousHandovers, templateSbar]);
 
   // Set modal tab to RECEIVE if there is a pending handover when opening
   useEffect(() => {
@@ -157,7 +162,7 @@ export const SbarSignModal: React.FC<SbarSignModalProps> = ({
       };
       const updated = await acknowledgeSbarHandover(pendingHandover.id, docInfo);
       if (updated) {
-        setPreviousHandovers(prev => prev.map(h => h.id === updated.id ? updated : h));
+        setPreviousHandovers(prev => prev.map(h => (h.id === updated.id || !h.incomingDoctor?.signedAt) ? { ...h, incomingDoctor: updated.incomingDoctor } : h));
 
         // Trigger SBAR Handover Received Notification
         const pName = patientName || patient?.fullNameAr || patient?.fullNameEn || `Bed ${bedNumber}`;
@@ -177,6 +182,7 @@ export const SbarSignModal: React.FC<SbarSignModalProps> = ({
 
         onHandoverSigned();
         setModalTab('NEW');
+        onClose();
       }
     } catch (err) {
       console.error('Error acknowledging SBAR handover:', err);
