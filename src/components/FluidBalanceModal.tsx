@@ -18,8 +18,7 @@ import {
 } from 'lucide-react';
 import { BedNumber, PatientDossier, FluidBalance24H } from '../types/schema.ts';
 import { db } from '../db/icuSyncDb.ts';
-import { doc, deleteDoc } from 'firebase/firestore';
-import { firestore, setDoc } from '../services/firebase.ts';
+import { syncFluidBalanceToCloud, deleteFluidBalanceFromCloud } from '../services/firebase.ts';
 import { COLLECTIONS } from '../types/contracts.ts';
 import { useAuth } from '../services/AuthContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
@@ -350,11 +349,7 @@ export const FluidBalanceModal: React.FC<FluidBalanceModalProps> = ({
 
       // Save to Firebase
       try {
-        const fluidRef = doc(firestore, 'fluid_balances', balanceRecord.id);
-        await setDoc(fluidRef, {
-          ...balanceRecord,
-          updatedAt: Date.now(),
-        });
+        await syncFluidBalanceToCloud(balanceRecord);
       } catch (cloudErr) {
         console.warn('Firestore offline sync will queue fluid balance:', cloudErr);
       }
@@ -375,8 +370,7 @@ export const FluidBalanceModal: React.FC<FluidBalanceModalProps> = ({
     try {
       await db.fluidBalances.delete(initialFluidBalance.id);
       try {
-        const fluidRef = doc(firestore, 'fluid_balances', initialFluidBalance.id);
-        await deleteDoc(fluidRef);
+        await deleteFluidBalanceFromCloud(initialFluidBalance.id);
       } catch (e) {
         console.warn('Firestore delete offline:', e);
       }

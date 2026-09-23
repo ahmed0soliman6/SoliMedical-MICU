@@ -261,6 +261,13 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    match /fluid_balances/{id} {
+      allow read: if hasPerm('vitals.view') || hasPerm('beds.view') || hasPerm('patients.view');
+      allow create: if hasPerm('vitals.create') || hasPerm('patients.update');
+      allow update: if (hasPerm('vitals.update') || hasPerm('patients.update')) && isValidMedicalRecordUpdate();
+      allow delete: if isAdmin();
+    }
+
     match /fluidBalances24H/{id} {
       allow read: if hasPerm('vitals.view') || hasPerm('beds.view') || hasPerm('patients.view');
       allow create: if hasPerm('vitals.create') || hasPerm('patients.update');
