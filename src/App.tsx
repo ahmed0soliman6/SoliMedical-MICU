@@ -27,8 +27,7 @@ import { getPatientForBed, toggleBedOperationalStatus } from './services/dataMod
 import { purgePhantomCriticalVitals, ensureBedPatientSync } from './db/icuSyncDb.ts';
 import { 
   subscribeToRealtimeFirestore, 
-  seedInitialDataToFirestore,
-  pullCloudDataToLocalDb
+  seedInitialDataToFirestore
 } from './services/firebase.ts';
 import { useTranslation } from './services/i18n.ts';
 import { useAuth } from './services/AuthContext.tsx';
@@ -366,19 +365,8 @@ export default function App() {
         await reloadData();
         setIsReady(true);
 
-        // 3. Background Cloud Reconcile: pull fresh Firestore data asynchronously without freezing screen
-        (async () => {
-          try {
-            await pullCloudDataToLocalDb();
-            await reloadData();
-          } catch (cloudErr) {
-            console.warn('Background cloud sync notice:', cloudErr);
-          }
-        })();
-
-        // 4. Subscribe to ongoing real-time cloud changes from Firebase Firestore
+        // 3. Authoritative Real-Time Sync & Initial Snapshot from Firebase Firestore (Single Source of Truth)
         unsubscribeFirestore = subscribeToRealtimeFirestore(async () => {
-          console.log('Firestore cloud delta received. Synchronizing local state...');
           await reloadData();
         });
       } catch (e) {

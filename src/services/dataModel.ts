@@ -1065,7 +1065,8 @@ export function getPatientForBed(
   // 1. Direct match by bed's currentPatientId or activePatientId
   if (targetPatientId) {
     const directActiveMatch = patients.find(
-      p => (p.id === targetPatientId || p.mrn === targetPatientId) && p.patientStatus === 'ACTIVE_ICU'
+      p => (p.id === targetPatientId || p.mrn === targetPatientId) && 
+        (p.patientStatus === 'ACTIVE_ICU' || (p as any).status === 'ACTIVE_ICU' || (p as any).currentStatus === 'ACTIVE_ICU')
     );
     if (directActiveMatch) return directActiveMatch;
 
@@ -1080,7 +1081,8 @@ export function getPatientForBed(
 
   // 2. Secondary match by patient's currentBedId === bed.bedNumber
   const bedMatch = patients.find(
-    p => (p.currentBedId === bed.bedNumber || (p.currentBedId as any) === bed.id) && p.patientStatus === 'ACTIVE_ICU'
+    p => (p.currentBedId === bed.bedNumber || (p.currentBedId as any) === bed.id) && 
+      (p.patientStatus === 'ACTIVE_ICU' || (p as any).status === 'ACTIVE_ICU' || (p as any).currentStatus === 'ACTIVE_ICU')
   );
   if (bedMatch) return bedMatch;
 

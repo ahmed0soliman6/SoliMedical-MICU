@@ -104,7 +104,11 @@ export const Header: React.FC<HeaderProps> = ({
     if (!b) return false;
     return b.status === 'OCCUPIED' || b.status === 'ISOLATION' || !!getPatientForBed(b, patients);
   }).length;
-  const criticalCount = (patients || []).filter(p => p && p.patientStatus === 'ACTIVE_ICU' && p.acuityLevel === 'CRITICAL_STAT').length;
+  const criticalCount = (patients || []).filter(p => 
+    p && 
+    (p.patientStatus === 'ACTIVE_ICU' || (p as any).status === 'ACTIVE_ICU' || (p as any).currentStatus === 'ACTIVE_ICU') && 
+    p.acuityLevel === 'CRITICAL_STAT'
+  ).length;
   
   const [notificationPermission, setNotificationPermission] = useState<string>('default');
   const [syncToastMessage, setSyncToastMessage] = useState<string | null>(null);

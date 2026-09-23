@@ -995,7 +995,34 @@ export function subscribeToRealtimeFirestore(
   try {
     // 1. Subscribe to Beds
     const bedsCol = collection(firestore, 'beds');
+    let isInitialBedsSnapshot = true;
     const unsubBeds = onSnapshot(bedsCol, async (snapshot) => {
+      if (snapshot.empty && isInitialBedsSnapshot) {
+        try {
+          const totalBedsCount = 6;
+          const bedIds = Array.from({ length: totalBedsCount }, (_, i) => String(i + 1).padStart(2, '0'));
+          for (let idx = 0; idx < bedIds.length; idx++) {
+            const num = bedIds[idx];
+            const cleanBed: BedRecord = {
+              id: num,
+              unitId: 'MICU-MAIN',
+              bedNumber: num as BedNumber,
+              bayName: `Critical Care Bay ${num}`,
+              isActive: true,
+              displayOrder: idx,
+              status: idx === (totalBedsCount - 1) ? BedStatus.UNAVAILABLE : BedStatus.VACANT,
+              currentPatientId: null,
+              activePatientId: null,
+              lastCleanedAt: new Date().toISOString()
+            };
+            await syncBedToCloud(cleanBed);
+          }
+        } catch (seedErr) {
+          console.warn('Auto-seed default beds notice:', seedErr);
+        }
+      }
+      isInitialBedsSnapshot = false;
+
       for (const change of snapshot.docChanges()) {
         if (change.type === 'added' || change.type === 'modified') {
           const remoteBed = change.doc.data() as BedRecord;
@@ -1030,31 +1057,43 @@ export function subscribeToRealtimeFirestore(
     }, (err) => handleFirestoreError(err, OperationType.GET, 'beds'));
     unsubscribers.push(unsubBeds);
 
-    // 2. Subscribe to Active Patients Query (scoped to active ICU status)
-    const activePatientsQuery = query(
-      collection(firestore, 'patients'),
-      where('patientStatus', '==', 'ACTIVE_ICU')
-    );
-    const unsubPatients = onSnapshot(activePatientsQuery, async (snapshot) => {
+    // 2. Subscribe to Patients (all active & unit patients, handling status variants seamlessly)
+    const patientsCol = collection(firestore, 'patients');
+    const unsubPatients = onSnapshot(patientsCol, async (snapshot) => {
       for (const change of snapshot.docChanges()) {
         if (change.type === 'added' || change.type === 'modified') {
           const remotePatient = change.doc.data() as PatientDossier;
           const patientId = remotePatient.id || (remotePatient as any).patientId || change.doc.id;
           if (patientId) {
             const localPatient = await db.patients.get(patientId);
-            if (!localPatient || !localPatient.updatedAt || !remotePatient.updatedAt ||
-                new Date(remotePatient.updatedAt).getTime() >= new Date(localPatient.updatedAt).getTime()) {
-              await db.patients.put({
-                ...remotePatient,
-                id: patientId,
-                patientStatus: remotePatient.patientStatus || (remotePatient as any).status || 'ACTIVE_ICU'
-              });
-            }
+            const resolvedStatus = 
+              remotePatient.patientStatus || 
+              (remotePatient as any).status || 
+              (remotePatient as any).currentStatus || 
+              'ACTIVE_ICU';
+
+            const resolvedBed = 
+              remotePatient.currentBedId || 
+              (remotePatient as any).bedNumber || 
+              (remotePatient as any).bedId || 
+              localPatient?.currentBedId;
+
+            const mergedPatient: PatientDossier = {
+              ...localPatient,
+              ...remotePatient,
+              id: patientId,
+              patientStatus: resolvedStatus,
+              status: resolvedStatus,
+              currentStatus: resolvedStatus,
+              currentBedId: resolvedBed,
+            };
+            await db.patients.put(mergedPatient);
           }
         } else if (change.type === 'removed') {
           await db.patients.delete(change.doc.id);
         }
       }
+      await ensureBedPatientSync();
       notifyUpdate();
     }, (err) => handleFirestoreError(err, OperationType.GET, 'patients'));
     unsubscribers.push(unsubPatients);
@@ -1284,6 +1323,11 @@ export async function fetchPatientHistoricalDataFromCloud(patientId: string): Pr
   }
 }
 
+let currentFlowsheetSubscription: {
+  patientId: string;
+  unsubs: Unsubscribe[];
+} | null = null;
+
 /**
  * Real-time listener scoped specifically to the currently active patient's flowsheet.
  * Subscribes to real-time updates for active patient clinical records (labs, abx, notes, vents, pumps, fluids, invs)
@@ -1291,6 +1335,14 @@ export async function fetchPatientHistoricalDataFromCloud(patientId: string): Pr
  */
 export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: () => void): () => void {
   if (!patientId) return () => {};
+
+  // Clean up any previous flowsheet listener before opening a new one
+  if (currentFlowsheetSubscription) {
+    currentFlowsheetSubscription.unsubs.forEach(u => {
+      try { u(); } catch {}
+    });
+    currentFlowsheetSubscription = null;
+  }
 
   const unsubs: Unsubscribe[] = [];
 
@@ -1328,8 +1380,13 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
       notify();
     }, () => {}));
 
-    // 3. Medical Records (Unified Labs & Investigations written to medical_records) (up to 30 newest)
-    const medRecQ = query(collection(firestore, 'medical_records'), where('patientId', '==', patientId), limit(30));
+    // 3. Medical Records (Unified Labs & Investigations written to medical_records) (up to 30 newest ordered by createdAt desc)
+    const medRecQ = query(
+      collection(firestore, 'medical_records'), 
+      where('patientId', '==', patientId), 
+      orderBy('createdAt', 'desc'), 
+      limit(30)
+    );
     unsubs.push(onSnapshot(medRecQ, async (snap) => {
       for (const change of snap.docChanges()) {
         const data = change.doc.data();
@@ -1348,7 +1405,34 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
         }
       }
       notify();
-    }, () => {}));
+    }, (err) => {
+      console.warn('medical_records query with orderBy failed, falling back to unordered limit query:', err);
+      try {
+        const fallbackMedRecQ = query(collection(firestore, 'medical_records'), where('patientId', '==', patientId), limit(30));
+        const fallbackUnsub = onSnapshot(fallbackMedRecQ, async (snap) => {
+          for (const change of snap.docChanges()) {
+            const data = change.doc.data();
+            if (change.type === 'added' || change.type === 'modified') {
+              if (data.recordType === 'INVESTIGATION') {
+                await db.investigations.put(data as InvestigationItem);
+              } else {
+                await db.labResults.put(data as LabResultItem);
+              }
+            } else if (change.type === 'removed') {
+              if (data.recordType === 'INVESTIGATION') {
+                await db.investigations.delete(change.doc.id);
+              } else {
+                await db.labResults.delete(change.doc.id);
+              }
+            }
+          }
+          notify();
+        }, () => {});
+        unsubs.push(fallbackUnsub);
+      } catch (fbErr) {
+        console.warn('Fallback medical_records query failed:', fbErr);
+      }
+    }));
 
     // 4. Antibiotics (active patient antibiotics up to 15)
     const abxQ = query(collection(firestore, 'patientAntibiotics'), where('patientId', '==', patientId), orderBy('startDate', 'desc'), limit(15));
@@ -1445,8 +1529,19 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
     console.warn(`Could not subscribe to active patient ${patientId}:`, err);
   }
 
+  currentFlowsheetSubscription = { patientId, unsubs };
+
   return () => {
-    unsubs.forEach(unsub => unsub());
+    if (currentFlowsheetSubscription && currentFlowsheetSubscription.patientId === patientId) {
+      currentFlowsheetSubscription.unsubs.forEach(u => {
+        try { u(); } catch {}
+      });
+      currentFlowsheetSubscription = null;
+    } else {
+      unsubs.forEach(u => {
+        try { u(); } catch {}
+      });
+    }
   };
 }
 
@@ -2116,34 +2211,67 @@ export async function deleteInvestigationFromCloud(invId: string): Promise<void>
  * Quota cost: 1 read upon initial connection, 0 reads unless an admin updates settings.
  */
 export function subscribeToSystemSettings(onSettingsChange: (settings: SystemSettings) => void): Unsubscribe {
+  let fallbackUnsub: Unsubscribe | null = null;
   const docRef = doc(firestore, 'settings', 'system_config');
-  return onSnapshot(docRef, (docSnap) => {
+  
+  const primaryUnsub = onSnapshot(docRef, (docSnap) => {
     if (docSnap.exists()) {
       onSettingsChange(docSnap.data() as SystemSettings);
     }
   }, (err) => {
-    // If permission or not found, fallback to system_settings/system_config
-    const fallbackRef = doc(firestore, 'system_settings', 'system_config');
-    onSnapshot(fallbackRef, (fbSnap) => {
-      if (fbSnap.exists()) {
-        onSettingsChange(fbSnap.data() as SystemSettings);
-      }
-    }, () => {});
+    handleFirestoreError(err, OperationType.GET, 'settings/system_config');
+    // If error on primary, try fallback to system_settings/system_config and track cleanup
+    try {
+      const fallbackRef = doc(firestore, 'system_settings', 'system_config');
+      fallbackUnsub = onSnapshot(fallbackRef, (fbSnap) => {
+        if (fbSnap.exists()) {
+          onSettingsChange(fbSnap.data() as SystemSettings);
+        }
+      }, (fbErr) => {
+        handleFirestoreError(fbErr, OperationType.GET, 'system_settings/system_config');
+      });
+    } catch (fbInitErr) {
+      console.warn('Fallback settings subscription notice:', fbInitErr);
+    }
   });
+
+  return () => {
+    primaryUnsub();
+    if (fallbackUnsub) {
+      fallbackUnsub();
+      fallbackUnsub = null;
+    }
+  };
 }
 
 /**
  * Sync System Settings to Cloud (Settings & System_Settings documents)
  */
 export async function syncSystemSettingsToCloud(settings: SystemSettings): Promise<void> {
+  const clean = sanitizeForFirestore(settings);
+  let writeSuccess = false;
+  let lastError: any = null;
+
   try {
-    const clean = sanitizeForFirestore(settings);
-    await Promise.all([
-      setDoc(doc(firestore, 'settings', 'system_config'), clean, { merge: true }).catch(() => {}),
-      setDoc(doc(firestore, 'system_settings', 'system_config'), clean, { merge: true }).catch(() => {})
-    ]);
-  } catch (err) {
-    console.warn('Failed to sync system settings to cloud:', err);
+    await setDoc(doc(firestore, 'settings', 'system_config'), clean, { merge: true });
+    writeSuccess = true;
+  } catch (err1) {
+    lastError = err1;
+    console.warn('Sync to settings/system_config failed, attempting fallback...', err1);
+  }
+
+  try {
+    await setDoc(doc(firestore, 'system_settings', 'system_config'), clean, { merge: true });
+    writeSuccess = true;
+  } catch (err2) {
+    if (!writeSuccess) {
+      lastError = err2;
+    }
+  }
+
+  if (!writeSuccess) {
+    handleFirestoreError(lastError, OperationType.WRITE, 'settings/system_config');
+    throw lastError || new Error('Failed to synchronize system settings to Firestore');
   }
 }
 

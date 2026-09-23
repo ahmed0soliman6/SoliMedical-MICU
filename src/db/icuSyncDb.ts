@@ -811,7 +811,11 @@ export async function ensureBedPatientSync(): Promise<void> {
   // Reconcile and synchronize bed occupancy state with active patients in IndexedDB
   const currentBeds = await db.beds.toArray();
   const allPatients = await db.patients.toArray();
-  const activePatients = allPatients.filter(p => p.patientStatus === 'ACTIVE_ICU');
+  const activePatients = allPatients.filter(p => 
+    p.patientStatus === 'ACTIVE_ICU' || 
+    (p as any).status === 'ACTIVE_ICU' || 
+    (p as any).currentStatus === 'ACTIVE_ICU'
+  );
 
   // Build a map of bedNumber -> active patient (Patient dossier is primary source of truth)
   const bedToActivePatientMap = new Map<string, PatientDossier>();
