@@ -1125,3 +1125,94 @@ html.dark .icu-card-header-toggle:hover {
 .animate-pulse-subtle {
   animation: pulse-subtle 2s infinite ease-in-out;
 }
+
+/* =========================================================================
+   UNIVERSAL MANDATORY / REQUIRED CLINICAL INPUTS (تحديد ظلال خفيف للحقول الإلزامية)
+   Gives every mandatory input box a clean, subtle shadow definition so doctors
+   and ICU staff immediately recognize required fields across the entire system.
+   ========================================================================= */
+
+/* Dark Mode - Soft warm amber/gold border & subtle shadow outline */
+html.dark input:required:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="hidden"]):not([type="range"]):not([type="file"]):not(:disabled):not([readonly]),
+html.dark select:required:not(:disabled):not([readonly]),
+html.dark textarea:required:not(:disabled):not([readonly]),
+html.dark input[required]:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="hidden"]):not([type="range"]):not([type="file"]):not(:disabled):not([readonly]),
+html.dark select[required]:not(:disabled):not([readonly]),
+html.dark textarea[required]:not(:disabled):not([readonly]),
+html.dark [aria-required="true"]:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not(:disabled):not([readonly]),
+html.dark [data-required="true"]:not(:disabled):not([readonly]),
+html.dark .is-required-field:not(:disabled):not([readonly]),
+html.dark .required-field:not(:disabled):not([readonly]) {
+  border-color: rgba(245, 158, 11, 0.58) !important;
+  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.38), 0 2px 8px -1px rgba(245, 158, 11, 0.2), 0 1px 3px 0 rgba(0, 0, 0, 0.35) !important;
+  transition: border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Dark Mode - Focus State: Prominent active ICU teal ring */
+html.dark input:required:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="hidden"]):not([type="range"]):not([type="file"]):not(:disabled):not([readonly]):focus,
+html.dark select:required:not(:disabled):not([readonly]):focus,
+html.dark textarea:required:not(:disabled):not([readonly]):focus,
+html.dark input[required]:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="hidden"]):not([type="range"]):not([type="file"]):not(:disabled):not([readonly]):focus,
+html.dark select[required]:not(:disabled):not([readonly]):focus,
+html.dark textarea[required]:not(:disabled):not([readonly]):focus,
+html.dark [aria-required="true"]:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not(:disabled):not([readonly]):focus,
+html.dark [data-required="true"]:not(:disabled):not([readonly]):focus,
+html.dark .is-required-field:not(:disabled):not([readonly]):focus,
+html.dark .required-field:not(:disabled):not([readonly]):focus {
+  border-color: #14b8a6 !important;
+  box-shadow: 0 0 0 2px #14b8a6, 0 0 14px -1px rgba(20, 184, 166, 0.45), 0 2px 4px rgba(0, 0, 0, 0.4) !important;
+  outline: none !important;
+}
+
+/* Day / Light Mode - Warm amber/bronze subtle shadow outline */
+html:not(.dark) input:required:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="hidden"]):not([type="range"]):not([type="file"]):not(:disabled):not([readonly]),
+html:not(.dark) select:required:not(:disabled):not([readonly]),
+html:not(.dark) textarea:required:not(:disabled):not([readonly]),
+html:not(.dark) input[required]:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="hidden"]):not([type="range"]):not([type="file"]):not(:disabled):not([readonly]),
+html:not(.dark) select[required]:not(:disabled):not([readonly]),
+html:not(.dark) textarea[required]:not(:disabled):not([readonly]),
+html:not(.dark) [aria-required="true"]:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not(:disabled):not([readonly]),
+html:not(.dark) [data-required="true"]:not(:disabled):not([readonly]),
+html:not(.dark) .is-required-field:not(:disabled):not([readonly]),
+html:not(.dark) .required-field:not(:disabled):not([readonly]),
+html.light input:required:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="hidden"]):not([type="range"]):not([type="file"]):not(:disabled):not([readonly]),
+html.light select:required:not(:disabled):not([readonly]),
+html.light textarea:required:not(:disabled):not([readonly]),
+html.light input[required]:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="hidden"]):not([type="range"]):not([type="file"]):not(:disabled):not([readonly]),
+html.light select[required]:not(:disabled):not([readonly]),
+html.light textarea[required]:not(:disabled):not([readonly]),
+html.light [aria-required="true"]:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not(:disabled):not([readonly]),
+html.light [data-required="true"]:not(:disabled):not([readonly]),
+html.light .is-required-field:not(:disabled):not([readonly]),
+html.light .required-field:not(:disabled):not([readonly]) {
+  border-color: rgba(217, 119, 6, 0.65) !important;
+  box-shadow: 0 0 0 1px rgba(217, 119, 6, 0.42), 0 2px 6px -1px rgba(217, 119, 6, 0.2), 0 1px 2px rgba(0, 0, 0, 0.05) !important;
+  transition: border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Day / Light Mode - Focus State */
+html:not(.dark) input:required:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="hidden"]):not([type="range"]):not([type="file"]):not(:disabled):not([readonly]):focus,
+html:not(.dark) select:required:not(:disabled):not([readonly]):focus,
+html:not(.dark) textarea:required:not(:disabled):not([readonly]):focus,
+html:not(.dark) input[required]:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="hidden"]):not([type="range"]):not([type="file"]):not(:disabled):not([readonly]):focus,
+html:not(.dark) select[required]:not(:disabled):not([readonly]):focus,
+html:not(.dark) textarea[required]:not(:disabled):not([readonly]):focus,
+html:not(.dark) [aria-required="true"]:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not(:disabled):not([readonly]):focus,
+html:not(.dark) [data-required="true"]:not(:disabled):not([readonly]):focus,
+html:not(.dark) .is-required-field:not(:disabled):not([readonly]):focus,
+html:not(.dark) .required-field:not(:disabled):not([readonly]):focus,
+html.light input:required:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="hidden"]):not([type="range"]):not([type="file"]):not(:disabled):not([readonly]):focus,
+html.light select:required:not(:disabled):not([readonly]):focus,
+html.light textarea:required:not(:disabled):not([readonly]):focus,
+html.light input[required]:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="hidden"]):not([type="range"]):not([type="file"]):not(:disabled):not([readonly]):focus,
+html.light select[required]:not(:disabled):not([readonly]):focus,
+html.light textarea[required]:not(:disabled):not([readonly]):focus,
+html.light [aria-required="true"]:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not(:disabled):not([readonly]):focus,
+html.light [data-required="true"]:not(:disabled):not([readonly]):focus,
+html.light .is-required-field:not(:disabled):not([readonly]):focus,
+html.light .required-field:not(:disabled):not([readonly]):focus {
+  border-color: #0f766e !important;
+  box-shadow: 0 0 0 2px #0f766e, 0 0 12px -1px rgba(15, 118, 110, 0.35), 0 2px 4px rgba(0, 0, 0, 0.08) !important;
+  outline: none !important;
+}
+

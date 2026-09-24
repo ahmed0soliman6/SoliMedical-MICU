@@ -1445,6 +1445,7 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
                   <select
                     value={formStatus}
                     onChange={(e) => setFormStatus(e.target.value as any)}
+                    required
                     className="w-full px-3 py-2 text-xs rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-teal-500 font-bold"
                   >
                     <option value="RESULTED">{lang === 'ar' ? 'نتيجة (Resulted)' : 'Resulted'}</option>

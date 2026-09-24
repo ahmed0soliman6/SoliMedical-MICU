@@ -791,6 +791,7 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
                   <select
                     value={status}
                     onChange={(e) => setStatus(e.target.value as any)}
+                    required
                     className="w-full px-3 py-2 text-xs rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-teal-500 cursor-pointer"
                   >
                     <option value="REPORTED">{lang === 'ar' ? 'تقرير معتمد (Reported)' : 'Reported'}</option>
@@ -823,6 +824,7 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
                   onChange={(e) => setResultReport(e.target.value)}
                   placeholder={lang === 'ar' ? 'أدخل نص التقرير، النتائج الإشعاعية، انطباع الطبيب...' : 'Enter findings, radiological impression, acute abnormalities...'}
                   rows={4}
+                  required={status !== 'ORDERED'}
                   className="w-full px-3 py-2 text-xs rounded-xl bg-slate-900 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-teal-500 font-sans"
                 />
               </div>

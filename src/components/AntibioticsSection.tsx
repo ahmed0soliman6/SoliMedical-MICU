@@ -1689,6 +1689,7 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                         }
                       }
                     }}
+                    required
                     className="w-full bg-slate-50 dark:bg-[#070c18] border border-amber-400 dark:border-amber-500/50 rounded-xl px-2.5 py-1.5 text-xs text-amber-900 dark:text-amber-300 font-bold font-mono focus:outline-none focus:border-amber-500 cursor-pointer shadow-inner"
                   >
                     <option value="" disabled>{lang === 'ar' ? '-- اختر الجرعة المتوفرة --' : '-- Select Available Dose --'}</option>
@@ -1721,6 +1722,7 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                   <select
                     value={route}
                     onChange={(e) => setRoute(e.target.value)}
+                    required
                     className="w-full bg-slate-50 dark:bg-[#070c18] border border-slate-300 dark:border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-amber-500"
                   >
                     <option value="IV">IV (Intravenous)</option>
@@ -1766,6 +1768,7 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                           setFrequency(val);
                         }
                       }}
+                      required
                       className="w-full bg-slate-50 dark:bg-[#070c18] border border-slate-300 dark:border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-amber-500 font-mono cursor-pointer"
                     >
                       <option value="Q6H">Q6H (كل 6 س)</option>
@@ -1821,6 +1824,7 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                         setPlannedDurationDays(Number(val));
                       }
                     }}
+                    required
                     className="w-full bg-slate-50 dark:bg-[#070c18] border border-amber-400 dark:border-amber-500/40 rounded-xl px-2.5 py-1.5 text-xs text-amber-900 dark:text-amber-300 font-bold font-mono focus:outline-none focus:border-amber-500 cursor-pointer shadow-inner"
                   >
                     {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21].map(d => (
@@ -1837,6 +1841,7 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                         type="number"
                         min="1"
                         max="90"
+                        required
                         value={plannedDurationDays}
                         onChange={(e) => setPlannedDurationDays(Number(e.target.value))}
                         placeholder={lang === 'ar' ? 'عدد الأيام' : 'Days'}

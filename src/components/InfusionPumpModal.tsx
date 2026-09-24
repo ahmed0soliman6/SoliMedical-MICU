@@ -774,6 +774,7 @@ export const InfusionPumpModal: React.FC<InfusionPumpModalProps> = ({
                     value={customCountText}
                     onChange={(e) => setCustomCountText(toEnglishDigits(e.target.value))}
                     placeholder="Enter custom count..."
+                    required
                     className="flex-1 bg-white dark:bg-[#091122] border border-amber-500/70 rounded-xl px-3 py-2 text-amber-700 dark:text-amber-300 font-mono text-xs font-bold focus:border-amber-500 focus:outline-none"
                   />
                   <span className="text-xs text-slate-500 dark:text-slate-400 font-mono px-2 py-1 bg-slate-200/70 dark:bg-slate-900 rounded-lg border border-slate-300 dark:border-slate-800">
@@ -802,6 +803,7 @@ export const InfusionPumpModal: React.FC<InfusionPumpModalProps> = ({
                 <select
                   value={selectedCarrier}
                   onChange={(e) => setSelectedCarrier(e.target.value)}
+                  required
                   className="w-full bg-white dark:bg-[#091122] border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-cyan-700 dark:text-cyan-300 font-mono text-xs font-bold focus:border-cyan-500 focus:outline-none"
                 >
                   {currentKnowledge.compatibleCarriers.map(c => (
@@ -819,6 +821,7 @@ export const InfusionPumpModal: React.FC<InfusionPumpModalProps> = ({
                   value={customCarrierText}
                   onChange={(e) => setCustomCarrierText(e.target.value)}
                   placeholder="e.g. Sterile Water, D5 1/2NS..."
+                  required
                   className="w-full bg-white dark:bg-[#091122] border border-cyan-500/70 rounded-xl px-3 py-2 text-cyan-700 dark:text-cyan-200 font-mono text-xs focus:border-cyan-500 focus:outline-none"
                 />
               )}

@@ -903,6 +903,7 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
                       type="datetime-local"
                       value={sampleDate}
                       onChange={(e) => setSampleDate(e.target.value)}
+                      required
                       className="w-full bg-white dark:bg-[#0b1224] border border-slate-300 dark:border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 dark:text-white focus:border-teal-500 focus:outline-none shadow-sm"
                     />
                   </div>
@@ -966,6 +967,7 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
                                 type="text"
                                 value={item.value}
                                 onChange={(e) => handleItemValueChange(idx, e.target.value)}
+                                required
                                 className="w-20 bg-white dark:bg-[#0b1224] border border-teal-400 dark:border-teal-500/40 rounded-lg px-2 py-1 text-xs text-teal-800 dark:text-teal-300 font-mono font-bold text-center focus:outline-none focus:ring-1 focus:ring-teal-500 shadow-sm"
                                 placeholder="0.0"
                               />
