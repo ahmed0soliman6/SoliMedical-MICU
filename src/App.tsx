@@ -40,7 +40,6 @@ import { HospitalChatView } from './components/HospitalChatView.tsx';
 import { TopNotificationBanner } from './components/TopNotificationBanner.tsx';
 import { FloatingChatWidget } from './components/FloatingChatWidget.tsx';
 import { ExitConfirmationModal } from './components/ExitConfirmationModal.tsx';
-import { ClinicalUserGuideModal } from './components/ClinicalUserGuideModal.tsx';
 import { useAppNotifications } from './services/NotificationContext.tsx';
 import { AppNotificationTarget } from './types/notification.ts';
 
@@ -129,7 +128,6 @@ export default function App() {
 
   // Exit protection state & guard ref
   const [isExitConfirmationOpen, setIsExitConfirmationOpen] = useState(false);
-  const [isUserGuideOpen, setIsUserGuideOpen] = useState(false);
   const isExitingRef = useRef(false);
 
   // Guard against accidental website exit when pressing Back at root screen
@@ -502,10 +500,6 @@ export default function App() {
           setActiveTab('users');
           setIsSidebarOpen(false);
         }}
-        onOpenUserGuide={() => {
-          setIsUserGuideOpen(true);
-          setIsSidebarOpen(false);
-        }}
         beds={beds}
         patients={patients}
         selectedBedNumber={selectedBedNumber}
@@ -755,12 +749,6 @@ export default function App() {
         isOpen={isExitConfirmationOpen}
         onStay={() => setIsExitConfirmationOpen(false)}
         onConfirmExit={handleConfirmExit}
-      />
-
-      {/* Clinical User Manual & Illustrated PDF Modal */}
-      <ClinicalUserGuideModal
-        isOpen={isUserGuideOpen}
-        onClose={() => setIsUserGuideOpen(false)}
       />
     </div>
   );

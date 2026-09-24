@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   Activity, 
-  Search, 
   UserPlus, 
   ShieldAlert, 
   Layers, 
@@ -50,7 +49,7 @@ interface HeaderProps {
   selectedBedNumber?: BedNumber | null;
   onSelectBed?: (bed: BedNumber | null) => void;
   onOpenAdmission?: () => void;
-  onOpenSearch: () => void;
+  onOpenSearch?: () => void;
   onOpenSettings: () => void;
   onOpenSidebar: () => void;
   onTriggerCloudSync?: () => void;
@@ -422,21 +421,6 @@ export const Header: React.FC<HeaderProps> = ({
               </>
             )}
           </button>
-          {/* Universal Search Icon Button */}
-          {settings.features.enableArchiveSearch && (
-            <button
-              onClick={onOpenSearch}
-              className={`flex items-center justify-center p-2 sm:px-2.5 sm:py-2 rounded-xl border text-xs font-semibold transition-all active:scale-95 shadow-sm group cursor-pointer ${
-                activeTab === 'search'
-                  ? 'bg-teal-50 dark:bg-teal-500/20 border-teal-500 text-teal-700 dark:text-teal-300 shadow-teal-500/10'
-                  : 'bg-white hover:bg-slate-100 dark:bg-[#0b1325] dark:hover:bg-[#111d38] border-slate-200 dark:border-slate-700/80 text-slate-700 hover:text-teal-700 dark:text-slate-300 dark:hover:text-teal-300'
-              }`}
-              title={lang === 'ar' ? 'البحث السريع في سجلات المرضى والأرشيف' : 'Search patient records & MRN'}
-              aria-label="Search patient records"
-            >
-              <Search className="w-4 h-4 text-teal-600 dark:text-teal-400 group-hover:scale-110 transition-transform flex-shrink-0" />
-            </button>
-          )}
 
           {/* Integrated Notification & Alert Center Bell with Popover */}
           <div className="relative" ref={notifMenuRef}>

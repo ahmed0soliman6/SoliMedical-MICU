@@ -14,9 +14,7 @@ import {
   MessageSquare, 
   KeyRound, 
   Sun, 
-  Moon,
-  BookOpen,
-  FileDown
+  Moon
 } from 'lucide-react';
 import { BedRecord, PatientDossier, BedNumber } from '../types/schema.ts';
 import { useSystemSettings } from '../services/SettingsContext.tsx';
@@ -271,28 +269,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {isRTL ? <ChevronLeft className="w-4 h-4 text-slate-400 shrink-0" /> : <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />}
           </button>
         )}
-
-        {/* 7. Clinical User Manual (PDF) */}
-        <button
-          onClick={() => {
-            onClose();
-            if (onOpenUserGuide) onOpenUserGuide();
-          }}
-          className="w-full flex items-center justify-between p-3 rounded-xl text-xs font-bold transition-all bg-teal-50/70 hover:bg-teal-100/80 dark:bg-teal-950/40 dark:hover:bg-teal-900/60 text-teal-900 dark:text-teal-200 border border-teal-300 dark:border-teal-500/40 shadow-sm cursor-pointer mt-1"
-        >
-          <div className="flex items-center gap-3 truncate">
-            <div className="p-2 rounded-lg bg-teal-500/20 text-teal-700 dark:text-teal-300 border border-teal-500/30">
-              <BookOpen className="w-4 h-4" />
-            </div>
-            <div className="truncate text-left rtl:text-right">
-              <span className="block truncate font-bold">{lang === 'ar' ? 'دليل الاستخدام السريري (PDF)' : 'Clinical User Guide (PDF)'}</span>
-              <span className="block text-[10px] text-teal-700 dark:text-teal-400 font-normal">{lang === 'ar' ? 'شرح مصور لجميع البطاقات' : 'Illustrated Cards Manual'}</span>
-            </div>
-          </div>
-          <span className="text-[10px] px-2 py-0.5 rounded bg-teal-600 text-white font-mono font-bold shrink-0">
-            PDF
-          </span>
-        </button>
       </div>
 
       {/* User Profile Footer */}
