@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { 
   FlaskConical, 
   Plus, 
@@ -35,6 +35,62 @@ import { syncLabResultToCloud, deleteLabResultFromCloud } from '../services/fire
 import { COLLECTIONS } from '../types/contracts.ts';
 import { AiLabScannerModal } from './AiLabScannerModal.tsx';
 import { toEnglishDigits } from '../services/numberUtils.ts';
+
+// Helper to determine clinical median/guidance value for lab tests
+export const getGuidanceValue = (testName: string, normalRange?: string): string => {
+  const norm = (testName || '').toLowerCase().trim();
+  
+  // Specific clinically standard medians
+  if (norm.includes('hb') || norm.includes('hemoglobin') || norm === 'hg') return '13.5';
+  if (norm.includes('wbc')) return '7.5';
+  if (norm.includes('platelet') || norm.includes('plt')) return '250';
+  if (norm.includes('hematocrit') || norm.includes('hct')) return '42.0';
+  if (norm.includes('creatinine') || norm.includes('creat')) return '0.9';
+  if (norm.includes('urea')) return '25';
+  if (norm.includes('bun')) return '14';
+  if (norm.includes('sodium') || norm.includes('na')) return '140';
+  if (norm.includes('potassium') || norm.includes('k')) return '4.2';
+  if (norm.includes('chloride') || norm.includes('cl')) return '102';
+  if (norm.includes('calcium') || norm.includes('ca')) return '9.2';
+  if (norm.includes('magnesium') || norm.includes('mg')) return '2.0';
+  if (norm.includes('phosphor') || norm.includes('po4')) return '3.5';
+  if (norm.includes('ph')) return '7.40';
+  if (norm.includes('po2')) return '95';
+  if (norm.includes('pco2')) return '40';
+  if (norm.includes('hco3')) return '24';
+  if (norm.includes('be') || norm.includes('base excess')) return '0';
+  if (norm.includes('sao2')) return '98';
+  if (norm.includes('lactate')) return '1.2';
+  if (norm.includes('crp')) return '3.0';
+  if (norm.includes('procalcitonin')) return '0.1';
+  if (norm.includes('inr')) return '1.0';
+  if (norm.includes('pt') && !norm.includes('ptt')) return '12.0';
+  if (norm.includes('ptt')) return '30';
+  if (norm.includes('total bili')) return '0.8';
+  if (norm.includes('direct bili')) return '0.1';
+  if (norm.includes('alt') || norm.includes('sgpt')) return '25';
+  if (norm.includes('ast') || norm.includes('sgot')) return '22';
+  if (norm.includes('albumin')) return '4.0';
+  if (norm.includes('protein')) return '7.2';
+  if (norm.includes('troponin')) return '0.01';
+  if (norm.includes('glucose') || norm.includes('rbs')) return '100';
+  if (norm.includes('uric')) return '5.0';
+
+  // If not matched, try calculating midpoint of normalRange (e.g. "12.0 - 16.0")
+  if (normalRange && normalRange !== '--') {
+    const parts = normalRange.split('-').map(s => parseFloat(s.trim())).filter(n => !isNaN(n));
+    if (parts.length === 2) {
+      const mid = (parts[0] + parts[1]) / 2;
+      return mid % 1 === 0 ? mid.toString() : mid.toFixed(1);
+    }
+    if (normalRange.includes('<')) {
+      const val = parseFloat(normalRange.replace('<', '').trim());
+      if (!isNaN(val)) return (val * 0.6).toFixed(1);
+    }
+  }
+
+  return '0.0';
+};
 
 interface LabFlowsheetSectionProps {
   patientId: string;
@@ -301,6 +357,28 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
   const [quickAddTest, setQuickAddTest] = useState<string | null>(null);
   const [quickAddValue, setQuickAddValue] = useState<string>('');
 
+  // Refs for focusing inputs only when selecting specific tests
+  const valueInputRef = useRef<HTMLInputElement | null>(null);
+  const customNameInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Dynamic clinical guidance value placeholder
+  const guidancePlaceholder = useMemo(() => {
+    const currentTest = formTestName === 'custom' ? formCustomName : formTestName;
+    const guidanceVal = getGuidanceValue(currentTest, formNormalRange);
+
+    if (lang === 'ar') {
+      if (formNormalRange && formNormalRange !== '--') {
+        return `قيمة استرشادية: ${guidanceVal} (${formNormalRange})`;
+      }
+      return `قيمة استرشادية: ${guidanceVal}`;
+    }
+
+    if (formNormalRange && formNormalRange !== '--') {
+      return `Guidance: ${guidanceVal} (${formNormalRange})`;
+    }
+    return `e.g. ${guidanceVal}`;
+  }, [formTestName, formCustomName, formNormalRange, lang]);
+
   // Collapsible category cards in main flowsheet (collapsed by default)
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
     ABG: true,
@@ -390,7 +468,7 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
     setIsAddModalOpen(true);
   };
 
-  const handlePresetSelect = (presetName: string) => {
+  const handlePresetSelect = (presetName: string, focusInput: boolean = false) => {
     setFormTestName(presetName);
     if (presetName === 'custom') {
       setFormCustomName('');
@@ -405,6 +483,16 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
         setFormNormalRange(p.normal);
         setFormCategory(p.category);
       }
+    }
+
+    if (focusInput) {
+      setTimeout(() => {
+        if (presetName === 'custom') {
+          customNameInputRef.current?.focus();
+        } else {
+          valueInputRef.current?.focus();
+        }
+      }, 60);
     }
   };
 
@@ -597,7 +685,7 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
                 type="button"
                 onClick={() => {
                   setFormTestName('Hb');
-                  handlePresetSelect('Hb');
+                  handlePresetSelect('Hb', false);
                   setFormValue('');
                   setFormNotes('');
                   setIsAddModalOpen(true);
@@ -1306,7 +1394,7 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
                       <button
                         type="button"
                         key={p.name}
-                        onClick={() => handlePresetSelect(p.name)}
+                        onClick={() => handlePresetSelect(p.name, true)}
                         className={`px-2.5 py-1 text-xs rounded-lg font-mono transition-all ${
                           formTestName === p.name
                             ? 'bg-teal-500 text-slate-950 font-bold shadow'
@@ -1318,7 +1406,7 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
                     ))}
                   <button
                     type="button"
-                    onClick={() => handlePresetSelect('custom')}
+                    onClick={() => handlePresetSelect('custom', true)}
                     className={`px-2.5 py-1 text-xs rounded-lg transition-all ${
                       formTestName === 'custom'
                         ? 'bg-teal-500 text-slate-950 font-bold shadow'
@@ -1337,6 +1425,7 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
                     {lang === 'ar' ? 'اسم التحليل المخصص' : 'Custom Test Name'}
                   </label>
                   <input
+                    ref={customNameInputRef}
                     type="text"
                     value={formCustomName}
                     onChange={(e) => setFormCustomName(e.target.value)}
@@ -1384,21 +1473,28 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
                     <label className="block text-xs font-semibold text-slate-300">
                       {lang === 'ar' ? 'القيمة (Value)' : 'Value'}
                     </label>
-                    {formUnit && (
-                      <span className="text-[11px] text-teal-400 font-mono">
-                        {lang === 'ar' ? `الوحدة: ${formUnit}` : `Unit: ${formUnit}`}
-                      </span>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {formNormalRange && formNormalRange !== '--' && (
+                        <span className="text-[11px] text-emerald-400 font-mono">
+                          {lang === 'ar' ? `المعدل: ${formNormalRange}` : `Ref: ${formNormalRange}`}
+                        </span>
+                      )}
+                      {formUnit && (
+                        <span className="text-[11px] text-teal-400 font-mono">
+                          {lang === 'ar' ? `الوحدة: ${formUnit}` : `Unit: ${formUnit}`}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <input
+                    ref={valueInputRef}
                     type="text"
                     inputMode="decimal"
                     value={formValue}
                     onChange={(e) => setFormValue(e.target.value)}
-                    placeholder="e.g. 7.5"
-                    className="w-full px-3.5 py-2.5 text-sm rounded-xl bg-slate-900 border border-slate-700 text-white font-mono font-bold focus:outline-none focus:border-teal-500"
+                    placeholder={guidancePlaceholder}
+                    className="w-full px-3.5 py-2.5 text-sm rounded-xl bg-slate-900 border border-slate-700 text-white font-mono font-bold focus:outline-none focus:border-teal-500 placeholder:text-slate-500 placeholder:font-normal"
                     required
-                    autoFocus
                   />
                 </div>
               ) : (
