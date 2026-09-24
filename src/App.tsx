@@ -41,6 +41,7 @@ import { TopNotificationBanner } from './components/TopNotificationBanner.tsx';
 import { FloatingChatWidget } from './components/FloatingChatWidget.tsx';
 import { ExitConfirmationModal } from './components/ExitConfirmationModal.tsx';
 import { ClinicalUserGuideModal } from './components/ClinicalUserGuideModal.tsx';
+import { ClinicalVideoModal } from './components/ClinicalVideoModal.tsx';
 import { useAppNotifications } from './services/NotificationContext.tsx';
 import { AppNotificationTarget } from './types/notification.ts';
 
@@ -130,6 +131,7 @@ export default function App() {
   // Exit protection state & guard ref
   const [isExitConfirmationOpen, setIsExitConfirmationOpen] = useState(false);
   const [isUserGuideOpen, setIsUserGuideOpen] = useState(false);
+  const [isClinicalVideoOpen, setIsClinicalVideoOpen] = useState(false);
   const isExitingRef = useRef(false);
 
   // Guard against accidental website exit when pressing Back at root screen
@@ -506,6 +508,10 @@ export default function App() {
           setIsUserGuideOpen(true);
           setIsSidebarOpen(false);
         }}
+        onOpenVideoGuide={() => {
+          setIsClinicalVideoOpen(true);
+          setIsSidebarOpen(false);
+        }}
         beds={beds}
         patients={patients}
         selectedBedNumber={selectedBedNumber}
@@ -761,6 +767,12 @@ export default function App() {
       <ClinicalUserGuideModal
         isOpen={isUserGuideOpen}
         onClose={() => setIsUserGuideOpen(false)}
+      />
+
+      {/* Clinical Video Walkthrough & MP4/WebM Export Modal */}
+      <ClinicalVideoModal
+        isOpen={isClinicalVideoOpen}
+        onClose={() => setIsClinicalVideoOpen(false)}
       />
     </div>
   );

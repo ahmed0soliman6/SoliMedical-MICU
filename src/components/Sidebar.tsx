@@ -16,7 +16,9 @@ import {
   Sun, 
   Moon,
   BookOpen,
-  FileDown
+  FileDown,
+  Film,
+  Play
 } from 'lucide-react';
 import { BedRecord, PatientDossier, BedNumber } from '../types/schema.ts';
 import { useSystemSettings } from '../services/SettingsContext.tsx';
@@ -36,6 +38,7 @@ interface SidebarProps {
   onOpenSettings: () => void;
   onOpenUserManagement?: () => void;
   onOpenUserGuide?: () => void;
+  onOpenVideoGuide?: () => void;
   beds: BedRecord[];
   patients: PatientDossier[];
   selectedBedNumber: BedNumber | null;
@@ -52,6 +55,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenSettings,
   onOpenUserManagement,
   onOpenUserGuide,
+  onOpenVideoGuide,
   beds,
   patients,
   selectedBedNumber,
@@ -291,6 +295,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
           <span className="text-[10px] px-2 py-0.5 rounded bg-teal-600 text-white font-mono font-bold shrink-0">
             PDF
+          </span>
+        </button>
+
+        {/* 8. Clinical Video Walkthrough (Video) */}
+        <button
+          onClick={() => {
+            onClose();
+            if (onOpenVideoGuide) onOpenVideoGuide();
+          }}
+          className="w-full flex items-center justify-between p-3 rounded-xl text-xs font-bold transition-all bg-cyan-50/70 hover:bg-cyan-100/80 dark:bg-cyan-950/40 dark:hover:bg-cyan-900/60 text-cyan-900 dark:text-cyan-200 border border-cyan-300 dark:border-cyan-500/40 shadow-sm cursor-pointer mt-1"
+        >
+          <div className="flex items-center gap-3 truncate">
+            <div className="p-2 rounded-lg bg-cyan-500/20 text-cyan-700 dark:text-cyan-300 border border-cyan-500/30">
+              <Film className="w-4 h-4" />
+            </div>
+            <div className="truncate text-left rtl:text-right">
+              <span className="block truncate font-bold">{lang === 'ar' ? 'فيديو الشرح العملي المصور' : 'Clinical Video Guide'}</span>
+              <span className="block text-[10px] text-cyan-700 dark:text-cyan-400 font-normal">{lang === 'ar' ? 'محاكاة بالفيديو وقابل للتحميل' : 'Interactive Video Player'}</span>
+            </div>
+          </div>
+          <span className="text-[10px] px-2 py-0.5 rounded bg-cyan-600 text-white font-mono font-bold shrink-0 flex items-center gap-1">
+            <Play className="w-2.5 h-2.5 fill-white" />
+            <span>HD</span>
           </span>
         </button>
       </div>
