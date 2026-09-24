@@ -720,6 +720,7 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
 
   // Form State
   const [selectedPresetId, setSelectedPresetId] = useState<string>('');
+  const [isCustomDrug, setIsCustomDrug] = useState<boolean>(false);
   const [drugNameEn, setDrugNameEn] = useState('');
   const [drugNameAr, setDrugNameAr] = useState('');
   const [dose, setDose] = useState('');
@@ -900,6 +901,59 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
     }
   };
 
+  const ICU_ANTIBIOTIC_CHIPS = [
+    { name: 'Meropenem', ar: 'ميرونام', defDose: '1 g', defFreq: 'Q8H' },
+    { name: 'Piperacillin/Tazobactam', ar: 'تازوسين', defDose: '4.5 g', defFreq: 'Q6H' },
+    { name: 'Vancomycin', ar: 'فانكومايسين', defDose: '1 g', defFreq: 'Q12H' },
+    { name: 'Ceftriaxone', ar: 'سفترياكسون', defDose: '2 g', defFreq: 'Q24H' },
+    { name: 'Colistin', ar: 'كوليستين', defDose: '3 MIU', defFreq: 'Q12H' },
+    { name: 'Levofloxacin', ar: 'ليفوفلوكساسين', defDose: '500 mg', defFreq: 'Q24H' },
+    { name: 'Cefepime', ar: 'سيفيبيم', defDose: '2 g', defFreq: 'Q8H' },
+    { name: 'Linezolid', ar: 'لينزوليد', defDose: '600 mg', defFreq: 'Q12H' },
+    { name: 'Metronidazole', ar: 'فلاجيل', defDose: '500 mg', defFreq: 'Q8H' },
+    { name: 'Amikacin', ar: 'أميكاسين', defDose: '1 g', defFreq: 'Q24H' },
+    { name: 'Fluconazole', ar: 'فلوكونازول', defDose: '400 mg', defFreq: 'Q24H' },
+    { name: 'Tigecycline', ar: 'تيجيسيكلين', defDose: '50 mg', defFreq: 'Q12H' },
+    { name: 'Ceftazidime/Avibactam', ar: 'زافيسيفتا', defDose: '2.5 g', defFreq: 'Q8H' },
+    { name: 'Ciprofloxacin', ar: 'سيبروفلوكساسين', defDose: '400 mg', defFreq: 'Q12H' },
+  ];
+
+  const combinedChips = useMemo(() => {
+    const list = [...ICU_ANTIBIOTIC_CHIPS];
+    if (presetsList && presetsList.length > 0) {
+      for (const p of presetsList) {
+        if (!list.some(c => c.name.toLowerCase() === p.nameEn.toLowerCase())) {
+          list.push({
+            name: p.nameEn,
+            ar: p.nameAr,
+            defDose: p.defaultDose,
+            defFreq: p.defaultFrequency
+          });
+        }
+      }
+    }
+    return list;
+  }, [presetsList]);
+
+  const handleSelectPresetChip = (chip: { name: string; ar: string; defDose?: string; defFreq?: string }) => {
+    setIsCustomDrug(false);
+    setSelectedPresetId('');
+    setDrugNameEn(chip.name);
+    setDrugNameAr(chip.ar);
+    applyDrugAndRenalAdjustment(chip.name, currentCrCl, chip.defDose, chip.defFreq);
+  };
+
+  const handleSelectCustomDrug = () => {
+    setIsCustomDrug(true);
+    setSelectedPresetId('');
+    setDrugNameEn('');
+    setDrugNameAr('');
+    setDose('1 g');
+    setRoute('IV');
+    setFrequency('Q8H');
+    setRenalAdjustment('');
+  };
+
   const handleOpenAddModal = (preset?: AntibioticPreset) => {
     setEditingAbx(null);
     setIsCustomFrequency(false);
@@ -907,6 +961,7 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
     setIsRenalAutoApplied(false);
     if (preset) {
       setSelectedPresetId(preset.id);
+      setIsCustomDrug(false);
       setDrugNameEn(preset.nameEn);
       setDrugNameAr(preset.nameAr);
       setRoute(preset.defaultRoute || 'IV');
@@ -918,17 +973,17 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
       applyDrugAndRenalAdjustment(preset.nameEn, currentCrCl, preset.defaultDose, preset.defaultFrequency);
     } else {
       setSelectedPresetId('');
-      setDrugNameEn('');
-      setDrugNameAr('');
-      setDose('1 g');
+      setIsCustomDrug(false);
+      setDrugNameEn('Meropenem');
+      setDrugNameAr('ميرونام');
       setRoute('IV');
-      setFrequency('Q8H');
       setIndication('Severe Sepsis');
       setCategory('Beta-Lactam / Carbapenem');
       setPlannedDurationDays(7);
       setRenalAdjustment('');
       setRequiresTdm(false);
       setTdmTarget('');
+      applyDrugAndRenalAdjustment('Meropenem', currentCrCl, '1 g', 'Q8H');
     }
     setStartDate(new Date().toISOString().slice(0, 10));
     setStatus('ACTIVE');
@@ -940,6 +995,7 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
 
   const handleOpenEditModal = (abx: PatientAntibiotic) => {
     setEditingAbx(abx);
+    setIsCustomDrug(true);
     setSelectedPresetId('');
     setDrugNameEn(abx.drugNameEn);
     setDrugNameAr(abx.drugNameAr);
@@ -1536,87 +1592,78 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
             </div>
 
             {/* Modal Form */}
-            <form onSubmit={handleSaveAntibiotic} className="p-4 sm:p-5 overflow-y-auto space-y-4 flex-1">
-              {/* Presets Selection if Adding */}
-              {!editingAbx && presetsList.length > 0 && (
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    {lang === 'ar' ? 'اختر من قائمة المضادات الجاهزة في وحدة العناية:' : 'Load from Unit Antibiotic Presets:'}
-                  </label>
-                  <select
-                    value={selectedPresetId}
-                    onChange={(e) => handleApplyPreset(e.target.value)}
-                    className="w-full bg-amber-50/60 dark:bg-[#070c18] border border-amber-400 dark:border-amber-500/40 rounded-xl px-3 py-2 text-xs text-amber-900 dark:text-amber-300 font-medium focus:outline-none focus:border-amber-500"
-                  >
-                    <option value="">{lang === 'ar' ? '-- إدخال يدوي مخصص --' : '-- Custom Manual Entry --'}</option>
-                    {presetsList.map(p => (
-                      <option key={p.id} value={p.id}>
-                        {lang === 'ar' ? `${p.nameAr} (${p.nameEn}) - ${p.defaultDose} ${p.defaultFrequency}` : `${p.nameEn} (${p.defaultDose} ${p.defaultFrequency})`}
-                      </option>
-                    ))}
-                  </select>
+            <form onSubmit={handleSaveAntibiotic} className="p-4 sm:p-5 overflow-y-auto space-y-3.5 sm:space-y-4 flex-1">
+              {/* Quick ICU Antibiotics Presets Toolbar (2 Compact Rows with '+ إضافة دواء' at the end) */}
+              {!editingAbx && (
+                <div className="bg-slate-100/90 dark:bg-[#060b17] border border-slate-200 dark:border-slate-800/80 rounded-xl p-2 sm:p-2.5">
+                  <div className="grid grid-rows-2 grid-flow-col auto-cols-max gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
+                    {combinedChips.map((chip) => {
+                      const isSelected = !isCustomDrug && (
+                        drugNameEn.toLowerCase() === chip.name.toLowerCase() ||
+                        drugNameAr === chip.ar ||
+                        drugNameEn.toLowerCase().includes(chip.name.toLowerCase())
+                      );
+                      return (
+                        <button
+                          key={chip.name}
+                          type="button"
+                          onClick={() => handleSelectPresetChip(chip)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap border transition-all cursor-pointer ${
+                            isSelected
+                              ? 'bg-amber-500 text-white dark:bg-amber-500/30 dark:text-amber-300 border-amber-500 dark:border-amber-500/60 shadow-sm ring-1 ring-amber-400/50'
+                              : 'bg-white dark:bg-slate-900/80 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:bg-amber-50 dark:hover:bg-slate-800 hover:text-amber-700 dark:hover:text-white'
+                          }`}
+                        >
+                          {lang === 'ar' ? `${chip.ar} (${chip.name})` : chip.name}
+                        </button>
+                      );
+                    })}
+
+                    {/* + إضافة دواء Button at the end of the grid */}
+                    <button
+                      type="button"
+                      onClick={handleSelectCustomDrug}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap border flex items-center gap-1 transition-all cursor-pointer ${
+                        isCustomDrug
+                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs ring-1 ring-emerald-400/50'
+                          : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/50'
+                      }`}
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>{lang === 'ar' ? '+ إضافة دواء' : '+ Add Drug'}</span>
+                    </button>
+                  </div>
                 </div>
               )}
 
-              {/* Drug Name with fast suggestions */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                    {lang === 'ar' ? 'اسم المضاد الحيوي (Drug Name) *' : 'Drug Name (Generic / Brand) *'}
-                  </label>
-                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
-                    {lang === 'ar' ? 'اكتب أو اختر المضاد لتحديث الجرعات المتاحة' : 'Type or pick to load standard doses'}
-                  </span>
-                </div>
-                <input
-                  type="text"
-                  required
-                  value={drugNameEn}
-                  onChange={(e) => {
-                    const newName = e.target.value;
-                    setDrugNameEn(newName);
-                    applyDrugAndRenalAdjustment(newName, currentCrCl);
-                  }}
-                  placeholder="e.g. Meropenem, Levofloxacin, Vancomycin, Tazocin"
-                  className="w-full bg-slate-50 dark:bg-[#070c18] border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-amber-500 font-mono"
-                />
-
-                {/* Fast Drug Chips */}
-                {!editingAbx && (
-                  <div className="flex flex-wrap gap-1 mt-1.5">
-                    {[
-                      { name: 'Meropenem', ar: 'ميرونام', defDose: '1 g', defFreq: 'Q8H' },
-                      { name: 'Levofloxacin', ar: 'ليفوفلوكساسين', defDose: '500 mg', defFreq: 'Q24H' },
-                      { name: 'Piperacillin/Tazobactam', ar: 'تازوسين', defDose: '4.5 g', defFreq: 'Q6H' },
-                      { name: 'Vancomycin', ar: 'فانكومايسين', defDose: '1 g', defFreq: 'Q12H' },
-                      { name: 'Colistin', ar: 'كوليستين', defDose: '3 MIU', defFreq: 'Q12H' },
-                      { name: 'Ceftriaxone', ar: 'سفترياكسون', defDose: '2 g', defFreq: 'Q24H' },
-                      { name: 'Cefepime', ar: 'سيفيبيم', defDose: '2 g', defFreq: 'Q8H' },
-                      { name: 'Linezolid', ar: 'لينزوليد', defDose: '600 mg', defFreq: 'Q12H' },
-                      { name: 'Amikacin', ar: 'أميكاسين', defDose: '1 g', defFreq: 'Q24H' },
-                      { name: 'Metronidazole', ar: 'فلاجيل', defDose: '500 mg', defFreq: 'Q8H' },
-                      { name: 'Fluconazole', ar: 'فلوكونازول', defDose: '400 mg', defFreq: 'Q24H' },
-                    ].map((chip) => (
-                      <button
-                        key={chip.name}
-                        type="button"
-                        onClick={() => {
-                          setDrugNameEn(chip.name);
-                          setDrugNameAr(chip.ar);
-                          applyDrugAndRenalAdjustment(chip.name, currentCrCl, chip.defDose, chip.defFreq);
-                        }}
-                        className={`text-[10px] px-2 py-0.5 rounded-md border transition-all cursor-pointer ${
-                          drugNameEn.toLowerCase().includes(chip.name.toLowerCase()) || drugNameEn.includes(chip.ar)
-                            ? 'bg-amber-100 dark:bg-amber-500/20 text-amber-900 dark:text-amber-300 border-amber-400 dark:border-amber-500/60 font-semibold'
-                            : 'bg-slate-100 dark:bg-slate-900/80 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700/60 hover:text-slate-900 dark:hover:text-slate-200 hover:border-slate-300 dark:hover:border-slate-600'
-                        }`}
-                      >
-                        {lang === 'ar' ? `${chip.ar} (${chip.name})` : chip.name}
-                      </button>
-                    ))}
+              {/* Medication Name - Hidden for presets, visible ONLY when choosing '+ إضافة دواء' or when editing */}
+              {(isCustomDrug || editingAbx) && (
+                <div className="p-3 bg-amber-500/10 dark:bg-amber-950/25 border border-amber-400/40 dark:border-amber-500/40 rounded-xl space-y-1.5 animate-in fade-in duration-200">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-[11px] font-bold text-amber-800 dark:text-amber-300">
+                      {lang === 'ar' ? 'اسم المضاد الحيوي أو الدواء (Drug Name) *' : 'Drug Name (Generic / Brand) *'}
+                    </label>
+                    {!editingAbx && (
+                      <span className="text-[10px] text-amber-700 dark:text-amber-400 font-semibold">
+                        {lang === 'ar' ? 'إضافة دواء مخصص غير موجود بالقائمة' : 'Custom drug'}
+                      </span>
+                    )}
                   </div>
-                )}
-              </div>
+                  <input
+                    type="text"
+                    required
+                    value={drugNameEn}
+                    autoFocus={isCustomDrug}
+                    onChange={(e) => {
+                      const newName = e.target.value;
+                      setDrugNameEn(newName);
+                      applyDrugAndRenalAdjustment(newName, currentCrCl);
+                    }}
+                    placeholder={lang === 'ar' ? 'اكتب اسم المضاد الحيوي أو الدواء هنا...' : 'e.g. Meropenem, Levofloxacin, Vancomycin, Tazocin'}
+                    className="w-full bg-white dark:bg-[#070c18] border border-amber-400 dark:border-amber-500/60 rounded-xl px-3.5 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-amber-500 font-mono shadow-inner"
+                  />
+                </div>
+              )}
 
               {/* Row 1: Available Dose & Route */}
               <div className="grid grid-cols-2 gap-2">

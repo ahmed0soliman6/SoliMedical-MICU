@@ -7,7 +7,6 @@ import {
   Plus, 
   Minus,
   Trash2, 
-  Zap,
   Sliders
 } from 'lucide-react';
 import { BedNumber, PatientDossier, InfusionPumpLine, PumpStatus } from '../types/schema.ts';
@@ -77,51 +76,19 @@ const ICU_DRUG_KNOWLEDGE: DrugKnowledge[] = [
     defaultTarget: 'Inotropic support & SBP > 90 mmHg'
   },
   {
-    id: 'cordarone',
-    nameEn: 'Cordarone (Amiodarone)',
-    nameAr: 'كوردارون (أميودارون)',
-    unitAmount: 300,
-    unitMeasure: 'mg',
-    unitType: 'ampoule',
+    id: 'insulin',
+    nameEn: 'Regular Insulin (Actrapid)',
+    nameAr: 'إنسولين عادي',
+    unitAmount: 50,
+    unitMeasure: 'Units',
+    unitType: 'vial',
     compatibleCarriers: [
-      { label: 'D5W (ديكستروز 5% - إلزامي لتفادي الترسيب)', value: 'D5W', isDefault: true }
+      { label: 'NS (محلول ملحي 0.9% - البروتوكول القياسي)', value: 'NS', isDefault: true }
     ],
     defaultVolumeMl: 50,
-    defaultFlowRate: 3.3,
-    dosingUnit: 'mg/h',
-    defaultTarget: 'Rate Control / Sinus Rhythm'
-  },
-  {
-    id: 'pethidine',
-    nameEn: 'Pethidine (Meperidine)',
-    nameAr: 'بيثيدين',
-    unitAmount: 100,
-    unitMeasure: 'mg',
-    unitType: 'ampoule',
-    compatibleCarriers: [
-      { label: 'NS (محلول ملحي 0.9% - موصى به)', value: 'NS', isDefault: true },
-      { label: 'D5W (ديكستروز 5%)', value: 'D5W' }
-    ],
-    defaultVolumeMl: 50,
-    defaultFlowRate: 2.5,
-    dosingUnit: 'mg/h',
-    defaultTarget: 'Analgesia (Pain Score < 3)'
-  },
-  {
-    id: 'fentanyl',
-    nameEn: 'Fentanyl',
-    nameAr: 'فنتانيل',
-    unitAmount: 1000,
-    unitMeasure: 'mcg',
-    unitType: 'ampoule',
-    compatibleCarriers: [
-      { label: 'NS (محلول ملحي 0.9% - موصى به)', value: 'NS', isDefault: true },
-      { label: 'D5W (ديكستروز 5%)', value: 'D5W' }
-    ],
-    defaultVolumeMl: 50,
-    defaultFlowRate: 2.5,
-    dosingUnit: 'mcg/h',
-    defaultTarget: 'Analgesia (CPOT score < 2)'
+    defaultFlowRate: 3.0,
+    dosingUnit: 'Units/hr',
+    defaultTarget: 'Target BG: 140 - 180 mg/dL'
   },
   {
     id: 'propofol',
@@ -156,52 +123,20 @@ const ICU_DRUG_KNOWLEDGE: DrugKnowledge[] = [
     defaultTarget: 'Sedation / Anxiolysis'
   },
   {
-    id: 'precedex',
-    nameEn: 'Dexmedetomidine (Precedex)',
-    nameAr: 'بريسيدكس (ديكسميديتوميدين)',
-    unitAmount: 200,
+    id: 'fentanyl',
+    nameEn: 'Fentanyl',
+    nameAr: 'فنتانيل',
+    unitAmount: 1000,
     unitMeasure: 'mcg',
-    unitType: 'vial',
+    unitType: 'ampoule',
     compatibleCarriers: [
       { label: 'NS (محلول ملحي 0.9% - موصى به)', value: 'NS', isDefault: true },
       { label: 'D5W (ديكستروز 5%)', value: 'D5W' }
     ],
     defaultVolumeMl: 50,
-    defaultFlowRate: 5.0,
-    dosingUnit: 'mcg/kg/h',
-    defaultTarget: 'Light Sedation (RASS: 0 to -1)'
-  },
-  {
-    id: 'nitroglycerin',
-    nameEn: 'Nitroglycerin (NTG)',
-    nameAr: 'نيتروجلسرين',
-    unitAmount: 50,
-    unitMeasure: 'mg',
-    unitType: 'ampoule',
-    compatibleCarriers: [
-      { label: 'D5W (ديكستروز 5% - موصى به)', value: 'D5W', isDefault: true },
-      { label: 'NS (محلول ملحي 0.9%)', value: 'NS' }
-    ],
-    defaultVolumeMl: 50,
-    defaultFlowRate: 3.0,
-    dosingUnit: 'mcg/min',
-    defaultTarget: 'Relieve Chest Pain / SBP 100-120'
-  },
-  {
-    id: 'dopamine',
-    nameEn: 'Dopamine',
-    nameAr: 'دوبامين',
-    unitAmount: 200,
-    unitMeasure: 'mg',
-    unitType: 'ampoule',
-    compatibleCarriers: [
-      { label: 'D5W (ديكستروز 5% - موصى به)', value: 'D5W', isDefault: true },
-      { label: 'NS (محلول ملحي 0.9%)', value: 'NS' }
-    ],
-    defaultVolumeMl: 50,
-    defaultFlowRate: 5.2,
-    dosingUnit: 'mcg/kg/min',
-    defaultTarget: 'Renal / Inotropic Support'
+    defaultFlowRate: 2.5,
+    dosingUnit: 'mcg/h',
+    defaultTarget: 'Analgesia (CPOT score < 2)'
   },
   {
     id: 'dobutamine',
@@ -220,6 +155,22 @@ const ICU_DRUG_KNOWLEDGE: DrugKnowledge[] = [
     defaultTarget: 'Cardiac Index > 2.5 L/min'
   },
   {
+    id: 'dopamine',
+    nameEn: 'Dopamine',
+    nameAr: 'دوبامين',
+    unitAmount: 200,
+    unitMeasure: 'mg',
+    unitType: 'ampoule',
+    compatibleCarriers: [
+      { label: 'D5W (ديكستروز 5% - موصى به)', value: 'D5W', isDefault: true },
+      { label: 'NS (محلول ملحي 0.9%)', value: 'NS' }
+    ],
+    defaultVolumeMl: 50,
+    defaultFlowRate: 5.2,
+    dosingUnit: 'mcg/kg/min',
+    defaultTarget: 'Renal / Inotropic Support'
+  },
+  {
     id: 'vasopressin',
     nameEn: 'Vasopressin',
     nameAr: 'فازوبريسين',
@@ -236,19 +187,35 @@ const ICU_DRUG_KNOWLEDGE: DrugKnowledge[] = [
     defaultTarget: 'Refractory Septic Shock'
   },
   {
-    id: 'insulin',
-    nameEn: 'Regular Insulin (Actrapid)',
-    nameAr: 'إنسولين عادي',
-    unitAmount: 50,
-    unitMeasure: 'Units',
-    unitType: 'vial',
+    id: 'cordarone',
+    nameEn: 'Cordarone (Amiodarone)',
+    nameAr: 'كوردارون (أميودارون)',
+    unitAmount: 300,
+    unitMeasure: 'mg',
+    unitType: 'ampoule',
     compatibleCarriers: [
-      { label: 'NS (محلول ملحي 0.9% - البروتوكول القياسي)', value: 'NS', isDefault: true }
+      { label: 'D5W (ديكستروز 5% - إلزامي لتفادي الترسيب)', value: 'D5W', isDefault: true }
+    ],
+    defaultVolumeMl: 50,
+    defaultFlowRate: 3.3,
+    dosingUnit: 'mg/h',
+    defaultTarget: 'Rate Control / Sinus Rhythm'
+  },
+  {
+    id: 'nitroglycerin',
+    nameEn: 'Nitroglycerin (NTG)',
+    nameAr: 'نيتروجلسرين',
+    unitAmount: 50,
+    unitMeasure: 'mg',
+    unitType: 'ampoule',
+    compatibleCarriers: [
+      { label: 'D5W (ديكستروز 5% - موصى به)', value: 'D5W', isDefault: true },
+      { label: 'NS (محلول ملحي 0.9%)', value: 'NS' }
     ],
     defaultVolumeMl: 50,
     defaultFlowRate: 3.0,
-    dosingUnit: 'Units/hr',
-    defaultTarget: 'Target BG: 140 - 180 mg/dL'
+    dosingUnit: 'mcg/min',
+    defaultTarget: 'Relieve Chest Pain / SBP 100-120'
   },
   {
     id: 'heparin',
@@ -282,20 +249,20 @@ const ICU_DRUG_KNOWLEDGE: DrugKnowledge[] = [
     defaultTarget: 'Target Urine Output > 0.5 mL/kg/h'
   },
   {
-    id: 'mgso4',
-    nameEn: 'Magnesium Sulfate (MgSO4)',
-    nameAr: 'سلفات المغنيسيوم',
-    unitAmount: 5,
-    unitMeasure: 'g',
+    id: 'precedex',
+    nameEn: 'Dexmedetomidine (Precedex)',
+    nameAr: 'بريسيدكس (ديكسميديتوميدين)',
+    unitAmount: 200,
+    unitMeasure: 'mcg',
     unitType: 'vial',
     compatibleCarriers: [
-      { label: 'D5W (ديكستروز 5% - موصى به)', value: 'D5W', isDefault: true },
-      { label: 'NS (محلول ملحي 0.9%)', value: 'NS' }
+      { label: 'NS (محلول ملحي 0.9% - موصى به)', value: 'NS', isDefault: true },
+      { label: 'D5W (ديكستروز 5%)', value: 'D5W' }
     ],
-    defaultVolumeMl: 100,
-    defaultFlowRate: 20.0,
-    dosingUnit: 'ml/h',
-    defaultTarget: 'Eclampsia / Torsades / Bronchospasm'
+    defaultVolumeMl: 50,
+    defaultFlowRate: 5.0,
+    dosingUnit: 'mcg/kg/h',
+    defaultTarget: 'Light Sedation (RASS: 0 to -1)'
   },
   {
     id: 'kcl',
@@ -312,6 +279,38 @@ const ICU_DRUG_KNOWLEDGE: DrugKnowledge[] = [
     defaultFlowRate: 50.0,
     dosingUnit: 'ml/h',
     defaultTarget: 'Correction of Hypokalemia'
+  },
+  {
+    id: 'mgso4',
+    nameEn: 'Magnesium Sulfate (MgSO4)',
+    nameAr: 'سلفات المغنيسيوم',
+    unitAmount: 5,
+    unitMeasure: 'g',
+    unitType: 'vial',
+    compatibleCarriers: [
+      { label: 'D5W (ديكستروز 5% - موصى به)', value: 'D5W', isDefault: true },
+      { label: 'NS (محلول ملحي 0.9%)', value: 'NS' }
+    ],
+    defaultVolumeMl: 100,
+    defaultFlowRate: 20.0,
+    dosingUnit: 'ml/h',
+    defaultTarget: 'Eclampsia / Torsades / Bronchospasm'
+  },
+  {
+    id: 'pethidine',
+    nameEn: 'Pethidine (Meperidine)',
+    nameAr: 'بيثيدين',
+    unitAmount: 100,
+    unitMeasure: 'mg',
+    unitType: 'ampoule',
+    compatibleCarriers: [
+      { label: 'NS (محلول ملحي 0.9% - موصى به)', value: 'NS', isDefault: true },
+      { label: 'D5W (ديكستروز 5%)', value: 'D5W' }
+    ],
+    defaultVolumeMl: 50,
+    defaultFlowRate: 2.5,
+    dosingUnit: 'mg/h',
+    defaultTarget: 'Analgesia (Pain Score < 3)'
   },
   {
     id: 'saline',
@@ -371,8 +370,28 @@ export const InfusionPumpModal: React.FC<InfusionPumpModalProps> = ({
 
   // Active drug knowledge object
   const currentKnowledge = useMemo(() => {
+    if (selectedDrugId === 'custom') {
+      return {
+        id: 'custom',
+        nameEn: drugNameEn || (lang === 'ar' ? 'دواء مخصص' : 'Custom Medication'),
+        nameAr: drugNameAr || 'دواء مخصص',
+        unitAmount: 1,
+        unitMeasure: 'unit',
+        unitType: 'ampoule' as const,
+        compatibleCarriers: [
+          { label: 'NS (محلول ملحي 0.9%)', value: 'NS', isDefault: true },
+          { label: 'D5W (ديكستروز 5%)', value: 'D5W' },
+          { label: 'D5NS (ديكستروز مع ملح)', value: 'D5NS' },
+          { label: 'Neat (بدون تخفيف)', value: 'Neat' }
+        ],
+        defaultVolumeMl: 50,
+        defaultFlowRate: 5.0,
+        dosingUnit: 'ml/h' as const,
+        defaultTarget: ''
+      };
+    }
     return ICU_DRUG_KNOWLEDGE.find(d => d.id === selectedDrugId) || ICU_DRUG_KNOWLEDGE[0];
-  }, [selectedDrugId]);
+  }, [selectedDrugId, drugNameEn, drugNameAr, lang]);
 
   // Find matching knowledge when drug name changes or presets are selected
   const applyDrugTemplate = (drug: DrugKnowledge) => {
@@ -391,6 +410,23 @@ export const InfusionPumpModal: React.FC<InfusionPumpModalProps> = ({
     setTotalVolumeMl(String(drug.defaultVolumeMl));
     setFlowRateMlPerHour(String(drug.defaultFlowRate));
     setClinicalTargetDescription(drug.defaultTarget);
+    setStatus(PumpStatus.RUNNING);
+  };
+
+  // Handle custom drug addition
+  const handleSelectCustomDrug = () => {
+    setSelectedDrugId('custom');
+    setDrugNameEn('');
+    setDrugNameAr('');
+    setCountValue(1);
+    setIsCustomCount(false);
+    setCustomCountText('1');
+    setSelectedCarrier('NS');
+    setIsCustomCarrier(false);
+    setCustomCarrierText('');
+    setTotalVolumeMl('50');
+    setFlowRateMlPerHour('5.0');
+    setClinicalTargetDescription('');
     setStatus(PumpStatus.RUNNING);
   };
 
@@ -624,14 +660,11 @@ export const InfusionPumpModal: React.FC<InfusionPumpModalProps> = ({
           </button>
         </div>
 
-        {/* Quick ICU Drug Presets Toolbar */}
+        {/* Quick ICU Drug Presets Toolbar (2 Compact Rows with '+ إضافة دواء' at the end) */}
         {!editingPump && (
-          <div className="px-3 py-2.5 sm:px-4 sm:py-3 bg-slate-100/90 dark:bg-[#060b17] border-b border-slate-200 dark:border-slate-800/80">
-            <div className="text-[11px] font-bold text-amber-700 dark:text-amber-400 mb-1.5 flex items-center gap-1.5">
-              <Zap className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-              <span>{lang === 'ar' ? 'أدوية ومحاليل العناية المركزة الشائعة (قوالب سريعة):' : 'Common ICU Infusions (Quick Select):'}</span>
-            </div>
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
+          <div className="px-3 py-2 sm:px-4 sm:py-2.5 bg-slate-100/90 dark:bg-[#060b17] border-b border-slate-200 dark:border-slate-800/80">
+            {/* 2 Rows Grid for ICU Medications */}
+            <div className="grid grid-rows-2 grid-flow-col auto-cols-max gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
               {ICU_DRUG_KNOWLEDGE.map((drug) => {
                 const isSelected = selectedDrugId === drug.id;
                 return (
@@ -639,9 +672,9 @@ export const InfusionPumpModal: React.FC<InfusionPumpModalProps> = ({
                     key={drug.id}
                     type="button"
                     onClick={() => applyDrugTemplate(drug)}
-                    className={`px-3 py-1 rounded-xl text-xs font-bold whitespace-nowrap border transition-all cursor-pointer ${
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap border transition-all cursor-pointer ${
                       isSelected
-                        ? 'bg-amber-500 text-white dark:bg-amber-500/25 dark:text-amber-300 border-amber-500 dark:border-amber-500/60 shadow-sm'
+                        ? 'bg-amber-500 text-white dark:bg-amber-500/30 dark:text-amber-300 border-amber-500 dark:border-amber-500/60 shadow-sm ring-1 ring-amber-400/50'
                         : 'bg-white dark:bg-slate-900/80 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:bg-amber-50 dark:hover:bg-slate-800 hover:text-amber-700 dark:hover:text-white'
                     }`}
                   >
@@ -649,6 +682,20 @@ export const InfusionPumpModal: React.FC<InfusionPumpModalProps> = ({
                   </button>
                 );
               })}
+
+              {/* + إضافة دواء Button at the end of the grid */}
+              <button
+                type="button"
+                onClick={handleSelectCustomDrug}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap border flex items-center gap-1 transition-all cursor-pointer ${
+                  selectedDrugId === 'custom'
+                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs ring-1 ring-emerald-400/50'
+                    : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/50'
+                }`}
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>{lang === 'ar' ? '+ إضافة دواء' : '+ Add Drug'}</span>
+              </button>
             </div>
           </div>
         )}
@@ -662,20 +709,30 @@ export const InfusionPumpModal: React.FC<InfusionPumpModalProps> = ({
             </div>
           )}
 
-          {/* Medication Name */}
-          <div>
-            <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              {lang === 'ar' ? 'اسم الدواء أو المحلول (Medication Name):' : 'Medication Name:'}
-            </label>
-            <input
-              type="text"
-              value={drugNameEn}
-              onChange={(e) => setDrugNameEn(e.target.value)}
-              placeholder="e.g. Noradrenaline (Norepinephrine)"
-              required
-              className="w-full bg-slate-50 dark:bg-[#060b17] border border-slate-300 dark:border-slate-700/80 rounded-xl px-3.5 py-2 text-slate-900 dark:text-white font-mono text-xs focus:border-amber-500 focus:ring-1 focus:ring-amber-500 focus:outline-none"
-            />
-          </div>
+          {/* Medication Name - Hidden for presets, visible ONLY when choosing 'Add Custom Drug' or when editing */}
+          {(selectedDrugId === 'custom' || editingPump) && (
+            <div className="p-3 bg-amber-500/10 dark:bg-amber-950/25 border border-amber-400/40 dark:border-amber-500/40 rounded-xl space-y-1.5 animate-in fade-in duration-200">
+              <div className="flex items-center justify-between">
+                <label className="block text-[11px] font-bold text-amber-800 dark:text-amber-300">
+                  {lang === 'ar' ? 'اسم الدواء أو المحلول (Medication Name):' : 'Medication / Drug Name:'}
+                </label>
+                {!editingPump && (
+                  <span className="text-[10px] text-amber-700 dark:text-amber-400 font-semibold">
+                    {lang === 'ar' ? 'إضافة دواء مخصص غير موجود بالقائمة' : 'Custom medication'}
+                  </span>
+                )}
+              </div>
+              <input
+                type="text"
+                value={drugNameEn}
+                onChange={(e) => setDrugNameEn(e.target.value)}
+                placeholder={lang === 'ar' ? 'اكتب اسم الدواء أو المحلول هنا...' : 'e.g. Noradrenaline, Propofol, Albumin...'}
+                required
+                autoFocus={selectedDrugId === 'custom'}
+                className="w-full bg-white dark:bg-[#060b17] border border-amber-400 dark:border-amber-500/60 rounded-xl px-3.5 py-2 text-slate-900 dark:text-white font-mono text-xs focus:border-amber-500 focus:ring-1 focus:ring-amber-500 focus:outline-none shadow-inner"
+              />
+            </div>
+          )}
 
           {/* Row 1: "العدد" (Count) & "المحلول الحامل" (Carrier Solution) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50 dark:bg-[#060d1d] p-3 sm:p-3.5 rounded-xl border border-slate-200 dark:border-slate-800">
