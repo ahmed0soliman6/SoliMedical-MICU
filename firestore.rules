@@ -377,6 +377,13 @@ service cloud.firestore {
       allow create, update, delete: if isActiveUser();
     }
 
+    // Firebase Cloud Messaging (FCM) Device Tokens
+    match /fcmTokens/{tokenId} {
+      allow read: if isActiveUser();
+      allow create, update: if isAuthenticated();
+      allow delete: if isAuthenticated();
+    }
+
     // System Settings
     match /system_settings/{settingId} {
       allow read: if isActiveUser() || hasPerm('settings.view');

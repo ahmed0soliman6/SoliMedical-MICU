@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   Bell, 
   BellRing, 
@@ -17,20 +17,54 @@ import {
   Sliders,
   HeartPulse,
   RotateCcw,
-  Gauge
+  Gauge,
+  Smartphone,
+  Send,
+  Radio
 } from 'lucide-react';
 import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
 import { playGentleNotificationTone } from '../services/NotificationAudio.ts';
+import { useAppNotifications } from '../services/NotificationContext.tsx';
 import { NotificationType } from '../types/notification.ts';
 import { DEFAULT_VITAL_THRESHOLDS, VitalThresholdsConfig } from '../types/settings.ts';
 
 export const NotificationSettingsCard: React.FC = () => {
   const { settings, updateNotificationSettings } = useSystemSettings();
+  const { isPushSupported, isPushEnabled, requestPushPermission, triggerNotification } = useAppNotifications();
   const { lang, isRTL } = useTranslation();
+  const [isRequestingPush, setIsRequestingPush] = useState(false);
+  const [testSent, setTestSent] = useState(false);
 
   const notifs = settings.notifications;
   const thresholds = notifs.vitalThresholds || DEFAULT_VITAL_THRESHOLDS;
+
+  const handleEnablePush = async () => {
+    setIsRequestingPush(true);
+    try {
+      await requestPushPermission();
+    } finally {
+      setIsRequestingPush(false);
+    }
+  };
+
+  const handleSendTestPush = () => {
+    triggerNotification({
+      type: 'ADMISSION',
+      titleAr: 'اختبار إشعارات Firebase Cloud Messaging (FCM)',
+      titleEn: 'FCM Web Push Test Notification',
+      messageAr: 'تم إرسال الإشعار بنجاح عبر خدمة FCM والتزامن السحابي اللحظي.',
+      messageEn: 'Notification successfully delivered via FCM and real-time cloud sync.',
+      target: {
+        action: 'OPEN_BED',
+        bedNumber: '01' as any,
+      },
+      forceVisual: true,
+      forceAudio: true,
+    });
+    setTestSent(true);
+    setTimeout(() => setTestSent(false), 3000);
+  };
 
   const handleToggleMasterVisual = () => {
     updateNotificationSettings({ masterVisual: !notifs.masterVisual });
@@ -275,7 +309,70 @@ export const NotificationSettingsCard: React.FC = () => {
         </div>
       </div>
 
+      {/* Firebase Cloud Messaging (FCM) & Web Push Status Card */}
+      <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-white to-teal-50/40 dark:from-[#0a1122] dark:to-[#0f1d35] border border-teal-200/80 dark:border-teal-500/30 shadow-sm transition-all">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-start sm:items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-teal-500/10 border border-teal-500/30 flex items-center justify-center text-teal-600 dark:text-teal-400 shrink-0">
+              <Smartphone className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
+                  {lang === 'ar' ? 'إشعارات الهاتف وتكامل Firebase Cloud Messaging (FCM)' : 'FCM Web Push & Mobile Lock Screen Alerts'}
+                </h4>
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                  isPushEnabled
+                    ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-500/30'
+                    : 'bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-500/30'
+                }`}>
+                  <Radio className={`w-2.5 h-2.5 ${isPushEnabled ? 'animate-pulse text-emerald-500' : 'text-amber-500'}`} />
+                  {isPushEnabled 
+                    ? (lang === 'ar' ? 'مفعّلة على هذا الجهاز' : 'Active on Device') 
+                    : (lang === 'ar' ? 'غير مفعلة' : 'Disabled / Standby')}
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                {lang === 'ar'
+                  ? 'استلام تنبيهات فورية على شاشة القفل وشريط إشعارات الهاتف عند تسجيل مريض، خروج، أو تسليم مناوبة SBAR.'
+                  : 'Receive lock screen and status bar push alerts for admissions, discharges, and SBAR shift handovers.'}
+              </p>
+            </div>
+          </div>
 
+          {/* Action Buttons */}
+          <div className="flex items-center gap-2 shrink-0">
+            {!isPushEnabled && (
+              <button
+                type="button"
+                onClick={handleEnablePush}
+                disabled={isRequestingPush}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 active:scale-95 text-white text-xs font-bold transition-all shadow-sm cursor-pointer disabled:opacity-50"
+              >
+                <BellRing className="w-4 h-4" />
+                <span>
+                  {isRequestingPush 
+                    ? (lang === 'ar' ? 'جاري التفعيل...' : 'Activating...') 
+                    : (lang === 'ar' ? 'تفعيل إشعارات الهاتف' : 'Enable Mobile Push')}
+                </span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={handleSendTestPush}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 active:scale-95 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 text-xs font-bold transition-all shadow-sm cursor-pointer"
+            >
+              <Send className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+              <span>
+                {testSent 
+                  ? (lang === 'ar' ? 'تم الإرسال بنجاح ✓' : 'Sent Successfully ✓') 
+                  : (lang === 'ar' ? 'إرسال إشعار تجريبي' : 'Test Push Alert')}
+              </span>
+            </button>
+          </div>
+        </div>
+      </div>
 
       {/* Detailed Granular Event Cards Grid (Dual Theme Friendly) */}
       <div className="space-y-3">

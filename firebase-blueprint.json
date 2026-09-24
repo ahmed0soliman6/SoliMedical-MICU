@@ -154,6 +154,22 @@
         "targetPatientMrn": { "type": "string", "maxLength": 64 },
         "immutableHash": { "type": "string", "maxLength": 64 }
       }
+    },
+    "FcmToken": {
+      "title": "FcmToken",
+      "description": "Firebase Cloud Messaging device registration token for web and mobile push alerts",
+      "type": "object",
+      "required": ["token", "uid", "updatedAt"],
+      "properties": {
+        "token": { "type": "string", "maxLength": 512 },
+        "uid": { "type": "string", "maxLength": 128 },
+        "userEmail": { "type": "string", "maxLength": 256 },
+        "userName": { "type": "string", "maxLength": 120 },
+        "platform": { "type": "string", "maxLength": 64 },
+        "userAgent": { "type": "string", "maxLength": 512 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
     }
   },
   "firestore": {
@@ -188,6 +204,10 @@
     "/auditLogs/{logId}": {
       "schema": { "$ref": "entities/AuditLog" },
       "description": "HIPAA compliance audit ledger"
+    },
+    "/fcmTokens/{tokenId}": {
+      "schema": { "$ref": "entities/FcmToken" },
+      "description": "Registered device push tokens for ICU critical messaging"
     }
   }
 }

@@ -14,6 +14,12 @@ import { useSystemSettings } from './SettingsContext.tsx';
 import { useAuth } from './AuthContext.tsx';
 import { playGentleNotificationTone, isAudioGloballyMuted } from './NotificationAudio.ts';
 import { firestore, sanitizeForFirestore, handleFirestoreError, OperationType } from './firebase.ts';
+import { 
+  checkIsFcmSupported, 
+  requestFcmToken, 
+  subscribeToForegroundFcmMessages, 
+  broadcastFcmPush 
+} from './fcmService.ts';
 
 const NOTIFICATIONS_STORAGE_KEY = 'soli_icu_notifications_queue_v2';
 const MAX_NOTIFICATIONS = 25;
@@ -24,6 +30,7 @@ export const ALLOWED_NOTIFICATION_TYPES: NotificationType[] = [
   'SBAR_HANDOVER',
   'SBAR_RECEIVED',
   'ISOLATION_CHANGE',
+  'CRITICAL_VITAL_ALERT',
 ];
 
 function isWhitelistedType(type: any): type is NotificationType {
@@ -45,6 +52,9 @@ interface NotificationContextType {
   notifications: AppNotification[];
   unreadCount: number;
   activeBanner: AppNotification | null;
+  isPushSupported: boolean;
+  isPushEnabled: boolean;
+  requestPushPermission: () => Promise<boolean>;
   triggerNotification: (params: TriggerNotificationParams) => void;
   markAsRead: (id: string) => void;
   markAllAsRead: () => void;
@@ -89,10 +99,103 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
   const [notifications, setNotifications] = useState<AppNotification[]>(loadSavedNotifications);
   const [activeBanner, setActiveBanner] = useState<AppNotification | null>(null);
   const [navHandler, setNavHandler] = useState<((target: AppNotificationTarget) => void) | null>(null);
+  const [isPushSupported, setIsPushSupported] = useState(false);
+  const [isPushEnabled, setIsPushEnabled] = useState(false);
 
   // Track locally triggered notification IDs to avoid echo audio/banner loops
   const locallyTriggeredIdsRef = useRef<Set<string>>(new Set());
   const isInitialSnapshotRef = useRef(true);
+
+  // Check Web Push / FCM browser support
+  useEffect(() => {
+    checkIsFcmSupported().then((supported) => {
+      setIsPushSupported(supported);
+      if (supported && typeof window !== 'undefined' && 'Notification' in window) {
+        setIsPushEnabled(Notification.permission === 'granted');
+      }
+    });
+  }, []);
+
+  // Initialize FCM token on user login if enabled
+  useEffect(() => {
+    if (!currentUser?.uid || !isPushSupported) return;
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+      requestFcmToken(currentUser).then((token) => {
+        if (token) {
+          setIsPushEnabled(true);
+        }
+      }).catch((e) => console.warn('FCM auto-token register notice:', e));
+    }
+  }, [currentUser?.uid, isPushSupported]);
+
+  // Foreground FCM messages listener
+  useEffect(() => {
+    let unsubscribe: (() => void) | null = null;
+    subscribeToForegroundFcmMessages((fcmNotif) => {
+      if (locallyTriggeredIdsRef.current.has(fcmNotif.id)) return;
+      locallyTriggeredIdsRef.current.add(fcmNotif.id);
+
+      const notifSettings = settings.notifications;
+      const isMuted = notifSettings.isMuted || isAudioGloballyMuted();
+
+      let eventKey: keyof typeof notifSettings.events = 'admission';
+      if (fcmNotif.type === 'ADMISSION') eventKey = 'admission';
+      else if (fcmNotif.type === 'DISCHARGE') eventKey = 'discharge';
+      else if (fcmNotif.type === 'SBAR_HANDOVER') eventKey = 'sbarHandover';
+      else if (fcmNotif.type === 'SBAR_RECEIVED') eventKey = 'sbarReceived';
+      else if (fcmNotif.type === 'ISOLATION_CHANGE') eventKey = 'isolationChange';
+
+      const eventConfig = notifSettings.events[eventKey] || { visual: true, audio: true };
+      if (notifSettings.masterVisual && eventConfig.visual) {
+        setActiveBanner(fcmNotif);
+      }
+      if (!isMuted && notifSettings.masterAudio && eventConfig.audio) {
+        playGentleNotificationTone(fcmNotif.type);
+      }
+
+      setNotifications((prev) => [fcmNotif, ...prev.filter(p => p.id !== fcmNotif.id)].slice(0, MAX_NOTIFICATIONS));
+    }).then((unsub) => {
+      unsubscribe = unsub;
+    });
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [settings.notifications]);
+
+  // Listen for Service Worker background notification clicks
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
+    const handleSwMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'NOTIFICATION_NAVIGATE' && event.data?.payload) {
+        const payload = event.data.payload;
+        if (payload.action && navHandler) {
+          navHandler({
+            action: payload.action,
+            bedNumber: payload.bedNumber,
+            patientId: payload.patientId,
+          });
+        }
+      }
+    };
+    navigator.serviceWorker.addEventListener('message', handleSwMessage);
+    return () => {
+      navigator.serviceWorker.removeEventListener('message', handleSwMessage);
+    };
+  }, [navHandler]);
+
+  const requestPushPermission = useCallback(async (): Promise<boolean> => {
+    try {
+      const token = await requestFcmToken(currentUser);
+      if (token) {
+        setIsPushEnabled(true);
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }, [currentUser]);
 
   // Sync to storage
   useEffect(() => {
@@ -339,6 +442,20 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
       } catch (cloudErr) {
         console.warn('Cloud notification sync (offline cache active):', cloudErr);
       }
+
+      // 5. Broadcast background Web Push via Firebase Cloud Messaging (FCM)
+      broadcastFcmPush({
+        type,
+        titleEn,
+        titleAr,
+        messageEn,
+        messageAr,
+        bedNumber: target?.bedNumber || undefined,
+        patientId: target?.patientId,
+        patientName: target?.patientName || target?.patientNameEn || target?.patientNameAr,
+        patientMrn: target?.patientMrn,
+        action: target?.action,
+      }).catch(() => {});
     },
     [settings.notifications, notifications]
   );
@@ -387,6 +504,9 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
         notifications,
         unreadCount,
         activeBanner,
+        isPushSupported,
+        isPushEnabled,
+        requestPushPermission,
         triggerNotification,
         markAsRead,
         markAllAsRead,

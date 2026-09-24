@@ -15,6 +15,7 @@ import { initializeApp, getApps, applicationDefault, cert } from 'firebase-admin
 import type { App } from 'firebase-admin/app';
 import { getFirestore, Firestore } from 'firebase-admin/firestore';
 import { getAuth, Auth } from 'firebase-admin/auth';
+import { getMessaging } from 'firebase-admin/messaging';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
@@ -1324,6 +1325,104 @@ export async function runAdminDiagnosticCheck(authHeader?: string): Promise<{
       adminInitialized: true,
       authConnection: false,
       error: `Firebase Auth connection failed: ${safeError}`
+    };
+  }
+}
+
+export async function adminBroadcastFcmPush(payload: {
+  type: string;
+  titleEn: string;
+  titleAr: string;
+  messageEn: string;
+  messageAr: string;
+  bedNumber?: string;
+  patientId?: string;
+  patientName?: string;
+  patientMrn?: string;
+  action?: string;
+}): Promise<{ success: boolean; deliveredCount: number; message?: string }> {
+  try {
+    const adminServices = getAdminApp();
+    const db = adminServices.db;
+    const messaging = getMessaging(adminServices.app);
+
+    // Retrieve active device tokens from Firestore fcmTokens collection
+    const snap = await db.collection('fcmTokens').get();
+    if (snap.empty) {
+      return { success: true, deliveredCount: 0, message: 'No registered device tokens found.' };
+    }
+
+    const tokens: string[] = [];
+    snap.forEach((docSnap) => {
+      const data = docSnap.data();
+      if (data && data.token && typeof data.token === 'string') {
+        tokens.push(data.token);
+      }
+    });
+
+    if (tokens.length === 0) {
+      return { success: true, deliveredCount: 0, message: 'No valid tokens to send.' };
+    }
+
+    const title = payload.titleAr || payload.titleEn || 'Soli Medical MICU';
+    const body = payload.messageAr || payload.messageEn || 'Clinical Notification';
+
+    const messagePayload = {
+      notification: {
+        title,
+        body,
+      },
+      data: {
+        type: String(payload.type || 'ADMISSION'),
+        titleEn: String(payload.titleEn || ''),
+        titleAr: String(payload.titleAr || ''),
+        messageEn: String(payload.messageEn || ''),
+        messageAr: String(payload.messageAr || ''),
+        bedNumber: String(payload.bedNumber || ''),
+        patientId: String(payload.patientId || ''),
+        patientName: String(payload.patientName || ''),
+        patientMrn: String(payload.patientMrn || ''),
+        action: String(payload.action || 'OPEN_BED'),
+        timestamp: new Date().toISOString(),
+      },
+      tokens,
+    };
+
+    const response = await messaging.sendEachForMulticast(messagePayload);
+
+    // Clean up expired or invalid tokens
+    if (response.failureCount > 0) {
+      const tokensToDelete: Promise<any>[] = [];
+      response.responses.forEach((resp, idx) => {
+        if (!resp.success && resp.error) {
+          const errCode = resp.error.code;
+          if (
+            errCode === 'messaging/invalid-registration-token' ||
+            errCode === 'messaging/registration-token-not-registered'
+          ) {
+            const badToken = tokens[idx];
+            snap.forEach((docSnap) => {
+              if (docSnap.data()?.token === badToken) {
+                tokensToDelete.push(docSnap.ref.delete());
+              }
+            });
+          }
+        }
+      });
+      await Promise.allSettled(tokensToDelete);
+    }
+
+    return {
+      success: true,
+      deliveredCount: response.successCount,
+      message: `Delivered to ${response.successCount}/${tokens.length} devices.`
+    };
+  } catch (err: any) {
+    console.warn('[FCM Admin] Push broadcast note:', err?.message || err);
+    return {
+      success: false,
+      deliveredCount: 0,
+      message: err?.message || 'FCM push broadcast failed'
     };
   }
 }

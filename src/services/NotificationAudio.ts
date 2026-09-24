@@ -212,6 +212,11 @@ export function playGentleNotificationTone(type: NotificationType, ignoreMute: b
         playTonePair(ctx, 493.88, 622.25, 0.14, 0.16);
         break;
 
+      case 'CRITICAL_VITAL_ALERT':
+        // High priority alarm cascade: F5 (698.46 Hz) -> A5 (880 Hz) -> C6 (1046.5 Hz)
+        playToneTriple(ctx, 698.46, 880.0, 1046.5, 0.16, 0.14);
+        break;
+
       default:
         break;
     }

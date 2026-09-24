@@ -507,8 +507,24 @@ import {
   adminArchiveSweep,
   adminDeleteMortalityRecord,
   adminMortalityAutoPurgeSweep,
-  runAdminDiagnosticCheck
+  runAdminDiagnosticCheck,
+  adminBroadcastFcmPush
 } from './src/server/adminOperations';
+
+// FCM Web Push Notification Broadcast Endpoint
+app.post('/api/notifications/fcm-broadcast', async (req, res) => {
+  try {
+    const payload = req.body;
+    if (!payload || !payload.type) {
+      return res.status(400).json({ success: false, message: 'Invalid notification payload.' });
+    }
+    const result = await adminBroadcastFcmPush(payload);
+    return res.status(200).json(result);
+  } catch (err: any) {
+    console.warn('[Server] FCM broadcast error:', err);
+    return res.status(200).json({ success: false, deliveredCount: 0, message: err?.message || 'Push broadcast error' });
+  }
+});
 
 app.post('/api/admin/users/create', async (req, res) => {
   try {
