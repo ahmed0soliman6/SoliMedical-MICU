@@ -1153,7 +1153,9 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
     return true;
   });
 
-  const displayedAntibiotics = showAllAbx ? filteredAntibiotics : filteredAntibiotics.slice(0, 4);
+  const displayedAntibiotics = (activeFilter === 'ACTIVE' || showAllAbx) 
+    ? filteredAntibiotics 
+    : filteredAntibiotics.slice(0, 4);
 
   const activeCount = antibiotics.filter(a => a.status === 'ACTIVE').length;
 
@@ -1529,8 +1531,8 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
               })}
               </div>
 
-              {/* Show More / Show Less Pagination Button */}
-              {(filteredAntibiotics.length > 4 || (!showAllAbx && filteredAntibiotics.length >= 4)) && (
+              {/* Show More / Show Less Pagination Button for Historical Courses */}
+              {activeFilter !== 'ACTIVE' && (filteredAntibiotics.length > 4 || (!showAllAbx && filteredAntibiotics.length >= 4)) && (
                 <div className="flex justify-center pt-2">
                   <button
                     type="button"

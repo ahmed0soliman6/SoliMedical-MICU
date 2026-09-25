@@ -26,7 +26,7 @@ import { useTranslation } from '../services/i18n.ts';
 import { useAuth } from '../services/AuthContext.tsx';
 import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { db } from '../db/icuSyncDb.ts';
-import { syncInvestigationToCloud, deleteInvestigationFromCloud } from '../services/firebase.ts';
+import { syncInvestigationToCloud, deleteInvestigationFromCloud, fetchFullCategoryFromCloud } from '../services/firebase.ts';
 import { AiInvestigationScannerModal } from './AiInvestigationScannerModal.tsx';
 
 interface InvestigationsSectionProps {
@@ -654,7 +654,12 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
                   <div className="text-center pt-2">
                     <button
                       type="button"
-                      onClick={() => setShowAllReports(!showAllReports)}
+                      onClick={() => {
+                        if (!showAllReports && patientId) {
+                          fetchFullCategoryFromCloud(patientId, 'investigations');
+                        }
+                        setShowAllReports(!showAllReports);
+                      }}
                       className="px-4 py-2 text-xs font-bold rounded-xl bg-teal-500/10 hover:bg-teal-500/20 text-teal-300 border border-teal-500/30 transition-all cursor-pointer shadow-sm"
                     >
                       {showAllReports 

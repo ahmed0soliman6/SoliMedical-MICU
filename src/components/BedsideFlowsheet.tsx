@@ -195,6 +195,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
   const [selectedSbarIdForView, setSelectedSbarIdForView] = useState<string | 'ALL'>('ALL');
   const [showMoreSbars, setShowMoreSbars] = useState(false);
   const [showMoreBedsideFluids, setShowMoreBedsideFluids] = useState(false);
+  const [showMoreNotes, setShowMoreNotes] = useState(false);
 
   // Vitals pagination and edit states
   const [showAllVitals, setShowAllVitals] = useState(false);
@@ -2032,7 +2033,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                   </table>
                 </div>
 
-                {vitalsHistory.length > 4 && (
+                {vitalsHistory.length >= 4 && (
                   <div className="flex justify-center pt-2">
                     <button
                       type="button"
@@ -2047,7 +2048,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                       <span>
                         {showAllVitals 
                           ? (lang === 'ar' ? 'عرض أقل' : 'Show Less') 
-                          : (lang === 'ar' ? `عرض المزيد (${vitalsHistory.length - 4} سجلات إضافية)` : `Show More (${vitalsHistory.length - 4} more records)`)}
+                          : (lang === 'ar' ? `عرض المزيد (${vitalsHistory.length > 4 ? vitalsHistory.length - 4 : '+'} سجلات إضافية)` : `Show More (${vitalsHistory.length > 4 ? vitalsHistory.length - 4 : '+'} more records)`)}
                       </span>
                       {showAllVitals ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                     </button>
@@ -4021,7 +4022,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
               {/* Handover Cards Display */}
               {sbarList.length > 0 ? (
                 <>
-                  {(showMoreSbars ? sbarList : sbarList.slice(0, 2)).map((sbar) => (
+                  {(showMoreSbars ? sbarList : sbarList.slice(0, 4)).map((sbar) => (
                   <div 
                     key={sbar.id}
                     className="bg-slate-50 border border-slate-200 text-slate-900 dark:bg-[#070c18] dark:border-slate-800 dark:text-white p-4 rounded-xl space-y-3 shadow-sm"
@@ -4125,8 +4126,8 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                   </div>
                   ))}
 
-                  {/* Show More Button after 2nd record */}
-                  {sbarList.length > 2 && (
+                  {/* Show More Button after 4th record */}
+                  {sbarList.length >= 4 && (
                     <div className="pt-2 text-center">
                       <button
                         type="button"
@@ -4141,7 +4142,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                         <span>
                           {showMoreSbars
                             ? (lang === 'ar' ? 'عرض أقل' : 'Show Less')
-                            : (lang === 'ar' ? `إظهار المزيد (${sbarList.length - 2} تقارير متبقية)` : `Show More (${sbarList.length - 2} remaining)`)}
+                            : (lang === 'ar' ? `إظهار المزيد (${sbarList.length > 4 ? sbarList.length - 4 : '+'} تقارير متبقية)` : `Show More (${sbarList.length > 4 ? sbarList.length - 4 : '+'} remaining)`)}
                         </span>
                         {showMoreSbars ? <ChevronUp className="w-4 h-4 text-teal-400" /> : <ChevronDown className="w-4 h-4 text-teal-400" />}
                       </button>
@@ -4222,7 +4223,9 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
 
           {!isPaperNotesCardCollapsed && (
             <div className="space-y-4 animate-in fade-in duration-300">
-              {notesList.length > 0 ? notesList.map((note) => (
+              {notesList.length > 0 ? (
+                <>
+                  {(showMoreNotes ? notesList : notesList.slice(0, 4)).map((note) => (
                 <div 
                    key={note.id}
                    className="bg-[#070c18] border border-slate-800 rounded-xl p-4 space-y-3"
@@ -4285,7 +4288,32 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                     </div>
                   )}
                 </div>
-              )) : (
+              ))}
+
+              {/* Show More Button for Clinical Notes */}
+              {notesList.length >= 4 && (
+                <div className="pt-2 text-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!showMoreNotes && patient?.id) {
+                        fetchFullCategoryFromCloud(patient.id, 'notes');
+                      }
+                      setShowMoreNotes(!showMoreNotes);
+                    }}
+                    className="px-5 py-2 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/40 text-purple-300 font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-2 mx-auto active:scale-95 shadow-md"
+                  >
+                    <span>
+                      {showMoreNotes
+                        ? (lang === 'ar' ? 'عرض أقل' : 'Show Less')
+                        : (lang === 'ar' ? `إظهار المزيد (${notesList.length > 4 ? notesList.length - 4 : '+'} ملاحظات إضافية)` : `Show More (${notesList.length > 4 ? notesList.length - 4 : '+'} more notes)`)}
+                    </span>
+                    {showMoreNotes ? <ChevronUp className="w-4 h-4 text-purple-400" /> : <ChevronDown className="w-4 h-4 text-purple-400" />}
+                  </button>
+                </div>
+              )}
+              </>
+              ) : (
                 <div className="p-6 text-center text-slate-400 bg-slate-950/40 rounded-xl border border-slate-800">
                   {lang === 'ar' ? 'لا توجد ملاحظات سريرية مسجلة اليوم.' : 'No clinical progress notes recorded today.'}
                 </div>

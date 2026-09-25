@@ -20,7 +20,7 @@ export async function getMedicalRecords(patientId: string): Promise<BaseMedicalR
 }
 
 export async function getHandovers(): Promise<HandoverRecord[]> {
-  const q = query(collection(firestore, 'sbar_handovers'), orderBy('createdAt', 'desc'));
+  const q = query(collection(firestore, 'sbarHandovers'), orderBy('createdAt', 'desc'));
   const snap = await getDocs(q);
   return snap.docs.map(d => ({ ...d.data(), id: d.id } as unknown as HandoverRecord));
 }
