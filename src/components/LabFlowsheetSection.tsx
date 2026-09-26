@@ -35,6 +35,7 @@ import { syncLabResultToCloud, deleteLabResultFromCloud } from '../services/fire
 import { COLLECTIONS } from '../types/contracts.ts';
 import { AiLabScannerModal } from './AiLabScannerModal.tsx';
 import { toEnglishDigits } from '../services/numberUtils.ts';
+import { canDeleteRecord } from '../services/medicalRecordPermissions.ts';
 
 // Helper to determine clinical median/guidance value for lab tests
 export const getGuidanceValue = (testName: string, normalRange?: string): string => {
@@ -588,12 +589,13 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
     const canDelete = !hasMultipleDoctors || 
                       currentUser?.role === StaffRole.ADMIN || 
                       currentUser?.isSuperAdmin || 
-                      currentUser?.role === StaffRole.CONSULTANT;
+                      currentUser?.role === StaffRole.CONSULTANT ||
+                      canDeleteRecord(currentUser);
 
     if (!canDelete) {
       setDeleteErrorMsg(lang === 'ar' 
-        ? 'عذراً، هذا التحليل يحتوي على قراءات مسجلة بواسطة أكثر من طبيب. لا يسمح بحذفه إلا لمدير النظام (Admin) أو الطبيب الاستشاري (Consultant).' 
-        : 'Sorry, this lab contains readings recorded by multiple doctors. Only Admin or Consultant can delete it.'
+        ? 'عذراً، هذا التحليل يحتوي على قراءات مسجلة بواسطة أكثر من طبيب. لا يسمح بحذفه إلا لمدير النظام (Admin) أو الطبيب الاستشاري (Consultant) أو من يملك صلاحية حذف السجلات الطبية.' 
+        : 'Sorry, this lab contains readings recorded by multiple doctors. Only Admin, Consultant, or users with medical records delete permission can delete it.'
       );
       return;
     }

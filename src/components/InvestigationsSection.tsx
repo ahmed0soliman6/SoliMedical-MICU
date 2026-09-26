@@ -28,6 +28,7 @@ import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { db } from '../db/icuSyncDb.ts';
 import { syncInvestigationToCloud, deleteInvestigationFromCloud, fetchFullCategoryFromCloud } from '../services/firebase.ts';
 import { AiInvestigationScannerModal } from './AiInvestigationScannerModal.tsx';
+import { canDeleteRecord } from '../services/medicalRecordPermissions.ts';
 
 interface InvestigationsSectionProps {
   patientId: string;
@@ -269,6 +270,10 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
   };
 
   const handleDelete = async (inv: InvestigationItem) => {
+    if (!canDeleteRecord(currentUser)) {
+      alert(lang === 'ar' ? 'غير مصرح: حذف السجلات الطبية يتطلب صلاحيات إدارية خاصة.' : 'Unauthorized: Deleting medical records requires special administrative permissions.');
+      return;
+    }
     if (!window.confirm(lang === 'ar' ? `هل أنت متأكد من حذف تقرير ${inv.testName}؟` : `Are you sure you want to delete ${inv.testName}?`)) {
       return;
     }
@@ -587,14 +592,16 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
                                   <span>{lang === 'ar' ? 'تعديل' : 'Edit'}</span>
                                 </button>
 
-                                <button
-                                  type="button"
-                                  onClick={(e) => { e.stopPropagation(); handleDelete(inv); }}
-                                  className="p-1 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-md transition-colors"
-                                  title={lang === 'ar' ? 'حذف الفحص' : 'Delete'}
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
+                                {canDeleteRecord(currentUser) && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); handleDelete(inv); }}
+                                    className="p-1 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-md transition-colors"
+                                    title={lang === 'ar' ? 'حذف الفحص' : 'Delete'}
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
                               </>
                             )}
                           </div>

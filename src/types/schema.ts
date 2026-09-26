@@ -788,6 +788,7 @@ export interface UserPermissions {
   'users.delete'?: boolean;
 
   'audit.view'?: boolean;
+  'medicalRecords.delete'?: boolean;
 }
 
 export type CanonicalRole = 'ADMIN' | 'CONSULTANT' | 'DOCTOR' | 'NURSE';

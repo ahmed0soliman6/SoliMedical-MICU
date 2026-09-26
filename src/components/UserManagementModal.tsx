@@ -392,6 +392,7 @@ const PERMISSION_GROUPS: PermissionCategory[] = [
       { key: 'users.disable', label: { ar: 'إيقاف وتعطيل حسابات الكوادر', en: 'Disable User (users.disable)' } },
       { key: 'users.delete', label: { ar: 'حذف حسابات الكوادر نهائياً', en: 'Delete User (users.delete)' } },
       { key: 'audit.view', label: { ar: 'الاطلاع على سجلات الرقابة CBAHI/JCI', en: 'View Audit Logs (audit.view)' } },
+      { key: 'medicalRecords.delete', label: { ar: 'حذف السجلات الطبية (المضادات، الفحوصات، المضخات، جهاز التنفس، السوائل، التحاليل)', en: 'Delete Medical Records (medicalRecords.delete)' } },
     ]
   }
 ];

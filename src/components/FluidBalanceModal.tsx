@@ -25,6 +25,7 @@ import { useTranslation } from '../services/i18n.ts';
 import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { DEFAULT_FLUID_CATEGORIES, FluidCategoryPreset } from '../types/settings.ts';
 import { toEnglishDigits, parseEnglishFloat } from '../services/numberUtils.ts';
+import { canDeleteRecord } from '../services/medicalRecordPermissions.ts';
 
 interface FluidBalanceModalProps {
   isOpen: boolean;
@@ -366,6 +367,16 @@ export const FluidBalanceModal: React.FC<FluidBalanceModalProps> = ({
 
   const handleDelete = async () => {
     if (!initialFluidBalance?.id) return;
+
+    if (!canDeleteRecord(currentUser)) {
+      alert(lang === 'ar' ? 'غير مصرح: حذف السجلات الطبية يتطلب صلاحيات إدارية خاصة.' : 'Unauthorized: Deleting medical records requires special administrative permissions.');
+      return;
+    }
+
+    if (!window.confirm(lang === 'ar' ? `هل أنت متأكد من حذف سجل ميزان السوائل لليوم؟` : `Are you sure you want to delete this fluid balance record?`)) {
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       await db.fluidBalances.delete(initialFluidBalance.id);

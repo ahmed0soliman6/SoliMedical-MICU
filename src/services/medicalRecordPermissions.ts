@@ -6,6 +6,7 @@ export interface UserContextForPermission {
   staffId?: string;
   role?: StaffRole | string;
   isSuperAdmin?: boolean;
+  permissions?: any;
 }
 
 export interface RecordOwnershipContext {
@@ -72,7 +73,12 @@ export function canEditRecord(
  */
 export function canDeleteRecord(user: UserContextForPermission | null | undefined): boolean {
   if (!user || !user.uid) return false;
-  return user.role === StaffRole.ADMIN || user.role === 'ADMIN' || user.isSuperAdmin === true;
+  return (
+    user.role === StaffRole.ADMIN ||
+    user.role === 'ADMIN' ||
+    user.isSuperAdmin === true ||
+    user.permissions?.['medicalRecords.delete'] === true
+  );
 }
 
 /**

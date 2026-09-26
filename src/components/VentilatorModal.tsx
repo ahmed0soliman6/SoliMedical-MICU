@@ -20,6 +20,7 @@ import { useAuth } from '../services/AuthContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
 import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { toEnglishDigits, parseEnglishFloat } from '../services/numberUtils.ts';
+import { canDeleteRecord } from '../services/medicalRecordPermissions.ts';
 
 interface VentilatorModalProps {
   isOpen: boolean;
@@ -200,6 +201,11 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
   };
 
   const handleRemoveVentilator = async () => {
+    if (!canDeleteRecord(currentUser)) {
+      alert(lang === 'ar' ? 'غير مصرح: حذف السجلات الطبية يتطلب صلاحيات إدارية خاصة.' : 'Unauthorized: Deleting medical records requires special administrative permissions.');
+      return;
+    }
+
     if (!confirm(lang === 'ar' ? 'هل أنت متأكد من فصل جهاز التنفس وتأكيد تنفس المريض تلقائياً (Extubated/Room Air)؟' : 'Confirm ventilator discontinuation (patient breathing spontaneously)?')) {
       return;
     }
@@ -477,7 +483,7 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
 
           {/* Action Buttons */}
           <div className="flex items-center justify-between gap-3 pt-4 border-t border-slate-800">
-            {initialVentilator ? (
+            {initialVentilator && canDeleteRecord(currentUser) ? (
               <button
                 type="button"
                 onClick={handleRemoveVentilator}

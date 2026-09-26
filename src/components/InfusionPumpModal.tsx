@@ -16,6 +16,8 @@ import { firestore, setDoc } from '../services/firebase.ts';
 import { useTranslation } from '../services/i18n.ts';
 import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { toEnglishDigits, parseEnglishFloat } from '../services/numberUtils.ts';
+import { useAuth } from '../services/AuthContext.tsx';
+import { canDeleteRecord } from '../services/medicalRecordPermissions.ts';
 
 interface InfusionPumpModalProps {
   isOpen: boolean;
@@ -339,6 +341,7 @@ export const InfusionPumpModal: React.FC<InfusionPumpModalProps> = ({
 }) => {
   const { lang, isRTL } = useTranslation();
   const { settings } = useSystemSettings();
+  const { currentUser } = useAuth();
 
   // Selected drug knowledge
   const [selectedDrugId, setSelectedDrugId] = useState<string>('noradrenaline');
@@ -612,6 +615,15 @@ export const InfusionPumpModal: React.FC<InfusionPumpModalProps> = ({
 
   const handleDeletePump = async () => {
     if (!editingPump) return;
+
+    if (!canDeleteRecord(currentUser)) {
+      alert(lang === 'ar' ? 'غير مصرح: حذف السجلات الطبية يتطلب صلاحيات إدارية خاصة.' : 'Unauthorized: Deleting medical records requires special administrative permissions.');
+      return;
+    }
+
+    if (!window.confirm(lang === 'ar' ? `هل أنت متأكد من حذف مضخة المحلول لـ ${editingPump.drugNameAr || editingPump.drugNameEn}؟` : `Are you sure you want to remove the infusion pump for ${editingPump.drugNameEn}?`)) {
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -953,7 +965,7 @@ export const InfusionPumpModal: React.FC<InfusionPumpModalProps> = ({
 
           {/* Action Buttons */}
           <div className="flex items-center justify-between gap-3 pt-3.5 border-t border-slate-200 dark:border-slate-800">
-            {editingPump ? (
+            {editingPump && canDeleteRecord(currentUser) ? (
               <button
                 type="button"
                 onClick={handleDeletePump}
