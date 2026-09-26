@@ -11,7 +11,7 @@
 
 import { getMessaging, getToken, onMessage, isSupported, Messaging } from 'firebase/messaging';
 import { doc, setDoc, deleteDoc } from 'firebase/firestore';
-import { firebaseApp, firestore, sanitizeForFirestore } from './firebase.ts';
+import { firebaseApp, firestore, auth, sanitizeForFirestore } from './firebase.ts';
 import { AppNotification, NotificationType } from '../types/notification.ts';
 import { IcuUser } from '../types/schema.ts';
 
@@ -97,13 +97,20 @@ export async function requestFcmToken(currentUser?: IcuUser | null): Promise<str
       }
     }
 
-    // Get FCM registration token
+    // Web Push requires vapidKey; fail gracefully with clear warning if missing
+    const vapidKey = (import.meta as any).env?.VITE_FIREBASE_VAPID_KEY;
+    if (!vapidKey) {
+      console.warn('[FCM] VITE_FIREBASE_VAPID_KEY is missing. Web Push requires a valid VAPID Key pair from Firebase Console -> Project Settings -> Cloud Messaging -> Web Push certificates -> Key pair.');
+      return null;
+    }
+
+    // Get FCM registration token with mandatory vapidKey and Service Worker Registration
     const token = await getToken(messaging, {
+      vapidKey,
       serviceWorkerRegistration: swReg,
     }).catch(async (tokErr) => {
-      // If default vapidKey fails, attempt without explicit swReg or try default
-      console.warn('[FCM] getToken fallback attempt:', tokErr);
-      return await getToken(messaging).catch(() => null);
+      console.warn('[FCM] getToken error with vapidKey:', tokErr);
+      return null;
     });
 
     if (!token) {
@@ -245,12 +252,25 @@ export async function broadcastFcmPush(notification: {
       timestamp: new Date().toISOString(),
     };
 
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+
+    if (auth.currentUser) {
+      try {
+        const idToken = await auth.currentUser.getIdToken();
+        if (idToken) {
+          headers['Authorization'] = `Bearer ${idToken}`;
+        }
+      } catch (tokenErr) {
+        console.warn('[FCM] Error obtaining auth ID token for broadcast:', tokenErr);
+      }
+    }
+
     // Asynchronously dispatch to full-stack server FCM broadcast route
     fetch('/api/notifications/fcm-broadcast', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify(payload),
     }).catch((err) => {
       console.warn('[FCM] Server push broadcast dispatch notice:', err);

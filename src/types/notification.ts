@@ -6,7 +6,8 @@ export type NotificationType =
   | 'SBAR_HANDOVER' 
   | 'SBAR_RECEIVED' 
   | 'ISOLATION_CHANGE'
-  | 'CRITICAL_VITAL_ALERT';
+  | 'CRITICAL_VITAL_ALERT'
+  | 'CLINICAL_NOTE';
 
 export interface AppNotificationTarget {
   action: 'OPEN_ARCHIVE' | 'OPEN_SBAR' | 'OPEN_BED' | 'OPEN_ISOLATION';

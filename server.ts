@@ -508,12 +508,19 @@ import {
   adminDeleteMortalityRecord,
   adminMortalityAutoPurgeSweep,
   runAdminDiagnosticCheck,
-  adminBroadcastFcmPush
+  adminBroadcastFcmPush,
+  verifyCallerToken
 } from './src/server/adminOperations';
 
 // FCM Web Push Notification Broadcast Endpoint
 app.post('/api/notifications/fcm-broadcast', async (req, res) => {
   try {
+    const authHeader = req.headers.authorization;
+    const authCheck = await verifyCallerToken(authHeader);
+    if (!authCheck.isAuthenticated) {
+      return res.status(401).json({ success: false, message: authCheck.error || 'Unauthorized: Invalid or missing authorization token.' });
+    }
+
     const payload = req.body;
     if (!payload || !payload.type) {
       return res.status(400).json({ success: false, message: 'Invalid notification payload.' });
@@ -522,7 +529,7 @@ app.post('/api/notifications/fcm-broadcast', async (req, res) => {
     return res.status(200).json(result);
   } catch (err: any) {
     console.warn('[Server] FCM broadcast error:', err);
-    return res.status(200).json({ success: false, deliveredCount: 0, message: err?.message || 'Push broadcast error' });
+    return res.status(500).json({ success: false, deliveredCount: 0, message: err?.message || 'Push broadcast error' });
   }
 });
 

@@ -302,6 +302,36 @@ export async function verifyAdminCallerToken(authHeader?: string): Promise<{ isA
   }
 }
 
+export async function verifyCallerToken(authHeader?: string): Promise<{ isAuthenticated: boolean; callerUid?: string; error?: string }> {
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return { isAuthenticated: false, error: 'Missing or invalid Authorization header. Must be Bearer <Firebase ID Token>.' };
+  }
+
+  const token = authHeader.split('Bearer ')[1]?.trim();
+  if (!token) {
+    return { isAuthenticated: false, error: 'Empty Authorization ID Token.' };
+  }
+
+  try {
+    if (!hasGoogleCredentials()) {
+      return { isAuthenticated: false, error: 'Firebase Admin credentials not configured on server.' };
+    }
+
+    const { auth } = requireAdminServices();
+    const decodedToken = await auth.verifyIdToken(token);
+    const callerUid = decodedToken?.uid;
+
+    if (!callerUid) {
+      return { isAuthenticated: false, error: 'Invalid token: missing caller UID.' };
+    }
+
+    return { isAuthenticated: true, callerUid };
+  } catch (err: any) {
+    console.error('[verifyCallerToken] Verification failed:', err?.message || err);
+    return { isAuthenticated: false, error: `Authentication failed: ${err?.message || 'Invalid or expired ID token'}` };
+  }
+}
+
 export async function adminCreateUser(authHeader?: string, userData?: any): Promise<AdminOpResult> {
   const authCheck = await verifyAdminCallerToken(authHeader);
   if (!authCheck.isAdmin || !authCheck.callerUid) {

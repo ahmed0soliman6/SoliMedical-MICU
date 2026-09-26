@@ -443,6 +443,29 @@ export async function admitPatient(input: DirectAdmissionInput): Promise<{ patie
     await db.auditLogs.put(auditLog);
   });
 
+  // [FCM Event Trigger]: Broadcast 'ADMISSION' push notification immediately after successful cloud sync
+  if (isOnline) {
+    try {
+      const { broadcastFcmPush } = await import('./fcmService.ts');
+      const attendingName = input.attendingDoctor?.name || 'طبيب العناية المركزة';
+      const patName = input.fullNameAr || input.fullNameEn || 'مريض جديد';
+      broadcastFcmPush({
+        type: 'ADMISSION',
+        titleEn: `New Admission - Bed ${input.targetBed}`,
+        titleAr: `دخول مريض جديد - السرير ${input.targetBed}`,
+        messageEn: `Patient ${input.fullNameEn || patName} (MRN: ${input.mrn}) admitted to Bed ${input.targetBed} by ${attendingName}.`,
+        messageAr: `تم تسجيل دخول المريض ${patName} (رقم الملف: ${input.mrn}) إلى السرير ${input.targetBed} بواسطة ${attendingName}.`,
+        bedNumber: input.targetBed,
+        patientId: patientId,
+        patientName: patName,
+        patientMrn: input.mrn,
+        action: 'OPEN_BED',
+      }).catch((e) => console.warn('[FCM] Admission push broadcast notice:', e));
+    } catch (fcmErr) {
+      console.warn('[FCM] Admission broadcast hook error:', fcmErr);
+    }
+  }
+
   return { patientId, noteId: createdNoteId };
 }
 

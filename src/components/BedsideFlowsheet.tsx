@@ -69,7 +69,7 @@ import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
 import { useAuth } from '../services/AuthContext.tsx';
 import { useAppNotifications } from '../services/NotificationContext.tsx';
-import { syncStatLabsToCloud, deleteStatLabFromCloud, syncLabResultToCloud, syncPatientToCloud, syncPumpToCloud, deletePumpFromCloud, firestore, fetchPatientHistoricalDataFromCloud, fetchFullCategoryFromCloud, subscribeToActivePatientFlowsheet } from '../services/firebase.ts';
+import { syncStatLabsToCloud, deleteStatLabFromCloud, syncLabResultToCloud, syncPatientToCloud, syncPumpToCloud, deletePumpFromCloud, firestore, fetchFullCategoryFromCloud, subscribeToActivePatientFlowsheet } from '../services/firebase.ts';
 import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { FullPageAdmission } from './FullPageAdmission.tsx';
 import { LabFlowsheetSection } from './LabFlowsheetSection.tsx';
@@ -306,10 +306,6 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
 
     let unsubActivePatientSync: (() => void) | null = null;
     if (patient?.id) {
-      fetchPatientHistoricalDataFromCloud(patient.id).then(() => {
-        loadBedsideData();
-      }).catch(() => null);
-
       unsubActivePatientSync = subscribeToActivePatientFlowsheet(patient.id, () => {
         loadBedsideData();
       });

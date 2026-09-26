@@ -1012,6 +1012,8 @@ export function subscribeToRealtimeFirestore(
   onCriticalAlarm?: (alert: { bedNumber: string; message: string; type: string }) => void
 ): () => void {
   const unsubscribers: Unsubscribe[] = [];
+  let summaryUnsubscribers: Unsubscribe[] = [];
+  let previousActiveIdsKey = '';
 
   const notifyUpdate = () => {
     onDataUpdate();
@@ -1020,6 +1022,174 @@ export function subscribeToRealtimeFirestore(
         window.dispatchEvent(new Event('icu-data-updated'));
       }
     } catch {}
+  };
+
+  /**
+   * Scopes the 6 central summary onSnapshot listeners strictly to current ACTIVE_ICU patients,
+   * chunking by 30 IDs per sub-query (Firestore 'in' constraint) and re-subscribing seamlessly without gap.
+   * If there are no active patients, no listeners are opened.
+   */
+  const updateActivePatientsAndSubscriptions = (patientIds: string[]) => {
+    const sortedIds = Array.from(new Set(patientIds.filter(Boolean))).sort();
+    const currentKey = sortedIds.join(',');
+
+    if (currentKey === previousActiveIdsKey) {
+      return;
+    }
+    previousActiveIdsKey = currentKey;
+
+    const oldUnsubscribers = [...summaryUnsubscribers];
+    const newUnsubscribers: Unsubscribe[] = [];
+
+    if (sortedIds.length > 0) {
+      const chunks: string[][] = [];
+      for (let i = 0; i < sortedIds.length; i += 30) {
+        chunks.push(sortedIds.slice(i, i + 30));
+      }
+
+      for (const chunk of chunks) {
+        // 1. Patient Antibiotics (limit 30)
+        try {
+          const abxQuery = query(
+            collection(firestore, 'patientAntibiotics'),
+            where('patientId', 'in', chunk),
+            limit(30)
+          );
+          const unsubAbx = onSnapshot(abxQuery, async (snapshot) => {
+            for (const change of snapshot.docChanges()) {
+              if (change.type === 'added' || change.type === 'modified') {
+                await db.patientAntibiotics.put(change.doc.data() as PatientAntibiotic);
+              } else if (change.type === 'removed') {
+                await db.patientAntibiotics.delete(change.doc.id);
+              }
+            }
+            notifyUpdate();
+          }, (err) => handleFirestoreError(err, OperationType.GET, 'patientAntibiotics'));
+          newUnsubscribers.push(unsubAbx);
+        } catch (e) {
+          console.warn('Error setting up chunked patientAntibiotics listener:', e);
+        }
+
+        // 2. Infusion Pumps (limit 30)
+        try {
+          const pumpsQuery = query(
+            collection(firestore, 'infusionPumps'),
+            where('patientId', 'in', chunk),
+            limit(30)
+          );
+          const unsubPumps = onSnapshot(pumpsQuery, async (snapshot) => {
+            for (const change of snapshot.docChanges()) {
+              if (change.type === 'added' || change.type === 'modified') {
+                await db.infusionPumps.put(change.doc.data() as InfusionPumpLine);
+              } else if (change.type === 'removed') {
+                await db.infusionPumps.delete(change.doc.id);
+              }
+            }
+            notifyUpdate();
+          }, (err) => handleFirestoreError(err, OperationType.GET, 'infusionPumps'));
+          newUnsubscribers.push(unsubPumps);
+        } catch (e) {
+          console.warn('Error setting up chunked infusionPumps listener:', e);
+        }
+
+        // 3. Ventilators (limit 20)
+        try {
+          const ventQuery = query(
+            collection(firestore, 'ventilators'),
+            where('patientId', 'in', chunk),
+            limit(20)
+          );
+          const unsubVent = onSnapshot(ventQuery, async (snapshot) => {
+            for (const change of snapshot.docChanges()) {
+              if (change.type === 'added' || change.type === 'modified') {
+                await db.ventilators.put(change.doc.data() as VentilatorParameters);
+              } else if (change.type === 'removed') {
+                await db.ventilators.delete(change.doc.id);
+              }
+            }
+            notifyUpdate();
+          }, (err) => handleFirestoreError(err, OperationType.GET, 'ventilators'));
+          newUnsubscribers.push(unsubVent);
+        } catch (e) {
+          console.warn('Error setting up chunked ventilators listener:', e);
+        }
+
+        // 4. Fluid Balances (limit 20)
+        try {
+          const fluidsQuery = query(
+            collection(firestore, 'fluidBalances'),
+            where('patientId', 'in', chunk),
+            limit(20)
+          );
+          const unsubFluids = onSnapshot(fluidsQuery, async (snapshot) => {
+            for (const change of snapshot.docChanges()) {
+              if (change.type === 'added' || change.type === 'modified') {
+                await db.fluidBalances.put(change.doc.data() as FluidBalance24H);
+              } else if (change.type === 'removed') {
+                await db.fluidBalances.delete(change.doc.id);
+              }
+            }
+            notifyUpdate();
+          }, (err) => handleFirestoreError(err, OperationType.GET, 'fluidBalances'));
+          newUnsubscribers.push(unsubFluids);
+        } catch (e) {
+          console.warn('Error setting up chunked fluidBalances listener:', e);
+        }
+
+        // 5. Clinical Notes (limit 20)
+        try {
+          const notesQuery = query(
+            collection(firestore, 'clinicalNotes'),
+            where('patientId', 'in', chunk),
+            limit(20)
+          );
+          const unsubNotes = onSnapshot(notesQuery, async (snapshot) => {
+            for (const change of snapshot.docChanges()) {
+              if (change.type === 'added' || change.type === 'modified') {
+                await db.clinicalNotes.put(change.doc.data() as ClinicalNote);
+              } else if (change.type === 'removed') {
+                await db.clinicalNotes.delete(change.doc.id);
+              }
+            }
+            notifyUpdate();
+          }, (err) => handleFirestoreError(err, OperationType.GET, 'clinicalNotes'));
+          newUnsubscribers.push(unsubNotes);
+        } catch (e) {
+          console.warn('Error setting up chunked clinicalNotes listener:', e);
+        }
+
+        // 6. Addendums (limit 20)
+        try {
+          const addQuery = query(
+            collection(firestore, 'addendums'),
+            where('patientId', 'in', chunk),
+            limit(20)
+          );
+          const unsubAdd = onSnapshot(addQuery, async (snapshot) => {
+            for (const change of snapshot.docChanges()) {
+              if (change.type === 'added' || change.type === 'modified') {
+                await db.addendums.put(change.doc.data() as Addendum);
+              } else if (change.type === 'removed') {
+                await db.addendums.delete(change.doc.id);
+              }
+            }
+            notifyUpdate();
+          }, (err) => handleFirestoreError(err, OperationType.GET, 'addendums'));
+          newUnsubscribers.push(unsubAdd);
+        } catch (e) {
+          console.warn('Error setting up chunked addendums listener:', e);
+        }
+      }
+    }
+
+    summaryUnsubscribers = newUnsubscribers;
+
+    // Close previous listeners after opening new ones so there's zero gap!
+    oldUnsubscribers.forEach((unsub) => {
+      try {
+        unsub();
+      } catch {}
+    });
   };
 
   try {
@@ -1131,6 +1301,31 @@ export function subscribeToRealtimeFirestore(
           }
         }
       }
+
+      // Collect current active patient IDs to scope central summary listeners
+      const currentActiveIds: string[] = [];
+      snapshot.docs.forEach((docSnap) => {
+        const remotePatient = docSnap.data() as PatientDossier;
+        const patientId = remotePatient.id || (remotePatient as any).patientId || docSnap.id;
+        if (!patientId) return;
+        if (remotePatient.unitId && remotePatient.unitId !== 'MICU-MAIN') return;
+        const remoteStatus = remotePatient.patientStatus || (remotePatient as any).status || (remotePatient as any).currentStatus;
+        const isRemoteDischarged = 
+          remotePatient.archiveStatus === 'ARCHIVED' || 
+          remotePatient.archiveStatus === 'COLD_STORAGE' ||
+          (remotePatient as any).isArchived === true ||
+          !!remotePatient.dischargeDate ||
+          !!remotePatient.mortalityRecord ||
+          String(remoteStatus || '').toUpperCase().includes('DISCHARGE') ||
+          String(remoteStatus || '').toUpperCase().includes('TRANSFER') ||
+          String(remoteStatus || '').toUpperCase().includes('EXPIRED') ||
+          String(remoteStatus || '').toUpperCase().includes('MORTALITY');
+        if (!isRemoteDischarged) {
+          currentActiveIds.push(patientId);
+        }
+      });
+      updateActivePatientsAndSubscriptions(currentActiveIds);
+
       await ensureBedPatientSync({ syncToCloud: false });
       notifyUpdate();
     }, (err) => {
@@ -1192,6 +1387,31 @@ export function subscribeToRealtimeFirestore(
               }
             }
           }
+
+          // Scoping in fallback query
+          const currentFallbackIds: string[] = [];
+          snap.docs.forEach((docSnap) => {
+            const remotePatient = docSnap.data() as PatientDossier;
+            const patientId = remotePatient.id || (remotePatient as any).patientId || docSnap.id;
+            if (!patientId) return;
+            if (remotePatient.unitId && remotePatient.unitId !== 'MICU-MAIN') return;
+            const remoteStatus = remotePatient.patientStatus || (remotePatient as any).status || (remotePatient as any).currentStatus;
+            const isRemoteDischarged = 
+              remotePatient.archiveStatus === 'ARCHIVED' || 
+              remotePatient.archiveStatus === 'COLD_STORAGE' ||
+              (remotePatient as any).isArchived === true ||
+              !!remotePatient.dischargeDate ||
+              !!remotePatient.mortalityRecord ||
+              String(remoteStatus || '').toUpperCase().includes('DISCHARGE') ||
+              String(remoteStatus || '').toUpperCase().includes('TRANSFER') ||
+              String(remoteStatus || '').toUpperCase().includes('EXPIRED') ||
+              String(remoteStatus || '').toUpperCase().includes('MORTALITY');
+            if (!isRemoteDischarged) {
+              currentFallbackIds.push(patientId);
+            }
+          });
+          updateActivePatientsAndSubscriptions(currentFallbackIds);
+
           await ensureBedPatientSync({ syncToCloud: false });
           notifyUpdate();
         }, (err) => handleFirestoreError(err, OperationType.GET, 'patients'));
@@ -1251,111 +1471,26 @@ export function subscribeToRealtimeFirestore(
     }, (err) => handleFirestoreError(err, OperationType.GET, 'sbarHandovers'));
     unsubscribers.push(unsubSbar);
 
-    // 5. Global Real-Time Sync: Patient Antibiotics
-    try {
-      const abxCol = collection(firestore, 'patientAntibiotics');
-      const abxQuery = query(abxCol, limit(30));
-      const unsubAbx = onSnapshot(abxQuery, async (snapshot) => {
-        for (const change of snapshot.docChanges()) {
-          if (change.type === 'added' || change.type === 'modified') {
-            await db.patientAntibiotics.put(change.doc.data() as PatientAntibiotic);
-          } else if (change.type === 'removed') {
-            await db.patientAntibiotics.delete(change.doc.id);
-          }
-        }
-        notifyUpdate();
-      }, (err) => handleFirestoreError(err, OperationType.GET, 'patientAntibiotics'));
-      unsubscribers.push(unsubAbx);
-    } catch {}
-
-    // 6. Global Real-Time Sync: Infusion Pumps
-    try {
-      const pumpsCol = collection(firestore, 'infusionPumps');
-      const pumpsQuery = query(pumpsCol, limit(30));
-      const unsubPumps = onSnapshot(pumpsQuery, async (snapshot) => {
-        for (const change of snapshot.docChanges()) {
-          if (change.type === 'added' || change.type === 'modified') {
-            await db.infusionPumps.put(change.doc.data() as InfusionPumpLine);
-          } else if (change.type === 'removed') {
-            await db.infusionPumps.delete(change.doc.id);
-          }
-        }
-        notifyUpdate();
-      }, (err) => handleFirestoreError(err, OperationType.GET, 'infusionPumps'));
-      unsubscribers.push(unsubPumps);
-    } catch {}
-
-    // 7. Global Real-Time Sync: Ventilator Settings
-    try {
-      const ventCol = collection(firestore, 'ventilators');
-      const ventQuery = query(ventCol, limit(20));
-      const unsubVent = onSnapshot(ventQuery, async (snapshot) => {
-        for (const change of snapshot.docChanges()) {
-          if (change.type === 'added' || change.type === 'modified') {
-            await db.ventilators.put(change.doc.data() as VentilatorParameters);
-          } else if (change.type === 'removed') {
-            await db.ventilators.delete(change.doc.id);
-          }
-        }
-        notifyUpdate();
-      }, (err) => handleFirestoreError(err, OperationType.GET, 'ventilators'));
-      unsubscribers.push(unsubVent);
-    } catch {}
-
-    // 8. Global Real-Time Sync: Fluid Balances
-    try {
-      const fluidsCol = collection(firestore, 'fluidBalances');
-      const fluidsQuery = query(fluidsCol, limit(20));
-      const unsubFluids = onSnapshot(fluidsQuery, async (snapshot) => {
-        for (const change of snapshot.docChanges()) {
-          if (change.type === 'added' || change.type === 'modified') {
-            await db.fluidBalances.put(change.doc.data() as FluidBalance24H);
-          } else if (change.type === 'removed') {
-            await db.fluidBalances.delete(change.doc.id);
-          }
-        }
-        notifyUpdate();
-      }, (err) => handleFirestoreError(err, OperationType.GET, 'fluidBalances'));
-      unsubscribers.push(unsubFluids);
-    } catch {}
-
-    // 9. Global Real-Time Sync: Clinical Notes & Addendums
-    try {
-      const notesCol = collection(firestore, 'clinicalNotes');
-      const notesQuery = query(notesCol, limit(20));
-      const unsubNotes = onSnapshot(notesQuery, async (snapshot) => {
-        for (const change of snapshot.docChanges()) {
-          if (change.type === 'added' || change.type === 'modified') {
-            await db.clinicalNotes.put(change.doc.data() as ClinicalNote);
-          } else if (change.type === 'removed') {
-            await db.clinicalNotes.delete(change.doc.id);
-          }
-        }
-        notifyUpdate();
-      }, (err) => handleFirestoreError(err, OperationType.GET, 'clinicalNotes'));
-      unsubscribers.push(unsubNotes);
-
-      const addCol = collection(firestore, 'addendums');
-      const addQuery = query(addCol, limit(20));
-      const unsubAdd = onSnapshot(addQuery, async (snapshot) => {
-        for (const change of snapshot.docChanges()) {
-          if (change.type === 'added' || change.type === 'modified') {
-            await db.addendums.put(change.doc.data() as Addendum);
-          } else if (change.type === 'removed') {
-            await db.addendums.delete(change.doc.id);
-          }
-        }
-        notifyUpdate();
-      }, (err) => handleFirestoreError(err, OperationType.GET, 'addendums'));
-      unsubscribers.push(unsubAdd);
-    } catch {}
+    // Note: Central summary listeners (patientAntibiotics, infusionPumps, ventilators,
+    // fluidBalances, clinicalNotes, addendums) are now dynamically scoped and maintained
+    // by updateActivePatientsAndSubscriptions() above, strictly partitioned by current active patient IDs.
 
   } catch (e) {
     console.warn('Could not establish Firestore real-time listener:', e);
   }
 
   return () => {
-    unsubscribers.forEach(unsub => unsub());
+    summaryUnsubscribers.forEach((unsub) => {
+      try {
+        unsub();
+      } catch {}
+    });
+    summaryUnsubscribers = [];
+    unsubscribers.forEach((unsub) => {
+      try {
+        unsub();
+      } catch {}
+    });
   };
 }
 
@@ -2358,6 +2493,25 @@ export async function syncSbarToCloud(sbar: SbarHandoverReport): Promise<void> {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new Event('icu-data-updated'));
     }
+
+    // [FCM Event Trigger]: Broadcast 'SBAR_HANDOVER' push notification immediately after successful cloud write
+    try {
+      const { broadcastFcmPush } = await import('./fcmService.ts');
+      const outgoingName = sbar.outgoingDoctor?.name || 'طبيب العناية المتابع';
+      const bedStr = String(sbar.bedId || (sbar as any).bedNumber || '');
+      broadcastFcmPush({
+        type: 'SBAR_HANDOVER',
+        titleEn: `New SBAR Handover - Bed ${bedStr}`,
+        titleAr: `تسليم نوبة جديد (SBAR) - السرير ${bedStr}`,
+        messageEn: `SBAR clinical shift handover recorded for Bed ${bedStr} by ${outgoingName}.`,
+        messageAr: `تم تسجيل تقرير تسليم نوبة سريري (SBAR) للسرير ${bedStr} بواسطة ${outgoingName}.`,
+        bedNumber: bedStr,
+        patientId: sbar.patientId,
+        action: 'OPEN_BED',
+      }).catch((e) => console.warn('[FCM] SBAR push broadcast notice:', e));
+    } catch (pushErr) {
+      console.warn('[FCM] SBAR push broadcast hook error:', pushErr);
+    }
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `sbarHandovers/${sbar.id}`);
   }
@@ -2376,6 +2530,30 @@ export async function syncClinicalNoteToCloud(note: ClinicalNote): Promise<void>
     if (note.addendums && note.addendums.length > 0) {
       for (const addendum of note.addendums) {
         await syncAddendumToCloud(addendum).catch(() => {});
+      }
+    }
+
+    // [FCM Event Trigger]: Broadcast 'CLINICAL_NOTE' push notification for urgent clinical notes after successful cloud write
+    const isUrgent = (note as any).priority === 'URGENT' || (note as any).priority === 'STAT' || 
+                     (note as any).urgency === 'URGENT' || (note as any).urgency === 'STAT' || 
+                     (note as any).isUrgent === true || String((note as any).priority || '').toLowerCase() === 'urgent';
+    if (isUrgent) {
+      try {
+        const { broadcastFcmPush } = await import('./fcmService.ts');
+        const author = note.authorName || 'طبيب العناية';
+        const bedStr = note.bedId ? String(note.bedId) : undefined;
+        broadcastFcmPush({
+          type: 'CLINICAL_NOTE',
+          titleEn: `Urgent Clinical Note - Bed ${bedStr || 'N/A'}`,
+          titleAr: `ملاحظة سريرية عاجلة - السرير ${bedStr || 'N/A'}`,
+          messageEn: `Urgent note recorded: "${note.title || 'Clinical Update'}" by ${author}.`,
+          messageAr: `ملاحظة سريرية عاجلة: "${note.title || 'تحديث سريري'}" بواسطة ${author}.`,
+          bedNumber: bedStr,
+          patientId: note.patientId,
+          action: 'OPEN_BED',
+        }).catch((e) => console.warn('[FCM] Urgent note push broadcast notice:', e));
+      } catch (pushErr) {
+        console.warn('[FCM] Urgent note push broadcast hook error:', pushErr);
       }
     }
   } catch (err) {

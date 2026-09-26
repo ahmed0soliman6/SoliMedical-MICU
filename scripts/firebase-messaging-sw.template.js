@@ -5,12 +5,12 @@ importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging-comp
 
 // Standard Firebase App Configuration (Injected dynamically during build)
 const firebaseConfig = {
-  apiKey: "AIzaSyA5NDAjz9mgzpkia99CIMkUSiEPg3hLQ9U",
-  authDomain: "solimedical-micu.firebaseapp.com",
-  projectId: "solimedical-micu",
-  storageBucket: "solimedical-micu.firebasestorage.app",
-  messagingSenderId: "356354051601",
-  appId: "1:356354051601:web:dbd4be1b6a39d5954dabb0"
+  apiKey: "__FIREBASE_API_KEY__",
+  authDomain: "__FIREBASE_AUTH_DOMAIN__",
+  projectId: "__FIREBASE_PROJECT_ID__",
+  storageBucket: "__FIREBASE_STORAGE_BUCKET__",
+  messagingSenderId: "__FIREBASE_MESSAGING_SENDER_ID__",
+  appId: "__FIREBASE_APP_ID__"
 };
 
 try {
