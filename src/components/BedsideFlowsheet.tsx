@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Heart, 
   Wind, 
@@ -293,39 +293,9 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
   const [otherConsultantName, setOtherConsultantName] = useState<string>('');
   const [isDispPanelOpen, setIsDispPanelOpen] = useState<boolean>(false);
 
-  useEffect(() => {
-    loadBedsideData();
-  }, [bed.bedNumber, patient.id]);
+  const loadBedsideData = useCallback(async () => {
+    if (!patient?.id) return;
 
-  useEffect(() => {
-    // Reset edit states on patient change
-    setHistoryInput(patient.history || '');
-    setPresentingComplaintInput(patient.presentingComplaint || '');
-    setChronicDiseasesInput(patient.chronicDiseases || '');
-    setPrimaryDiagnosisEnInput(patient.primaryDiagnosisEn || patient.primaryDiagnosisAr || '');
-    setPrimaryDiagnosisArInput(patient.primaryDiagnosisAr || '');
-    setIsHistoryEditing(false);
-
-    let unsubActivePatientSync: (() => void) | null = null;
-    if (patient?.id) {
-      unsubActivePatientSync = subscribeToActivePatientFlowsheet(patient.id, () => {
-        loadBedsideData();
-      });
-    }
-    loadBedsideData();
-    const handleDataUpdate = () => loadBedsideData();
-    window.addEventListener('icu-data-updated', handleDataUpdate);
-    const interval = setInterval(() => {
-      loadBedsideData();
-    }, 2500);
-    return () => {
-      if (unsubActivePatientSync) unsubActivePatientSync();
-      clearInterval(interval);
-      window.removeEventListener('icu-data-updated', handleDataUpdate);
-    };
-  }, [bed.bedNumber, patient.id]);
-
-  const loadBedsideData = async () => {
     const vitals = await db.vitals
       .where('patientId')
       .equals(patient.id)
@@ -375,295 +345,17 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
     setLabsList(labs);
 
     // Load Daily Lab Flowsheet Items (Trend-enabled)
-    let labItems = await db.labResults
+    const labItems = await db.labResults
       .where('patientId')
       .equals(patient.id)
       .sortBy('timestamp');
-
-    if (false as boolean) {
-      const now = Date.now();
-      const oneHour = 3600000;
-      const oneDay = 86400000;
-      const seedLabs: LabResultItem[] = [
-        {
-          id: `lab-${patient.id}-hb1`,
-          patientId: patient.id,
-          bedNumber: bed.bedNumber,
-          testName: 'HG (Hemoglobin)',
-          category: 'CBC',
-          value: '5',
-          unit: 'g/dL',
-          normalRange: '12.0 - 16.0',
-          timestamp: new Date(now - 3 * oneDay).toISOString(),
-          status: 'RESULTED',
-          recordedByName: 'Dr. Hesham Talaat (Consultant)',
-          notes: 'Severe acute blood loss on admission - 2 units PRBC ordered'
-        },
-        {
-          id: `lab-${patient.id}-hb2`,
-          patientId: patient.id,
-          bedNumber: bed.bedNumber,
-          testName: 'HG (Hemoglobin)',
-          category: 'CBC',
-          value: '7',
-          unit: 'g/dL',
-          normalRange: '12.0 - 16.0',
-          timestamp: new Date(now - 2 * oneDay).toISOString(),
-          status: 'RESULTED',
-          recordedByName: 'Dr. Sarah Al-Otaibi (Specialist)',
-          notes: 'Post-transfusion 1st check, active stabilization'
-        },
-        {
-          id: `lab-${patient.id}-hb3`,
-          patientId: patient.id,
-          bedNumber: bed.bedNumber,
-          testName: 'HG (Hemoglobin)',
-          category: 'CBC',
-          value: '8.5',
-          unit: 'g/dL',
-          normalRange: '12.0 - 16.0',
-          timestamp: new Date(now - 1 * oneDay).toISOString(),
-          status: 'RESULTED',
-          recordedByName: 'Dr. Hesham Talaat (Consultant)',
-          notes: 'Target reached > 8.0 g/dL, hemodynamic stability improved'
-        },
-        {
-          id: `lab-${patient.id}-hb4`,
-          patientId: patient.id,
-          bedNumber: bed.bedNumber,
-          testName: 'HG (Hemoglobin)',
-          category: 'CBC',
-          value: '8',
-          unit: 'g/dL',
-          normalRange: '12.0 - 16.0',
-          timestamp: new Date(now - 4 * oneHour).toISOString(),
-          status: 'RESULTED',
-          recordedByName: 'Dr. Ahmed Mansoor (Resident)',
-          notes: 'Morning ICU rounds check - stable'
-        },
-        {
-          id: `lab-${patient.id}-wbc1`,
-          patientId: patient.id,
-          bedNumber: bed.bedNumber,
-          testName: 'WBC',
-          category: 'CBC',
-          value: '18.4',
-          unit: 'x10³/µL',
-          normalRange: '4.0 - 11.0',
-          timestamp: new Date(now - 3 * oneDay).toISOString(),
-          status: 'RESULTED',
-          recordedByName: 'Dr. Hesham Talaat',
-          notes: 'Septic leukocytosis'
-        },
-        {
-          id: `lab-${patient.id}-wbc2`,
-          patientId: patient.id,
-          bedNumber: bed.bedNumber,
-          testName: 'WBC',
-          category: 'CBC',
-          value: '14.2',
-          unit: 'x10³/µL',
-          normalRange: '4.0 - 11.0',
-          timestamp: new Date(now - 2 * oneDay).toISOString(),
-          status: 'RESULTED',
-          recordedByName: 'Dr. Sarah Al-Otaibi',
-          notes: 'Responding to broad-spectrum Meropenem'
-        },
-        {
-          id: `lab-${patient.id}-wbc3`,
-          patientId: patient.id,
-          bedNumber: bed.bedNumber,
-          testName: 'WBC',
-          category: 'CBC',
-          value: '11.5',
-          unit: 'x10³/µL',
-          normalRange: '4.0 - 11.0',
-          timestamp: new Date(now - 1 * oneDay).toISOString(),
-          status: 'RESULTED',
-          recordedByName: 'Dr. Ahmed Mansoor',
-          notes: 'Resolving infection'
-        },
-        {
-          id: `lab-${patient.id}-k1`,
-          patientId: patient.id,
-          bedNumber: bed.bedNumber,
-          testName: 'K (Potassium)',
-          category: 'Electrolytes',
-          value: '5.6',
-          unit: 'mmol/L',
-          normalRange: '3.5 - 5.0',
-          timestamp: new Date(now - 2 * oneDay).toISOString(),
-          status: 'RESULTED',
-          recordedByName: 'Dr. Sarah Al-Otaibi',
-          notes: 'Mild hyperkalemia managed with calcium gluconate'
-        },
-        {
-          id: `lab-${patient.id}-k2`,
-          patientId: patient.id,
-          bedNumber: bed.bedNumber,
-          testName: 'K (Potassium)',
-          category: 'Electrolytes',
-          value: '4.7',
-          unit: 'mmol/L',
-          normalRange: '3.5 - 5.0',
-          timestamp: new Date(now - 1 * oneDay).toISOString(),
-          status: 'RESULTED',
-          recordedByName: 'Dr. Hesham Talaat',
-          notes: 'Electrolytes normalized'
-        },
-        {
-          id: `lab-${patient.id}-k3`,
-          patientId: patient.id,
-          bedNumber: bed.bedNumber,
-          testName: 'K (Potassium)',
-          category: 'Electrolytes',
-          value: '4.2',
-          unit: 'mmol/L',
-          normalRange: '3.5 - 5.0',
-          timestamp: new Date(now - 3 * oneHour).toISOString(),
-          status: 'RESULTED',
-          recordedByName: 'Dr. Ahmed Mansoor',
-          notes: 'Optimal cardiac stability'
-        },
-        {
-          id: `lab-${patient.id}-cr1`,
-          patientId: patient.id,
-          bedNumber: bed.bedNumber,
-          testName: 'Creatinine',
-          category: 'Renal',
-          value: '2.8',
-          unit: 'mg/dL',
-          normalRange: '0.7 - 1.3',
-          timestamp: new Date(now - 2 * oneDay).toISOString(),
-          status: 'RESULTED',
-          recordedByName: 'Dr. Hesham Talaat',
-          notes: 'Acute Kidney Injury (AKI Stage 2)'
-        },
-        {
-          id: `lab-${patient.id}-cr2`,
-          patientId: patient.id,
-          bedNumber: bed.bedNumber,
-          testName: 'Creatinine',
-          category: 'Renal',
-          value: '2.1',
-          unit: 'mg/dL',
-          normalRange: '0.7 - 1.3',
-          timestamp: new Date(now - 1 * oneDay).toISOString(),
-          status: 'RESULTED',
-          recordedByName: 'Dr. Sarah Al-Otaibi',
-          notes: 'Improving with fluid resuscitation'
-        },
-        {
-          id: `lab-${patient.id}-cr3`,
-          patientId: patient.id,
-          bedNumber: bed.bedNumber,
-          testName: 'Creatinine',
-          category: 'Renal',
-          value: '1.4',
-          unit: 'mg/dL',
-          normalRange: '0.7 - 1.3',
-          timestamp: new Date(now - 3 * oneHour).toISOString(),
-          status: 'RESULTED',
-          recordedByName: 'Dr. Ahmed Mansoor',
-          notes: 'Renal recovery ongoing'
-        },
-        {
-          id: `lab-${patient.id}-lact1`,
-          patientId: patient.id,
-          bedNumber: bed.bedNumber,
-          testName: 'Lactate',
-          category: 'ABG',
-          value: '4.5',
-          unit: 'mmol/L',
-          normalRange: '0.5 - 2.0',
-          timestamp: new Date(now - 2 * oneDay).toISOString(),
-          status: 'RESULTED',
-          recordedByName: 'Dr. Hesham Talaat',
-          notes: 'Lactic acidosis on admission'
-        },
-        {
-          id: `lab-${patient.id}-lact2`,
-          patientId: patient.id,
-          bedNumber: bed.bedNumber,
-          testName: 'Lactate',
-          category: 'ABG',
-          value: '2.4',
-          unit: 'mmol/L',
-          normalRange: '0.5 - 2.0',
-          timestamp: new Date(now - 1 * oneDay).toISOString(),
-          status: 'RESULTED',
-          recordedByName: 'Dr. Sarah Al-Otaibi',
-          notes: 'Clearing nicely'
-        },
-        {
-          id: `lab-${patient.id}-lact3`,
-          patientId: patient.id,
-          bedNumber: bed.bedNumber,
-          testName: 'Lactate',
-          category: 'ABG',
-          value: '1.3',
-          unit: 'mmol/L',
-          normalRange: '0.5 - 2.0',
-          timestamp: new Date(now - 3 * oneHour).toISOString(),
-          status: 'RESULTED',
-          recordedByName: 'Dr. Ahmed Mansoor',
-          notes: 'Complete lactate clearance'
-        }
-      ];
-      await db.labResults.bulkPut(seedLabs);
-      labItems = seedLabs;
-    }
     setLabResults(labItems);
 
     // Load Investigations & Imaging Items
-    let invItems = await db.investigations
+    const invItems = await db.investigations
       .where('patientId')
       .equals(patient.id)
       .sortBy('timestamp');
-
-    if (false as boolean) {
-      const now = Date.now();
-      const seedInvs: InvestigationItem[] = [
-        {
-          id: `inv-${patient.id}-1`,
-          patientId: patient.id,
-          bedNumber: bed.bedNumber,
-          modality: 'Chest X-Ray',
-          testName: 'Portable AP Chest Radiograph',
-          timestamp: new Date(now - 18 * 3600000).toISOString(),
-          status: 'REPORTED',
-          resultReport: 'Endotracheal tube tip is 3.5 cm above the carina. Right internal jugular CVC tip at cavoatrial junction. Bilateral patchy bibasilar infiltrates consistent with ARDS / aspiration, slightly improved compared to admission film. No pneumothorax.',
-          recordedByName: 'Dr. Khaled Radiologist',
-          notes: 'Bedside portable study completed'
-        },
-        {
-          id: `inv-${patient.id}-2`,
-          patientId: patient.id,
-          bedNumber: bed.bedNumber,
-          modality: 'Ultrasound',
-          testName: 'Bedside POCUS - Focused Cardiac & Lung Ultrasound',
-          timestamp: new Date(now - 6 * 3600000).toISOString(),
-          status: 'REPORTED',
-          resultReport: 'LV function hyperdynamic with EF ~55-60%. No pericardial effusion. IVC collapsible > 50% indicating fluid responsiveness. Lung ultrasound demonstrates bilateral B-lines in anterior and lateral zones.',
-          recordedByName: 'Dr. Hesham Talaat (Consultant)',
-          notes: 'Bedside echocardiogram and BLUE protocol'
-        },
-        {
-          id: `inv-${patient.id}-3`,
-          patientId: patient.id,
-          bedNumber: bed.bedNumber,
-          modality: 'ECG',
-          testName: '12-Lead Electrocardiogram',
-          timestamp: new Date(now - 2 * 3600000).toISOString(),
-          status: 'REPORTED',
-          resultReport: 'Sinus tachycardia at 104 bpm. Normal axis. QTc 432 ms. No ST elevation or depression. Non-specific T wave flattening in V4-V6.',
-          recordedByName: 'Dr. Ahmed Mansoor (Resident)',
-          notes: 'Routine morning monitoring'
-        }
-      ];
-      await db.investigations.bulkPut(seedInvs);
-      invItems = seedInvs;
-    }
     setInvestigations(invItems);
 
     // Load Active & Past Antibiotics for patient
@@ -673,7 +365,35 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       .reverse()
       .sortBy('createdAt');
     setAntibioticsList(abxItems);
-  };
+  }, [patient?.id]);
+
+  useEffect(() => {
+    // Reset edit states on patient change
+    setHistoryInput(patient.history || '');
+    setPresentingComplaintInput(patient.presentingComplaint || '');
+    setChronicDiseasesInput(patient.chronicDiseases || '');
+    setPrimaryDiagnosisEnInput(patient.primaryDiagnosisEn || patient.primaryDiagnosisAr || '');
+    setPrimaryDiagnosisArInput(patient.primaryDiagnosisAr || '');
+    setIsHistoryEditing(false);
+
+    // 1) Load Dexie local data once on patient/bed change
+    loadBedsideData();
+
+    // 2) & 3) If readOnly is false and patient.id exists, subscribe to realtime flowsheet updates
+    let unsubActivePatientSync: (() => void) | null = null;
+    if (!readOnly && patient?.id) {
+      unsubActivePatientSync = subscribeToActivePatientFlowsheet(patient.id, () => {
+        loadBedsideData();
+      });
+    }
+
+    // 4) Clean up unsubscribe when patient changes or card closes
+    return () => {
+      if (unsubActivePatientSync) {
+        unsubActivePatientSync();
+      }
+    };
+  }, [bed.bedNumber, patient?.id, readOnly, loadBedsideData]);
 
   const latestVitals = vitalsHistory[0] || null;
 

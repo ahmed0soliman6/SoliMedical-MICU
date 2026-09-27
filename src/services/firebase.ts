@@ -1521,11 +1521,11 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
       (id) => db.vitals.delete(id)
     );
 
-    // 3. Historical Record with explicit exception: Lab Results (limit 30 live onSnapshot)
+    // 3. Historical Record: Lab Results (limit 10 live onSnapshot)
     setupHistoricalListener<LabResultItem>(
       'labResults',
       'timestamp',
-      30,
+      10,
       (data) => db.labResults.put(data),
       (id) => db.labResults.delete(id)
     );
@@ -1533,36 +1533,10 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
     setupHistoricalListener<StatLabPanel>(
       'statLabs',
       'timestamp',
-      30,
+      10,
       (data) => db.statLabs.put(data),
       (id) => db.statLabs.delete(id)
     );
-
-    // Unified / Legacy Medical Records for labs and investigations
-    try {
-      const medRecQ = query(collection(firestore, 'medical_records'), where('patientId', '==', patientId), limit(30));
-      unsubs.push(onSnapshot(medRecQ, async (snap) => {
-        for (const change of snap.docChanges()) {
-          const data = change.doc.data();
-          if (change.type === 'added' || change.type === 'modified') {
-            if (data.recordType === 'INVESTIGATION') {
-              await db.investigations.put(data as InvestigationItem);
-            } else {
-              await db.labResults.put(data as LabResultItem);
-            }
-          } else if (change.type === 'removed') {
-            if (data.recordType === 'INVESTIGATION') {
-              await db.investigations.delete(change.doc.id);
-            } else {
-              await db.labResults.delete(change.doc.id);
-            }
-          }
-        }
-        notify();
-      }, (err) => handleFirestoreError(err, OperationType.GET, 'medical_records')));
-    } catch (err) {
-      handleFirestoreError(err, OperationType.GET, 'medical_records');
-    }
 
     // 4. Historical Growing Record: Investigations & Imaging (latest 4 records)
     setupHistoricalListener<InvestigationItem>(
@@ -1609,9 +1583,9 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
       (id) => db.addendums.delete(id)
     );
 
-    // 9. Current State: Patient Active Antibiotics (Live full-sync, no limit)
+    // 9. Current State: Patient Active Antibiotics (Limit 20)
     try {
-      const abxQ = query(collection(firestore, 'patientAntibiotics'), where('patientId', '==', patientId));
+      const abxQ = query(collection(firestore, 'patientAntibiotics'), where('patientId', '==', patientId), limit(20));
       unsubs.push(onSnapshot(abxQ, async (snap) => {
         for (const change of snap.docChanges()) {
           if (change.type === 'added' || change.type === 'modified') {
@@ -1626,26 +1600,18 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
       handleFirestoreError(err, OperationType.GET, 'patientAntibiotics');
     }
 
-    // 10. Current State: Active Ventilator Settings (Live full-sync, no limit)
-    try {
-      const ventQ = query(collection(firestore, 'ventilators'), where('patientId', '==', patientId));
-      unsubs.push(onSnapshot(ventQ, async (snap) => {
-        for (const change of snap.docChanges()) {
-          if (change.type === 'added' || change.type === 'modified') {
-            await db.ventilators.put(change.doc.data() as VentilatorParameters);
-          } else if (change.type === 'removed') {
-            await db.ventilators.delete(change.doc.id);
-          }
-        }
-        notify();
-      }, (err) => handleFirestoreError(err, OperationType.GET, 'ventilators')));
-    } catch (err) {
-      handleFirestoreError(err, OperationType.GET, 'ventilators');
-    }
+    // 10. Current State: Active Ventilator Settings (orderBy timestamp desc + limit 4)
+    setupHistoricalListener<VentilatorParameters>(
+      'ventilators',
+      'timestamp',
+      4,
+      (data) => db.ventilators.put(data),
+      (id) => db.ventilators.delete(id)
+    );
 
-    // 11. Current State: Active Infusion Pumps (Live full-sync, no limit)
+    // 11. Current State: Active Infusion Pumps (Limit 20)
     try {
-      const pumpsQ = query(collection(firestore, 'infusionPumps'), where('patientId', '==', patientId));
+      const pumpsQ = query(collection(firestore, 'infusionPumps'), where('patientId', '==', patientId), limit(20));
       unsubs.push(onSnapshot(pumpsQ, async (snap) => {
         for (const change of snap.docChanges()) {
           if (change.type === 'added' || change.type === 'modified') {
