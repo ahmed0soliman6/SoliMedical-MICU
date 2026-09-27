@@ -121,45 +121,28 @@ export const Header: React.FC<HeaderProps> = ({
   type ConnectionStatus = 'ONLINE' | 'CONNECTING' | 'OFFLINE';
   type OfflineReason = 'NO_INTERNET' | 'CLOUD_UNREACHABLE';
 
-  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('CONNECTING');
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>(() => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return 'OFFLINE';
+    return 'ONLINE';
+  });
   const [offlineReason, setOfflineReason] = useState<OfflineReason | null>(null);
 
-  const verifyConnectionHealth = useCallback(async (isSilent = true, forceDocRead = false) => {
+  const verifyConnectionHealth = useCallback(async (_isSilent = true, _forceDocRead = false) => {
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
       setConnectionStatus('OFFLINE');
       setOfflineReason('NO_INTERNET');
       return { status: 'OFFLINE' as const, reason: 'NO_INTERNET' as const };
     }
 
-    if (!isSilent) {
-      setConnectionStatus('CONNECTING');
-    }
-
-    try {
-      const result = await checkConnectionHealth(forceDocRead);
-      if (result.status === 'ONLINE') {
-        setConnectionStatus('ONLINE');
-        setOfflineReason(null);
-        // Clear any old offline toast
-        setSyncToastMessage(null);
-        return result;
-      } else {
-        setConnectionStatus('OFFLINE');
-        setOfflineReason(result.reason);
-        return result;
-      }
-    } catch {
-      const isNetOnline = typeof navigator !== 'undefined' ? navigator.onLine : false;
-      const r = isNetOnline ? ('CLOUD_UNREACHABLE' as const) : ('NO_INTERNET' as const);
-      setConnectionStatus('OFFLINE');
-      setOfflineReason(r);
-      return { status: 'OFFLINE' as const, reason: r };
-    }
+    setConnectionStatus('ONLINE');
+    setOfflineReason(null);
+    setSyncToastMessage(null);
+    return { status: 'ONLINE' as const };
   }, []);
 
   useEffect(() => {
-    // Initial verification on mount (runs once only)
-    verifyConnectionHealth(false, true);
+    // Initial verification on mount
+    verifyConnectionHealth(true);
 
     const handleOnline = () => {
       setConnectionStatus('ONLINE');
@@ -180,25 +163,25 @@ export const Header: React.FC<HeaderProps> = ({
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    // Passive 5-minute safety check (0 Firestore read cost - only verifies navigator.onLine)
+    // Passive safety check
     const healthInterval = setInterval(() => {
       if (typeof navigator !== 'undefined') {
         if (!navigator.onLine) {
           setConnectionStatus('OFFLINE');
           setOfflineReason('NO_INTERNET');
-        } else if (connectionStatus === 'OFFLINE') {
+        } else {
           setConnectionStatus('ONLINE');
           setOfflineReason(null);
         }
       }
-    }, 300000);
+    }, 60000);
 
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
       clearInterval(healthInterval);
     };
-  }, [verifyConnectionHealth, lang, connectionStatus]);
+  }, [verifyConnectionHealth, lang]);
 
   const INITIAL_VISIBLE_COUNT = 6;
   const displayedNotifications = isExpanded ? notifications : notifications.slice(0, INITIAL_VISIBLE_COUNT);
@@ -241,43 +224,22 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   const handleCloudSyncClick = async () => {
-    // 1. If currently ONLINE: Silently sync with cloud and DO NOT show any intrusive popup
-    if (connectionStatus === 'ONLINE') {
-      if (onTriggerCloudSync) {
-        onTriggerCloudSync();
-      }
-      setSyncToastMessage(null);
-      // Run background silent health check
-      verifyConnectionHealth(true);
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setConnectionStatus('OFFLINE');
+      setOfflineReason('NO_INTERNET');
+      setSyncToastMessage(
+        lang === 'ar'
+          ? '⚠️ سبب المشكلة: تم فقدان الاتصال بشبكة الإنترنت (Wi-Fi / No Internet Connection).'
+          : '⚠️ Issue Cause: No Internet Connection detected.'
+      );
       return;
     }
 
-    // 2. If currently CONNECTING: re-verify and don't spam
-    if (connectionStatus === 'CONNECTING') {
-      await verifyConnectionHealth(false, true);
-      return;
-    }
-
-    // 3. If OFFLINE: re-verify and show diagnostic explanation of the exact failure cause
-    const checkResult = await verifyConnectionHealth(false, true);
-    if (checkResult.status === 'ONLINE') {
-      // Reconnected successfully!
-      if (onTriggerCloudSync) onTriggerCloudSync();
-      setSyncToastMessage(null);
-    } else {
-      const isNoInternet = checkResult.reason === 'NO_INTERNET' || (typeof navigator !== 'undefined' && !navigator.onLine);
-      const diagnosticMsg = isNoInternet
-        ? (lang === 'ar'
-            ? '⚠️ سبب المشكلة: تم فقدان الاتصال بشبكة الإنترنت (Wi-Fi / No Internet Connection). النظام يعمل الآن محلياً بنظام الأمان والمقاومة (Dexie IndexedDB) ولن يفقد أي بيانات.'
-            : '⚠️ Issue Cause: No Internet Connection detected. System is running safely in local offline resilience mode (Dexie) - no data will be lost.')
-        : (lang === 'ar'
-            ? '⚠️ سبب المشكلة: يتوفر اتصال بالإنترنت ولكن تعذر الوصول إلى خوادم المزامنة السحابية (Firebase Cloud Sync). يتم حفظ كافة التعديلات محلياً وسيتم رفعها تلقائياً فور استقرار الخادم.'
-            : '⚠️ Issue Cause: Internet is available, but Firebase Cloud Sync servers are unreachable. All records are saved locally and will auto-sync upon reconnection.');
-
-      setSyncToastMessage(diagnosticMsg);
-      setTimeout(() => {
-        setSyncToastMessage(null);
-      }, 7000);
+    setConnectionStatus('ONLINE');
+    setOfflineReason(null);
+    setSyncToastMessage(null);
+    if (onTriggerCloudSync) {
+      onTriggerCloudSync();
     }
   };
 

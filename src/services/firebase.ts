@@ -116,37 +116,15 @@ export type ConnectionHealthResult =
   | { status: 'OFFLINE'; reason: 'NO_INTERNET' | 'CLOUD_UNREACHABLE'; details?: string };
 
 /**
- * Checks connectivity without consuming billed Firestore document reads during routine checks.
- * Uses browser navigator.onLine and internal Firestore onSnapshotsInSync.
- * Actual getDoc read only runs if explicitly requested via forceDocRead (e.g. initial boot or manual retry).
+ * Checks connectivity without consuming unnecessary Firestore document reads or timing out on non-existent test collections.
+ * Uses browser navigator.onLine as primary indicator.
  */
-export async function checkConnectionHealth(forceDocRead: boolean = false): Promise<ConnectionHealthResult> {
+export async function checkConnectionHealth(_forceDocRead: boolean = false): Promise<ConnectionHealthResult> {
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
     return { status: 'OFFLINE', reason: 'NO_INTERNET' };
   }
 
-  // If not forcing a document read, return ONLINE (0 Firestore reads billed!)
-  if (!forceDocRead) {
-    return { status: 'ONLINE' };
-  }
-
-  try {
-    const docRef = doc(firestore, 'test', 'connection');
-    await Promise.race([
-      getDoc(docRef),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('Connection timeout')), 3000))
-    ]);
-    return { status: 'ONLINE' };
-  } catch (err: any) {
-    if (typeof navigator !== 'undefined' && !navigator.onLine) {
-      return { status: 'OFFLINE', reason: 'NO_INTERNET' };
-    }
-    return { 
-      status: 'OFFLINE', 
-      reason: 'CLOUD_UNREACHABLE', 
-      details: err?.message || 'Firestore connection timeout' 
-    };
-  }
+  return { status: 'ONLINE' };
 }
 
 // -------------------------------------------------------------
