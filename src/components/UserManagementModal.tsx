@@ -22,7 +22,9 @@ import {
   Trash2,
   AlertTriangle,
   UserX,
-  Loader2
+  Loader2,
+  Clock,
+  Calendar
 } from 'lucide-react';
 import { useAuth } from '../services/AuthContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
@@ -817,6 +819,24 @@ const PERMISSION_GROUPS: PermissionCategory[] = [
                             user.isActive ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-800/40' : 'bg-red-950/80 text-red-300 border border-red-800/40'
                           }`}>
                             {user.isActive ? (lang === 'ar' ? 'نشط' : 'Active') : (lang === 'ar' ? 'موقوف' : 'Deactivated')}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Last Login & Session Timestamp */}
+                      <div className="mt-2 pt-2 border-t border-slate-800/40 flex items-center justify-between text-[10px] text-slate-400">
+                        <div className="flex items-center gap-1.5 text-slate-300">
+                          <Clock className="w-3.5 h-3.5 text-teal-400 flex-shrink-0" />
+                          <span>{lang === 'ar' ? 'آخر تسجيل دخول:' : 'Last Login:'}</span>
+                          <span className="font-mono text-teal-300">
+                            {user.lastLoginAt 
+                              ? new Date(user.lastLoginAt).toLocaleString(lang === 'ar' ? 'ar-SA' : 'en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })
+                              : (lang === 'ar' ? 'لم يسجل دخول بعد' : 'Never logged in')}
                           </span>
                         </div>
                       </div>
