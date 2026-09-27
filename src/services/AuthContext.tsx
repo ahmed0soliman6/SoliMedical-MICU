@@ -36,6 +36,7 @@ import {
 } from 'firebase/auth';
 import { collection, onSnapshot, doc, getDoc, getDocs, query, where, Unsubscribe } from 'firebase/firestore';
 import { db } from '../db/icuSyncDb.ts';
+import { recordAuditLog } from './auditService.ts';
 
 interface AuthContextType {
   currentUser: IcuUser | null;
@@ -395,6 +396,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       setCurrentUser(user);
       localStorage.setItem('soli_icu_active_user', JSON.stringify(user));
+
+      recordAuditLog({
+        action: 'USER_LOGIN',
+        actorUid: user.uid,
+        actorName: user.nameEn || user.nameAr || 'Clinical Staff',
+        actorEmail: user.email,
+        actorRole: user.role,
+        details: `تسجيل دخول ناجح للمستخدم ${user.nameEn || user.nameAr} (${user.role})`,
+        status: 'SUCCESS',
+      }).catch(() => {});
+
       return { success: true };
     } catch (err: any) {
       return { success: false, message: err?.message || 'فشل تسجيل الدخول' };
@@ -435,6 +447,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       setCurrentUser(matchedUser);
       localStorage.setItem('soli_icu_active_user', JSON.stringify(matchedUser));
+
+      recordAuditLog({
+        action: 'USER_LOGIN',
+        actorUid: matchedUser.uid,
+        actorName: matchedUser.nameEn || matchedUser.nameAr || 'Google User',
+        actorEmail: matchedUser.email,
+        actorRole: matchedUser.role,
+        details: `تسجيل دخول عبر Google للمستخدم ${matchedUser.nameEn || matchedUser.nameAr}`,
+        status: 'SUCCESS',
+      }).catch(() => {});
+
       return { success: true };
     } catch (err: any) {
       if (err?.code === 'auth/user-disabled') {
@@ -531,6 +554,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // 2. Save to Firestore and Dexie SSOT
       await saveUserAccount(newUser);
       await refreshUsers();
+
+      recordAuditLog({
+        action: 'USER_CREATED',
+        actorUid: currentUser?.uid || 'admin',
+        actorName: currentUser?.nameEn || currentUser?.nameAr || 'Admin',
+        actorRole: currentUser?.role || 'ADMIN',
+        targetUid: newUser.uid,
+        targetName: newUser.nameEn || newUser.nameAr,
+        targetEmail: newUser.email,
+        targetRole: newUser.role,
+        details: `إنشاء حساب مستخدم جديد: ${newUser.nameEn} (${newUser.role}) بواسطة ${currentUser?.nameEn || 'Admin'}`,
+        status: 'SUCCESS',
+      }).catch(() => {});
+
       return { success: true };
     } catch (err: any) {
       console.error('User creation failed:', err);
@@ -560,6 +597,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem('soli_icu_active_user', JSON.stringify(updatedUser));
     }
     await refreshUsers();
+
+    recordAuditLog({
+      action: 'USER_UPDATED',
+      actorUid: currentUser?.uid || 'system',
+      actorName: currentUser?.nameEn || currentUser?.nameAr || 'User',
+      actorRole: currentUser?.role,
+      targetUid: updatedUser.uid,
+      targetName: updatedUser.nameEn || updatedUser.nameAr,
+      targetEmail: updatedUser.email,
+      targetRole: updatedUser.role,
+      details: `تحديث بيانات المستخدم والصلاحيات: ${updatedUser.nameEn} (${updatedUser.role})`,
+      status: 'SUCCESS',
+    }).catch(() => {});
+
     return { success: true };
   };
 
@@ -634,6 +685,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       await refreshUsers();
+
+      recordAuditLog({
+        action: 'PASSWORD_RESET',
+        actorUid: currentUser?.uid || 'admin',
+        actorName: currentUser?.nameEn || currentUser?.nameAr || 'Admin',
+        actorRole: currentUser?.role,
+        targetUid: uid,
+        targetName: targetUser?.nameEn || targetUser?.nameAr,
+        targetEmail: targetUser?.email,
+        details: `تغيير كلمة المرور للمستخدم ${targetUser?.nameEn || uid} بواسطة المشرف`,
+        status: 'SUCCESS',
+      }).catch(() => {});
+
       return {
         success: true,
         message: 'تم تغيير كلمة المرور بنجاح في Firebase Authentication.'
@@ -803,6 +867,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       await refreshUsers();
 
+      recordAuditLog({
+        action: 'STATUS_CHANGED',
+        actorUid: currentUser?.uid || 'admin',
+        actorName: currentUser?.nameEn || currentUser?.nameAr || 'Admin',
+        actorRole: currentUser?.role,
+        targetUid: uid,
+        targetName: user.nameEn || user.nameAr,
+        targetEmail: user.email,
+        targetRole: user.role,
+        details: `${newActiveState ? 'تفعيل' : 'تعطيل'} حساب المستخدم: ${user.nameEn || uid}`,
+        status: 'SUCCESS',
+      }).catch(() => {});
+
       return {
         success: true,
         message: data?.message || (isCurrentlyActive ? 'تم تعطيل الحساب بنجاح وإبطال جلساته.' : 'تم إعادة تفعيل الحساب بنجاح.')
@@ -885,6 +962,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await db.users.delete(uid);
       await refreshUsers();
 
+      recordAuditLog({
+        action: 'USER_DELETED',
+        actorUid: currentUser?.uid || 'admin',
+        actorName: currentUser?.nameEn || currentUser?.nameAr || 'Admin',
+        actorRole: currentUser?.role,
+        targetUid: uid,
+        targetName: target.nameEn || target.nameAr,
+        targetEmail: target.email,
+        targetRole: target.role,
+        details: `حذف حساب المستخدم نهائياً: ${target.nameEn} (${target.role})`,
+        status: 'WARNING',
+      }).catch(() => {});
+
       return {
         success: true,
         message: data.message || 'تم حذف المستخدم نهائيًا من Firebase Authentication وقاعدة البيانات بنجاح.'
@@ -899,6 +989,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Logout
   const logout = async () => {
+    if (currentUser) {
+      recordAuditLog({
+        action: 'USER_LOGOUT',
+        actorUid: currentUser.uid,
+        actorName: currentUser.nameEn || currentUser.nameAr || 'User',
+        actorEmail: currentUser.email,
+        actorRole: currentUser.role,
+        details: `تسجيل خروج للمستخدم: ${currentUser.nameEn || currentUser.nameAr}`,
+        status: 'SUCCESS',
+      }).catch(() => {});
+    }
+
     try {
       await firebaseSignOut(auth);
     } catch (e) {

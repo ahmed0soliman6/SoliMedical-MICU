@@ -24,7 +24,8 @@ import {
   UserX,
   Loader2,
   Clock,
-  Calendar
+  Calendar,
+  History
 } from 'lucide-react';
 import { useAuth } from '../services/AuthContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
@@ -32,6 +33,7 @@ import { StaffRole, IcuUser, UserPermissions } from '../types/schema.ts';
 import { getDefaultPermissionsForRole, auth, firestore } from '../services/firebase.ts';
 import { doc, setDoc } from 'firebase/firestore';
 import { API_BASE_URL } from '../config/api.ts';
+import { AuditLogsSection } from './AuditLogsSection.tsx';
 
 interface UserManagementModalProps {
   isOpen: boolean;
@@ -50,6 +52,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
 
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('ALL');
+  const [activeTab, setActiveTab] = useState<'users' | 'audit'>('users');
   const [isAddMode, setIsAddMode] = useState(false);
   const [editingUser, setEditingUser] = useState<IcuUser | null>(null);
   const [showFormPassword, setShowFormPassword] = useState(false);
@@ -431,7 +434,7 @@ const PERMISSION_GROUPS: PermissionCategory[] = [
           </div>
 
           <div className="flex items-center gap-2">
-            {!isAddMode && (
+            {!isAddMode && activeTab === 'users' && (
               <>
                 <button
                   onClick={() => {
@@ -466,17 +469,55 @@ const PERMISSION_GROUPS: PermissionCategory[] = [
           </div>
         </div>
 
+        {/* Navigation Tabs */}
+        {!isAddMode && (
+          <div className="flex items-center gap-2 border-b border-slate-800/80 pt-3 pb-2">
+            <button
+              type="button"
+              onClick={() => setActiveTab('users')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                activeTab === 'users'
+                  ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent'
+              }`}
+            >
+              <Users className="w-4 h-4" />
+              <span>{lang === 'ar' ? 'دليل المستخدمين والكوادر' : 'Staff & Users Directory'}</span>
+              <span className="px-1.5 py-0.2 rounded-full bg-black/40 text-[10px] font-mono">
+                {allUsers.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('audit')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                activeTab === 'audit'
+                  ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent'
+              }`}
+            >
+              <History className="w-4 h-4" />
+              <span>{lang === 'ar' ? 'سجلات الأمان والتدقيق (Audit Logs)' : 'Security & Audit Logs'}</span>
+            </button>
+          </div>
+        )}
+
         {/* Content Body */}
         <div className="flex-1 overflow-y-auto py-4 space-y-4">
           
-          {statusMsg && (
-            <div className={`p-3 rounded-xl text-xs flex items-center gap-2 ${
-              statusMsg.type === 'success' ? 'bg-teal-950/60 border border-teal-500/50 text-teal-200' : 'bg-red-950/60 border border-red-500/50 text-red-200'
-            }`}>
-              {statusMsg.type === 'success' ? <CheckCircle2 className="w-4 h-4 text-teal-400" /> : <XCircle className="w-4 h-4 text-red-400" />}
-              <span>{statusMsg.text}</span>
-            </div>
-          )}
+          {activeTab === 'audit' ? (
+            <AuditLogsSection />
+          ) : (
+            <>
+              {statusMsg && (
+                <div className={`p-3 rounded-xl text-xs flex items-center gap-2 ${
+                  statusMsg.type === 'success' ? 'bg-teal-950/60 border border-teal-500/50 text-teal-200' : 'bg-red-950/60 border border-red-500/50 text-red-200'
+                }`}>
+                  {statusMsg.type === 'success' ? <CheckCircle2 className="w-4 h-4 text-teal-400" /> : <XCircle className="w-4 h-4 text-red-400" />}
+                  <span>{statusMsg.text}</span>
+                </div>
+              )}
 
           {isAddMode ? (
             /* Add / Edit Form */
@@ -868,6 +909,8 @@ const PERMISSION_GROUPS: PermissionCategory[] = [
               </div>
 
             </div>
+          )}
+          </>
           )}
 
         </div>
