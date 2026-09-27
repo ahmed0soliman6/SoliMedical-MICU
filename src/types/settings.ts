@@ -35,6 +35,7 @@ export interface SystemFeatureFlags {
 }
 
 export interface UnitCustomization {
+  unitId: string;                    // معرف الوحدة الثابت، مثال: MICU-MAIN
   unitName: string;                  // اسم وحدة العناية (مثلاً: Soli Medical MICU)
   unitSubtitle: string;              // الوصف الفرعي (مثلاً: ICU-Sync 6-Pod)
   shiftName: string;                 // اسم المناوبة الحالية (مناوبة ليلية / صباحية)
@@ -436,6 +437,7 @@ export const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
   },
   notifications: DEFAULT_NOTIFICATION_SETTINGS,
   unit: {
+    unitId: 'MICU-MAIN',
     unitName: 'Soli Medical MICU',
     unitSubtitle: 'ICU-Sync 6-Pod',
     shiftName: 'Night Shift (07:00 - 19:00)',

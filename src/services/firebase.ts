@@ -1002,483 +1002,220 @@ export function playIcuAlarmAudio(urgency: 'HIGH' | 'MEDIUM' = 'HIGH') {
 
 export function subscribeToRealtimeFirestore(
   onDataUpdate: () => void,
-  onCriticalAlarm?: (alert: { bedNumber: string; message: string; type: string }) => void
+  _onCriticalAlarm?: (alert: { bedNumber: string; message: string; type: string }) => void,
+  unitId: string = 'MICU-MAIN'
 ): () => void {
   const unsubscribers: Unsubscribe[] = [];
-  let summaryUnsubscribers: Unsubscribe[] = [];
-  let previousActiveIdsKey = '';
 
   const notifyUpdate = () => {
-    onDataUpdate();
     try {
+      onDataUpdate();
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new Event('icu-data-updated'));
       }
     } catch {}
   };
 
-  /**
-   * Scopes the 6 central summary onSnapshot listeners strictly to current ACTIVE_ICU patients,
-   * chunking by 30 IDs per sub-query (Firestore 'in' constraint) and re-subscribing seamlessly without gap.
-   * If there are no active patients, no listeners are opened.
-   */
-  const updateActivePatientsAndSubscriptions = (patientIds: string[]) => {
-    const sortedIds = Array.from(new Set(patientIds.filter(Boolean))).sort();
-    const currentKey = sortedIds.join(',');
-
-    if (currentKey === previousActiveIdsKey) {
-      return;
-    }
-    previousActiveIdsKey = currentKey;
-
-    const oldUnsubscribers = [...summaryUnsubscribers];
-    const newUnsubscribers: Unsubscribe[] = [];
-
-    if (sortedIds.length > 0) {
-      const chunks: string[][] = [];
-      for (let i = 0; i < sortedIds.length; i += 30) {
-        chunks.push(sortedIds.slice(i, i + 30));
-      }
-
-      for (const chunk of chunks) {
-        // 1. Patient Antibiotics (limit 30)
-        try {
-          const abxQuery = query(
-            collection(firestore, 'patientAntibiotics'),
-            where('patientId', 'in', chunk),
-            limit(30)
-          );
-          const unsubAbx = onSnapshot(abxQuery, async (snapshot) => {
-            for (const change of snapshot.docChanges()) {
-              if (change.type === 'added' || change.type === 'modified') {
-                await db.patientAntibiotics.put(change.doc.data() as PatientAntibiotic);
-              } else if (change.type === 'removed') {
-                await db.patientAntibiotics.delete(change.doc.id);
-              }
-            }
-            notifyUpdate();
-          }, (err) => handleFirestoreError(err, OperationType.GET, 'patientAntibiotics'));
-          newUnsubscribers.push(unsubAbx);
-        } catch (e) {
-          console.warn('Error setting up chunked patientAntibiotics listener:', e);
-        }
-
-        // 2. Infusion Pumps (limit 30)
-        try {
-          const pumpsQuery = query(
-            collection(firestore, 'infusionPumps'),
-            where('patientId', 'in', chunk),
-            limit(30)
-          );
-          const unsubPumps = onSnapshot(pumpsQuery, async (snapshot) => {
-            for (const change of snapshot.docChanges()) {
-              if (change.type === 'added' || change.type === 'modified') {
-                await db.infusionPumps.put(change.doc.data() as InfusionPumpLine);
-              } else if (change.type === 'removed') {
-                await db.infusionPumps.delete(change.doc.id);
-              }
-            }
-            notifyUpdate();
-          }, (err) => handleFirestoreError(err, OperationType.GET, 'infusionPumps'));
-          newUnsubscribers.push(unsubPumps);
-        } catch (e) {
-          console.warn('Error setting up chunked infusionPumps listener:', e);
-        }
-
-        // 3. Ventilators (limit 20)
-        try {
-          const ventQuery = query(
-            collection(firestore, 'ventilators'),
-            where('patientId', 'in', chunk),
-            limit(20)
-          );
-          const unsubVent = onSnapshot(ventQuery, async (snapshot) => {
-            for (const change of snapshot.docChanges()) {
-              if (change.type === 'added' || change.type === 'modified') {
-                await db.ventilators.put(change.doc.data() as VentilatorParameters);
-              } else if (change.type === 'removed') {
-                await db.ventilators.delete(change.doc.id);
-              }
-            }
-            notifyUpdate();
-          }, (err) => handleFirestoreError(err, OperationType.GET, 'ventilators'));
-          newUnsubscribers.push(unsubVent);
-        } catch (e) {
-          console.warn('Error setting up chunked ventilators listener:', e);
-        }
-
-        // 4. Fluid Balances (limit 20)
-        try {
-          const fluidsQuery = query(
-            collection(firestore, 'fluidBalances'),
-            where('patientId', 'in', chunk),
-            limit(20)
-          );
-          const unsubFluids = onSnapshot(fluidsQuery, async (snapshot) => {
-            for (const change of snapshot.docChanges()) {
-              if (change.type === 'added' || change.type === 'modified') {
-                await db.fluidBalances.put(change.doc.data() as FluidBalance24H);
-              } else if (change.type === 'removed') {
-                await db.fluidBalances.delete(change.doc.id);
-              }
-            }
-            notifyUpdate();
-          }, (err) => handleFirestoreError(err, OperationType.GET, 'fluidBalances'));
-          newUnsubscribers.push(unsubFluids);
-        } catch (e) {
-          console.warn('Error setting up chunked fluidBalances listener:', e);
-        }
-
-        // 5. Clinical Notes (limit 20)
-        try {
-          const notesQuery = query(
-            collection(firestore, 'clinicalNotes'),
-            where('patientId', 'in', chunk),
-            limit(20)
-          );
-          const unsubNotes = onSnapshot(notesQuery, async (snapshot) => {
-            for (const change of snapshot.docChanges()) {
-              if (change.type === 'added' || change.type === 'modified') {
-                await db.clinicalNotes.put(change.doc.data() as ClinicalNote);
-              } else if (change.type === 'removed') {
-                await db.clinicalNotes.delete(change.doc.id);
-              }
-            }
-            notifyUpdate();
-          }, (err) => handleFirestoreError(err, OperationType.GET, 'clinicalNotes'));
-          newUnsubscribers.push(unsubNotes);
-        } catch (e) {
-          console.warn('Error setting up chunked clinicalNotes listener:', e);
-        }
-
-        // 6. Addendums (limit 20)
-        try {
-          const addQuery = query(
-            collection(firestore, 'addendums'),
-            where('patientId', 'in', chunk),
-            limit(20)
-          );
-          const unsubAdd = onSnapshot(addQuery, async (snapshot) => {
-            for (const change of snapshot.docChanges()) {
-              if (change.type === 'added' || change.type === 'modified') {
-                await db.addendums.put(change.doc.data() as Addendum);
-              } else if (change.type === 'removed') {
-                await db.addendums.delete(change.doc.id);
-              }
-            }
-            notifyUpdate();
-          }, (err) => handleFirestoreError(err, OperationType.GET, 'addendums'));
-          newUnsubscribers.push(unsubAdd);
-        } catch (e) {
-          console.warn('Error setting up chunked addendums listener:', e);
-        }
-      }
-    }
-
-    summaryUnsubscribers = newUnsubscribers;
-
-    // Close previous listeners after opening new ones so there's zero gap!
-    oldUnsubscribers.forEach((unsub) => {
-      try {
-        unsub();
-      } catch {}
-    });
-  };
-
   try {
-    // 1. Subscribe to Beds (Dynamic bed count - no hardcoded seeding in listener)
-    const bedsCol = collection(firestore, 'beds');
-    const unsubBeds = onSnapshot(bedsCol, async (snapshot) => {
-      for (const change of snapshot.docChanges()) {
-        if (change.type === 'added' || change.type === 'modified') {
-          const remoteBed = change.doc.data() as BedRecord;
-          const bedId = remoteBed.id || change.doc.id;
-          if (bedId) {
+    // =========================================================
+    // LEVEL 1 ONLY:
+    // Dashboard overview gets ONLY:
+    //   1) beds for current unit
+    //   2) ACTIVE_ICU patients for current unit
+    //
+    // IMPORTANT:
+    // No vitals / labs / notes / SBAR / pumps / vents listeners here.
+    // =========================================================
+
+    // 1. Beds - current unit only
+    const bedsQuery = query(
+      collection(firestore, 'beds'),
+      where('unitId', '==', unitId)
+    );
+
+    const unsubBeds = onSnapshot(
+      bedsQuery,
+      async (snapshot) => {
+        for (const change of snapshot.docChanges()) {
+          if (change.type === 'added' || change.type === 'modified') {
+            const remoteBed = change.doc.data() as BedRecord;
+            const bedId = remoteBed.id || change.doc.id;
+
+            if (!bedId) continue;
+
             const localBed = await db.beds.get(bedId);
-            const assignedPatId = remoteBed.currentPatientId !== undefined 
-              ? remoteBed.currentPatientId 
-              : ((remoteBed as any).activePatientId !== undefined ? (remoteBed as any).activePatientId : null);
+
+            const assignedPatientId =
+              remoteBed.currentPatientId !== undefined
+                ? remoteBed.currentPatientId
+                : (
+                    (remoteBed as any).activePatientId !== undefined
+                      ? (remoteBed as any).activePatientId
+                      : null
+                  );
 
             const mergedBed: BedRecord = {
               ...localBed,
               ...remoteBed,
               id: bedId,
+              unitId: remoteBed.unitId || unitId,
               bedNumber: remoteBed.bedNumber || bedId,
-              currentPatientId: assignedPatId || null,
-              activePatientId: assignedPatId || null,
-              isolation: remoteBed.isolation || localBed?.isolation || { isIsolated: false, precautions: [] },
-              status: remoteBed.status || (assignedPatId ? BedStatus.OCCUPIED : BedStatus.VACANT),
+              currentPatientId: assignedPatientId || null,
+              activePatientId: assignedPatientId || null,
+              isolation:
+                remoteBed.isolation ||
+                localBed?.isolation ||
+                { isIsolated: false, precautions: [] },
+              status:
+                remoteBed.status ||
+                (assignedPatientId
+                  ? BedStatus.OCCUPIED
+                  : BedStatus.VACANT),
             };
+
             await db.beds.put(mergedBed);
           }
-        } else if (change.type === 'removed') {
-          await db.beds.delete(change.doc.id);
+
+          if (change.type === 'removed') {
+            await db.beds.delete(change.doc.id);
+          }
         }
+
+        await ensureBedPatientSync({ syncToCloud: false });
+        notifyUpdate();
+      },
+      (err) => {
+        handleFirestoreError(err, OperationType.GET, `beds?unitId=${unitId}`);
       }
-      await ensureBedPatientSync({ syncToCloud: false });
-      notifyUpdate();
-    }, (err) => handleFirestoreError(err, OperationType.GET, 'beds'));
+    );
+
     unsubscribers.push(unsubBeds);
 
-    // 2. Subscribe to Active Patients Query (scoped strictly to ACTIVE_ICU, avoiding historical records)
+    // =========================================================
+    // 2. ACTIVE PATIENTS - CURRENT UNIT ONLY
+    // =========================================================
     const activePatientsQuery = query(
       collection(firestore, 'patients'),
+      where('unitId', '==', unitId),
       or(
         where('patientStatus', '==', 'ACTIVE_ICU'),
         where('status', '==', 'ACTIVE_ICU'),
         where('currentStatus', '==', 'ACTIVE_ICU')
-      )
+      ) as any
     );
-    const unsubPatients = onSnapshot(activePatientsQuery, async (snapshot) => {
+
+    const processActivePatientsSnapshot = async (
+      snapshot: any
+    ) => {
       for (const change of snapshot.docChanges()) {
         if (change.type === 'added' || change.type === 'modified') {
           const remotePatient = change.doc.data() as PatientDossier;
-          const patientId = remotePatient.id || (remotePatient as any).patientId || change.doc.id;
-          if (patientId) {
-            // Filter by unitId if specified on the document
-            if (remotePatient.unitId && remotePatient.unitId !== 'MICU-MAIN') {
-              continue;
-            }
+          const patientId =
+            remotePatient.id ||
+            (remotePatient as any).patientId ||
+            change.doc.id;
 
-            const localPatient = await db.patients.get(patientId);
-            const remoteStatus = 
-              remotePatient.patientStatus || 
-              (remotePatient as any).status || 
-              (remotePatient as any).currentStatus;
+          if (!patientId) continue;
 
-            // Use the actual status present in the document; retain local only if remote omitted status
-            // NEVER invent 'ACTIVE_ICU' if no status was provided!
-            const resolvedStatus = remoteStatus || localPatient?.patientStatus;
-
-            const isRemoteDischarged = 
-              remotePatient.archiveStatus === 'ARCHIVED' || 
-              remotePatient.archiveStatus === 'COLD_STORAGE' ||
-              (remotePatient as any).isArchived === true ||
-              !!remotePatient.dischargeDate ||
-              !!remotePatient.mortalityRecord ||
-              String(resolvedStatus || '').toUpperCase().includes('DISCHARGE') ||
-              String(resolvedStatus || '').toUpperCase().includes('TRANSFER') ||
-              String(resolvedStatus || '').toUpperCase().includes('EXPIRED') ||
-              String(resolvedStatus || '').toUpperCase().includes('MORTALITY');
-
-            const remoteBed = remotePatient.currentBedId || (remotePatient as any).bedNumber || (remotePatient as any).bedId;
-            const resolvedBed = isRemoteDischarged ? undefined : (remoteBed || undefined);
-
-            const mergedPatient: PatientDossier = {
-              ...localPatient,
-              ...remotePatient,
-              id: patientId,
-              currentBedId: resolvedBed,
-            };
-
-            if (resolvedStatus) {
-              mergedPatient.patientStatus = resolvedStatus;
-              (mergedPatient as any).status = resolvedStatus;
-              (mergedPatient as any).currentStatus = resolvedStatus;
-            }
-
-            await db.patients.put(mergedPatient);
+          if (
+            remotePatient.unitId &&
+            remotePatient.unitId !== unitId
+          ) {
+            continue;
           }
-        } else if (change.type === 'removed') {
-          // Patient is no longer in ACTIVE_ICU scope (discharged/transferred/removed)
+
+          const localPatient = await db.patients.get(patientId);
+
+          const remoteStatus =
+            remotePatient.patientStatus ||
+            (remotePatient as any).status ||
+            (remotePatient as any).currentStatus;
+
+          const mergedPatient: PatientDossier = {
+            ...localPatient,
+            ...remotePatient,
+            id: patientId,
+            unitId,
+          } as PatientDossier;
+
+          if (remoteStatus) {
+            mergedPatient.patientStatus = remoteStatus;
+            (mergedPatient as any).status = remoteStatus;
+            (mergedPatient as any).currentStatus = remoteStatus;
+          }
+
+          await db.patients.put(mergedPatient);
+        }
+
+        if (change.type === 'removed') {
+          // Do NOT invent DISCHARGED / EXPIRED / TRANSFERRED status.
+          // Simply remove the bed association locally.
           const removedPatientId = change.doc.id;
-          const localPat = await db.patients.get(removedPatientId);
-          if (localPat) {
+          const localPatient = await db.patients.get(removedPatientId);
+
+          if (localPatient) {
             await db.patients.put({
-              ...localPat,
-              patientStatus: 'DISCHARGED_HOME',
-              status: 'DISCHARGED',
-              currentStatus: 'DISCHARGED',
-              currentBedId: undefined
+              ...localPatient,
+              currentBedId: null,
             });
           }
         }
       }
 
-      // Collect current active patient IDs to scope central summary listeners
-      const currentActiveIds: string[] = [];
-      snapshot.docs.forEach((docSnap) => {
-        const remotePatient = docSnap.data() as PatientDossier;
-        const patientId = remotePatient.id || (remotePatient as any).patientId || docSnap.id;
-        if (!patientId) return;
-        if (remotePatient.unitId && remotePatient.unitId !== 'MICU-MAIN') return;
-        const remoteStatus = remotePatient.patientStatus || (remotePatient as any).status || (remotePatient as any).currentStatus;
-        const isRemoteDischarged = 
-          remotePatient.archiveStatus === 'ARCHIVED' || 
-          remotePatient.archiveStatus === 'COLD_STORAGE' ||
-          (remotePatient as any).isArchived === true ||
-          !!remotePatient.dischargeDate ||
-          !!remotePatient.mortalityRecord ||
-          String(remoteStatus || '').toUpperCase().includes('DISCHARGE') ||
-          String(remoteStatus || '').toUpperCase().includes('TRANSFER') ||
-          String(remoteStatus || '').toUpperCase().includes('EXPIRED') ||
-          String(remoteStatus || '').toUpperCase().includes('MORTALITY');
-        if (!isRemoteDischarged) {
-          currentActiveIds.push(patientId);
-        }
-      });
-      updateActivePatientsAndSubscriptions(currentActiveIds);
-
       await ensureBedPatientSync({ syncToCloud: false });
       notifyUpdate();
-    }, (err) => {
-      handleFirestoreError(err, OperationType.GET, 'patients');
-      // Resilient fallback in case 'or' disjunction encounters unexpected index requirement
-      try {
-        const fallbackActiveQuery = query(
-          collection(firestore, 'patients'),
-          where('patientStatus', '==', 'ACTIVE_ICU')
-        );
-        const fallbackUnsub = onSnapshot(fallbackActiveQuery, async (snap) => {
-          for (const change of snap.docChanges()) {
-            if (change.type === 'added' || change.type === 'modified') {
-              const remotePatient = change.doc.data() as PatientDossier;
-              const patientId = remotePatient.id || (remotePatient as any).patientId || change.doc.id;
-              if (patientId) {
-                if (remotePatient.unitId && remotePatient.unitId !== 'MICU-MAIN') continue;
-                const localPatient = await db.patients.get(patientId);
-                const remoteStatus = remotePatient.patientStatus || (remotePatient as any).status || (remotePatient as any).currentStatus;
-                const resolvedStatus = remoteStatus || localPatient?.patientStatus;
-                const isRemoteDischarged = 
-                  remotePatient.archiveStatus === 'ARCHIVED' || 
-                  remotePatient.archiveStatus === 'COLD_STORAGE' ||
-                  (remotePatient as any).isArchived === true ||
-                  !!remotePatient.dischargeDate ||
-                  !!remotePatient.mortalityRecord ||
-                  String(resolvedStatus || '').toUpperCase().includes('DISCHARGE') ||
-                  String(resolvedStatus || '').toUpperCase().includes('TRANSFER') ||
-                  String(resolvedStatus || '').toUpperCase().includes('EXPIRED') ||
-                  String(resolvedStatus || '').toUpperCase().includes('MORTALITY');
+    };
 
-                const remoteBed = remotePatient.currentBedId || (remotePatient as any).bedNumber || (remotePatient as any).bedId;
-                const resolvedBed = isRemoteDischarged ? undefined : (remoteBed || undefined);
+    const unsubPatients = onSnapshot(
+      activePatientsQuery,
+      async (snapshot) => {
+        await processActivePatientsSnapshot(snapshot);
+      },
+      (err) => {
+        handleFirestoreError(err, OperationType.GET, `patients?unitId=${unitId}`);
 
-                const mergedPatient: PatientDossier = {
-                  ...localPatient,
-                  ...remotePatient,
-                  id: patientId,
-                  currentBedId: resolvedBed
-                };
-                if (resolvedStatus) {
-                  mergedPatient.patientStatus = resolvedStatus;
-                  (mergedPatient as any).status = resolvedStatus;
-                  (mergedPatient as any).currentStatus = resolvedStatus;
-                }
-                await db.patients.put(mergedPatient);
-              }
-            } else if (change.type === 'removed') {
-              const removedPatientId = change.doc.id;
-              const localPat = await db.patients.get(removedPatientId);
-              if (localPat) {
-                await db.patients.put({
-                  ...localPat,
-                  patientStatus: 'DISCHARGED_HOME',
-                  status: 'DISCHARGED',
-                  currentStatus: 'DISCHARGED',
-                  currentBedId: undefined
-                });
-              }
+        // Safe fallback: keep unit scoping.
+        try {
+          const fallbackQuery = query(
+            collection(firestore, 'patients'),
+            where('unitId', '==', unitId),
+            where('patientStatus', '==', 'ACTIVE_ICU')
+          );
+
+          const fallbackUnsub = onSnapshot(
+            fallbackQuery,
+            async (snapshot) => {
+              await processActivePatientsSnapshot(snapshot);
+            },
+            (fallbackErr) => {
+              handleFirestoreError(
+                fallbackErr,
+                OperationType.GET,
+                `patients?unitId=${unitId}&patientStatus=ACTIVE_ICU`
+              );
             }
-          }
+          );
 
-          // Scoping in fallback query
-          const currentFallbackIds: string[] = [];
-          snap.docs.forEach((docSnap) => {
-            const remotePatient = docSnap.data() as PatientDossier;
-            const patientId = remotePatient.id || (remotePatient as any).patientId || docSnap.id;
-            if (!patientId) return;
-            if (remotePatient.unitId && remotePatient.unitId !== 'MICU-MAIN') return;
-            const remoteStatus = remotePatient.patientStatus || (remotePatient as any).status || (remotePatient as any).currentStatus;
-            const isRemoteDischarged = 
-              remotePatient.archiveStatus === 'ARCHIVED' || 
-              remotePatient.archiveStatus === 'COLD_STORAGE' ||
-              (remotePatient as any).isArchived === true ||
-              !!remotePatient.dischargeDate ||
-              !!remotePatient.mortalityRecord ||
-              String(remoteStatus || '').toUpperCase().includes('DISCHARGE') ||
-              String(remoteStatus || '').toUpperCase().includes('TRANSFER') ||
-              String(remoteStatus || '').toUpperCase().includes('EXPIRED') ||
-              String(remoteStatus || '').toUpperCase().includes('MORTALITY');
-            if (!isRemoteDischarged) {
-              currentFallbackIds.push(patientId);
-            }
-          });
-          updateActivePatientsAndSubscriptions(currentFallbackIds);
-
-          await ensureBedPatientSync({ syncToCloud: false });
-          notifyUpdate();
-        }, (err) => handleFirestoreError(err, OperationType.GET, 'patients'));
-        unsubscribers.push(fallbackUnsub);
-      } catch (fbErr) {
-        console.warn('Fallback active patients query failed:', fbErr);
+          unsubscribers.push(fallbackUnsub);
+        } catch (fallbackSetupError) {
+          console.warn(
+            'Failed to setup active patient fallback listener:',
+            fallbackSetupError
+          );
+        }
       }
-    });
+    );
+
     unsubscribers.push(unsubPatients);
 
-    // 3. Subscribe to Real-Time Vitals with Alarm Checks (Ordered by newest timestamp)
-    const vitalsCol = collection(firestore, 'vitals');
-    const vitalsQuery = query(vitalsCol, orderBy('timestamp', 'desc'), limit(30));
-    let isInitialVitalsSnapshot = true;
-    const unsubVitals = onSnapshot(vitalsQuery, async (snapshot) => {
-      const remoteVitals: TelemetryVitals[] = [];
-
-      // On initial snapshot connection, sync existing records silently without firing alarms on reload!
-      if (isInitialVitalsSnapshot) {
-        isInitialVitalsSnapshot = false;
-        snapshot.forEach((doc) => {
-          remoteVitals.push(doc.data() as TelemetryVitals);
-        });
-        if (remoteVitals.length > 0) {
-          await db.vitals.bulkPut(remoteVitals);
-          notifyUpdate();
-        }
-        return;
-      }
-
-      snapshot.docChanges().forEach((change) => {
-        if (change.type === 'added' || change.type === 'modified') {
-          const v = change.doc.data() as TelemetryVitals;
-          remoteVitals.push(v);
-        }
-      });
-
-      if (remoteVitals.length > 0) {
-        await db.vitals.bulkPut(remoteVitals);
-        notifyUpdate();
-      }
-    }, (err) => handleFirestoreError(err, OperationType.GET, 'vitals'));
-    unsubscribers.push(unsubVitals);
-
-    // 4. Subscribe to Operational SBAR Handovers (Ordered by newest createdAt)
-    const sbarCol = collection(firestore, 'sbarHandovers');
-    const sbarQuery = query(sbarCol, orderBy('createdAt', 'desc'), limit(20));
-    const unsubSbar = onSnapshot(sbarQuery, async (snapshot) => {
-      for (const change of snapshot.docChanges()) {
-        if (change.type === 'added' || change.type === 'modified') {
-          await db.sbarHandovers.put(change.doc.data() as SbarHandoverReport);
-        } else if (change.type === 'removed') {
-          await db.sbarHandovers.delete(change.doc.id);
-        }
-      }
-      notifyUpdate();
-    }, (err) => handleFirestoreError(err, OperationType.GET, 'sbarHandovers'));
-    unsubscribers.push(unsubSbar);
-
-    // Note: Central summary listeners (patientAntibiotics, infusionPumps, ventilators,
-    // fluidBalances, clinicalNotes, addendums) are now dynamically scoped and maintained
-    // by updateActivePatientsAndSubscriptions() above, strictly partitioned by current active patient IDs.
-
-  } catch (e) {
-    console.warn('Could not establish Firestore real-time listener:', e);
+  } catch (err) {
+    console.warn(
+      'Could not establish Level-1 Firestore real-time listeners:',
+      err
+    );
   }
 
   return () => {
-    summaryUnsubscribers.forEach((unsub) => {
-      try {
-        unsub();
-      } catch {}
-    });
-    summaryUnsubscribers = [];
     unsubscribers.forEach((unsub) => {
       try {
         unsub();

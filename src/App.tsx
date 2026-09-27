@@ -366,9 +366,13 @@ export default function App() {
         setIsReady(true);
 
         // 3. Authoritative Real-Time Sync & Initial Snapshot from Firebase Firestore (Single Source of Truth)
-        unsubscribeFirestore = subscribeToRealtimeFirestore(async () => {
-          await reloadData();
-        });
+        unsubscribeFirestore = subscribeToRealtimeFirestore(
+          async () => {
+            await reloadData();
+          },
+          undefined,
+          settings.unit.unitId || 'MICU-MAIN'
+        );
       } catch (e) {
         console.warn('System initialization warning (running in offline/local fallback):', e);
         setIsReady(true);
@@ -382,7 +386,7 @@ export default function App() {
         unsubscribeFirestore();
       }
     };
-  }, [reloadData, currentUser?.uid]);
+  }, [reloadData, currentUser?.uid, settings.unit.unitId]);
 
   // Dismiss active alert and prevent recurrence for this reading instance
   // Handle ESC key to exit Bedside Flowsheet back to Central 6-Bed Console
