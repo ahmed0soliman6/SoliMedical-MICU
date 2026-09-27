@@ -4,6 +4,8 @@ import { BedNumber, StaffRole, NoteType } from '../types/schema.ts';
 import { createClinicalNote } from '../services/dataModel.ts';
 import { useTranslation } from '../services/i18n.ts';
 import { useAuth } from '../services/AuthContext.tsx';
+import { useSystemSettings } from '../services/SettingsContext.tsx';
+import { VoiceNoteRecorder } from './VoiceNoteRecorder.tsx';
 
 interface AddClinicalNoteModalProps {
   isOpen: boolean;
@@ -24,11 +26,29 @@ export const AddClinicalNoteModal: React.FC<AddClinicalNoteModalProps> = ({
 }) => {
   const { lang } = useTranslation();
   const { currentUser } = useAuth();
+  const { settings } = useSystemSettings();
   const [title, setTitle] = useState<string>('');
   const [content, setContent] = useState<string>('');
   const [noteType, setNoteType] = useState<NoteType>(NoteType.PROGRESS_NOTE);
   const [consultationSpecialty, setConsultationSpecialty] = useState<string>('Nephrology / الكلى');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+
+  const isVoiceDictationEnabled = settings?.features?.enableVoiceNoteDictation !== false;
+
+  const handleVoiceTranscript = (chunk: string) => {
+    if (!chunk.trim()) return;
+    setContent(prev => {
+      const trimmed = prev.trim();
+      if (!trimmed) {
+        return chunk;
+      }
+      const endsWithSentencePunctuation = /[.!?:\n]$/.test(trimmed);
+      if (endsWithSentencePunctuation) {
+        return `${trimmed}\n${chunk}`;
+      }
+      return `${trimmed} ${chunk}`;
+    });
+  };
 
   // Derive user info dynamically from currently logged in user
   const loggedInName = currentUser?.displayName || currentUser?.name || (lang === 'ar' 
@@ -267,14 +287,36 @@ RECOMMENDATIONS:
           )}
 
           <div>
-            <label className="text-[11px] text-slate-300 font-semibold block mb-1">
-              {lang === 'ar' ? 'المحتوى الطبي المفصل (Note Content)' : 'Detailed Clinical Narrative'}
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-[11px] text-slate-300 font-semibold block">
+                {lang === 'ar' ? 'المحتوى الطبي المفصل (Note Content)' : 'Detailed Clinical Narrative'}
+              </label>
+              {content && (
+                <button
+                  type="button"
+                  onClick={() => setContent('')}
+                  className="text-[10px] text-slate-500 hover:text-rose-400 transition-colors cursor-pointer"
+                >
+                  {lang === 'ar' ? 'مسح النص' : 'Clear Text'}
+                </button>
+              )}
+            </div>
+
+            {/* Voice Dictation via Browser SpeechRecognition */}
+            {isVoiceDictationEnabled && (
+              <div className="mb-2">
+                <VoiceNoteRecorder
+                  onTranscript={handleVoiceTranscript}
+                  defaultLang={lang === 'ar' ? 'ar-SA' : 'en-US'}
+                />
+              </div>
+            )}
+
             <textarea
               rows={6}
               value={content}
               onChange={(e) => setContent(e.target.value)}
-              placeholder={lang === 'ar' ? "اكتب السرد الطبي المفصل وخطة العلاج والملاحظات التمريضية والسريرية هنا..." : "Document detailed physical assessments, vitals correlation, ventilator weaning, or drug adjustments..."}
+              placeholder={lang === 'ar' ? "اكتب السرد الطبي المفصل وخطة العلاج والملاحظات التمريضية والسريرية هنا أو استخدم زر الإملاء الصوتي أعلاه..." : "Document detailed physical assessments, vitals correlation, ventilator weaning, or drug adjustments (or click Record Voice Note)..."}
               className="w-full bg-[#0f172a] border border-slate-700 rounded-lg p-3 text-white focus:border-teal-500 focus:outline-none font-mono text-xs leading-relaxed"
               required
             />

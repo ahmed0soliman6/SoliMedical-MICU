@@ -24,6 +24,7 @@ export interface SystemFeatureFlags {
   enableAcuityLevels: boolean;        // تصنيفات الخطورة السريرية (Acuity Badges)
   enableCodeStatus: boolean;          // حالة الإنعاش القلبي الرئوي (Code Status: Full CPR / DNR)
   enableSha256Addendums: boolean;     // البصمات المشفرة SHA-256 للملاحظات
+  enableVoiceNoteDictation?: boolean; // الإملاء الصوتي المباشر للملاحظات الطبية عبر SpeechRecognition
 
   // Alerts, Safety & Network Sync
   enableAudioAlarms: boolean;         // الإنذارات الصوتية الطبية IEC 60601-1-8
@@ -426,6 +427,7 @@ export const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
     enableAcuityLevels: true,
     enableCodeStatus: true,
     enableSha256Addendums: true,
+    enableVoiceNoteDictation: true,
     enableAudioAlarms: true,
     enablePushNotifications: true,
     enableCloudSync: true,

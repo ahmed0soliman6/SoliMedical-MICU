@@ -4,6 +4,8 @@ import { StaffRole } from '../types/schema.ts';
 import { appendImmutableAddendum } from '../services/dataModel.ts';
 import { useTranslation } from '../services/i18n.ts';
 import { useAuth } from '../services/AuthContext.tsx';
+import { useSystemSettings } from '../services/SettingsContext.tsx';
+import { VoiceNoteRecorder } from './VoiceNoteRecorder.tsx';
 
 interface AddAddendumModalProps {
   isOpen: boolean;
@@ -27,8 +29,26 @@ export const AddAddendumModal: React.FC<AddAddendumModalProps> = ({
 }) => {
   const { t, lang, isRTL } = useTranslation();
   const { currentUser } = useAuth();
+  const { settings } = useSystemSettings();
   const [content, setContent] = useState<string>('');
   const [reason, setReason] = useState<'CLINICAL_UPDATE' | 'CORRECTION' | 'LAB_CORRELATION' | 'CONSULTANT_COUNTERSIGN' | 'HANDOVER_NOTE'>('CLINICAL_UPDATE');
+
+  const isVoiceDictationEnabled = settings?.features?.enableVoiceNoteDictation !== false;
+
+  const handleVoiceTranscript = (chunk: string) => {
+    if (!chunk.trim()) return;
+    setContent(prev => {
+      const trimmed = prev.trim();
+      if (!trimmed) {
+        return chunk;
+      }
+      const endsWithSentencePunctuation = /[.!?:\n]$/.test(trimmed);
+      if (endsWithSentencePunctuation) {
+        return `${trimmed}\n${chunk}`;
+      }
+      return `${trimmed} ${chunk}`;
+    });
+  };
   
   const loggedInName = lang === 'ar' 
     ? currentUser?.nameAr || currentUser?.nameEn || 'طبيب العناية المناوب'
@@ -149,14 +169,36 @@ export const AddAddendumModal: React.FC<AddAddendumModalProps> = ({
           </div>
 
           <div>
-            <label className="text-[11px] text-slate-300 font-semibold">
-              {lang === 'ar' ? 'نص الملحق الطبي (Clinical Addendum Content)' : 'Addendum Clinical Content'}
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-[11px] text-slate-300 font-semibold">
+                {lang === 'ar' ? 'نص الملحق الطبي (Clinical Addendum Content)' : 'Addendum Clinical Content'}
+              </label>
+              {content && (
+                <button
+                  type="button"
+                  onClick={() => setContent('')}
+                  className="text-[10px] text-slate-500 hover:text-rose-400 transition-colors cursor-pointer"
+                >
+                  {lang === 'ar' ? 'مسح النص' : 'Clear Text'}
+                </button>
+              )}
+            </div>
+
+            {/* Voice Dictation via Browser SpeechRecognition */}
+            {isVoiceDictationEnabled && (
+              <div className="mb-2">
+                <VoiceNoteRecorder
+                  onTranscript={handleVoiceTranscript}
+                  defaultLang={lang === 'ar' ? 'ar-SA' : 'en-US'}
+                />
+              </div>
+            )}
+
             <textarea
               rows={4}
               value={content}
               onChange={(e) => setContent(e.target.value)}
-              placeholder={lang === 'ar' ? "اكتب التحديثات السريرية، استجابة المريض للعلاج، نتائج الأشعة المقطعية أو خطة العناية..." : "Document clinical response, new lab values, scan findings, or revised care plan..."}
+              placeholder={lang === 'ar' ? "اكتب التحديثات السريرية، استجابة المريض للعلاج، نتائج الأشعة أو استخدم الإملاء الصوتي أعلاه..." : "Document clinical response, new lab values, scan findings, or click Record Voice Note..."}
               className="w-full mt-1 bg-[#0f172a] border border-slate-700 rounded-lg p-3 text-white focus:border-purple-500 focus:outline-none"
               required
             />

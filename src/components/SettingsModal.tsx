@@ -43,6 +43,7 @@ import {
   CloudOff,
   Bell,
   Wrench,
+  Mic,
   MessageSquare
 } from 'lucide-react';
 import { useSystemSettings } from '../services/SettingsContext.tsx';
@@ -334,6 +335,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
       descriptionEn: 'Document and authenticate medical notes and immutable signed addendums.',
       icon: FileCheck2,
       color: 'text-blue-400',
+    },
+    {
+      key: 'enableVoiceNoteDictation',
+      category: 'bedside',
+      labelAr: 'الإملاء الصوتي المباشر للملاحظات (Voice Note Dictation)',
+      labelEn: 'Voice Note Dictation (Speech-to-Text)',
+      descriptionAr: 'تسجيل وتحويل الملاحظات الطبية المنطوقة مباشرة إلى نص سريري عبر SpeechRecognition API.',
+      descriptionEn: 'Record and transcribe clinical voice observations directly into clinical notes using browser SpeechRecognition.',
+      icon: Mic,
+      color: 'text-rose-400',
     },
     {
       key: 'enableVentilatorParameters',
