@@ -27,16 +27,17 @@ export const AddClinicalNoteModal: React.FC<AddClinicalNoteModalProps> = ({
   const [title, setTitle] = useState<string>('');
   const [content, setContent] = useState<string>('');
   const [noteType, setNoteType] = useState<NoteType>(NoteType.PROGRESS_NOTE);
+  const [consultationSpecialty, setConsultationSpecialty] = useState<string>('Nephrology / الكلى');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   // Derive user info dynamically from currently logged in user
-  const loggedInName = lang === 'ar' 
-    ? currentUser?.nameAr || currentUser?.nameEn || 'مدخل بيانات غير معروف'
-    : currentUser?.nameEn || currentUser?.nameAr || 'Unknown Data Entry User';
+  const loggedInName = currentUser?.displayName || currentUser?.name || (lang === 'ar' 
+    ? currentUser?.nameAr || currentUser?.nameEn 
+    : currentUser?.nameEn || currentUser?.nameAr) || (lang === 'ar' ? 'طبيب مناوب' : 'Staff Clinician');
 
   const loggedInRole = currentUser?.role || StaffRole.RESIDENT;
-  const loggedInBadgeId = currentUser?.badgeId || '9912';
-  const loggedInUid = currentUser?.uid ? `staff-${currentUser.uid}` : 'staff-9912';
+  const loggedInBadgeId = currentUser?.badgeId || currentUser?.staffId || '9912';
+  const loggedInUid = currentUser?.uid ? `staff-${currentUser.uid}` : (currentUser?.badgeId ? `staff-${currentUser.badgeId}` : 'staff-9912');
 
   // Quick Clinical Templates for high utility
   const templates = [
@@ -51,6 +52,17 @@ RESP: Stable on room air/HFNC. SpO2 98%. Lungs clear bilaterally.
 GI/GU: Abdomen soft, bowel sounds positive, tolerating enteral feeding. UOP > 0.5 ml/kg/hr.
 ID: Afebrile. Procalcitonin/WBC down. Antibiotics continue on schedule.
 PLAN: De-escalate antibiotics, encourage early mobilization, consult physiotherapy.`
+    },
+    {
+      id: 'nephrology_consult',
+      titleEn: 'Referral: Nephrology Consultation',
+      titleAr: 'طلب عرض: استشارة طبيب الكلى',
+      type: NoteType.CONSULTATION_NOTE,
+      content: `REASON FOR REFERRAL: Assessment of acute kidney injury (AKI) with worsening renal function.
+BACKGROUND: Patient admitted with septic shock. Serum Creatinine increased from baseline 0.8 mg/dL to 2.4 mg/dL over 48 hours. Urea: 85 mg/dL. Potassium: 5.6 mEq/L with ECG showing peaked T waves.
+FLUID BALANCE: 24H Fluid Balance is +3.5 Liters. Urine Output has dropped to < 0.3 ml/kg/hr for the last 8 hours (Oliguria).
+CURRENT MEDICATIONS: On Norepinephrine infusion, Meropenem 1g Q8H (needs adjustment), and Furosemide 40mg IV Q12H with poor response.
+CLINICAL INQUIRY: Kindly review the patient's labs and fluid state, recommend appropriate renal dose adjustments for antibiotics, and advise on the suitability of urgent Hemodialysis (CRRT) or high-dose diuretic titration.`
     },
     {
       id: 'cvc_insertion',
@@ -116,6 +128,9 @@ RECOMMENDATIONS:
         authorName: loggedInName,
         authorRole: loggedInRole,
         authorStaffId: loggedInBadgeId,
+        createdByUid: currentUser?.uid || '',
+        consultationSpecialty: noteType === NoteType.CONSULTATION_NOTE ? consultationSpecialty : undefined,
+        consultationStatus: noteType === NoteType.CONSULTATION_NOTE ? 'PENDING' : undefined,
       });
       onNoteCreated();
       setTitle('');
@@ -146,8 +161,8 @@ RECOMMENDATIONS:
               </h3>
               <p className="text-[11px] text-slate-400">
                 {lang === 'ar' 
-                  ? `تسجيل مستند طبي رسمي للمريض: ${patientName} • محمي بـ SHA-256` 
-                  : `Record secure clinical document for ${patientName} • Cryptographically Locked`}
+                  ? `تسجيل مستند طبي رسمي للمريض: ${patientName}` 
+                  : `Record secure clinical document for ${patientName}`}
               </p>
             </div>
           </div>
@@ -189,11 +204,17 @@ RECOMMENDATIONS:
               </label>
               <select
                 value={noteType}
-                onChange={(e) => setNoteType(e.target.value as NoteType)}
+                onChange={(e) => {
+                  const val = e.target.value as NoteType;
+                  setNoteType(val);
+                  if (val === NoteType.CONSULTATION_NOTE && !title) {
+                    setTitle(lang === 'ar' ? 'طلب عرض طبي واستشارة' : 'Medical Consultation Referral');
+                  }
+                }}
                 className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-teal-500 focus:outline-none font-sans"
               >
                 <option value={NoteType.PROGRESS_NOTE}>{lang === 'ar' ? 'Progress Note (ملاحظة تقدمية)' : 'Clinical Progress Note'}</option>
-                <option value={NoteType.CONSULTATION_NOTE}>{lang === 'ar' ? 'Consultation Note (رد استشارة)' : 'Clinical Consultation Note'}</option>
+                <option value={NoteType.CONSULTATION_NOTE}>{lang === 'ar' ? 'Consultation Note (طلب عرض / استشارة)' : 'Clinical Consultation Referral'}</option>
                 <option value={NoteType.PROCEDURAL_NOTE}>{lang === 'ar' ? 'Procedural Note (إجراء طبي)' : 'Bedside Procedure Note'}</option>
                 <option value={NoteType.ADMISSION_NOTE}>{lang === 'ar' ? 'Admission Note (ملاحظة دخول)' : 'Admission Progress Note'}</option>
               </select>
@@ -207,12 +228,43 @@ RECOMMENDATIONS:
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder={lang === 'ar' ? "مثال: ملاحظة تقدمية يومية - تحسن الوعي" : "e.g., Daily Progress Note - Vent weaning"}
+                placeholder={lang === 'ar' ? "مثال: طلب عرض طبي - استشارة الكلى" : "e.g., Nephrology Consultation Request"}
                 className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-teal-500 focus:outline-none"
                 required
               />
             </div>
           </div>
+
+          {noteType === NoteType.CONSULTATION_NOTE && (
+            <div className="p-3 bg-teal-950/20 border border-teal-800/40 rounded-xl space-y-2 animate-in fade-in slide-in-from-top-2 duration-150">
+              <label className="text-[11px] text-teal-300 font-bold block">
+                {lang === 'ar' ? 'التخصص الطبي المستهدف للاستشارة (Target Specialty) *' : 'Target Consulting Specialty *'}
+              </label>
+              <select
+                value={consultationSpecialty}
+                onChange={(e) => {
+                  setConsultationSpecialty(e.target.value);
+                  const specialtyName = e.target.value.split('/')[1]?.trim() || e.target.value;
+                  setTitle(lang === 'ar' ? `طلب عرض طبي: استشارة طبيب ${specialtyName}` : `Clinical Referral: ${e.target.value.split('/')[0].trim()} Consult`);
+                }}
+                className="w-full bg-[#090f1d] border border-teal-800/50 rounded-lg px-3 py-2 text-teal-200 focus:border-teal-400 focus:outline-none font-sans"
+              >
+                <option value="Nephrology / الكلى">{lang === 'ar' ? 'Nephrology (أخصائي / استشاري أمراض الكلى)' : 'Nephrology (Kidney Specialty)'}</option>
+                <option value="Cardiology / القلب">{lang === 'ar' ? 'Cardiology (أخصائي / استشاري أمراض القلب)' : 'Cardiology (Heart Specialty)'}</option>
+                <option value="Pulmonology / الصدرية">{lang === 'ar' ? 'Pulmonology (أخصائي / استشاري الصدرية)' : 'Pulmonology (Respiratory)'}</option>
+                <option value="Neurology / المخ والأعصاب">{lang === 'ar' ? 'Neurology (أخصائي / استشاري الأعصاب)' : 'Neurology (Nervous System)'}</option>
+                <option value="Infectious Diseases / الأمراض المعدية">{lang === 'ar' ? 'Infectious Diseases (الأمراض المعدية)' : 'Infectious Diseases'}</option>
+                <option value="Clinical Pharmacy / الصيدلة الإكلينيكية">{lang === 'ar' ? 'Clinical Pharmacy (الصيدلي الإكلينيكي)' : 'Clinical Pharmacy'}</option>
+                <option value="General Surgery / الجراحة العامة">{lang === 'ar' ? 'General Surgery (الجراحة العامة)' : 'General Surgery'}</option>
+                <option value="Other Specialty / تخصص آخر">{lang === 'ar' ? 'Other Medical Specialty (تخصص آخر)' : 'Other Medical Specialty'}</option>
+              </select>
+              <p className="text-[10px] text-slate-400 leading-normal">
+                {lang === 'ar' 
+                  ? 'اختر تخصص الاستشارة المطلوب. سيظهر هذا العرض في قائمة الملاحظات كحالة معلقة باللون الأصفر، وسيتمكن الطبيب المعني من كتابة الرد الرسمي مباشرة.' 
+                  : 'Select the consulting specialty. This referral will appear as pending (yellow), allowing the specific consultant to record their clinical answer.'}
+              </p>
+            </div>
+          )}
 
           <div>
             <label className="text-[11px] text-slate-300 font-semibold block mb-1">
@@ -262,8 +314,8 @@ RECOMMENDATIONS:
               </span>
               <p className="text-[10px] text-slate-400 leading-normal">
                 {lang === 'ar' 
-                  ? 'بمجرد التوقيع الرقمي للملاحظة، تصبح معزولة كلياً ومحمية تشفيرياً بصيغة SHA-256. التعديلات اللاحقة تتم حصراً كملحقات (Addendums) مرتبطة بسلسلة مشفرة متصلة.' 
-                  : 'Upon digital signing, notes are locked using a SHA-256 secure hash. Standard audits and future updates can only be executed via linked addendums.'}
+                  ? 'بمجرد التوقيع الرقمي للملاحظة، يتم حفظها وتوثيقها رسمياً في ملف المريض. التعديلات اللاحقة تتم عبر ملحقات (Addendums) معتمدة.' 
+                  : 'Upon digital signing, notes are securely logged in the patient record. Standard audits and updates can be executed via linked addendums.'}
               </p>
             </div>
           </div>

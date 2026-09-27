@@ -215,7 +215,7 @@ export default function App() {
   const [isQuickVitalsOpen, setIsQuickVitalsOpen] = useState(false);
   const [vitalsTarget, setVitalsTarget] = useState<{ bedNumber: BedNumber; patientId: string; patientName: string } | null>(null);
   const [isAddendumOpen, setIsAddendumOpen] = useState(false);
-  const [addendumTarget, setAddendumTarget] = useState<{ noteId: string; patientId: string; author: string } | null>(null);
+  const [addendumTarget, setAddendumTarget] = useState<{ noteId: string; patientId: string; author: string; defaultReason?: 'CLINICAL_UPDATE' | 'CORRECTION' | 'LAB_CORRELATION' | 'CONSULTANT_COUNTERSIGN' | 'HANDOVER_NOTE' } | null>(null);
   const [isClinicalNoteOpen, setIsClinicalNoteOpen] = useState(false);
   const [clinicalNoteTarget, setClinicalNoteTarget] = useState<{ bedNumber?: BedNumber; patientId: string; patientName: string } | null>(null);
   const [isSbarModalOpen, setIsSbarModalOpen] = useState(false);
@@ -707,6 +707,7 @@ export default function App() {
           originalNoteAuthor={addendumTarget.author}
           patientName="المريض المحدد"
           onAddendumAppended={reloadData}
+          defaultReason={addendumTarget.defaultReason}
         />
       )}
 

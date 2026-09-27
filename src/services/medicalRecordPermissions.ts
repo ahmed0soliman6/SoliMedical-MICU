@@ -69,7 +69,7 @@ export function canEditRecord(
  * Validates if a user is authorized to delete a record.
  * Rules:
  * 1. Doctors CANNOT delete records just because they can edit.
- * 2. Only ADMIN can perform deletions according to retention and deletion policy.
+ * 2. Only ADMIN or users with explicit medicalRecords.delete permission can perform deletions.
  */
 export function canDeleteRecord(user: UserContextForPermission | null | undefined): boolean {
   if (!user || !user.uid) return false;
@@ -79,6 +79,87 @@ export function canDeleteRecord(user: UserContextForPermission | null | undefine
     user.isSuperAdmin === true ||
     user.permissions?.['medicalRecords.delete'] === true
   );
+}
+
+/**
+ * Validates if a user is authorized to delete a clinical progress note or consultation note.
+ * Rules requested by user:
+ * 1. ADMIN (or Super Admin) can delete any clinical note.
+ * 2. User granted deletion permission by Admin ('medicalRecords.delete' or 'clinicalNotes.delete').
+ * 3. The original author / owner of the clinical note only.
+ * 4. Fails closed if unauthorized.
+ */
+export function canDeleteClinicalNote(
+  user: UserContextForPermission | any | null | undefined,
+  note: {
+    authorId?: string;
+    authorStaffId?: string;
+    authorName?: string;
+    createdByUid?: string;
+    authorRole?: string;
+  } | null | undefined
+): boolean {
+  if (!user) return false;
+
+  // 1. Admin / Super Admin has universal delete authority
+  if (
+    user.role === StaffRole.ADMIN ||
+    user.role === 'ADMIN' ||
+    user.role === 'SUPER_ADMIN' ||
+    user.isSuperAdmin === true
+  ) {
+    return true;
+  }
+
+  // 2. User with explicit delete permission granted by Admin
+  if (
+    user.permissions?.['medicalRecords.delete'] === true ||
+    user.permissions?.['clinicalNotes.delete'] === true ||
+    canDeleteRecord(user)
+  ) {
+    return true;
+  }
+
+  if (!note) return false;
+
+  // 3. Author / Creator of the note
+  const userUids = [user.uid, user.badgeId, user.staffId].filter(Boolean) as string[];
+  const noteAuthorIds = [
+    note.authorId,
+    note.authorStaffId,
+    note.createdByUid,
+  ].filter(Boolean) as string[];
+
+  // Match UIDs / IDs (including staff- prefixes)
+  const idMatches = userUids.some(uId => 
+    noteAuthorIds.some(nId => 
+      nId === uId || 
+      nId === `staff-${uId}` || 
+      `staff-${nId}` === uId ||
+      nId.includes(uId) ||
+      uId.includes(nId)
+    )
+  );
+
+  if (idMatches) return true;
+
+  // Match Author Name (trimmed, lowercase) against user name variations
+  const userNames = [
+    user.name,
+    user.displayName,
+    user.nameAr,
+    user.nameEn,
+    user.username,
+  ].filter(Boolean).map((n: string) => n.trim().toLowerCase());
+
+  if (note.authorName) {
+    const cleanAuthorName = note.authorName.trim().toLowerCase();
+    if (userNames.some(uName => uName === cleanAuthorName || cleanAuthorName.includes(uName) || uName.includes(cleanAuthorName))) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 /**

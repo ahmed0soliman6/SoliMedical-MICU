@@ -247,6 +247,8 @@ export function getDefaultPermissionsForRole(role: StaffRole): UserPermissions {
         'users.disable': true,
         'users.delete': true,
         'audit.view': true,
+        'medicalRecords.delete': true,
+        'clinicalNotes.delete': true,
       };
     case StaffRole.CONSULTANT:
     case StaffRole.SPECIALIST:
@@ -2572,6 +2574,15 @@ export async function syncAddendumToCloud(addendum: Addendum): Promise<void> {
     await setDoc(addRef, sanitizeForFirestore(payload), { merge: true });
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `addendums/${addendum.id}`);
+  }
+}
+
+export async function deleteClinicalNoteFromCloud(noteId: string): Promise<void> {
+  try {
+    await deleteDoc(doc(firestore, 'clinicalNotes', noteId));
+  } catch (err) {
+    console.warn('Delete clinical note from cloud notice:', err);
+    handleFirestoreError(err, OperationType.DELETE, `clinicalNotes/${noteId}`);
   }
 }
 

@@ -609,9 +609,13 @@ export async function appendImmutableAddendum(input: AppendAddendumInput): Promi
     }
 
     // Update note's addendum array (append-only)
-    await db.clinicalNotes.update(input.noteId, {
+    const updatePayload: any = {
       addendums: updatedAddendums,
-    });
+    };
+    if ((txNote.noteType as any) === 'CONSULTATION_NOTE') {
+      updatePayload.consultationStatus = 'REPLIED';
+    }
+    await db.clinicalNotes.update(input.noteId, updatePayload);
 
     // Also index in addendums table
     await db.addendums.put(newAddendum);
@@ -637,6 +641,7 @@ export async function appendImmutableAddendum(input: AppendAddendumInput): Promi
   syncClinicalNoteToCloud({
     ...originalNote,
     addendums: updatedAddendums,
+    consultationStatus: (originalNote.noteType as any) === 'CONSULTATION_NOTE' ? 'REPLIED' : originalNote.consultationStatus,
   });
 
   return newAddendum;
@@ -656,6 +661,9 @@ export interface CreateClinicalNoteInput {
   authorName: string;
   authorRole: StaffRole;
   authorStaffId: string;
+  createdByUid?: string;
+  consultationSpecialty?: string;
+  consultationStatus?: 'PENDING' | 'REPLIED';
 }
 
 export async function createClinicalNote(input: CreateClinicalNoteInput): Promise<ClinicalNote> {
@@ -677,11 +685,14 @@ export async function createClinicalNote(input: CreateClinicalNoteInput): Promis
     authorName: input.authorName,
     authorRole: input.authorRole,
     authorStaffId: input.authorStaffId,
+    createdByUid: input.createdByUid || (input.authorId ? input.authorId.replace('staff-', '') : undefined),
     timestamp: nowIso,
     isImmutable: true,
     cryptographicHash: hash,
     digitalSignatureToken: signatureToken,
     addendums: [],
+    consultationSpecialty: input.consultationSpecialty,
+    consultationStatus: input.consultationStatus,
   };
 
   await db.transaction('rw', [db.clinicalNotes, db.auditLogs], async () => {

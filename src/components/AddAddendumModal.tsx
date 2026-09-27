@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Lock, ShieldCheck, AlertCircle } from 'lucide-react';
 import { StaffRole } from '../types/schema.ts';
 import { appendImmutableAddendum } from '../services/dataModel.ts';
 import { useTranslation } from '../services/i18n.ts';
+import { useAuth } from '../services/AuthContext.tsx';
 
 interface AddAddendumModalProps {
   isOpen: boolean;
@@ -12,6 +13,7 @@ interface AddAddendumModalProps {
   originalNoteAuthor: string;
   patientName: string;
   onAddendumAppended: () => void;
+  defaultReason?: 'CLINICAL_UPDATE' | 'CORRECTION' | 'LAB_CORRELATION' | 'CONSULTANT_COUNTERSIGN' | 'HANDOVER_NOTE';
 }
 
 export const AddAddendumModal: React.FC<AddAddendumModalProps> = ({
@@ -21,13 +23,34 @@ export const AddAddendumModal: React.FC<AddAddendumModalProps> = ({
   patientId,
   originalNoteAuthor,
   onAddendumAppended,
+  defaultReason,
 }) => {
   const { t, lang, isRTL } = useTranslation();
+  const { currentUser } = useAuth();
   const [content, setContent] = useState<string>('');
   const [reason, setReason] = useState<'CLINICAL_UPDATE' | 'CORRECTION' | 'LAB_CORRELATION' | 'CONSULTANT_COUNTERSIGN' | 'HANDOVER_NOTE'>('CLINICAL_UPDATE');
-  const [authorName, setAuthorName] = useState<string>('Dr. Tarek Fouad');
-  const [authorRole, setAuthorRole] = useState<StaffRole>(StaffRole.SPECIALIST);
+  
+  const loggedInName = lang === 'ar' 
+    ? currentUser?.nameAr || currentUser?.nameEn || 'طبيب العناية المناوب'
+    : currentUser?.nameEn || currentUser?.nameAr || 'ICU Duty Physician';
+  const loggedInRole = currentUser?.role as StaffRole || StaffRole.RESIDENT;
+
+  const [authorName, setAuthorName] = useState<string>(loggedInName);
+  const [authorRole, setAuthorRole] = useState<StaffRole>(loggedInRole);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+
+  // Sync state with dynamic auth user and props on open
+  useEffect(() => {
+    if (isOpen) {
+      setAuthorName(loggedInName);
+      setAuthorRole(loggedInRole);
+      if (defaultReason) {
+        setReason(defaultReason);
+      } else {
+        setReason('CLINICAL_UPDATE');
+      }
+    }
+  }, [isOpen, currentUser, defaultReason, lang]);
 
   if (!isOpen) return null;
 
@@ -37,13 +60,16 @@ export const AddAddendumModal: React.FC<AddAddendumModalProps> = ({
 
     setIsSubmitting(true);
     try {
+      const loggedInUid = currentUser?.uid ? `staff-${currentUser.uid}` : 'staff-9912';
+      const loggedInBadgeId = currentUser?.badgeId || '9912';
+
       await appendImmutableAddendum({
         noteId,
         patientId,
-        authorId: 'staff-9912',
+        authorId: loggedInUid,
         authorName,
         authorRole,
-        authorStaffId: '9912',
+        authorStaffId: loggedInBadgeId,
         content: content.trim(),
         reasonForAddendum: reason,
       });
@@ -68,10 +94,10 @@ export const AddAddendumModal: React.FC<AddAddendumModalProps> = ({
             </div>
             <div>
               <h3 className="text-sm font-bold text-white">
-                {lang === 'ar' ? 'إلحاق ملاحظة مشفرة (SHA-256 Addendum)' : 'Immutable Note Addendum (SHA-256)'}
+                {lang === 'ar' ? 'إلحاق ملحق بالملاحظة (Clinical Addendum)' : 'Clinical Note Addendum'}
               </h3>
               <p className="text-[11px] text-slate-400">
-                {lang === 'ar' ? 'بروتوكول Rule 2.6 للحماية الطبية القانونية (Doctor-to-Doctor Immutability)' : 'CBAHI & HIPAA Medico-Legal Addendum Standard'}
+                {lang === 'ar' ? 'بروتوكول الحماية الطبية والتسجيل المعتمد' : 'CBAHI & HIPAA Medico-Legal Addendum Standard'}
               </p>
             </div>
           </div>

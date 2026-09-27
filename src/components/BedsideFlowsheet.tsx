@@ -69,7 +69,8 @@ import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
 import { useAuth } from '../services/AuthContext.tsx';
 import { useAppNotifications } from '../services/NotificationContext.tsx';
-import { syncStatLabsToCloud, deleteStatLabFromCloud, syncLabResultToCloud, syncPatientToCloud, syncPumpToCloud, deletePumpFromCloud, firestore, fetchFullCategoryFromCloud, subscribeToActivePatientFlowsheet } from '../services/firebase.ts';
+import { syncStatLabsToCloud, deleteStatLabFromCloud, syncLabResultToCloud, syncPatientToCloud, syncPumpToCloud, deletePumpFromCloud, deleteClinicalNoteFromCloud, firestore, fetchFullCategoryFromCloud, subscribeToActivePatientFlowsheet } from '../services/firebase.ts';
+import { canDeleteRecord, canDeleteClinicalNote } from '../services/medicalRecordPermissions.ts';
 import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { FullPageAdmission } from './FullPageAdmission.tsx';
 import { LabFlowsheetSection } from './LabFlowsheetSection.tsx';
@@ -100,7 +101,7 @@ interface BedsideFlowsheetProps {
   onBack: () => void;
   onOpenAddVitals: () => void;
   onOpenAddClinicalNote?: () => void;
-  onOpenAddAddendum: (noteId: string, author: string) => void;
+  onOpenAddAddendum: (noteId: string, author: string, defaultReason?: any) => void;
   onOpenSbarSign: () => void;
   onDataUpdated: () => void;
   readOnly?: boolean;
@@ -196,6 +197,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
   const [showMoreSbars, setShowMoreSbars] = useState(false);
   const [showMoreBedsideFluids, setShowMoreBedsideFluids] = useState(false);
   const [showMoreNotes, setShowMoreNotes] = useState(false);
+  const [expandedBedsideNotes, setExpandedBedsideNotes] = useState<Record<string, boolean>>({});
 
   // Vitals pagination and edit states
   const [showAllVitals, setShowAllVitals] = useState(false);
@@ -4180,12 +4182,12 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
               <FileText className="w-5 h-5 text-teal-400" />
               <div>
                 <h3 className="text-base font-bold text-white">
-                  {lang === 'ar' ? 'الملاحظات الطبية وملحقاتها' : 'Clinical Progress Notes & Cryptographic Addendums'}
+                  {lang === 'ar' ? 'الملاحظات الطبية وملحقاتها' : 'Clinical Progress Notes & Addendums'}
                 </h3>
                 <p className="text-[10px] text-slate-400 hidden sm:block">
                   {lang === 'ar' 
-                    ? 'ملاحظات الأطباء محمية بتشفير SHA-256، لا يمكن حذفها، ويتم إلحاق التحديثات عبر Addendums فقط.'
-                    : 'Medical notes are cryptographic SHA-256 protected and immutable. Modifications are appended as verified addendums.'}
+                    ? 'سجل الملاحظات السريرية، العروضات الطبية، والملحقات التوضيحية.'
+                    : 'Clinical progress notes, specialty consultation referrals & addendums.'}
                 </p>
               </div>
             </div>
@@ -4221,70 +4223,171 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
             <div className="space-y-4 animate-in fade-in duration-300">
               {notesList.length > 0 ? (
                 <>
-                  {(showMoreNotes ? notesList : notesList.slice(0, 4)).map((note) => (
-                <div 
-                   key={note.id}
-                   className="bg-[#070c18] border border-slate-800 rounded-xl p-4 space-y-3"
-                >
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-800 pb-2 gap-2">
-                    <div>
-                      <span className="font-bold text-white text-sm">{note.title}</span>
-                      <span className="text-[10px] font-mono text-slate-400 mx-2">
-                        {note.noteType} • {new Date(note.timestamp).toLocaleString('en-US')}
-                      </span>
-                    </div>
+                  {(showMoreNotes ? notesList : notesList.slice(0, 4)).map((note) => {
+                    const isConsultation = note.noteType === 'CONSULTATION_NOTE';
+                    const hasReply = note.consultationStatus === 'REPLIED' || (note.addendums && note.addendums.some(a => a.reasonForAddendum === 'CONSULTANT_COUNTERSIGN'));
+                    const isNoteExpanded = !!expandedBedsideNotes[note.id];
+                    const canDelete = canDeleteClinicalNote(currentUser, note);
 
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-mono text-teal-400 px-2 py-0.5 rounded bg-teal-950/60 border border-teal-800/60">
-                        SHA-256: {note.cryptographicHash ? note.cryptographicHash.slice(0, 10) : 'HASH'}...
-                      </span>
-                      {!readOnly && (
-                        <button
-                          onClick={() => onOpenAddAddendum(note.id, note.authorName)}
-                          className="px-2.5 py-1 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 text-xs font-bold transition-all"
+                    const handleDeleteBedsideNote = async (e: React.MouseEvent, targetNote: ClinicalNote = note) => {
+                      e.stopPropagation();
+                      if (!canDeleteClinicalNote(currentUser, targetNote)) {
+                        alert(
+                          lang === 'ar'
+                            ? 'عفواً، حذف الملاحظة السريرية متاح فقط لمدير النظام (Admin)، أو من لديه صلاحية الحذف من الإدارة، أو صاحب الملاحظة فقط.'
+                            : 'Unauthorized: Clinical note deletion is restricted to Admins, users granted delete permission, or the note author only.'
+                        );
+                        return;
+                      }
+                      if (!window.confirm(lang === 'ar' ? `هل أنت متأكد من حذف الملاحظة السريرية "${targetNote.title}"؟\nسيتم حذفها نهائياً من قاعدة البيانات والمزامنة السحابية.` : `Delete note "${targetNote.title}"?`)) return;
+                      
+                      try {
+                        await db.clinicalNotes.delete(targetNote.id);
+                        await db.addendums.where('noteId').equals(targetNote.id).delete().catch(() => {});
+                        await deleteClinicalNoteFromCloud(targetNote.id);
+                        setNotesList(prev => prev.filter(n => n.id !== targetNote.id));
+                        onDataUpdated();
+                      } catch (err) {
+                        console.error('Error deleting bedside note:', err);
+                        alert(lang === 'ar' ? 'حدث خطأ أثناء الحذف.' : 'Delete error.');
+                      }
+                    };
+
+                    return (
+                      <div 
+                         key={note.id}
+                         className={`border rounded-xl transition-all overflow-hidden ${
+                           isConsultation
+                             ? hasReply
+                               ? 'border-emerald-500/30 bg-[#061514] shadow shadow-emerald-950/20'
+                               : 'border-amber-500/30 bg-[#121111] shadow shadow-amber-950/20'
+                             : 'bg-[#070c18] border-slate-800'
+                         }`}
+                      >
+                        <div 
+                          onClick={() => setExpandedBedsideNotes(prev => ({ ...prev, [note.id]: !prev[note.id] }))}
+                          className={`flex flex-col sm:flex-row sm:items-center justify-between p-3 gap-2 cursor-pointer transition-colors ${
+                            isNoteExpanded ? 'border-b border-slate-800/80 bg-slate-900/30' : 'hover:bg-slate-900/20'
+                          }`}
                         >
-                          + {lang === 'ar' ? 'إلحاق ملحق (Addendum)' : 'Add Addendum'}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  <p className="text-xs text-slate-200 leading-relaxed whitespace-pre-line">
-                    {note.content}
-                  </p>
-
-                  <div className="text-[11px] text-slate-400 font-sans">
-                    {lang === 'ar' ? 'الكاتب:' : 'Author:'} <strong className="text-slate-200">{note.authorName}</strong> ({note.authorRole})
-                  </div>
-
-                  {/* Chained Addendums */}
-                  {note.addendums && note.addendums.length > 0 && (
-                    <div className="bg-[#0a101f] border-l-2 sm:border-r-2 border-purple-500 p-3 rounded-lg space-y-2 mt-2">
-                      <div className="text-[11px] font-bold text-purple-300 flex items-center gap-1">
-                        <Lock className="w-3.5 h-3.5" />
-                        <span>{lang === 'ar' ? `الملحقات المشفرة المربوطة بالسلسلة (${note.addendums.length}):` : `Chained Cryptographic Addendums (${note.addendums.length}):`}</span>
-                      </div>
-
-                      {note.addendums.map((addendum) => (
-                        <div key={addendum.id} className="text-xs space-y-1 bg-[#070c17] p-2.5 rounded-lg border border-purple-900/30">
-                          <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono">
-                            <span>{new Date(addendum.timestamp).toLocaleString('en-US')}</span>
-                            <span className="text-purple-400">
-                              PrevHash: {addendum.previousHash ? addendum.previousHash.slice(0, 8) : 'ROOT'}...
+                          <div className="flex items-center gap-2 flex-wrap min-w-0">
+                            <button 
+                              type="button" 
+                              className="p-0.5 rounded bg-slate-800 text-slate-400 hover:text-white"
+                            >
+                              {isNoteExpanded ? <ChevronUp className="w-3.5 h-3.5 text-teal-400" /> : <ChevronDown className="w-3.5 h-3.5 text-teal-400" />}
+                            </button>
+                            <span className="font-bold text-white text-sm truncate">{note.title}</span>
+                            <span className="text-[10px] font-mono text-slate-400">
+                              {isConsultation ? (lang === 'ar' ? '📋 طلب عرض / استشارة' : 'Consultation Referral') : note.noteType} • {new Date(note.timestamp).toLocaleString('en-US')}
+                            </span>
+                            {isConsultation && (
+                              <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
+                                hasReply ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                              }`}>
+                                {hasReply ? (lang === 'ar' ? 'تم الرد' : 'Replied') : (lang === 'ar' ? 'قيد الانتظار' : 'Pending')}
+                              </span>
+                            )}
+                            <span className="text-[11px] text-slate-400 hidden md:inline">
+                              • {note.authorName} ({note.authorRole})
                             </span>
                           </div>
-                          <p className="text-slate-200">{addendum.content}</p>
-                          <div className="text-[10px] text-purple-300">
-                            {lang === 'ar' 
-                              ? `السبب: ${addendum.reasonForAddendum} • الطبيب: ${addendum.authorName}` 
-                              : `Reason: ${addendum.reasonForAddendum} • Physician: ${addendum.authorName}`}
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            {!readOnly && (
+                              isConsultation && !hasReply ? (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onOpenAddAddendum(note.id, note.authorName, 'CONSULTANT_COUNTERSIGN');
+                                  }}
+                                  className="px-2.5 py-1 rounded-lg bg-teal-500 hover:bg-teal-400 text-slate-950 text-xs font-bold transition-all cursor-pointer shadow active:scale-95"
+                                >
+                                  <span>{lang === 'ar' ? '✍️ تسجيل الرد' : 'Reply'}</span>
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onOpenAddAddendum(note.id, note.authorName, 'CLINICAL_UPDATE');
+                                  }}
+                                  className="px-2.5 py-1 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 text-xs font-bold transition-all"
+                                >
+                                  + {lang === 'ar' ? 'إلحاق ملحق' : 'Add Addendum'}
+                                </button>
+                              )
+                            )}
+
+                            {!readOnly && (
+                              <button
+                                type="button"
+                                onClick={(e) => handleDeleteBedsideNote(e, note)}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 active:scale-95 border ${
+                                  canDelete 
+                                    ? 'bg-rose-500/10 hover:bg-rose-500/25 border-rose-500/30 text-rose-400 hover:text-rose-300' 
+                                    : 'bg-slate-800/80 hover:bg-rose-950/40 border-slate-700 text-slate-400 hover:text-rose-400'
+                                }`}
+                                title={lang === 'ar' ? 'حذف الملاحظة (المدير أو صاحب الصلاحية أو كاتب الملاحظة فقط)' : 'Delete Note (Admin, authorized user, or author only)'}
+                              >
+                                <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                                <span className="font-medium">{lang === 'ar' ? 'حذف' : 'Delete'}</span>
+                              </button>
+                            )}
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
+
+                        {/* Collapsible Content */}
+                        {isNoteExpanded && (
+                          <div className="p-4 space-y-3 animate-in fade-in duration-200">
+                            <p className="text-xs text-slate-200 leading-relaxed whitespace-pre-line bg-slate-950/40 p-3 rounded-lg border border-slate-800/30">
+                              {note.content}
+                            </p>
+
+                            <div className="flex items-center justify-between pt-2 border-t border-slate-800/80 mt-2 text-xs">
+                              <div className="text-[11px] text-slate-400 font-sans">
+                                {lang === 'ar' ? 'الكاتب:' : 'Author:'} <strong className="text-slate-200">{note.authorName}</strong> ({note.authorRole})
+                              </div>
+                              {!readOnly && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleDeleteBedsideNote(e, note)}
+                                  className="px-2.5 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 hover:text-rose-300 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+                                  title={lang === 'ar' ? 'حذف الملاحظة السريرية' : 'Delete Clinical Note'}
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <span>{lang === 'ar' ? 'حذف الملاحظة' : 'Delete Note'}</span>
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Chained Addendums */}
+                            {note.addendums && note.addendums.length > 0 && (
+                              <div className="bg-[#0a101f] border-l-2 sm:border-r-2 border-purple-500 p-3 rounded-lg space-y-2 mt-2">
+                                <div className="text-[11px] font-bold text-purple-300 flex items-center gap-1">
+                                  <Lock className="w-3.5 h-3.5" />
+                                  <span>{lang === 'ar' ? `الملحقات التوضيحية (${note.addendums.length}):` : `Addendums & Updates (${note.addendums.length}):`}</span>
+                                </div>
+
+                                {note.addendums.map((addendum) => (
+                                  <div key={addendum.id} className="text-xs space-y-1 bg-[#070c17] p-2.5 rounded-lg border border-purple-900/30">
+                                    <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono">
+                                      <span>{new Date(addendum.timestamp).toLocaleString('en-US')}</span>
+                                    </div>
+                                    <p className="text-slate-200">{addendum.content}</p>
+                                    <div className="text-[10px] text-purple-300">
+                                      {lang === 'ar' 
+                                        ? `السبب: ${addendum.reasonForAddendum} • الطبيب: ${addendum.authorName}` 
+                                        : `Reason: ${addendum.reasonForAddendum} • Physician: ${addendum.authorName}`}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
 
               {/* Show More Button for Clinical Notes */}
               {notesList.length >= 4 && (

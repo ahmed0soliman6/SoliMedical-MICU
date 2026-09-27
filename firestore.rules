@@ -193,14 +193,26 @@ service cloud.firestore {
       allow read: if hasPerm('clinicalNotes.view') || hasPerm('patients.view');
       allow create: if hasPerm('clinicalNotes.create') || hasPerm('clinicalNotes.update') || hasPerm('patients.create');
       allow update: if (hasPerm('clinicalNotes.update') || hasPerm('clinicalNotes.create') || hasPerm('patients.create')) && isValidMedicalRecordUpdate();
-      allow delete: if isAdmin();
+      allow delete: if isAdmin() || hasPerm('medicalRecords.delete') || hasPerm('clinicalNotes.delete') || (request.auth != null && (
+        request.auth.uid == resource.data.authorId ||
+        ('staff-' + request.auth.uid) == resource.data.authorId ||
+        request.auth.uid == resource.data.createdByUid ||
+        request.auth.token.name == resource.data.authorName ||
+        (resource.data.authorStaffId != null && request.auth.token.badgeId == resource.data.authorStaffId)
+      ));
     }
 
     match /addendums/{addendumId} {
       allow read: if hasPerm('clinicalNotes.view') || hasPerm('patients.view');
       allow create: if hasPerm('clinicalNotes.update') || hasPerm('clinicalNotes.create') || hasPerm('patients.create');
       allow update: if false; // Immutable addendums
-      allow delete: if isAdmin();
+      allow delete: if isAdmin() || hasPerm('medicalRecords.delete') || hasPerm('clinicalNotes.delete') || (request.auth != null && (
+        request.auth.uid == resource.data.authorId ||
+        ('staff-' + request.auth.uid) == resource.data.authorId ||
+        request.auth.uid == resource.data.createdByUid ||
+        request.auth.token.name == resource.data.authorName ||
+        (resource.data.authorStaffId != null && request.auth.token.badgeId == resource.data.authorStaffId)
+      ));
     }
 
     // SBAR Handovers & Shift Transitions (Collaborative Doctor-to-Doctor Shift Transfer)
@@ -329,12 +341,7 @@ service cloud.firestore {
 
     // Hospital Chat (1-to-1 & Department Chat)
     match /chats/{chatId} {
-      allow read: if isNotDisabledUser() && hasPerm('chat.view') && (
-        isAdmin() ||
-        resource.data.type == 'department' ||
-        (resource.data.participantUids != null && request.auth.uid in resource.data.participantUids) ||
-        (resource.data.participants != null && request.auth.uid in resource.data.participants)
-      );
+      allow read: if isNotDisabledUser() && hasPerm('chat.view');
       allow create: if isNotDisabledUser() && hasPerm('chat.create');
       allow update: if isNotDisabledUser() && hasPerm('chat.create') && (
         isAdmin() ||

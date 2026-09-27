@@ -659,6 +659,10 @@ export interface ClinicalNote extends Partial<MedicalRecordOwnership> {
   updatedByUid?: string;
   updatedAt?: number | string;
   originalRecordId?: string;
+
+  // Optional Consultation referral & reply fields
+  consultationSpecialty?: string;
+  consultationStatus?: 'PENDING' | 'REPLIED';
 }
 
 // -------------------------------------------------------------
@@ -762,6 +766,7 @@ export interface UserPermissions {
   'clinicalNotes.view'?: boolean;
   'clinicalNotes.create'?: boolean;
   'clinicalNotes.update'?: boolean;
+  'clinicalNotes.delete'?: boolean;
 
   'sbar.view'?: boolean;
   'sbar.create'?: boolean;

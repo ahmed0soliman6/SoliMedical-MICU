@@ -1,6 +1,7 @@
 import { 
   canEditRecord, 
   canDeleteRecord, 
+  canDeleteClinicalNote,
   canDeleteMortalityRecord, 
   preserveRecordOwnership 
 } from '../services/medicalRecordPermissions.ts';
@@ -50,6 +51,19 @@ function runTests() {
 
   // Test 5: Admin deleting records
   assert(canDeleteRecord(adminUser) === true, 'ADMIN CAN delete medical records');
+
+  // Test 5.1: Clinical Note Deletion - Author can delete own note
+  assert(canDeleteClinicalNote(doc1, doc1Record) === true, 'Doctor 1 CAN delete their own clinical note');
+
+  // Test 5.2: Clinical Note Deletion - Another doctor CANNOT delete Doc 1 note
+  assert(canDeleteClinicalNote(doc2, doc1Record) === false, 'Doctor 2 CANNOT delete Doctor 1 clinical note');
+
+  // Test 5.3: Clinical Note Deletion - Admin CAN delete any clinical note
+  assert(canDeleteClinicalNote(adminUser, doc1Record) === true, 'ADMIN CAN delete any clinical note');
+
+  // Test 5.4: Clinical Note Deletion - User with explicit permission granted by Admin CAN delete
+  const docWithPerm = { uid: 'doc-103', role: StaffRole.SPECIALIST, permissions: { 'clinicalNotes.delete': true } };
+  assert(canDeleteClinicalNote(docWithPerm, doc1Record) === true, 'Doctor with clinicalNotes.delete permission CAN delete');
 
   // Test 6: Mortality deletion authorization
   assert(canDeleteMortalityRecord(doc1) === false, 'Ordinary Doctor CANNOT delete mortality record');
