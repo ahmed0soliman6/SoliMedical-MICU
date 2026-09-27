@@ -34,6 +34,7 @@ import { getDefaultPermissionsForRole, auth, firestore } from '../services/fireb
 import { doc, setDoc } from 'firebase/firestore';
 import { API_BASE_URL } from '../config/api.ts';
 import { AuditLogsSection } from './AuditLogsSection.tsx';
+import { formatRelativeTime, formatDetailedTimestamp } from '../services/auditService.ts';
 
 interface UserManagementModalProps {
   isOpen: boolean;
@@ -866,19 +867,23 @@ const PERMISSION_GROUPS: PermissionCategory[] = [
 
                       {/* Last Login & Session Timestamp */}
                       <div className="mt-2 pt-2 border-t border-slate-800/40 flex items-center justify-between text-[10px] text-slate-400">
-                        <div className="flex items-center gap-1.5 text-slate-300">
+                        <div className="flex items-center gap-1.5 text-slate-300 flex-wrap">
                           <Clock className="w-3.5 h-3.5 text-teal-400 flex-shrink-0" />
                           <span>{lang === 'ar' ? 'آخر تسجيل دخول:' : 'Last Login:'}</span>
-                          <span className="font-mono text-teal-300">
-                            {user.lastLoginAt 
-                              ? new Date(user.lastLoginAt).toLocaleString(lang === 'ar' ? 'ar-SA' : 'en-US', {
-                                  month: 'short',
-                                  day: 'numeric',
-                                  hour: '2-digit',
-                                  minute: '2-digit'
-                                })
-                              : (lang === 'ar' ? 'لم يسجل دخول بعد' : 'Never logged in')}
-                          </span>
+                          {user.lastLoginAt ? (
+                            <div className="flex items-center gap-1.5 font-mono">
+                              <span className="font-semibold text-teal-300 bg-teal-950/60 border border-teal-800/40 px-1.5 py-0.2 rounded text-[10px]">
+                                {formatRelativeTime(user.lastLoginAt, lang)}
+                              </span>
+                              <span className="text-[9px] text-slate-400" title={formatDetailedTimestamp(user.lastLoginAt, lang)}>
+                                ({formatDetailedTimestamp(user.lastLoginAt, lang)})
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="font-mono text-slate-500 italic">
+                              {lang === 'ar' ? 'لم يسجل دخول بعد' : 'Never logged in'}
+                            </span>
+                          )}
                         </div>
                       </div>
 

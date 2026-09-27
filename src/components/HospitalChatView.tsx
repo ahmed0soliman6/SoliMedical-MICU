@@ -72,7 +72,7 @@ export const HospitalChatView: React.FC = () => {
         currentUser.displayName || currentUser.nameEn || 'Staff'
       );
     }
-  }, [currentUser]);
+  }, [currentUser?.uid]);
 
   // Subscribe to user's chat channels
   useEffect(() => {
@@ -80,13 +80,16 @@ export const HospitalChatView: React.FC = () => {
     const unsub = subscribeToUserChats(currentUser.uid, (list) => {
       setChats(list);
       // Default to dept_general if current active is invalid
-      if (list.length > 0 && !list.some(c => c.id === activeChatId)) {
-        const generalChat = list.find(c => c.id === 'dept_general');
-        setActiveChatId(generalChat ? generalChat.id : list[0].id);
+      if (list.length > 0) {
+        setActiveChatId(prev => {
+          if (list.some(c => c.id === prev)) return prev;
+          const generalChat = list.find(c => c.id === 'dept_general');
+          return generalChat ? generalChat.id : list[0].id;
+        });
       }
     });
     return () => unsub();
-  }, [currentUser, activeChatId]);
+  }, [currentUser?.uid]);
 
   // Subscribe to messages of active conversation and mark as read
   useEffect(() => {
@@ -103,7 +106,7 @@ export const HospitalChatView: React.FC = () => {
     }
 
     return () => unsub();
-  }, [activeChatId, currentUser]);
+  }, [activeChatId, currentUser?.uid]);
 
   const handleToggleFloatingWidget = () => {
     const nextState = !isFloatingWidgetEnabled;

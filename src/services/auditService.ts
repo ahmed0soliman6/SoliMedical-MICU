@@ -23,7 +23,10 @@ export type AuditActionType =
   | 'STATUS_CHANGED'
   | 'PERMISSIONS_CHANGED'
   | 'RECOVERY_CODE_UPDATED'
-  | 'SETTINGS_UPDATED';
+  | 'SETTINGS_UPDATED'
+  | 'NOTE_CREATED'
+  | 'ADDENDUM_ADDED'
+  | 'SYSTEM_EVENT';
 
 export interface AuditLogEntry {
   id: string;
@@ -42,7 +45,68 @@ export interface AuditLogEntry {
 }
 
 /**
- * Records a new audit log entry with minimal payload (~300 bytes)
+ * Normalizes any raw log document (including legacy database schemas)
+ * into a complete, clean, typed AuditLogEntry.
+ */
+export function normalizeAuditLog(raw: any, docId?: string): AuditLogEntry {
+  const id = raw?.id || docId || `audit_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+  const timestamp = raw?.timestamp || raw?.createdAt || new Date().toISOString();
+
+  // 1. Resolve Action
+  let action: AuditActionType = raw?.action || raw?.eventType || 'USER_LOGIN';
+  if (action === ('NOTE_CREATED' as any)) action = 'SETTINGS_UPDATED';
+
+  // 2. Resolve Actor
+  const actorUid = raw?.actorUid || raw?.performedBy?.staffId || raw?.userId || raw?.authorId || raw?.uid || '';
+  let actorName = raw?.actorName || raw?.performedBy?.name || raw?.userName || raw?.authorName || raw?.staffName || '';
+  if (!actorName && actorUid) {
+    actorName = `Staff (${actorUid.slice(0, 8)})`;
+  } else if (!actorName) {
+    actorName = 'مستخدم المنظومة / ICU Staff';
+  }
+
+  const actorRole = raw?.actorRole || raw?.performedBy?.role || raw?.userRole || raw?.role || undefined;
+  const actorEmail = raw?.actorEmail || raw?.email || undefined;
+
+  // 3. Resolve Target
+  const targetUid = raw?.targetUid || raw?.patientId || undefined;
+  const targetName = raw?.targetName || raw?.patientName || undefined;
+  const targetEmail = raw?.targetEmail || undefined;
+  const targetRole = raw?.targetRole || undefined;
+
+  // 4. Resolve Details
+  let details = raw?.details || raw?.description || raw?.message || '';
+  if (!details) {
+    if (action === 'USER_LOGIN') {
+      details = `تسجيل دخول ناجح للمستخدم ${actorName}`;
+    } else if (action === 'USER_LOGOUT') {
+      details = `تسجيل خروج للمستخدم ${actorName}`;
+    } else {
+      details = `تم تنفيذ عملية ${action} بنجاح في النظام`;
+    }
+  }
+
+  const status = raw?.status || 'SUCCESS';
+
+  return {
+    id,
+    timestamp,
+    action,
+    actorUid,
+    actorName,
+    actorRole,
+    actorEmail,
+    targetUid,
+    targetName,
+    targetEmail,
+    targetRole,
+    details,
+    status,
+  };
+}
+
+/**
+ * Records a new audit log entry with minimal payload (~300 bytes).
  * Asynchronously writes to Firestore and local IndexedDB cache.
  */
 export async function recordAuditLog(
@@ -62,13 +126,13 @@ export async function recordAuditLog(
     await db.auditLogs.put({
       id: logData.id,
       timestamp: logData.timestamp,
-      eventType: 'NOTE_CREATED' as any, // Dexie legacy mapping
+      eventType: 'NOTE_CREATED' as any,
       performedBy: {
         staffId: logData.actorUid || 'system',
         name: logData.actorName || 'System',
         role: (logData.actorRole as any) || 'ADMIN',
       },
-      description: `${logData.action}: ${logData.details || ''}`,
+      description: logData.details || `${logData.action} executed`,
       immutableHash: id,
       ...logData,
     } as any).catch(() => {});
@@ -112,11 +176,7 @@ export async function fetchAuditLogs(options?: {
     const logs: AuditLogEntry[] = [];
 
     snap.forEach((docSnap) => {
-      const data = docSnap.data() as AuditLogEntry;
-      logs.push({
-        ...data,
-        id: docSnap.id,
-      });
+      logs.push(normalizeAuditLog(docSnap.data(), docSnap.id));
     });
 
     const lastVisibleDoc = snap.docs[snap.docs.length - 1] || null;
@@ -134,7 +194,7 @@ export async function fetchAuditLogs(options?: {
             name: log.actorName || 'System',
             role: (log.actorRole as any) || 'ADMIN',
           },
-          description: `${log.action}: ${log.details || ''}`,
+          description: log.details || `${log.action} recorded`,
           immutableHash: log.id,
           ...log,
         } as any).catch(() => {});
@@ -167,22 +227,135 @@ export async function fetchAuditLogs(options?: {
 export async function getLocalAuditLogs(limitCount: number = 25): Promise<AuditLogEntry[]> {
   try {
     const all = await db.auditLogs.reverse().sortBy('timestamp');
-    return all.slice(0, limitCount).map((item: any) => ({
-      id: item.id || '',
-      timestamp: item.timestamp || new Date().toISOString(),
-      action: item.action || 'USER_LOGIN',
-      actorUid: item.actorUid || item.performedBy?.staffId || '',
-      actorName: item.actorName || item.performedBy?.name || 'User',
-      actorRole: item.actorRole || item.performedBy?.role,
-      actorEmail: item.actorEmail,
-      targetUid: item.targetUid,
-      targetName: item.targetName,
-      targetEmail: item.targetEmail,
-      targetRole: item.targetRole,
-      details: item.details || item.description,
-      status: item.status || 'SUCCESS',
-    }));
+    return all.slice(0, limitCount).map((item: any) => normalizeAuditLog(item, item.id));
   } catch {
     return [];
   }
 }
+
+/**
+ * Formats a timestamp into human-readable relative time (e.g., '5 minutes ago' / 'منذ 5 دقائق')
+ * with high clinical clarity and bilingual support.
+ */
+export function formatRelativeTime(dateInput?: string | number | Date | null, lang: 'ar' | 'en' = 'en'): string {
+  if (!dateInput) {
+    return lang === 'ar' ? 'لم يسجل بعد' : 'Never';
+  }
+
+  const date = new Date(dateInput);
+  if (isNaN(date.getTime())) {
+    return String(dateInput);
+  }
+
+  const now = new Date();
+  const diffInMs = now.getTime() - date.getTime();
+  const diffInSec = Math.floor(diffInMs / 1000);
+
+  // Future or very recent safety check
+  if (diffInSec < 10) {
+    return lang === 'ar' ? 'الآن' : 'Just now';
+  }
+
+  if (diffInSec < 60) {
+    return lang === 'ar' ? `منذ ${diffInSec} ثانية` : `${diffInSec} seconds ago`;
+  }
+
+  const diffInMin = Math.floor(diffInSec / 60);
+  if (diffInMin === 1) {
+    return lang === 'ar' ? 'منذ دقيقة' : '1 minute ago';
+  }
+  if (diffInMin === 2) {
+    return lang === 'ar' ? 'منذ دقيقتين' : '2 minutes ago';
+  }
+  if (diffInMin < 60) {
+    if (lang === 'ar') {
+      if (diffInMin >= 3 && diffInMin <= 10) return `منذ ${diffInMin} دقائق`;
+      return `منذ ${diffInMin} دقيقة`;
+    }
+    return `${diffInMin} minutes ago`;
+  }
+
+  const diffInHours = Math.floor(diffInMin / 60);
+  if (diffInHours === 1) {
+    return lang === 'ar' ? 'منذ ساعة' : '1 hour ago';
+  }
+  if (diffInHours === 2) {
+    return lang === 'ar' ? 'منذ ساعتين' : '2 hours ago';
+  }
+  if (diffInHours < 24) {
+    if (lang === 'ar') {
+      if (diffInHours >= 3 && diffInHours <= 10) return `منذ ${diffInHours} ساعات`;
+      return `منذ ${diffInHours} ساعة`;
+    }
+    return `${diffInHours} hours ago`;
+  }
+
+  const diffInDays = Math.floor(diffInHours / 24);
+  if (diffInDays === 1) {
+    return lang === 'ar' ? 'أمس' : 'Yesterday';
+  }
+  if (diffInDays === 2) {
+    return lang === 'ar' ? 'منذ يومين' : '2 days ago';
+  }
+  if (diffInDays < 7) {
+    if (lang === 'ar') {
+      if (diffInDays >= 3 && diffInDays <= 10) return `منذ ${diffInDays} أيام`;
+      return `منذ ${diffInDays} يوم`;
+    }
+    return `${diffInDays} days ago`;
+  }
+
+  const diffInWeeks = Math.floor(diffInDays / 7);
+  if (diffInWeeks === 1) {
+    return lang === 'ar' ? 'منذ أسبوع' : '1 week ago';
+  }
+  if (diffInWeeks === 2) {
+    return lang === 'ar' ? 'منذ أسبوعين' : '2 weeks ago';
+  }
+  if (diffInWeeks < 4) {
+    if (lang === 'ar') {
+      return `منذ ${diffInWeeks} أسابيع`;
+    }
+    return `${diffInWeeks} weeks ago`;
+  }
+
+  const diffInMonths = Math.floor(diffInDays / 30);
+  if (diffInMonths === 1) {
+    return lang === 'ar' ? 'منذ شهر' : '1 month ago';
+  }
+  if (diffInMonths === 2) {
+    return lang === 'ar' ? 'منذ شهرين' : '2 months ago';
+  }
+  if (diffInMonths < 12) {
+    if (lang === 'ar') {
+      return `منذ ${diffInMonths} أشهر`;
+    }
+    return `${diffInMonths} months ago`;
+  }
+
+  return date.toLocaleDateString(lang === 'ar' ? 'ar-SA' : 'en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
+/**
+ * Formats a timestamp into an exact, localized date and time string.
+ */
+export function formatDetailedTimestamp(dateInput?: string | number | Date | null, lang: 'ar' | 'en' = 'en'): string {
+  if (!dateInput) return '';
+  const date = new Date(dateInput);
+  if (isNaN(date.getTime())) return String(dateInput);
+
+  return date.toLocaleString(lang === 'ar' ? 'ar-SA' : 'en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
+  });
+}
+

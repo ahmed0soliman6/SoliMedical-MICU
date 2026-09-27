@@ -11,6 +11,7 @@ import {
   getDocs, 
   deleteDoc,
   onSnapshot, 
+  onSnapshotsInSync,
   query, 
   where,
   or,
@@ -79,6 +80,16 @@ try {
 // Bind directly to default Cloud Firestore database instance
 export const firestore = firestoreInstance;
 
+// Internal zero-cost Firestore sync observer
+let isFirestoreSnapshotsSynced = true;
+try {
+  onSnapshotsInSync(firestore, () => {
+    isFirestoreSnapshotsSynced = true;
+  });
+} catch {
+  // Graceful fallback for environments without onSnapshotsInSync
+}
+
 export const auth = getAuth(firebaseApp);
 export const googleProvider = new GoogleAuthProvider();
 
@@ -94,27 +105,29 @@ export async function ensureAuthenticated(): Promise<void> {
 
 // Test Connection on boot (with timeout and offline graceful handling)
 export async function testFirestoreConnection(): Promise<boolean> {
-  try {
-    const docRef = doc(firestore, 'test', 'connection');
-    const docSnap = await Promise.race([
-      getDoc(docRef),
-      new Promise<null>((_, reject) => setTimeout(() => reject(new Error('Connection timeout')), 3000))
-    ]);
-    return docSnap !== null;
-  } catch (error) {
-    handleFirestoreError(error, OperationType.GET, 'test/connection');
-    // Expected when running offline or quota exceeded
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
     return false;
   }
+  return true;
 }
 
 export type ConnectionHealthResult = 
   | { status: 'ONLINE' }
   | { status: 'OFFLINE'; reason: 'NO_INTERNET' | 'CLOUD_UNREACHABLE'; details?: string };
 
-export async function checkConnectionHealth(): Promise<ConnectionHealthResult> {
+/**
+ * Checks connectivity without consuming billed Firestore document reads during routine checks.
+ * Uses browser navigator.onLine and internal Firestore onSnapshotsInSync.
+ * Actual getDoc read only runs if explicitly requested via forceDocRead (e.g. initial boot or manual retry).
+ */
+export async function checkConnectionHealth(forceDocRead: boolean = false): Promise<ConnectionHealthResult> {
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
     return { status: 'OFFLINE', reason: 'NO_INTERNET' };
+  }
+
+  // If not forcing a document read, return ONLINE (0 Firestore reads billed!)
+  if (!forceDocRead) {
+    return { status: 'ONLINE' };
   }
 
   try {

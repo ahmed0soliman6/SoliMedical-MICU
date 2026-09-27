@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { 
   History, 
   Search, 
-  Filter, 
   RefreshCw, 
   Download, 
   LogIn, 
@@ -17,15 +16,15 @@ import {
   Clock, 
   User, 
   Shield, 
-  AlertCircle,
-  Loader2,
-  Calendar
+  Loader2
 } from 'lucide-react';
 import { useTranslation } from '../services/i18n.ts';
-import { AuditLogEntry, fetchAuditLogs, getLocalAuditLogs } from '../services/auditService.ts';
+import { useAuth } from '../services/AuthContext.tsx';
+import { AuditLogEntry, fetchAuditLogs, getLocalAuditLogs, formatRelativeTime, formatDetailedTimestamp } from '../services/auditService.ts';
 
 export const AuditLogsSection: React.FC = () => {
   const { lang } = useTranslation();
+  const { allUsers } = useAuth();
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
   const [lastVisibleDoc, setLastVisibleDoc] = useState<any>(null);
   const [hasMore, setHasMore] = useState<boolean>(false);
@@ -92,19 +91,61 @@ export const AuditLogsSection: React.FC = () => {
     }
   };
 
+  // Helper to resolve real user name from active users directory
+  const resolveActorName = (log: AuditLogEntry): string => {
+    if (log.actorName && log.actorName !== 'User' && log.actorName !== 'System' && !log.actorName.startsWith('Staff (')) {
+      return log.actorName;
+    }
+
+    if (allUsers && allUsers.length > 0) {
+      const matched = allUsers.find(u => 
+        (log.actorUid && (u.uid === log.actorUid || log.actorUid.includes(u.uid) || (u.badgeId && log.actorUid.includes(u.badgeId)))) ||
+        (log.actorEmail && u.email && u.email.toLowerCase() === log.actorEmail.toLowerCase())
+      );
+      if (matched) {
+        return (lang === 'ar' ? matched.nameAr : matched.nameEn) || matched.nameAr || matched.nameEn || log.actorName || 'طاقم العناية المركزة';
+      }
+    }
+
+    return log.actorName || (log.actorUid ? `Staff (${log.actorUid.slice(0, 8)})` : (lang === 'ar' ? 'طاقم العناية' : 'Clinical Staff'));
+  };
+
+  // Helper to resolve target user name
+  const resolveTargetName = (log: AuditLogEntry): string => {
+    if (log.targetName && log.targetName !== 'User' && !log.targetName.startsWith('Staff (')) {
+      return log.targetName;
+    }
+
+    if (allUsers && allUsers.length > 0) {
+      const matched = allUsers.find(u => 
+        (log.targetUid && (u.uid === log.targetUid || log.targetUid.includes(u.uid) || (u.badgeId && log.targetUid.includes(u.badgeId)))) ||
+        (log.targetEmail && u.email && u.email.toLowerCase() === log.targetEmail.toLowerCase())
+      );
+      if (matched) {
+        return (lang === 'ar' ? matched.nameAr : matched.nameEn) || matched.nameAr || matched.nameEn || log.targetName || '';
+      }
+    }
+
+    return log.targetName || log.targetUid || '';
+  };
+
   const exportToCsv = () => {
     if (logs.length === 0) return;
     const headers = ['Timestamp', 'Action', 'Actor Name', 'Actor Role', 'Actor UID', 'Target User', 'Details', 'Status'];
-    const rows = logs.map(l => [
-      `"${l.timestamp}"`,
-      `"${l.action}"`,
-      `"${l.actorName || ''}"`,
-      `"${l.actorRole || ''}"`,
-      `"${l.actorUid || ''}"`,
-      `"${l.targetName || l.targetUid || ''}"`,
-      `"${(l.details || '').replace(/"/g, '""')}"`,
-      `"${l.status || 'SUCCESS'}"`
-    ]);
+    const rows = logs.map(l => {
+      const actor = resolveActorName(l);
+      const target = resolveTargetName(l);
+      return [
+        `"${l.timestamp}"`,
+        `"${l.action}"`,
+        `"${actor}"`,
+        `"${l.actorRole || ''}"`,
+        `"${l.actorUid || ''}"`,
+        `"${target}"`,
+        `"${(l.details || '').replace(/"/g, '""')}"`,
+        `"${l.status || 'SUCCESS'}"`
+      ];
+    });
 
     const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
     const encodedUri = encodeURI(csvContent);
@@ -126,19 +167,22 @@ export const AuditLogsSection: React.FC = () => {
     // Search query
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      const matchActor = (l.actorName || '').toLowerCase().includes(q) || (l.actorEmail || '').toLowerCase().includes(q);
-      const matchTarget = (l.targetName || '').toLowerCase().includes(q) || (l.targetEmail || '').toLowerCase().includes(q);
+      const actor = resolveActorName(l).toLowerCase();
+      const target = resolveTargetName(l).toLowerCase();
+      const matchActor = actor.includes(q) || (l.actorEmail || '').toLowerCase().includes(q);
+      const matchTarget = target.includes(q) || (l.targetEmail || '').toLowerCase().includes(q);
       const matchDetails = (l.details || '').toLowerCase().includes(q);
-      const matchAction = l.action.toLowerCase().includes(q);
+      const matchAction = (l.action || '').toLowerCase().includes(q);
       return matchActor || matchTarget || matchDetails || matchAction;
     }
 
     return true;
   });
 
-  const getActionBadge = (action: string) => {
+  const getActionBadge = (action: string | undefined) => {
     switch (action) {
       case 'USER_LOGIN':
+      case 'LOGIN':
         return {
           icon: LogIn,
           labelAr: 'تسجيل دخول',
@@ -146,6 +190,7 @@ export const AuditLogsSection: React.FC = () => {
           bg: 'bg-emerald-950/40 text-emerald-300 border-emerald-500/30'
         };
       case 'USER_LOGOUT':
+      case 'LOGOUT':
         return {
           icon: LogOut,
           labelAr: 'تسجيل خروج',
@@ -188,23 +233,24 @@ export const AuditLogsSection: React.FC = () => {
           bg: 'bg-rose-950/40 text-rose-300 border-rose-500/30'
         };
       case 'SETTINGS_UPDATED':
+      case 'NOTE_CREATED':
         return {
           icon: Sliders,
-          labelAr: 'تعديل إعدادات النظام',
-          labelEn: 'Settings Updated',
+          labelAr: 'توثيق وتعديل سجل',
+          labelEn: 'Record Updated',
           bg: 'bg-teal-950/40 text-teal-300 border-teal-500/30'
         };
       default:
         return {
           icon: History,
-          labelAr: action,
-          labelEn: action,
+          labelAr: action || 'عملية بالنظام',
+          labelEn: action || 'System Activity',
           bg: 'bg-slate-900 text-slate-300 border-slate-700'
         };
     }
   };
 
-  const loginCount = logs.filter(l => l.action === 'USER_LOGIN').length;
+  const loginCount = logs.filter(l => l.action === 'USER_LOGIN' || l.action === ('LOGIN' as any)).length;
   const securityCount = logs.filter(l => l.action === 'PASSWORD_RESET' || l.action === 'STATUS_CHANGED' || l.action === 'ROLE_CHANGED').length;
   const accountCount = logs.filter(l => l.action === 'USER_CREATED' || l.action === 'USER_DELETED').length;
 
@@ -339,22 +385,18 @@ export const AuditLogsSection: React.FC = () => {
           filteredLogs.map((log) => {
             const badge = getActionBadge(log.action);
             const IconComp = badge.icon;
-            const logDate = new Date(log.timestamp);
-            const formattedDate = isNaN(logDate.getTime()) 
-              ? log.timestamp 
-              : logDate.toLocaleString('ar-SA', { 
-                  month: 'short', 
-                  day: 'numeric', 
-                  hour: '2-digit', 
-                  minute: '2-digit', 
-                  second: '2-digit',
-                  hour12: true 
-                });
+            const relativeTimeStr = formatRelativeTime(log.timestamp, lang);
+            const exactTimestampStr = formatDetailedTimestamp(log.timestamp, lang);
+
+            const actorName = resolveActorName(log);
+            const targetName = resolveTargetName(log);
+            const actionTitle = lang === 'ar' ? badge.labelAr : badge.labelEn;
+            const logDetails = log.details || (lang === 'ar' ? `تم تنفيذ ${actionTitle} بنجاح` : `${actionTitle} executed successfully`);
 
             return (
               <div 
                 key={log.id}
-                className="p-3 bg-[#080f1e] border border-slate-800/80 hover:border-slate-700 rounded-xl transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                className="p-3 bg-[#080f1e] border border-slate-800/80 hover:border-slate-700 rounded-xl transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs group"
               >
                 <div className="flex items-start sm:items-center gap-3 min-w-0">
                   <div className={`p-2 rounded-xl border flex-shrink-0 ${badge.bg}`}>
@@ -364,40 +406,50 @@ export const AuditLogsSection: React.FC = () => {
                   <div className="space-y-0.5 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-bold text-white">
-                        {lang === 'ar' ? badge.labelAr : badge.labelEn}
+                        {actionTitle}
                       </span>
                       <span className="px-1.5 py-0.2 rounded text-[10px] font-mono bg-slate-800 text-slate-300 border border-slate-700">
-                        {log.action}
+                        {log.action || 'ACTIVITY'}
                       </span>
+                      {log.action === 'USER_LOGIN' && (
+                        <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                          {relativeTimeStr}
+                        </span>
+                      )}
                     </div>
 
                     <div className="text-[11px] text-slate-300 leading-relaxed break-words">
-                      {log.details || `${badge.labelEn} executed`}
+                      {logDetails}
                     </div>
 
                     <div className="flex items-center gap-2 text-[10px] text-slate-400 flex-wrap">
                       <span className="flex items-center gap-1">
                         <User className="w-3 h-3 text-teal-400" />
                         <span>{lang === 'ar' ? 'المنفذ:' : 'Actor:'}</span>
-                        <strong className="text-slate-300">{log.actorName || log.actorUid}</strong>
+                        <strong className="text-slate-200 font-semibold">{actorName}</strong>
                         {log.actorRole && <span className="text-teal-400 font-mono">({log.actorRole})</span>}
                       </span>
 
-                      {log.targetName && (
+                      {targetName && (
                         <span className="flex items-center gap-1 border-r border-slate-700 pr-2 rtl:border-r-0 rtl:border-l rtl:pr-0 rtl:pl-2">
                           <Shield className="w-3 h-3 text-amber-400" />
                           <span>{lang === 'ar' ? 'المستهدف:' : 'Target:'}</span>
-                          <strong className="text-slate-300">{log.targetName}</strong>
+                          <strong className="text-slate-200 font-semibold">{targetName}</strong>
                         </span>
                       )}
                     </div>
                   </div>
                 </div>
 
-                <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center border-t sm:border-t-0 border-slate-800 pt-2 sm:pt-0 text-[10px] text-slate-400 font-mono flex-shrink-0">
-                  <div className="flex items-center gap-1 text-slate-300 font-semibold">
-                    <Clock className="w-3 h-3 text-teal-400" />
-                    <span>{formattedDate}</span>
+                <div className="flex sm:flex-col items-start sm:items-end justify-between sm:justify-center border-t sm:border-t-0 border-slate-800 pt-2 sm:pt-0 text-[10px] text-slate-400 font-mono flex-shrink-0">
+                  <div className="flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-teal-400 flex-shrink-0" />
+                    <span className="font-bold text-teal-300 bg-teal-950/70 border border-teal-800/40 px-2 py-0.5 rounded-md text-[10px]">
+                      {relativeTimeStr}
+                    </span>
+                  </div>
+                  <div className="text-[9px] text-slate-400 mt-1" title={exactTimestampStr}>
+                    {exactTimestampStr}
                   </div>
                   <div className="flex items-center gap-1 text-emerald-400 text-[9px] mt-0.5">
                     <CheckCircle2 className="w-2.5 h-2.5" />

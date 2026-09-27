@@ -124,7 +124,7 @@ export const Header: React.FC<HeaderProps> = ({
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('CONNECTING');
   const [offlineReason, setOfflineReason] = useState<OfflineReason | null>(null);
 
-  const verifyConnectionHealth = useCallback(async (isSilent = true) => {
+  const verifyConnectionHealth = useCallback(async (isSilent = true, forceDocRead = false) => {
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
       setConnectionStatus('OFFLINE');
       setOfflineReason('NO_INTERNET');
@@ -136,7 +136,7 @@ export const Header: React.FC<HeaderProps> = ({
     }
 
     try {
-      const result = await checkConnectionHealth();
+      const result = await checkConnectionHealth(forceDocRead);
       if (result.status === 'ONLINE') {
         setConnectionStatus('ONLINE');
         setOfflineReason(null);
@@ -158,12 +158,13 @@ export const Header: React.FC<HeaderProps> = ({
   }, []);
 
   useEffect(() => {
-    // Initial verification on mount
-    verifyConnectionHealth(false);
+    // Initial verification on mount (runs once only)
+    verifyConnectionHealth(false, true);
 
     const handleOnline = () => {
-      setConnectionStatus('CONNECTING');
-      verifyConnectionHealth(false);
+      setConnectionStatus('ONLINE');
+      setOfflineReason(null);
+      setSyncToastMessage(null);
     };
 
     const handleOffline = () => {
@@ -179,19 +180,25 @@ export const Header: React.FC<HeaderProps> = ({
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    // Periodic gentle background health check every 30s
+    // Passive 5-minute safety check (0 Firestore read cost - only verifies navigator.onLine)
     const healthInterval = setInterval(() => {
-      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-        verifyConnectionHealth(true);
+      if (typeof navigator !== 'undefined') {
+        if (!navigator.onLine) {
+          setConnectionStatus('OFFLINE');
+          setOfflineReason('NO_INTERNET');
+        } else if (connectionStatus === 'OFFLINE') {
+          setConnectionStatus('ONLINE');
+          setOfflineReason(null);
+        }
       }
-    }, 30000);
+    }, 300000);
 
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
       clearInterval(healthInterval);
     };
-  }, [verifyConnectionHealth, lang]);
+  }, [verifyConnectionHealth, lang, connectionStatus]);
 
   const INITIAL_VISIBLE_COUNT = 6;
   const displayedNotifications = isExpanded ? notifications : notifications.slice(0, INITIAL_VISIBLE_COUNT);
@@ -247,12 +254,12 @@ export const Header: React.FC<HeaderProps> = ({
 
     // 2. If currently CONNECTING: re-verify and don't spam
     if (connectionStatus === 'CONNECTING') {
-      await verifyConnectionHealth(false);
+      await verifyConnectionHealth(false, true);
       return;
     }
 
     // 3. If OFFLINE: re-verify and show diagnostic explanation of the exact failure cause
-    const checkResult = await verifyConnectionHealth(false);
+    const checkResult = await verifyConnectionHealth(false, true);
     if (checkResult.status === 'ONLINE') {
       // Reconnected successfully!
       if (onTriggerCloudSync) onTriggerCloudSync();
