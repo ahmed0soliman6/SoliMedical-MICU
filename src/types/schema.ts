@@ -822,6 +822,7 @@ export interface IcuUser {
   isActive?: boolean;
   isSuperAdmin?: boolean;
   lastLoginAt?: string;
+  preferredLanguage?: 'en' | 'ar';
 }
 
 export interface DynamicSection {

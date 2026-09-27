@@ -131,20 +131,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             localStorage.setItem('soli_icu_active_user', JSON.stringify(resolvedUser));
             // Keep local Dexie cache synchronized with Firestore SSOT
             await db.users.put(resolvedUser);
+            try {
+              window.dispatchEvent(new CustomEvent('icu-user-auth-changed', { detail: resolvedUser }));
+            } catch {}
           } else {
             // User deleted, non-existent, or deactivated in Firestore
             await firebaseSignOut(auth);
             setCurrentUser(null);
             localStorage.removeItem('soli_icu_active_user');
+            try {
+              window.dispatchEvent(new CustomEvent('icu-user-auth-changed', { detail: null }));
+            } catch {}
           }
         } catch (e) {
           console.warn('Auth state verification error:', e);
           setCurrentUser(null);
           localStorage.removeItem('soli_icu_active_user');
+          try {
+            window.dispatchEvent(new CustomEvent('icu-user-auth-changed', { detail: null }));
+          } catch {}
         }
       } else {
         setCurrentUser(null);
         localStorage.removeItem('soli_icu_active_user');
+        try {
+          window.dispatchEvent(new CustomEvent('icu-user-auth-changed', { detail: null }));
+        } catch {}
       }
       setIsLoading(false);
     });

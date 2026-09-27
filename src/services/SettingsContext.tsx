@@ -1,19 +1,94 @@
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
 import { SystemSettings, DEFAULT_SYSTEM_SETTINGS, DEFAULT_NOTIFICATION_SETTINGS, NotificationSettings } from '../types/settings.ts';
-import { subscribeToSystemSettings, syncSystemSettingsToCloud } from './firebase.ts';
+import { subscribeToSystemSettings, syncSystemSettingsToCloud, firestore } from './firebase.ts';
+import { doc, setDoc } from 'firebase/firestore';
+import { IcuUser } from '../types/schema.ts';
+
+export type Language = 'en' | 'ar';
 
 const SETTINGS_STORAGE_KEY = 'soli_medical_icu_settings_v1';
+export const USER_LANG_STORAGE_KEY = 'soli_icu_user_language';
+export const USER_THEME_STORAGE_KEY = 'soli_icu_user_theme';
+
+/**
+ * Retrieves the user-specific or device-specific preferred language.
+ * Never allows cloud broadcasts from other users to override this.
+ */
+export function getLocalUserLanguage(uid?: string): Language {
+  if (typeof window === 'undefined') return 'en';
+  try {
+    // 1. If explicit UID provided, check for account-specific language
+    if (uid) {
+      const accountLang = localStorage.getItem(`soli_icu_user_lang_${uid}`);
+      if (accountLang === 'ar' || accountLang === 'en') return accountLang;
+    }
+
+    // 2. Check if an active user session exists in localStorage
+    const activeUserRaw = localStorage.getItem('soli_icu_active_user');
+    if (activeUserRaw) {
+      const activeUser = JSON.parse(activeUserRaw);
+      if (activeUser?.uid) {
+        const accountLang = localStorage.getItem(`soli_icu_user_lang_${activeUser.uid}`) || activeUser.preferredLanguage;
+        if (accountLang === 'ar' || accountLang === 'en') return accountLang;
+      }
+    }
+
+    // 3. Check browser/device saved language
+    const deviceLang = localStorage.getItem(USER_LANG_STORAGE_KEY);
+    if (deviceLang === 'ar' || deviceLang === 'en') return deviceLang;
+
+    // 4. Backward compatibility check from legacy settings key
+    const legacy = localStorage.getItem(SETTINGS_STORAGE_KEY);
+    if (legacy) {
+      const parsed = JSON.parse(legacy);
+      if (parsed?.language === 'ar' || parsed?.language === 'en') return parsed.language;
+    }
+  } catch (e) {
+    console.error('Error reading local user language:', e);
+  }
+  return 'en';
+}
+
+/**
+ * Retrieves the device/user-specific theme ('dark' | 'light').
+ */
+export function getLocalUserTheme(): 'light' | 'dark' {
+  if (typeof window === 'undefined') return 'dark';
+  try {
+    const saved = localStorage.getItem(USER_THEME_STORAGE_KEY);
+    if (saved === 'light' || saved === 'dark') return saved;
+  } catch {}
+  return 'dark';
+}
 
 export function loadSavedSettings(): SystemSettings {
-  if (typeof window === 'undefined') return DEFAULT_SYSTEM_SETTINGS;
+  const localLang = getLocalUserLanguage();
+  const localTheme = getLocalUserTheme();
+
+  if (typeof window === 'undefined') {
+    return {
+      ...DEFAULT_SYSTEM_SETTINGS,
+      language: localLang,
+      theme: localTheme,
+    };
+  }
+
   try {
     const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
-    if (!raw) return DEFAULT_SYSTEM_SETTINGS;
+    if (!raw) {
+      return {
+        ...DEFAULT_SYSTEM_SETTINGS,
+        language: localLang,
+        theme: localTheme,
+      };
+    }
     const parsed = JSON.parse(raw);
     return {
       ...DEFAULT_SYSTEM_SETTINGS,
       ...parsed,
-      theme: parsed.theme || 'light',
+      // Personal preferences ALWAYS take precedence over shared system settings
+      language: localLang,
+      theme: localTheme,
       features: {
         ...DEFAULT_SYSTEM_SETTINGS.features,
         ...(parsed.features || {}),
@@ -42,7 +117,11 @@ export function loadSavedSettings(): SystemSettings {
     };
   } catch (e) {
     console.error('Failed to load system settings:', e);
-    return DEFAULT_SYSTEM_SETTINGS;
+    return {
+      ...DEFAULT_SYSTEM_SETTINGS,
+      language: localLang,
+      theme: localTheme,
+    };
   }
 }
 
@@ -72,14 +151,23 @@ const SettingsContext = createContext<SettingsContextType | null>(null);
 export const SettingsProvider = ({ children }: { children: ReactNode }) => {
   const [settings, setSettings] = useState<SystemSettings>(loadSavedSettings);
 
-  // Single-doc real-time listener for Settings from Cloud Firestore
+  // 1. Single-doc real-time listener for Clinical System Settings from Cloud Firestore
   useEffect(() => {
     const unsub = subscribeToSystemSettings((cloudSettings) => {
       if (cloudSettings) {
         setSettings((prev) => {
+          // CRITICAL: NEVER allow cloudSettings from Firestore to overwrite the active user's local language or theme!
+          // Shared clinical configurations (features, units, thresholds, templates) sync across devices,
+          // but personal preferences (language, theme) remain strictly isolated per user and per browser.
+          const currentLang = prev.language || getLocalUserLanguage();
+          const currentTheme = prev.theme || getLocalUserTheme();
+
           const merged: SystemSettings = {
             ...prev,
             ...cloudSettings,
+            // Enforce user's local/personal language & theme:
+            language: currentLang,
+            theme: currentTheme,
             features: {
               ...prev.features,
               ...(cloudSettings.features || {}),
@@ -110,6 +198,28 @@ export const SettingsProvider = ({ children }: { children: ReactNode }) => {
     return () => unsub();
   }, []);
 
+  // 2. React to Auth Account changes: switch to that user's personal preferred language if configured
+  useEffect(() => {
+    const handleAuthChange = (e: Event) => {
+      const customEvent = e as CustomEvent<IcuUser | null>;
+      const user = customEvent.detail;
+      const targetLang = getLocalUserLanguage(user?.uid);
+      setSettings((prev) => {
+        if (prev.language === targetLang) return prev;
+        const updated = {
+          ...prev,
+          language: targetLang,
+        };
+        saveSettingsToStorage(updated);
+        return updated;
+      });
+    };
+
+    window.addEventListener('icu-user-auth-changed', handleAuthChange);
+    return () => window.removeEventListener('icu-user-auth-changed', handleAuthChange);
+  }, []);
+
+  // 3. Manage HTML root theme class
   useEffect(() => {
     saveSettingsToStorage(settings);
     if (typeof document !== 'undefined') {
@@ -122,23 +232,52 @@ export const SettingsProvider = ({ children }: { children: ReactNode }) => {
         root.classList.add('light');
       }
     }
-  }, [settings]);
+  }, [settings.theme]);
 
+  // Toggle Theme (Strictly local to this browser/device, never overrides other hospital users)
   const toggleTheme = () => {
     setSettings((prev) => {
       const nextTheme = prev.theme === 'dark' ? 'light' : 'dark';
+      try {
+        localStorage.setItem(USER_THEME_STORAGE_KEY, nextTheme);
+      } catch (e) {}
       const updated = {
         ...prev,
         theme: nextTheme,
         lastUpdated: new Date().toISOString(),
       };
       saveSettingsToStorage(updated);
-      syncSystemSettingsToCloud(updated);
       return updated;
     });
   };
 
+  // Update Settings (Isolates personal preferences vs global unit settings)
   const updateSettings = (newSettings: Partial<SystemSettings>) => {
+    // If language is being updated, store it in personal local preference
+    if (newSettings.language) {
+      const targetLang = newSettings.language;
+      try {
+        localStorage.setItem(USER_LANG_STORAGE_KEY, targetLang);
+        const activeUserRaw = localStorage.getItem('soli_icu_active_user');
+        if (activeUserRaw) {
+          const activeUser = JSON.parse(activeUserRaw);
+          if (activeUser?.uid) {
+            localStorage.setItem(`soli_icu_user_lang_${activeUser.uid}`, targetLang);
+            // Asynchronously sync preference to user's profile in Firestore without blocking
+            setDoc(doc(firestore, 'users', activeUser.uid), { preferredLanguage: targetLang }, { merge: true }).catch(() => {});
+          }
+        }
+      } catch (e) {
+        console.error('Failed to save user language preference:', e);
+      }
+    }
+
+    if (newSettings.theme) {
+      try {
+        localStorage.setItem(USER_THEME_STORAGE_KEY, newSettings.theme);
+      } catch (e) {}
+    }
+
     setSettings((prev) => {
       const updated: SystemSettings = {
         ...prev,
@@ -162,7 +301,14 @@ export const SettingsProvider = ({ children }: { children: ReactNode }) => {
         lastUpdated: new Date().toISOString(),
       };
       saveSettingsToStorage(updated);
-      syncSystemSettingsToCloud(updated);
+
+      // ONLY broadcast to Cloud Firestore if there are global clinical changes (features, unit, drug libraries, etc.)
+      // Personal preferences (language, theme) are NEVER broadcast to Cloud to avoid changing other users' accounts!
+      const hasGlobalChanges = Object.keys(newSettings).some(key => key !== 'language' && key !== 'theme');
+      if (hasGlobalChanges) {
+        syncSystemSettingsToCloud(updated);
+      }
+
       return updated;
     });
   };
@@ -204,9 +350,16 @@ export const SettingsProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const resetToDefaults = () => {
-    setSettings(DEFAULT_SYSTEM_SETTINGS);
-    saveSettingsToStorage(DEFAULT_SYSTEM_SETTINGS);
-    syncSystemSettingsToCloud(DEFAULT_SYSTEM_SETTINGS);
+    const currentLang = getLocalUserLanguage();
+    const currentTheme = getLocalUserTheme();
+    const resetSettings: SystemSettings = {
+      ...DEFAULT_SYSTEM_SETTINGS,
+      language: currentLang,
+      theme: currentTheme,
+    };
+    setSettings(resetSettings);
+    saveSettingsToStorage(resetSettings);
+    syncSystemSettingsToCloud(resetSettings);
   };
 
   return (
