@@ -1573,22 +1573,14 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
       (id) => db.addendums.delete(id)
     );
 
-    // 9. Current State: Patient Active Antibiotics (Limit 20)
-    try {
-      const abxQ = query(collection(firestore, 'patientAntibiotics'), where('patientId', '==', patientId), limit(20));
-      unsubs.push(onSnapshot(abxQ, async (snap) => {
-        for (const change of snap.docChanges()) {
-          if (change.type === 'added' || change.type === 'modified') {
-            await db.patientAntibiotics.put(change.doc.data() as PatientAntibiotic);
-          } else if (change.type === 'removed') {
-            await db.patientAntibiotics.delete(change.doc.id);
-          }
-        }
-        notify();
-      }, (err) => handleFirestoreError(err, OperationType.GET, 'patientAntibiotics')));
-    } catch (err) {
-      handleFirestoreError(err, OperationType.GET, 'patientAntibiotics');
-    }
+    // 9. Current State: Patient Active Antibiotics (orderBy startDate desc + limit 4)
+    setupHistoricalListener<PatientAntibiotic>(
+      'patientAntibiotics',
+      'startDate',
+      4,
+      (data) => db.patientAntibiotics.put(data),
+      (id) => db.patientAntibiotics.delete(id)
+    );
 
     // 10. Current State: Active Ventilator Settings (orderBy timestamp desc + limit 4)
     setupHistoricalListener<VentilatorParameters>(
@@ -1599,22 +1591,14 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
       (id) => db.ventilators.delete(id)
     );
 
-    // 11. Current State: Active Infusion Pumps (Limit 20)
-    try {
-      const pumpsQ = query(collection(firestore, 'infusionPumps'), where('patientId', '==', patientId), limit(20));
-      unsubs.push(onSnapshot(pumpsQ, async (snap) => {
-        for (const change of snap.docChanges()) {
-          if (change.type === 'added' || change.type === 'modified') {
-            await db.infusionPumps.put(change.doc.data() as InfusionPumpLine);
-          } else if (change.type === 'removed') {
-            await db.infusionPumps.delete(change.doc.id);
-          }
-        }
-        notify();
-      }, (err) => handleFirestoreError(err, OperationType.GET, 'infusionPumps')));
-    } catch (err) {
-      handleFirestoreError(err, OperationType.GET, 'infusionPumps');
-    }
+    // 11. Current State: Active Infusion Pumps (orderBy id desc + limit 4)
+    setupHistoricalListener<InfusionPumpLine>(
+      'infusionPumps',
+      'id',
+      4,
+      (data) => db.infusionPumps.put(data),
+      (id) => db.infusionPumps.delete(id)
+    );
 
   } catch (err) {
     console.warn(`Could not subscribe to active patient ${patientId}:`, err);

@@ -103,7 +103,14 @@ export const BedMatrixCard: React.FC<BedMatrixCardProps> = ({
       }
 
       try {
-        // 1. Primary Source: Latest SBAR Handover linked to patientId (Current Active Physician on Duty)
+        // 1. Primary Source: patient.attendingPhysician (Live from Firestore)
+        const primaryDoc = getValidDoctorName(patient.attendingPhysician);
+        if (primaryDoc) {
+          if (isMounted) setResolvedDoctor(primaryDoc);
+          return;
+        }
+
+        // 2. Secondary Source: Latest SBAR Handover linked to patientId (Current Active Physician on Duty)
         const sbars = await db.sbarHandovers
           .where('patientId')
           .equals(patient.id)
@@ -125,13 +132,6 @@ export const BedMatrixCard: React.FC<BedMatrixCardProps> = ({
             if (isMounted) setResolvedDoctor(activeSbarDoctor);
             return;
           }
-        }
-
-        // 2. Secondary Source: patient.attendingPhysician?.name
-        const primaryDoc = getValidDoctorName(patient.attendingPhysician);
-        if (primaryDoc) {
-          if (isMounted) setResolvedDoctor(primaryDoc);
-          return;
         }
 
         // 3. Fallback: Latest Clinical Note linked to patientId -> authorName
