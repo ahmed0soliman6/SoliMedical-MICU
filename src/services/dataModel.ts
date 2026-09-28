@@ -84,6 +84,7 @@ import { normalizeArabicName, extractLast4, computeSha256Hash } from './patientS
 export interface DirectAdmissionInput {
   targetBed: BedNumber;
   existingPatientId?: string; // Readmission of existing patient
+  unitId?: string;
   mrn: string;
   nationalId?: string;
   fullNameEn: string;
@@ -243,6 +244,7 @@ export async function admitPatient(input: DirectAdmissionInput): Promise<{ patie
   const newPatient: PatientDossier = {
     ...existingPatientDoc, // Retain existing patient historical attributes
     id: patientId,
+    unitId: input.unitId || existingPatientDoc?.unitId || 'MICU-MAIN',
     mrn: toEnglishDigits(input.mrn),
     nationalId: input.nationalId ? toEnglishDigits(input.nationalId) : (existingPatientDoc?.nationalId || undefined),
     nationalIdLast4: last4 || existingPatientDoc?.nationalIdLast4,

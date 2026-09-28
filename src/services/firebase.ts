@@ -1029,8 +1029,7 @@ export function subscribeToRealtimeFirestore(
 
     // 1. Beds - current unit only
     const bedsQuery = query(
-      collection(firestore, 'beds'),
-      where('unitId', '==', unitId)
+      collection(firestore, 'beds')
     );
 
     const unsubBeds = onSnapshot(
@@ -1096,7 +1095,6 @@ export function subscribeToRealtimeFirestore(
     // =========================================================
     const activePatientsQuery = query(
       collection(firestore, 'patients'),
-      where('unitId', '==', unitId),
       or(
         where('patientStatus', '==', 'ACTIVE_ICU'),
         where('status', '==', 'ACTIVE_ICU'),
@@ -1116,13 +1114,6 @@ export function subscribeToRealtimeFirestore(
             change.doc.id;
 
           if (!patientId) continue;
-
-          if (
-            remotePatient.unitId &&
-            remotePatient.unitId !== unitId
-          ) {
-            continue;
-          }
 
           const localPatient = await db.patients.get(patientId);
 
@@ -1178,7 +1169,6 @@ export function subscribeToRealtimeFirestore(
         try {
           const fallbackQuery = query(
             collection(firestore, 'patients'),
-            where('unitId', '==', unitId),
             where('patientStatus', '==', 'ACTIVE_ICU')
           );
 

@@ -18,6 +18,7 @@ import { useTranslation } from '../services/i18n.ts';
 import { db, ensureBedPatientSync } from '../db/icuSyncDb.ts';
 import { toEnglishDigits, parseEnglishFloat, parseEnglishInt } from '../services/numberUtils.ts';
 import { useAppNotifications } from '../services/NotificationContext.tsx';
+import { useSystemSettings } from '../services/SettingsContext.tsx';
 
 import { doc } from 'firebase/firestore';
 import { firestore, setDoc } from '../services/firebase.ts';
@@ -41,6 +42,7 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
 }) => {
   const { lang, isRTL } = useTranslation();
   const { triggerNotification } = useAppNotifications();
+  const { settings } = useSystemSettings();
 
   const [bedsList, setBedsList] = useState<BedRecord[]>(allBeds || []);
   const [patientsList, setPatientsList] = useState<PatientDossier[]>(allPatients || []);
@@ -291,6 +293,7 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
         const finalDocName = attendingDoctorName.trim() || initialPatient.attendingPhysician?.name || (lang === 'ar' ? 'غير محدد' : 'Unassigned');
         const updatedPatient: PatientDossier = {
           ...initialPatient,
+          unitId: initialPatient.unitId || settings.unit.unitId || 'MICU-MAIN',
           attendingPhysician: {
             staffId: initialPatient.attendingPhysician?.staffId || (finalDocName !== 'غير محدد' && finalDocName !== 'Unassigned' ? 'DOC-ACTIVE' : ''),
             name: finalDocName,
@@ -377,6 +380,7 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
       await admitPatient({
         targetBed,
         existingPatientId: selectedExistingPatient?.patientId,
+        unitId: settings.unit.unitId || 'MICU-MAIN',
         mrn: toEnglishDigits(mrn.trim() || `MRN-${Math.floor(10000 + Math.random() * 90000)}`),
         nationalId: cleanNatId,
         fullNameAr: fullNameAr.trim(),
