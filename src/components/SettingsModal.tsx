@@ -197,6 +197,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
       color: 'text-teal-400',
     },
     {
+      key: 'enableTotalOccupancyBadge',
+      category: 'modules',
+      labelAr: 'مؤشر الإشغال الإجمالي بالشريط العلوي (Header Total Occupancy)',
+      labelEn: 'Header Total Occupancy Badge',
+      descriptionAr: 'عرض شريط مختصر لنسبة إشغال الأسِرّة في الشريط العلوي من الشاشة.',
+      descriptionEn: 'Display quick bed occupancy metric in the top navigation bar.',
+      icon: Layers,
+      color: 'text-cyan-400',
+    },
+    {
       key: 'enableArchiveSearch',
       category: 'modules',
       labelAr: 'أرشيف المرضى والبحث الطبي (MRN Patient Archive)',

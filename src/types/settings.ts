@@ -1,6 +1,7 @@
 export interface SystemFeatureFlags {
   // Main Views, Navigation & Pages (تخصيصات صفحات وقوائم النظام)
   enableBedMatrix: boolean;          // لوحة الأسرة الستة (6-Bed Grid)
+  enableTotalOccupancyBadge?: boolean;// مؤشر الإشغال الإجمالي في الشريط العلوي (Total Occupancy Header Badge)
   enableSbarHandover: boolean;        // تسليم المناوبات SBAR
   enableClinicalNotes: boolean;       // الملاحظات الطبية المشفرة
   enableArchiveSearch: boolean;       // البحث في الأرشيف الطبي
@@ -407,6 +408,7 @@ export const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
   theme: 'light',
   features: {
     enableBedMatrix: true,
+    enableTotalOccupancyBadge: false,
     enableSbarHandover: true,
     enableClinicalNotes: true,
     enableArchiveSearch: true,

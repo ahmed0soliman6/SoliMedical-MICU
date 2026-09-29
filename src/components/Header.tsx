@@ -292,7 +292,7 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Live Metrics Ticker (Desktop & Tablet) */}
         <div className="hidden md:flex items-center gap-3">
           {/* Bed Occupancy */}
-          {settings.features.enableBedMatrix && (
+          {settings.features.enableBedMatrix && Boolean(settings.features.enableTotalOccupancyBadge) && (
             <div className="bg-slate-100 dark:bg-[#0e172a] border border-slate-200 dark:border-slate-800 px-3 py-1.5 rounded-xl flex items-center gap-2">
               <Layers className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
               <div className={isRTL ? 'text-right' : 'text-left'}>

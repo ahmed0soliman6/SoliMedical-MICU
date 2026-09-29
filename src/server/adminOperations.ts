@@ -24,6 +24,70 @@ let adminApp: App | undefined;
 let firestoreDb: Firestore | undefined;
 let authAdmin: Auth | undefined;
 
+function safeParseServiceAccount(raw: any): any {
+  if (!raw) return null;
+  if (typeof raw === 'object' && raw !== null) return raw;
+  if (typeof raw !== 'string') return null;
+
+  let str = raw.trim();
+  if (!str) return null;
+
+  // 1. Direct JSON parse attempt
+  try {
+    const res = JSON.parse(str);
+    if (typeof res === 'object' && res !== null) return res;
+    if (typeof res === 'string') {
+      return safeParseServiceAccount(res);
+    }
+  } catch {}
+
+  // 2. Unescape quotes if needed (e.g. \"type\": \"service_account\")
+  if (str.includes('\\"')) {
+    try {
+      const unescaped = str.replace(/\\"/g, '"');
+      const candidate = unescaped.startsWith('{') ? unescaped : `{${unescaped}}`;
+      const res = JSON.parse(candidate);
+      if (typeof res === 'object' && res !== null) return res;
+    } catch {}
+  }
+
+  // 3. If missing outer curly braces: e.g. starts with "type": or contains "client_email"
+  if (!str.startsWith('{')) {
+    try {
+      let candidate = str;
+      if (!candidate.startsWith('{')) candidate = '{' + candidate;
+      if (!candidate.endsWith('}')) candidate = candidate + '}';
+      const res = JSON.parse(candidate);
+      if (typeof res === 'object' && res !== null) return res;
+    } catch {}
+  }
+
+  // 4. Wrapped in outer quotes
+  if (
+    (str.startsWith('"') && str.endsWith('"') && str.length > 2) ||
+    (str.startsWith("'") && str.endsWith("'") && str.length > 2)
+  ) {
+    const inner = str.slice(1, -1).trim();
+    try {
+      const res = JSON.parse(inner.startsWith('{') ? inner : `{${inner}}`);
+      if (typeof res === 'object' && res !== null) return res;
+    } catch {}
+  }
+
+  // 5. Base64 encoded JSON
+  if (!str.startsWith('{') && /^[A-Za-z0-9+/=\s]+$/.test(str)) {
+    try {
+      const decoded = Buffer.from(str.replace(/\s+/g, ''), 'base64').toString('utf-8').trim();
+      if (decoded.startsWith('{') || decoded.includes('"client_email"')) {
+        const res = safeParseServiceAccount(decoded);
+        if (typeof res === 'object' && res !== null) return res;
+      }
+    } catch {}
+  }
+
+  return null;
+}
+
 function formatPrivateKey(key: string | undefined): string | undefined {
   if (!key) return undefined;
 
@@ -46,10 +110,10 @@ function formatPrivateKey(key: string | undefined): string | undefined {
     .replace(/\\\\n/g, '\n');
 
   // Handle case where user pasted the full service account JSON
-  if (cleanKey.startsWith('{') && cleanKey.endsWith('}')) {
+  if (cleanKey.includes('"private_key"') || cleanKey.startsWith('{')) {
     try {
-      const parsed = JSON.parse(cleanKey);
-      if (parsed.private_key) {
+      const parsed = safeParseServiceAccount(cleanKey);
+      if (parsed?.private_key) {
         return formatPrivateKey(parsed.private_key);
       }
     } catch {
@@ -77,51 +141,72 @@ function formatPrivateKey(key: string | undefined): string | undefined {
 }
 
 function parseServiceAccountCredentials(): { projectId?: string; clientEmail?: string; privateKey?: string } | null {
-  const rawJson = process.env.FIREBASE_SERVICE_ACCOUNT || process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
-  if (rawJson) {
-    try {
-      const parsed = typeof rawJson === 'string' ? JSON.parse(rawJson) : rawJson;
-      if (parsed.client_email && parsed.private_key) {
-        const formattedKey = formatPrivateKey(parsed.private_key);
-        if (formattedKey) {
-          return {
-            projectId: parsed.project_id,
-            clientEmail: parsed.client_email,
-            privateKey: formattedKey
-          };
-        }
+  const targetProjectId = process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID || 'solimedical-micu';
+
+  // 1. Direct explicit environment variables: FIREBASE_CLIENT_EMAIL & FIREBASE_PRIVATE_KEY
+  const directClientEmail = process.env.FIREBASE_CLIENT_EMAIL?.trim();
+  const directPrivateKey = process.env.FIREBASE_PRIVATE_KEY?.trim();
+  if (directClientEmail && directPrivateKey) {
+    // If explicit email matches target project (or if no raw service account json provided), prioritize it
+    if (directClientEmail.includes(targetProjectId) || !process.env.FIREBASE_SERVICE_ACCOUNT) {
+      const formattedKey = formatPrivateKey(directPrivateKey);
+      if (formattedKey) {
+        return {
+          projectId: targetProjectId,
+          clientEmail: directClientEmail,
+          privateKey: formattedKey
+        };
       }
-    } catch (e) {
-      console.warn('[Firebase Admin] JSON parse error in service account:', e);
     }
   }
 
-  const rawKey = process.env.FIREBASE_PRIVATE_KEY?.trim();
-  if (rawKey && rawKey.startsWith('{') && rawKey.endsWith('}')) {
+  // 2. Safe parse FIREBASE_SERVICE_ACCOUNT or GOOGLE_SERVICE_ACCOUNT_JSON
+  const rawJson = process.env.FIREBASE_SERVICE_ACCOUNT || process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+  if (rawJson) {
     try {
-      const parsed = JSON.parse(rawKey);
-      if (parsed.client_email && parsed.private_key) {
+      const parsed = safeParseServiceAccount(rawJson);
+      if (parsed && parsed.client_email && parsed.private_key) {
+        const credProjectId = parsed.project_id || targetProjectId;
         const formattedKey = formatPrivateKey(parsed.private_key);
         if (formattedKey) {
           return {
-            projectId: parsed.project_id || process.env.FIREBASE_PROJECT_ID,
+            projectId: credProjectId,
             clientEmail: parsed.client_email,
             privateKey: formattedKey
           };
         }
       }
     } catch {
-      // Not valid JSON, continue with raw PEM
+      // Gracefully ignore parse error
     }
   }
 
-  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL?.trim();
-  if (clientEmail && rawKey) {
-    const formattedKey = formatPrivateKey(rawKey);
+  // 3. Check if FIREBASE_PRIVATE_KEY contains full service account JSON
+  if (directPrivateKey) {
+    try {
+      const parsed = safeParseServiceAccount(directPrivateKey);
+      if (parsed && parsed.client_email && parsed.private_key) {
+        const formattedKey = formatPrivateKey(parsed.private_key);
+        if (formattedKey) {
+          return {
+            projectId: parsed.project_id || targetProjectId,
+            clientEmail: parsed.client_email,
+            privateKey: formattedKey
+          };
+        }
+      }
+    } catch {
+      // Gracefully ignore
+    }
+  }
+
+  // 4. Fallback to direct clientEmail & formattedKey
+  if (directClientEmail && directPrivateKey) {
+    const formattedKey = formatPrivateKey(directPrivateKey);
     if (formattedKey) {
       return {
-        projectId: process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID || 'solimedical-micu',
-        clientEmail,
+        projectId: targetProjectId,
+        clientEmail: directClientEmail,
         privateKey: formattedKey
       };
     }
