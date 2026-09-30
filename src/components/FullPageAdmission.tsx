@@ -19,6 +19,7 @@ import { db, ensureBedPatientSync } from '../db/icuSyncDb.ts';
 import { toEnglishDigits, parseEnglishFloat, parseEnglishInt } from '../services/numberUtils.ts';
 import { useAppNotifications } from '../services/NotificationContext.tsx';
 import { useSystemSettings } from '../services/SettingsContext.tsx';
+import { useAuth } from '../services/AuthContext.tsx';
 
 import { doc } from 'firebase/firestore';
 import { firestore, setDoc } from '../services/firebase.ts';
@@ -43,6 +44,7 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
   const { lang, isRTL } = useTranslation();
   const { triggerNotification } = useAppNotifications();
   const { settings } = useSystemSettings();
+  const { currentUser } = useAuth();
 
   const [bedsList, setBedsList] = useState<BedRecord[]>(allBeds || []);
   const [patientsList, setPatientsList] = useState<PatientDossier[]>(allPatients || []);
@@ -114,6 +116,15 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
   const [initialFio2, setInitialFio2] = useState<string>('');
   const [admissionNoteInput, setAdmissionNoteInput] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!initialPatient && !attendingDoctorName) {
+      const userDisplayName = currentUser?.nameAr || currentUser?.nameEn || currentUser?.displayName || '';
+      if (userDisplayName) {
+        setAttendingDoctorName(userDisplayName);
+      }
+    }
+  }, [currentUser, initialPatient, attendingDoctorName]);
 
   // Populate form if editing an existing patient - runs only when patient ID changes (mount or switching patients)
   useEffect(() => {
@@ -224,13 +235,13 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
       return;
     }
 
-    // Rule 1: Validate full name is provided (at least 2 or 3 parts)
-    const nameParts = fullNameAr.trim().split(/\s+/).filter(Boolean);
-    if (nameParts.length < 2) {
+    // Rule 1: Validate full name is provided (at least 3 parts)
+    const nameParts = fullNameAr.trim().split(/\s+/).filter(part => part.length >= 2);
+    if (nameParts.length < 3) {
       setAdmissionError(
         lang === 'ar'
-          ? 'يرجى كتابة اسم المريض (الاسم الأول واسم العائلة على الأقل).'
-          : 'Please enter at least first name and last name.'
+          ? 'يجب إدخال اسم المريض ثلاثي أو رباعي على الأقل (مثال: يحيى ممدوح السيد).'
+          : 'Patient full name must have at least 3 parts (e.g., John David Smith).'
       );
       return;
     }
@@ -399,8 +410,9 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
         return;
       }
 
-      // Attending Doctor: strictly use entered doctor name, or 'غير محدد' / 'Unassigned' if blank
-      const docName = attendingDoctorName.trim() || (lang === 'ar' ? 'غير محدد' : 'Unassigned');
+      // Attending Doctor: strictly use entered doctor name, or logged-in user's name, or 'غير محدد' / 'Unassigned' if blank
+      const userDisplayName = currentUser?.nameAr || currentUser?.nameEn || currentUser?.displayName || '';
+      const docName = attendingDoctorName.trim() || userDisplayName || (lang === 'ar' ? 'غير محدد' : 'Unassigned');
       let nurseName = '';
       try {
         const storedUser = localStorage.getItem('icu_current_user') || localStorage.getItem('soli_logged_user');
@@ -671,7 +683,7 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
                 />
               </div>
 
-              {/* Box 3: Medical Record Number (MRN) - Optional, Under Card ID */}
+              {/* Box 3: Medical Record Number (MRN) - Optional */}
               <div>
                 <label className="text-[11px] text-slate-300 font-semibold block mb-1 flex items-center justify-between">
                   <span>{lang === 'ar' ? 'رقم الملف الطبي (MRN)' : 'Medical Record Number (MRN)'}</span>
