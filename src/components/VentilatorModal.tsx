@@ -45,10 +45,12 @@ interface RespiratoryDeviceOption {
   flowRange?: string;
   descriptionEn?: string;
   descriptionAr?: string;
+  flowPresets?: number[];
+  fio2Presets?: number[];
 }
 
 const RESPIRATORY_DEVICES: RespiratoryDeviceOption[] = [
-  // 1. Oxygen Therapy Devices (Concise Medical Terms)
+  // 1. Oxygen Therapy Devices (Concise Medical Terms & Tailored Ranges)
   { 
     id: 'NASAL_CANNULA', 
     category: 'OXYGEN_THERAPY', 
@@ -56,42 +58,63 @@ const RESPIRATORY_DEVICES: RespiratoryDeviceOption[] = [
     labelAr: 'قنية أنفية (Nasal Cannula - NC)', 
     defaultFlow: 3, 
     defaultFio2: 32, 
-    flowRange: '1 - 6 L/min',
-    descriptionAr: '1-6 L/min (~24-44% FiO₂)',
-    descriptionEn: '1-6 L/min (~24-44% FiO2)'
+    flowRange: '1 - 6 L/min (24% - 44% FiO₂)',
+    descriptionAr: '1-6 L/min (24% - 44% FiO₂)',
+    descriptionEn: '1-6 L/min (24% - 44% FiO2)',
+    flowPresets: [1, 2, 3, 4, 5, 6],
+    fio2Presets: [24, 28, 32, 36, 40, 44]
   },
   { 
     id: 'SIMPLE_MASK', 
     category: 'OXYGEN_THERAPY', 
     labelEn: 'Simple Mask (Face Mask)', 
-    labelAr: 'ماسك أكسجين (Simple Face Mask)', 
+    labelAr: 'ماسك وجه بسيط (Simple Face Mask)', 
+    defaultFlow: 6, 
+    defaultFio2: 45, 
+    flowRange: '5 - 8 L/min (40% - 60% FiO₂)',
+    descriptionAr: '5-8 L/min (40% - 60% FiO₂)',
+    descriptionEn: '5-8 L/min (40% - 60% FiO2)',
+    flowPresets: [5, 6, 7, 8],
+    fio2Presets: [40, 45, 50, 55, 60]
+  },
+  { 
+    id: 'PARTIAL_REBREATHER', 
+    category: 'OXYGEN_THERAPY', 
+    labelEn: 'Partial Rebreather (PRBM)', 
+    labelAr: 'ماسك بارشيال ريبريزر (PRBM)', 
     defaultFlow: 8, 
-    defaultFio2: 50, 
-    flowRange: '5 - 10 L/min',
-    descriptionAr: '5-10 L/min (~40-60% FiO₂)',
-    descriptionEn: '5-10 L/min (~40-60% FiO2)'
+    defaultFio2: 70, 
+    flowRange: '6 - 10 L/min (60% - 80% FiO₂)',
+    descriptionAr: '6-10 L/min (60% - 80% FiO₂)',
+    descriptionEn: '6-10 L/min (60% - 80% FiO2)',
+    flowPresets: [6, 7, 8, 9, 10],
+    fio2Presets: [60, 65, 70, 75, 80]
   },
   { 
     id: 'RESERVOIR_MASK', 
     category: 'OXYGEN_THERAPY', 
-    labelEn: 'Reservoir Mask (NRBM)', 
-    labelAr: 'ماسك ريزرفوار (NRBM / Reservoir)', 
-    defaultFlow: 15, 
-    defaultFio2: 90, 
-    flowRange: '10 - 15 L/min',
-    descriptionAr: '10-15 L/min (~60-95% FiO₂)',
-    descriptionEn: '10-15 L/min (~60-95% FiO2)'
+    labelEn: 'Non-Rebreather (NRBM)', 
+    labelAr: 'ماسك نون ريبريزر (NRBM)', 
+    defaultFlow: 12, 
+    defaultFio2: 80, 
+    flowRange: '10 - 15 L/min (60% - 95% FiO₂)',
+    descriptionAr: '10-15 L/min (60% - 95% FiO₂)',
+    descriptionEn: '10-15 L/min (60% - 95% FiO2)',
+    flowPresets: [10, 11, 12, 13, 14, 15],
+    fio2Presets: [60, 70, 80, 90, 95]
   },
   { 
     id: 'VENTURI_MASK', 
     category: 'OXYGEN_THERAPY', 
     labelEn: 'Venturi Mask (Fixed FiO₂)', 
     labelAr: 'ماسك فينتوري (Venturi Mask)', 
-    defaultFlow: 8, 
-    defaultFio2: 35, 
-    flowRange: '4 - 12 L/min',
-    descriptionAr: '4-12 L/min (24% - 50% FiO₂)',
-    descriptionEn: '4-12 L/min (24-50% FiO2)'
+    defaultFlow: 6, 
+    defaultFio2: 28, 
+    flowRange: '4 - 10 L/min (24% - 55% FiO₂)',
+    descriptionAr: '4-10 L/min (24% - 55% FiO₂)',
+    descriptionEn: '4-10 L/min (24% - 55% FiO2)',
+    flowPresets: [4, 6, 8, 10],
+    fio2Presets: [24, 28, 31, 35, 40, 50, 55]
   },
   { 
     id: 'HIGH_FLOW_NC', 
@@ -100,9 +123,11 @@ const RESPIRATORY_DEVICES: RespiratoryDeviceOption[] = [
     labelAr: 'قنية عالية التدفق (HFNC)', 
     defaultFlow: 40, 
     defaultFio2: 50, 
-    flowRange: '20 - 60 L/min',
+    flowRange: '20 - 60 L/min (21% - 100% FiO₂)',
     descriptionAr: '20-60 L/min (21% - 100% FiO₂)',
-    descriptionEn: '20-60 L/min (21-100% FiO2)'
+    descriptionEn: '20-60 L/min (21-100% FiO2)',
+    flowPresets: [20, 30, 40, 50, 60],
+    fio2Presets: [30, 40, 50, 60, 80, 100]
   },
   { 
     id: 'TRACH_MASK', 
@@ -111,9 +136,11 @@ const RESPIRATORY_DEVICES: RespiratoryDeviceOption[] = [
     labelAr: 'قناع شق حنجري (Trach Collar)', 
     defaultFlow: 8, 
     defaultFio2: 35, 
-    flowRange: '5 - 15 L/min',
+    flowRange: '5 - 15 L/min (28% - 50% FiO₂)',
     descriptionAr: '5-15 L/min (28% - 50% FiO₂)',
-    descriptionEn: '5-15 L/min (28-50% FiO2)'
+    descriptionEn: '5-15 L/min (28-50% FiO2)',
+    flowPresets: [5, 8, 10, 12, 15],
+    fio2Presets: [28, 35, 40, 50]
   },
   { 
     id: 'ROOM_AIR', 
@@ -122,9 +149,11 @@ const RESPIRATORY_DEVICES: RespiratoryDeviceOption[] = [
     labelAr: 'هواء الغرفة (Room Air)', 
     defaultFlow: 0, 
     defaultFio2: 21, 
-    flowRange: '0 L/min',
+    flowRange: '0 L/min (21% FiO₂)',
     descriptionAr: 'تنفس تلقائي (21% FiO₂)',
-    descriptionEn: 'Spontaneous ambient air'
+    descriptionEn: 'Spontaneous ambient air',
+    flowPresets: [0],
+    fio2Presets: [21]
   },
 
   // 2. Non-Invasive Ventilation (NIV)
@@ -324,20 +353,37 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
     }
   };
 
-  // Helper when changing oxygen flow rate for Nasal Cannula
+  // Helper when changing oxygen flow rate
   const handleFlowChange = (valStr: string) => {
     const rawVal = toEnglishDigits(valStr);
     setOxygenFlow(rawVal);
     const flowNum = parseEnglishFloat(rawVal);
-    if (selectedDevice === 'NASAL_CANNULA' && flowNum > 0 && flowNum <= 6) {
-      // Rule of 4: 1L = 24%, 2L = 28%, 3L = 32%, 4L = 36%, 5L = 40%, 6L = 44%
-      const calculatedFio2 = Math.round(20 + flowNum * 4);
+    if (isNaN(flowNum) || flowNum <= 0) return;
+
+    if (selectedDevice === 'NASAL_CANNULA') {
+      // 1L=24%, 2L=28%, 3L=32%, 4L=36%, 5L=40%, 6L=44%
+      const calculatedFio2 = Math.min(44, Math.max(24, Math.round(20 + flowNum * 4)));
       setFio2(String(calculatedFio2));
-    } else if (selectedDevice === 'SIMPLE_MASK' && flowNum >= 5) {
-      const calcFio2 = Math.min(60, Math.max(40, 30 + flowNum * 3));
-      setFio2(String(Math.round(calcFio2)));
-    } else if (selectedDevice === 'RESERVOIR_MASK' && flowNum >= 10) {
-      setFio2(String(Math.min(95, 60 + (flowNum - 10) * 7)));
+    } else if (selectedDevice === 'SIMPLE_MASK') {
+      // 5L=40%, 6L=45%, 7L=50%, 8L=60%
+      const table: Record<number, number> = { 5: 40, 6: 45, 7: 50, 8: 60 };
+      const nearest = table[Math.round(flowNum)] || Math.min(60, Math.max(40, Math.round(40 + (flowNum - 5) * 6.6)));
+      setFio2(String(nearest));
+    } else if (selectedDevice === 'PARTIAL_REBREATHER') {
+      // 6L=60%, 7L=65%, 8L=70%, 9L=75%, 10L=80%
+      const table: Record<number, number> = { 6: 60, 7: 65, 8: 70, 9: 75, 10: 80 };
+      const nearest = table[Math.round(flowNum)] || Math.min(80, Math.max(60, Math.round(60 + (flowNum - 6) * 5)));
+      setFio2(String(nearest));
+    } else if (selectedDevice === 'RESERVOIR_MASK') {
+      // 10L=60%, 11L=70%, 12L=80%, 13L=85%, 14L=90%, 15L=95%
+      const table: Record<number, number> = { 10: 60, 11: 70, 12: 80, 13: 85, 14: 90, 15: 95 };
+      const nearest = table[Math.round(flowNum)] || Math.min(95, Math.max(60, Math.round(60 + (flowNum - 10) * 7)));
+      setFio2(String(nearest));
+    } else if (selectedDevice === 'VENTURI_MASK') {
+      // 4L=24%, 6L=28%, 8L=35%, 10L=50%
+      const table: Record<number, number> = { 4: 24, 6: 28, 8: 35, 10: 50 };
+      const nearest = table[Math.round(flowNum)];
+      if (nearest) setFio2(String(nearest));
     }
   };
 
@@ -636,132 +682,120 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
 
           {/* DYNAMIC PARAMETER SECTION BASED ON SELECTED CATEGORY */}
 
-          {/* A. OXYGEN THERAPY SECTION (High-contrast, clearly separated & styled) */}
-          {isOxygenTherapy && (
-            <div className="p-4 sm:p-5 rounded-2xl bg-slate-50 dark:bg-[#060d1b] border-2 border-teal-500/40 dark:border-teal-500/40 space-y-4 shadow-sm">
-              <div className="flex items-center justify-between pb-2.5 border-b border-slate-200 dark:border-slate-800 text-xs">
-                <span className="font-extrabold text-teal-800 dark:text-teal-300 flex items-center gap-1.5 text-sm">
-                  <Flame className="w-4 h-4 text-teal-500" />
-                  <span>{lang === 'ar' ? 'معاملات تدفق الأكسجين والتركيز المقدر:' : 'Active Oxygen Flow & Estimated FiO₂:'}</span>
-                </span>
-                <span className="text-[11px] font-mono font-bold text-teal-700 dark:text-teal-400 bg-teal-500/10 px-2 py-0.5 rounded-lg border border-teal-500/20">
-                  {selectedDevice === 'NASAL_CANNULA' 
-                    ? (lang === 'ar' ? 'القاعدة: كل 1 L/min $\\approx$ +4% FiO₂' : 'Rule: +4% FiO2 per L/min') 
-                    : (lang === 'ar' ? 'توصيل أكسجين نشط' : 'Active Oxygen Delivery')}
-                </span>
-              </div>
+          {/* A. OXYGEN THERAPY SECTION (Compact 2-Column High-Contrast Design with Device-Specific Presets) */}
+          {isOxygenTherapy && (() => {
+            const currentDevice = RESPIRATORY_DEVICES.find(d => d.id === selectedDevice);
+            const currentFlowPresets = currentDevice?.flowPresets || [1, 2, 3, 4, 5, 6];
+            const currentFio2Presets = currentDevice?.fio2Presets || [24, 28, 32, 36, 40, 44];
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-                {/* Flow Rate (L/min) */}
-                <div className="bg-white dark:bg-[#091122] p-3 rounded-xl border border-slate-200 dark:border-slate-800">
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                    {lang === 'ar' ? 'معدل تدفق الأكسجين (Flow L/min):' : 'Oxygen Flow Rate (Flow L/min):'}
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      value={oxygenFlow}
-                      onChange={(e) => handleFlowChange(e.target.value)}
-                      placeholder="e.g. 3, 5, 8, 15"
-                      required
-                      className="w-full bg-slate-50 dark:bg-[#060b17] border-2 border-teal-500/50 dark:border-teal-500/60 rounded-xl px-3 py-2 text-teal-800 dark:text-teal-300 font-mono font-black text-lg focus:border-teal-500 focus:outline-none"
-                    />
-                    <span className="absolute right-3 top-2.5 text-xs text-slate-500 font-mono font-bold">L/min</span>
-                  </div>
-
-                  {/* Flow Presets Pills */}
-                  <div className="flex flex-wrap gap-1 mt-2.5">
-                    {[1, 2, 3, 4, 5, 6, 8, 10, 12, 15].map((presetFlow) => (
-                      <button
-                        key={presetFlow}
-                        type="button"
-                        onClick={() => handleFlowChange(String(presetFlow))}
-                        className={`px-2 py-1 rounded-lg text-[10px] font-mono font-bold transition-all cursor-pointer ${
-                          oxygenFlow === String(presetFlow)
-                            ? 'bg-teal-600 text-white shadow-sm ring-1 ring-teal-400'
-                            : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-                        }`}
-                      >
-                        {presetFlow}L
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* FiO2 (%) */}
-                <div className="bg-white dark:bg-[#091122] p-3 rounded-xl border border-slate-200 dark:border-slate-800">
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                    {lang === 'ar' ? 'نسبة الأكسجين المقدرة FiO₂ (%):' : 'Estimated FiO₂ (%):'}
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      value={fio2}
-                      onChange={(e) => setFio2(toEnglishDigits(e.target.value))}
-                      placeholder="21 - 100"
-                      required
-                      className="w-full bg-slate-50 dark:bg-[#060b17] border-2 border-teal-500/50 dark:border-teal-500/60 rounded-xl px-3 py-2 text-teal-800 dark:text-teal-300 font-mono font-black text-lg focus:border-teal-500 focus:outline-none"
-                    />
-                    <span className="absolute right-3 top-2.5 text-xs text-slate-500 font-mono font-bold">%</span>
-                  </div>
-
-                  {/* FiO2 Quick Presets */}
-                  <div className="flex flex-wrap gap-1 mt-2.5">
-                    {[24, 28, 32, 35, 40, 50, 60, 80, 100].map((f) => (
-                      <button
-                        key={f}
-                        type="button"
-                        onClick={() => setFio2(String(f))}
-                        className={`px-2 py-1 rounded-lg text-[10px] font-mono font-bold transition-all cursor-pointer ${
-                          fio2 === String(f)
-                            ? 'bg-teal-600 text-white shadow-sm ring-1 ring-teal-400'
-                            : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-                        }`}
-                      >
-                        {f}%
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Respiratory Rate (RR) */}
-                <div className="bg-white dark:bg-[#091122] p-3 rounded-xl border border-slate-200 dark:border-slate-800">
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                    {lang === 'ar' ? 'معدل التنفس الفعلي (RR bpm):' : 'Patient Respiratory Rate (RR):'}
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      value={actualRate}
-                      onChange={(e) => setActualRate(toEnglishDigits(e.target.value))}
-                      placeholder="12 - 35"
-                      className="w-full bg-slate-50 dark:bg-[#060b17] border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white font-mono font-bold text-lg focus:border-teal-500 focus:outline-none"
-                    />
-                    <span className="absolute right-3 top-2.5 text-xs text-slate-500 font-mono font-bold">bpm</span>
-                  </div>
-                  <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-2 font-mono">
-                    {lang === 'ar' ? 'المعدل الطبيعي: 12 - 20 bpm' : 'Normal: 12 - 20 bpm'}
-                  </p>
-                </div>
-              </div>
-
-              {/* Summary Strip */}
-              <div className="p-3 rounded-xl bg-white dark:bg-[#060b17] border border-teal-200 dark:border-slate-800 text-xs flex items-center justify-between flex-wrap gap-2 text-slate-800 dark:text-slate-200 font-mono shadow-sm">
-                <span className="flex items-center gap-2 text-teal-700 dark:text-teal-300 font-black">
-                  <Activity className="w-4 h-4" />
-                  <span>
-                    {RESPIRATORY_DEVICES.find(d => d.id === selectedDevice)?.labelEn || selectedDevice} @ {oxygenFlow} L/min (FiO₂ {fio2}%)
+            return (
+              <div className="p-3 sm:p-4 rounded-2xl bg-slate-50 dark:bg-[#060d1b] border-2 border-teal-500/40 dark:border-teal-500/40 space-y-3 shadow-sm">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800 text-xs">
+                  <span className="font-extrabold text-teal-800 dark:text-teal-300 flex items-center gap-1.5 text-xs sm:text-sm">
+                    <Flame className="w-4 h-4 text-teal-500 shrink-0" />
+                    <span>{lang === 'ar' ? 'معاملات تدفق وتركيز الأكسجين:' : 'Oxygen Flow & FiO₂ Settings:'}</span>
                   </span>
-                </span>
-                <span className="text-[11px] text-slate-500 font-medium">
-                  {lang === 'ar' ? 'يتم حفظ هذا الجهاز فورياً في السجلات وتسليم SBAR' : 'Auto-synced into Flowsheet & SBAR'}
-                </span>
+                  <span className="text-[10px] sm:text-[11px] font-mono font-bold text-teal-700 dark:text-teal-400 bg-teal-500/10 px-2 py-0.5 rounded-lg border border-teal-500/20">
+                    {currentDevice?.flowRange || (lang === 'ar' ? 'توصيل أكسجين' : 'Oxygen Delivery')}
+                  </span>
+                </div>
+
+                {/* 2 Compact Columns: Flow Rate & FiO2 (Respiratory rate removed per request) */}
+                <div className="grid grid-cols-2 gap-2.5 sm:gap-3.5">
+                  {/* Flow Rate (L/min) */}
+                  <div className="bg-white dark:bg-[#091122] p-2.5 sm:p-3 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
+                    <div>
+                      <label className="block text-[11px] sm:text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                        {lang === 'ar' ? 'معدل التدفق (Flow):' : 'Oxygen Flow Rate:'}
+                      </label>
+                      <div className="flex items-center rounded-lg border-2 border-teal-500/50 dark:border-teal-500/60 bg-slate-50 dark:bg-[#060b17] px-2.5 py-1.5 focus-within:border-teal-500 focus-within:ring-2 focus-within:ring-teal-400/30">
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={oxygenFlow}
+                          onChange={(e) => handleFlowChange(e.target.value)}
+                          placeholder="3"
+                          required
+                          className="w-full bg-transparent text-center font-mono font-black text-base sm:text-lg text-teal-800 dark:text-teal-300 outline-none"
+                        />
+                        <span className="text-[11px] font-mono font-bold text-slate-500 shrink-0 select-none">L/min</span>
+                      </div>
+                    </div>
+
+                    {/* Flow Presets Tailored to Selected Device */}
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {currentFlowPresets.map((presetFlow) => (
+                        <button
+                          key={presetFlow}
+                          type="button"
+                          onClick={() => handleFlowChange(String(presetFlow))}
+                          className={`px-2 py-1 rounded-md text-[10px] font-mono font-bold transition-all cursor-pointer ${
+                            oxygenFlow === String(presetFlow)
+                              ? 'bg-teal-600 text-white shadow-sm ring-1 ring-teal-400'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                          }`}
+                        >
+                          {presetFlow}L
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* FiO2 (%) */}
+                  <div className="bg-white dark:bg-[#091122] p-2.5 sm:p-3 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
+                    <div>
+                      <label className="block text-[11px] sm:text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                        {lang === 'ar' ? 'نسبة الأكسجين (FiO₂):' : 'Estimated FiO₂ (%):'}
+                      </label>
+                      <div className="flex items-center rounded-lg border-2 border-teal-500/50 dark:border-teal-500/60 bg-slate-50 dark:bg-[#060b17] px-2.5 py-1.5 focus-within:border-teal-500 focus-within:ring-2 focus-within:ring-teal-400/30">
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={fio2}
+                          onChange={(e) => setFio2(toEnglishDigits(e.target.value))}
+                          placeholder="32"
+                          required
+                          className="w-full bg-transparent text-center font-mono font-black text-base sm:text-lg text-teal-800 dark:text-teal-300 outline-none"
+                        />
+                        <span className="text-[11px] font-mono font-bold text-slate-500 shrink-0 select-none">%</span>
+                      </div>
+                    </div>
+
+                    {/* FiO2 Presets Tailored to Selected Device */}
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {currentFio2Presets.map((f) => (
+                        <button
+                          key={f}
+                          type="button"
+                          onClick={() => setFio2(String(f))}
+                          className={`px-2 py-1 rounded-md text-[10px] font-mono font-bold transition-all cursor-pointer ${
+                            fio2 === String(f)
+                              ? 'bg-teal-600 text-white shadow-sm ring-1 ring-teal-400'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                          }`}
+                        >
+                          {f}%
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Summary Strip */}
+                <div className="p-2.5 rounded-xl bg-white dark:bg-[#060b17] border border-teal-200 dark:border-slate-800 text-xs flex items-center justify-between flex-wrap gap-1.5 text-slate-800 dark:text-slate-200 font-mono shadow-sm">
+                  <span className="flex items-center gap-1.5 text-teal-700 dark:text-teal-300 font-black text-[11px] sm:text-xs">
+                    <Activity className="w-3.5 h-3.5" />
+                    <span>
+                      {currentDevice?.labelEn || selectedDevice} @ {oxygenFlow} L/min (FiO₂ {fio2}%)
+                    </span>
+                  </span>
+                  <span className="text-[10px] text-slate-500 font-medium">
+                    {lang === 'ar' ? 'توثيق في السجل وتسليم SBAR' : 'Auto-synced into Flowsheet & SBAR'}
+                  </span>
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* B. ROOM AIR SECTION */}
           {isRoomAir && (
@@ -820,7 +854,7 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
                   <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     FiO₂ (%)
                   </label>
-                  <div className="relative">
+                  <div className="flex items-center rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#060b17] px-3 py-1.5 focus-within:border-cyan-400">
                     <input
                       type="text"
                       inputMode="decimal"
@@ -828,9 +862,9 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
                       onChange={(e) => setFio2(toEnglishDigits(e.target.value))}
                       placeholder="21 - 100"
                       required
-                      className="w-full bg-white dark:bg-[#060b17] border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-teal-700 dark:text-teal-300 font-mono font-bold text-sm focus:border-cyan-400 focus:outline-none"
+                      className="w-full bg-transparent text-center text-teal-700 dark:text-teal-300 font-mono font-bold text-sm outline-none"
                     />
-                    <span className="absolute right-2.5 top-2.5 text-xs text-slate-500 font-mono">%</span>
+                    <span className="text-xs text-slate-500 font-mono shrink-0 select-none">%</span>
                   </div>
                 </div>
 
