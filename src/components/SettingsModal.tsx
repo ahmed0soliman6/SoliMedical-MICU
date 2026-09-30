@@ -63,7 +63,6 @@ import { SoliLogo } from './SoliLogo.tsx';
 import { clearLocalBrowserDataAndSyncFromCloud, clearAllCloudAndLocalDataAndReset, auth } from '../services/firebase.ts';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { db } from '../db/icuSyncDb.ts';
-import { useLockBodyScroll } from '../hooks/useLockBodyScroll.ts';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -104,9 +103,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
   // Password protection for cloud deletion
   const [deletePasswordInput, setDeletePasswordInput] = useState<string>('');
   const [deletePasswordError, setDeletePasswordError] = useState<string | null>(null);
-
-  // Lock background body scroll when modal is open
-  useLockBodyScroll(isOpen);
 
   if (!isOpen) return null;
 
