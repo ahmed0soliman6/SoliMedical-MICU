@@ -1728,7 +1728,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                                 <span className="text-slate-400 text-[11px] font-sans truncate max-w-[110px]">
                                   {v.recordedBy?.name || (lang === 'ar' ? 'الكادر الطبي' : 'Staff')}
                                 </span>
-                                {!readOnly && (
+                                {!readOnly && (currentUser?.uid === v.recordedBy?.staffId || currentUser?.badgeId === v.recordedBy?.staffId || currentUser?.role === StaffRole.ADMIN || currentUser?.role === 'ADMIN' || currentUser?.isSuperAdmin === true) && (
                                   <button
                                     type="button"
                                     onClick={() => {

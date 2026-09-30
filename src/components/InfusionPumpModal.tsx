@@ -591,6 +591,8 @@ export const InfusionPumpModal: React.FC<InfusionPumpModalProps> = ({
         clinicalTargetDescription: clinicalTargetDescription.trim(),
         remainingVolumeMl: totalVolume,
         totalVolumeMl: totalVolume,
+        createdByUid: editingPump?.createdByUid || currentUser?.uid,
+        doctorId: editingPump?.doctorId || currentUser?.uid,
       };
 
       // 1. Save to Dexie IndexedDB

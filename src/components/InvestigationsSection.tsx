@@ -217,6 +217,7 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
       bedNumber,
       recordedByName: `${userDisplay} (AI OCR)`,
       recordedByStaffId: currentUser?.badgeId || currentUser?.uid,
+      createdByUid: currentUser?.uid,
     };
 
     // 1. Dexie local database
@@ -333,6 +334,7 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
           notes: notes.trim() || undefined,
           recordedByName: userDisplay,
           recordedByStaffId: currentUser?.badgeId || currentUser?.uid,
+          createdByUid: currentUser?.uid,
         };
 
         // 1. Dexie local database

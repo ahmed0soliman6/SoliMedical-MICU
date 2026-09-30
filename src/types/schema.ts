@@ -176,6 +176,7 @@ export interface InvestigationItem {
   notes?: string;
   recordedByName: string;
   recordedByStaffId?: string;
+  createdByUid?: string;
   lastModifiedByName?: string;
   lastModifiedByStaffId?: string;
   lastModifiedAt?: string;
@@ -437,6 +438,8 @@ export interface InfusionPumpLine {
   clinicalTargetDescription: string; // e.g. "Target MAP > 65 mmHg", "Target Blood Glucose 140-180"
   remainingVolumeMl: number;
   totalVolumeMl: number;
+  createdByUid?: string;
+  doctorId?: string;
   titrationHistory?: {
     timestamp: string;
     newRate: number;
