@@ -70,10 +70,10 @@ export interface InfusionDrugPreset {
 }
 
 export interface VentilatorModePreset {
-  id: string; // e.g. "SIMV_PC", "PRVC", "APRV"
+  id: string; // e.g. "SIMV_PC", "PRVC", "APRV", "NASAL_CANNULA", "RESERVOIR_MASK"
   labelEn: string;
   labelAr: string;
-  type: 'invasive' | 'non-invasive' | 'weaning';
+  type: 'invasive' | 'non-invasive' | 'weaning' | 'oxygen';
 }
 
 export interface FluidCategoryPreset {
@@ -193,14 +193,25 @@ export const DEFAULT_INFUSION_DRUGS: InfusionDrugPreset[] = [
 ];
 
 export const DEFAULT_VENTILATOR_MODES: VentilatorModePreset[] = [
-  { id: 'SIMV_PC', labelEn: 'SIMV-PC (Pressure Control)', labelAr: 'SIMV بالتحكم بالضغط', type: 'invasive' },
-  { id: 'SIMV_VC', labelEn: 'SIMV-VC (Volume Control)', labelAr: 'SIMV بالتحكم بالحجم', type: 'invasive' },
-  { id: 'PRVC', labelEn: 'PRVC (Pressure Regulated Vol)', labelAr: 'PRVC الحجم المنظم بالضغط', type: 'invasive' },
-  { id: 'PSV_CPAP', labelEn: 'PSV / CPAP (Spontaneous)', labelAr: 'PSV / CPAP دعم الضغط العفوي', type: 'weaning' },
+  // Oxygen Therapy Devices
+  { id: 'NASAL_CANNULA', labelEn: 'Nasal Cannula (1-6 L/min)', labelAr: 'قنية أنفية / نيزل كانيولا (1-6 L/min)', type: 'oxygen' },
+  { id: 'SIMPLE_MASK', labelEn: 'Simple Face Mask (5-10 L/min)', labelAr: 'قناع أكسجين بسيط (5-10 L/min)', type: 'oxygen' },
+  { id: 'RESERVOIR_MASK', labelEn: 'Non-Rebreather Mask / NRBM (10-15 L/min)', labelAr: 'قناع أكسجين ذو كيس حزام / ريزرفوار (10-15 L/min)', type: 'oxygen' },
+  { id: 'VENTURI_MASK', labelEn: 'Venturi Mask (24-50% FiO2)', labelAr: 'قناع فنتوري عالي الدقة (24-50%)', type: 'oxygen' },
+  { id: 'HIGH_FLOW_NC', labelEn: 'High-Flow Nasal Cannula (HFNC)', labelAr: 'قنية أنفية عالية التدفق (HFNC)', type: 'oxygen' },
+  { id: 'TRACH_MASK', labelEn: 'Tracheostomy Mask / Collar', labelAr: 'قناع الشق الحنجري (Trach Collar)', type: 'oxygen' },
+  { id: 'ROOM_AIR', labelEn: 'Room Air (Spontaneous Breathing)', labelAr: 'هواء الغرفة (تنفس تلقائي بدون أكسجين)', type: 'oxygen' },
+
+  // Non-Invasive Ventilation (NIV)
   { id: 'BIPAP', labelEn: 'BiPAP (Non-Invasive Mask)', labelAr: 'BiPAP قناع غير جائر', type: 'non-invasive' },
-  { id: 'HIGH_FLOW_NC', labelEn: 'High-Flow Nasal Cannula (HFNC)', labelAr: 'قنية أنفية عالية التدفق HFNC', type: 'non-invasive' },
-  { id: 'T_PIECE', labelEn: 'T-Piece Weaning Trial', labelAr: 'اختبار فطام T-Piece', type: 'weaning' },
+  { id: 'PSV_CPAP', labelEn: 'PSV / CPAP (Non-Invasive / Spontaneous)', labelAr: 'PSV / CPAP دعم الضغط العفوي', type: 'non-invasive' },
+
+  // Invasive Mechanical Ventilation
+  { id: 'PRVC', labelEn: 'PRVC / AC (Pressure Regulated Vol)', labelAr: 'PRVC / AC الحجم المنظم بالضغط', type: 'invasive' },
+  { id: 'SIMV_PC', labelEn: 'SIMV-PC (Pressure Control)', labelAr: 'SIMV-PC بالتحكم بالضغط', type: 'invasive' },
+  { id: 'SIMV_VC', labelEn: 'SIMV-VC (Volume Control)', labelAr: 'SIMV-VC بالتحكم بالحجم', type: 'invasive' },
   { id: 'APRV', labelEn: 'APRV (Airway Pressure Release)', labelAr: 'APRV تحرير ضغط مجرى الهواء', type: 'invasive' },
+  { id: 'T_PIECE', labelEn: 'T-Piece Weaning Trial', labelAr: 'اختبار فطام T-Piece', type: 'weaning' },
 ];
 
 export const DEFAULT_FLUID_CATEGORIES: FluidCategoryPreset[] = [

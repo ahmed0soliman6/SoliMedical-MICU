@@ -4,6 +4,8 @@ import android.Manifest;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.webkit.PermissionRequest;
+import android.webkit.WebChromeClient;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import com.getcapacitor.BridgeActivity;
@@ -35,5 +37,21 @@ public class MainActivity extends BridgeActivity {
                 ActivityCompat.requestPermissions(this, requiredPermissions, PERMISSION_REQUEST_CODE);
             }
         }
+
+        // Auto-grant webview permission requests for microphone and camera
+        if (this.bridge != null && this.bridge.getWebView() != null) {
+            this.bridge.getWebView().setWebChromeClient(new WebChromeClient() {
+                @Override
+                public void onPermissionRequest(final PermissionRequest request) {
+                    MainActivity.this.runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            request.grant(request.getResources());
+                        }
+                    });
+                }
+            });
+        }
     }
 }
+

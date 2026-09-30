@@ -50,6 +50,75 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// AI Audio / Voice Dictation Transcription Endpoint using Gemini
+app.post(['/api/transcribe-audio', '/api/ai/transcribe-audio'], async (req, res) => {
+  try {
+    const { audioBase64, mimeType = 'audio/webm', lang = 'ar' } = req.body;
+
+    if (!audioBase64 || typeof audioBase64 !== 'string') {
+      return res.status(400).json({ success: false, error: 'Missing audioBase64 in request body.' });
+    }
+
+    const cleanBase64 = audioBase64.replace(/^data:audio\/[a-zA-Z0-9+-]+;base64,/, '').trim();
+    if (!cleanBase64) {
+      return res.status(400).json({ success: false, error: 'Empty audio payload.' });
+    }
+
+    const ai = getGenAI();
+    const promptText = lang === 'ar'
+      ? `أنت نظام إملاء صوتي طبي فائق الدقة لوحدة العناية المركزة (ICU). قم بنسخ وتفريغ الصوت الطبي المسجل بدقة عالية وبنفس اللغة المنطوقة (عربية أو إنجليزية طبية).
+إذا كان الكلام بالعربية، اكتبه بلغة عربية طبية واضحة مع الحفاظ على الاختصارات الطبية الإنجليزية الشائعة (مثل BP, MAP, HR, SpO2, GCS, RASS, ABG, PEEP, FiO2, CXR, CT, ICU).
+إذا كان الكلام بالإنجليزية، اكتبه بالإنجليزية الطبية السليمة.
+أعد فقط النص المفرغ مباشرة دون أي مقدمات أو شروحات.`
+      : `You are an accurate clinical voice dictation system for an Intensive Care Unit (ICU). Transcribe the spoken clinical dictation accurately with proper medical terms, punctuation, and abbreviations (e.g. MAP, SpO2, HR, BP, GCS, RASS, ABG, PEEP, FiO2, CXR, CT).
+Return ONLY the transcribed text with no explanations or preamble.`;
+
+    const modelsToTry = ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-3.8-flash'];
+    let transcribedText = '';
+    let lastError: any = null;
+
+    for (const modelName of modelsToTry) {
+      try {
+        const response = await ai.models.generateContent({
+          model: modelName,
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                {
+                  inlineData: {
+                    mimeType: (mimeType || 'audio/webm').split(';')[0],
+                    data: cleanBase64,
+                  },
+                },
+                { text: promptText },
+              ],
+            },
+          ],
+        });
+
+        const text = response.text ? response.text.trim() : '';
+        if (text) {
+          transcribedText = text;
+          break;
+        }
+      } catch (err: any) {
+        lastError = err;
+        console.warn(`[Server] Transcription model ${modelName} attempt failed:`, err?.message || err);
+      }
+    }
+
+    if (!transcribedText && lastError) {
+      return res.status(500).json({ success: false, error: lastError?.message || 'Transcription failed' });
+    }
+
+    return res.status(200).json({ success: true, text: transcribedText });
+  } catch (err: any) {
+    console.error('[Server] /api/transcribe-audio error:', err);
+    return res.status(500).json({ success: false, error: err?.message || 'Internal transcription error' });
+  }
+});
+
 // AI Lab OCR Scanner Endpoints (supporting both /api/scan-lab and /api/ai/scan-lab)
 app.get(['/api/scan-lab', '/api/ai/scan-lab'], (req, res) => {
   res.json({

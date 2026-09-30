@@ -379,9 +379,9 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
           )}
         </div>
 
-        <div className="flex items-center justify-between sm:justify-end gap-2 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-xs font-mono text-slate-300">
-          <span className="text-slate-400 text-[11px]">{lang === 'ar' ? 'عدد الفحوصات المسجلة:' : 'Recorded Studies:'}</span>
-          <span className="font-bold text-teal-300 px-2 py-0.5 rounded-lg bg-teal-500/10 border border-teal-500/30">
+        <div className="flex items-center justify-between sm:justify-end gap-2 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-700 dark:text-slate-300">
+          <span className="text-slate-500 dark:text-slate-400 text-[11px]">{lang === 'ar' ? 'عدد الفحوصات المسجلة:' : 'Recorded Studies:'}</span>
+          <span className="font-bold text-teal-700 dark:text-teal-300 px-2 py-0.5 rounded-lg bg-teal-100 dark:bg-teal-500/10 border border-teal-300 dark:border-teal-500/30">
             {patientInvestigations.length}
           </span>
         </div>
@@ -389,9 +389,9 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
 
       {/* Studies List */}
       {patientInvestigations.length === 0 ? (
-        <div className="p-8 text-center bg-slate-900/40 rounded-xl border border-dashed border-slate-800 space-y-3">
-          <Scan className="w-8 h-8 text-slate-600 mx-auto" />
-          <p className="text-xs text-slate-400">
+        <div className="p-8 text-center bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-dashed border-slate-300 dark:border-slate-800 space-y-3">
+          <Scan className="w-8 h-8 text-slate-400 dark:text-slate-600 mx-auto" />
+          <p className="text-xs text-slate-600 dark:text-slate-400">
             {lang === 'ar' 
               ? 'لا توجد فحوصات أو أشعات مسجلة لهذا المريض بعد.' 
               : 'No radiology or investigations recorded for this patient.'}
@@ -400,7 +400,7 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
             <button
               type="button"
               onClick={() => setIsAiScanModalOpen(true)}
-              className="px-3.5 py-1.5 text-xs font-bold rounded-xl bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 border border-teal-500/40 transition-all cursor-pointer flex items-center gap-1.5"
+              className="px-3.5 py-1.5 text-xs font-bold rounded-xl bg-teal-50 dark:bg-teal-500/20 hover:bg-teal-100 dark:hover:bg-teal-500/30 text-teal-800 dark:text-teal-300 border border-teal-300 dark:border-teal-500/40 transition-all cursor-pointer flex items-center gap-1.5"
             >
               <Sparkles className="w-3.5 h-3.5" />
               <span>{lang === 'ar' ? 'المسح الضوئي الذكي بالذكاء الاصطناعي' : 'AI Smart Scan Report'}</span>
@@ -410,7 +410,7 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
                 key={m.id}
                 type="button"
                 onClick={() => handleOpenAddModal(m.id)}
-                className="px-2.5 py-1 text-[11px] rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors border border-slate-700 cursor-pointer"
+                className="px-2.5 py-1 text-[11px] rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors border border-slate-300 dark:border-slate-700 cursor-pointer"
               >
                 + {m.id}
               </button>
@@ -436,7 +436,7 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
                   return (
                     <div 
                       key={inv.id}
-                      className="p-3 sm:p-3.5 rounded-xl bg-[#0d1527] border border-slate-800/80 hover:border-slate-700 transition-all space-y-2.5"
+                      className="p-3 sm:p-3.5 rounded-xl bg-white dark:bg-[#0d1527] border border-slate-200 dark:border-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700 shadow-sm transition-all space-y-2.5"
                     >
                       {/* Collapsible Header */}
                       <div 
@@ -449,11 +449,11 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
                           <div className="flex items-center justify-between gap-1.5">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               {/* مختصر الأشعة */}
-                              <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-teal-500/20 text-teal-300 border border-teal-500/40 text-xs font-bold font-mono shadow-sm">
-                                <Tag className="w-3 h-3 text-teal-400" />
+                              <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-teal-50 text-teal-800 border border-teal-300 dark:bg-teal-500/20 dark:text-teal-300 dark:border-teal-500/40 text-xs font-bold font-mono shadow-sm">
+                                <Tag className="w-3 h-3 text-teal-600 dark:text-teal-400" />
                                 <span>{lang === 'ar' ? `مختصر: ${info.code}` : `Abbr: ${info.code}`}</span>
                               </div>
-                              <span className="text-[10px] text-slate-400 font-medium px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800">
+                              <span className="text-[10px] text-slate-600 dark:text-slate-400 font-medium px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
                                 {lang === 'ar' ? info.labelAr : info.labelEn}
                               </span>
                             </div>
@@ -461,40 +461,40 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
                             <div className="flex items-center gap-1.5 shrink-0">
                               <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                                 inv.status === 'REPORTED'
-                                  ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800'
                                   : inv.status === 'RESULTED'
-                                  ? 'bg-teal-950 text-teal-300 border border-teal-800'
-                                  : 'bg-amber-950 text-amber-300 border border-amber-800'
+                                  ? 'bg-teal-100 text-teal-800 border border-teal-300 dark:bg-teal-950 dark:text-teal-300 dark:border-teal-800'
+                                  : 'bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800'
                               }`}>
                                 {inv.status === 'REPORTED' ? (lang === 'ar' ? 'معتمد' : 'Reported') :
                                  inv.status === 'RESULTED' ? (lang === 'ar' ? 'أولية' : 'Resulted') :
                                  (lang === 'ar' ? 'معلق' : 'Ordered')}
                               </span>
-                              <div className="p-1 rounded-lg bg-slate-800/80 text-slate-400 group-hover:text-white transition-colors">
+                              <div className="p-1 rounded-lg bg-slate-100 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">
                                 {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                               </div>
                             </div>
                           </div>
 
                           {/* Row 2: اسم الأشعة بالتفصيل */}
-                          <div className="p-2.5 rounded-xl bg-slate-900/80 border border-slate-800/90 space-y-1">
-                            <span className="text-[10px] font-bold text-teal-400 flex items-center gap-1">
-                              <Scan className="w-3 h-3 text-teal-400" />
+                          <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800/90 space-y-1">
+                            <span className="text-[10px] font-bold text-teal-700 dark:text-teal-400 flex items-center gap-1">
+                              <Scan className="w-3 h-3 text-teal-600 dark:text-teal-400" />
                               <span>{lang === 'ar' ? 'اسم الأشعة / الفحص:' : 'Radiology Exam / Study:'}</span>
                             </span>
-                            <h4 className="text-sm font-bold text-white break-words leading-snug">
+                            <h4 className="text-sm font-bold text-slate-900 dark:text-white break-words leading-snug">
                               {inv.testName || (lang === 'ar' ? 'غير محدد' : 'Unspecified')}
                             </h4>
                           </div>
 
                           {/* Row 3 (when collapsed): summary & time */}
                           {!isExpanded && (
-                            <div className="flex items-center justify-between gap-2 text-[10px] text-slate-400 pt-0.5">
+                            <div className="flex items-center justify-between gap-2 text-[10px] text-slate-500 dark:text-slate-400 pt-0.5">
                               <div className="flex items-center gap-1 font-mono">
-                                <Clock className="w-3 h-3 text-slate-500" />
+                                <Clock className="w-3 h-3 text-slate-400 dark:text-slate-500" />
                                 <span>{formatNumericDate(inv.timestamp)} {new Date(inv.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                               </div>
-                              <span className="text-teal-400/90 font-medium">
+                              <span className="text-teal-700 dark:text-teal-400 font-medium">
                                 {lang === 'ar' ? 'اضغط لعرض التقرير' : 'Tap for details'}
                               </span>
                             </div>
@@ -505,21 +505,21 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
                         <div className="hidden sm:flex items-center justify-between gap-3">
                           <div className="flex items-center gap-2.5 flex-1 min-w-0">
                             {/* مختصر الأشعة */}
-                            <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-teal-500/20 text-teal-300 border border-teal-500/40 font-mono shrink-0 flex items-center gap-1 shadow-sm">
-                              <Tag className="w-3 h-3 text-teal-400" />
+                            <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-teal-50 text-teal-800 border border-teal-300 dark:bg-teal-500/20 dark:text-teal-300 dark:border-teal-500/40 font-mono shrink-0 flex items-center gap-1 shadow-sm">
+                              <Tag className="w-3 h-3 text-teal-600 dark:text-teal-400" />
                               <span>{info.code}</span>
                             </span>
 
                             {/* اسم الأشعة */}
                             <div className="flex items-center gap-2 min-w-0 flex-1">
-                              <span className="text-[11px] text-slate-400 shrink-0 font-medium">
+                              <span className="text-[11px] text-slate-500 dark:text-slate-400 shrink-0 font-medium">
                                 {lang === 'ar' ? 'اسم الأشعة:' : 'Study:'}
                               </span>
-                              <h4 className="text-xs font-bold text-white group-hover:text-teal-300 transition-colors truncate">
+                              <h4 className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-teal-600 dark:group-hover:text-teal-300 transition-colors truncate">
                                 {inv.testName}
                               </h4>
                               {!isExpanded && summaryLine && (
-                                <span className="text-[11px] text-slate-400 truncate max-w-xs font-sans">
+                                <span className="text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-xs font-sans">
                                   — {summaryLine}
                                 </span>
                               )}
@@ -528,23 +528,23 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
 
                           <div className="flex items-center gap-2 shrink-0">
                             {!isExpanded && (
-                              <span className="text-[10px] font-mono text-slate-400 flex items-center gap-1 bg-slate-900 px-2 py-0.5 rounded-lg border border-slate-800">
-                                <Clock className="w-3 h-3 text-slate-500" />
+                              <span className="text-[10px] font-mono text-slate-600 dark:text-slate-400 flex items-center gap-1 bg-slate-100 dark:bg-slate-900 px-2 py-0.5 rounded-lg border border-slate-200 dark:border-slate-800">
+                                <Clock className="w-3 h-3 text-slate-400 dark:text-slate-500" />
                                 <span>{formatNumericDate(inv.timestamp)} {new Date(inv.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                               </span>
                             )}
                             <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                               inv.status === 'REPORTED'
-                                ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800'
                                 : inv.status === 'RESULTED'
-                                ? 'bg-teal-950 text-teal-300 border border-teal-800'
-                                : 'bg-amber-950 text-amber-300 border border-amber-800'
+                                ? 'bg-teal-100 text-teal-800 border border-teal-300 dark:bg-teal-950 dark:text-teal-300 dark:border-teal-800'
+                                : 'bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800'
                             }`}>
                               {inv.status === 'REPORTED' ? (lang === 'ar' ? 'تقرير معتمد' : 'Reported') :
                                inv.status === 'RESULTED' ? (lang === 'ar' ? 'نتيجة أولية' : 'Resulted') :
                                (lang === 'ar' ? 'طلب معلق' : 'Ordered')}
                             </span>
-                            <div className="p-1 rounded-lg bg-slate-800/80 text-slate-400 group-hover:text-white transition-colors">
+                            <div className="p-1 rounded-lg bg-slate-100 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">
                               {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                             </div>
                           </div>
@@ -553,26 +553,26 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
 
                       {/* Expanded Full Report Details */}
                       {isExpanded && (
-                        <div className="space-y-3 pt-3 border-t border-slate-800/80 animate-in fade-in duration-200">
+                        <div className="space-y-3 pt-3 border-t border-slate-200 dark:border-slate-800/80 animate-in fade-in duration-200">
                           {/* Top Info Banner */}
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-2.5 rounded-xl bg-slate-950/90 border border-slate-800 text-xs">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950/90 border border-slate-200 dark:border-slate-800 text-xs">
                             <div className="space-y-0.5">
-                              <span className="text-[10px] text-teal-400/90 font-semibold uppercase tracking-wider block">
+                              <span className="text-[10px] text-teal-700 dark:text-teal-400/90 font-semibold uppercase tracking-wider block">
                                 {lang === 'ar' ? 'اسم الأشعة / الفحص الكامل:' : 'Full Radiology Exam / Study:'}
                               </span>
-                              <p className="text-xs font-bold text-white break-words">
+                              <p className="text-xs font-bold text-slate-900 dark:text-white break-words">
                                 {inv.testName}
                               </p>
                             </div>
                             <div className="space-y-0.5 sm:text-end">
-                              <span className="text-[10px] text-teal-400/90 font-semibold uppercase tracking-wider block">
+                              <span className="text-[10px] text-teal-700 dark:text-teal-400/90 font-semibold uppercase tracking-wider block">
                                 {lang === 'ar' ? 'مختصر ونوع الأشعة:' : 'Modality & Abbreviation:'}
                               </span>
                               <div className="flex items-center sm:justify-end gap-1.5">
-                                <span className="px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-teal-500/20 text-teal-300 border border-teal-500/40">
+                                <span className="px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-teal-100 text-teal-800 border border-teal-300 dark:bg-teal-500/20 dark:text-teal-300 dark:border-teal-500/40">
                                   {info.code}
                                 </span>
-                                <span className="text-slate-300 font-medium text-[11px]">
+                                <span className="text-slate-700 dark:text-slate-300 font-medium text-[11px]">
                                   {lang === 'ar' ? info.labelAr : info.labelEn}
                                 </span>
                               </div>
@@ -585,7 +585,7 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
                                 <button
                                   type="button"
                                   onClick={(e) => { e.stopPropagation(); handleOpenEditModal(inv); }}
-                                  className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded-lg bg-slate-800 hover:bg-slate-700 text-teal-300 hover:text-white border border-slate-700/80 transition-all cursor-pointer shadow-sm active:scale-95"
+                                  className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-teal-800 dark:text-teal-300 hover:text-slate-900 dark:hover:text-white border border-slate-300 dark:border-slate-700/80 transition-all cursor-pointer shadow-sm active:scale-95"
                                   title={lang === 'ar' ? 'تعديل التقرير والفحص' : 'Edit Report & Details'}
                                 >
                                   <Pencil className="w-3 h-3" />
@@ -596,7 +596,7 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
                                   <button
                                     type="button"
                                     onClick={(e) => { e.stopPropagation(); handleDelete(inv); }}
-                                    className="p-1 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-md transition-colors"
+                                    className="p-1 text-slate-400 hover:text-rose-600 dark:text-slate-500 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-md transition-colors"
                                     title={lang === 'ar' ? 'حذف الفحص' : 'Delete'}
                                   >
                                     <Trash2 className="w-3.5 h-3.5" />
@@ -608,41 +608,41 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
 
                           {/* Report Content */}
                           {inv.resultReport ? (
-                            <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800/80 text-xs text-slate-200 whitespace-pre-wrap font-sans leading-relaxed">
+                            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800/80 text-xs text-slate-800 dark:text-slate-200 whitespace-pre-wrap font-sans leading-relaxed">
                               {inv.resultReport}
                             </div>
                           ) : (
-                            <div className="p-2 rounded-lg bg-slate-950/40 border border-dashed border-slate-800 text-[11px] text-slate-500 italic">
+                            <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-950/40 border border-dashed border-slate-200 dark:border-slate-800 text-[11px] text-slate-500 italic">
                               {lang === 'ar' ? 'لم يتم إدخال نص تقرير مكتوب بعد.' : 'No written findings/report provided yet.'}
                             </div>
                           )}
 
                           {/* Footer details */}
-                          <div className="pt-2 border-t border-slate-800/60 space-y-1.5 text-[11px]">
-                            <div className="flex flex-wrap items-center justify-between gap-2 text-slate-400">
+                          <div className="pt-2 border-t border-slate-200 dark:border-slate-800/60 space-y-1.5 text-[11px]">
+                            <div className="flex flex-wrap items-center justify-between gap-2 text-slate-500 dark:text-slate-400">
                               <span className="truncate max-w-md">
                                 {inv.notes ? `${lang === 'ar' ? 'ملاحظة: ' : 'Note: '}${inv.notes}` : ''}
                               </span>
                               <div className="flex items-center gap-3 font-mono text-[10px]">
-                                <span className="flex items-center gap-1 text-slate-400">
-                                  <Clock className="w-3 h-3 text-slate-500" />
+                                <span className="flex items-center gap-1 text-slate-600 dark:text-slate-400">
+                                  <Clock className="w-3 h-3 text-slate-400 dark:text-slate-500" />
                                   <span>{formatNumericDate(inv.timestamp)} {new Date(inv.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                 </span>
-                                <span className="text-slate-300 flex items-center gap-1">
-                                  <User className="w-3 h-3 text-slate-500" />
+                                <span className="text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                                  <User className="w-3 h-3 text-slate-400 dark:text-slate-500" />
                                   <span>{lang === 'ar' ? 'بواسطة: ' : 'By: '}{inv.recordedByName}</span>
                                 </span>
                               </div>
                             </div>
 
                             {inv.lastModifiedByName && (
-                              <div className="flex items-center gap-1.5 text-[10px] text-amber-300/90 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-lg">
-                                <Edit3 className="w-3 h-3 text-amber-400 shrink-0" />
+                              <div className="flex items-center gap-1.5 text-[10px] text-amber-800 dark:text-amber-300/90 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 px-2.5 py-1 rounded-lg">
+                                <Edit3 className="w-3 h-3 text-amber-600 dark:text-amber-400 shrink-0" />
                                 <span>
                                   {lang === 'ar' ? 'تم التعديل بواسطة: ' : 'Edited by: '}
-                                  <strong className="font-semibold text-amber-200">{inv.lastModifiedByName}</strong>
+                                  <strong className="font-semibold text-amber-900 dark:text-amber-200">{inv.lastModifiedByName}</strong>
                                   {inv.lastModifiedAt && (
-                                    <span className="text-slate-400 font-mono ml-1 mr-1">
+                                    <span className="text-slate-500 dark:text-slate-400 font-mono ml-1 mr-1">
                                       • {formatNumericDate(inv.lastModifiedAt)} {new Date(inv.lastModifiedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                     </span>
                                   )}
@@ -667,7 +667,7 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
                         }
                         setShowAllReports(!showAllReports);
                       }}
-                      className="px-4 py-2 text-xs font-bold rounded-xl bg-teal-500/10 hover:bg-teal-500/20 text-teal-300 border border-teal-500/30 transition-all cursor-pointer shadow-sm"
+                      className="px-4 py-2 text-xs font-bold rounded-xl bg-teal-50 dark:bg-teal-500/10 hover:bg-teal-100 dark:hover:bg-teal-500/20 text-teal-800 dark:text-teal-300 border border-teal-300 dark:border-teal-500/30 transition-all cursor-pointer shadow-sm"
                     >
                       {showAllReports 
                         ? (lang === 'ar' ? 'إخفاء (عرض 4 فقط)' : 'Show Less') 
@@ -685,21 +685,21 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
           <div 
-            className="w-full max-w-lg bg-[#0a1224] border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+            className="w-full max-w-lg bg-white dark:bg-[#0a1224] border border-slate-200 dark:border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] text-slate-900 dark:text-white"
             dir={isRTL ? 'rtl' : 'ltr'}
           >
-            <div className="flex items-center justify-between p-4 sm:p-5 border-b border-slate-800 bg-slate-900/50">
+            <div className="flex items-center justify-between p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
               <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-teal-500/10 border border-teal-500/30 flex items-center justify-center text-teal-400">
+                <div className="w-9 h-9 rounded-xl bg-teal-500/10 border border-teal-500/30 flex items-center justify-center text-teal-600 dark:text-teal-400">
                   {editingItem ? <Pencil className="w-5 h-5" /> : <Scan className="w-5 h-5" />}
                 </div>
                 <div>
-                  <h2 className="text-base font-bold text-white">
+                  <h2 className="text-base font-bold text-slate-900 dark:text-white">
                     {editingItem 
                       ? (lang === 'ar' ? 'تعديل الفحص / تقرير الأشعة' : 'Edit Investigation Report')
                       : (lang === 'ar' ? 'تسجيل فحص أو تقرير جديد' : 'Add Investigation / Diagnostic Study')}
                   </h2>
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
                     {editingItem
                       ? (lang === 'ar' ? 'تعديل النتائج وسيتم توثيق اسمك وتوقيت التعديل تلقائياً' : 'Update report findings; editor and timestamp will be logged')
                       : (lang === 'ar' ? 'توثيق تقرير الأشعة وتخطيط القلب وفحوصات السرير' : 'Record radiology report, ECG, or ultrasound')}
@@ -711,7 +711,7 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
                   setIsAddModalOpen(false);
                   setEditingItem(null);
                 }}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -724,9 +724,9 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
                   setIsAddModalOpen(false);
                   setIsAiScanModalOpen(true);
                 }}
-                className="w-full flex items-center justify-center gap-2 p-2.5 rounded-xl bg-gradient-to-r from-teal-500/15 via-cyan-500/15 to-teal-500/15 border border-teal-500/30 hover:border-teal-400 text-teal-300 hover:text-white text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-[0.99]"
+                className="w-full flex items-center justify-center gap-2 p-2.5 rounded-xl bg-gradient-to-r from-teal-50 via-cyan-50 to-teal-50 dark:from-teal-500/15 dark:via-cyan-500/15 dark:to-teal-500/15 border border-teal-300 dark:border-teal-500/30 hover:border-teal-400 text-teal-800 dark:text-teal-300 hover:text-teal-950 dark:hover:text-white text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-[0.99]"
               >
-                <Sparkles className="w-4 h-4 text-teal-400 animate-pulse" />
+                <Sparkles className="w-4 h-4 text-teal-600 dark:text-teal-400 animate-pulse" />
                 <span>{lang === 'ar' ? 'هل تملك صورة للتقرير أو الفحص؟ اضغط للمسح الذكي بالـ AI' : 'Have report photo? Click for AI Smart OCR Scan'}</span>
               </button>
             </div>
@@ -735,10 +735,10 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
               {/* Modality & Abbreviation Selector */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-xs font-semibold text-slate-300">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
                     {lang === 'ar' ? 'مختصر ونوع الأشعة (Modality & Code):' : 'Radiology Modality & Abbreviation:'}
                   </label>
-                  <span className="text-[11px] font-mono font-bold text-teal-400 bg-teal-950/60 px-2 py-0.5 rounded border border-teal-800/80">
+                  <span className="text-[11px] font-mono font-bold text-teal-800 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/60 px-2 py-0.5 rounded border border-teal-300 dark:border-teal-800/80">
                     {getModalityInfo(modality).code}
                   </span>
                 </div>
@@ -751,11 +751,11 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
                       className={`p-2.5 rounded-xl text-xs text-start sm:text-center border transition-all cursor-pointer flex sm:flex-col items-center justify-between sm:justify-center gap-1.5 ${
                         modality === m.id
                           ? 'bg-teal-500 text-slate-950 font-bold shadow-md border-teal-400'
-                          : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'
+                          : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                       }`}
                     >
                       <span className={`font-mono font-bold text-[11px] px-1.5 py-0.5 rounded ${
-                        modality === m.id ? 'bg-black/20 text-slate-950' : 'bg-slate-800 text-teal-300'
+                        modality === m.id ? 'bg-black/20 text-slate-950' : 'bg-slate-200 dark:bg-slate-800 text-teal-700 dark:text-teal-300'
                       }`}>
                         {m.code}
                       </span>
@@ -768,10 +768,10 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
               {/* Test Name */}
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-semibold text-slate-300">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
                     {lang === 'ar' ? 'اسم الأشعة / الفحص المطلوب بالتفصيل:' : 'Radiology Study / Exam Name:'}
                   </label>
-                  <span className="text-[10px] text-slate-400">
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400">
                     {lang === 'ar' ? 'يظهر بالكامل في البطاقة' : 'Displayed in full'}
                   </span>
                 </div>
@@ -780,15 +780,15 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
                   value={testName}
                   onChange={(e) => setTestName(e.target.value)}
                   placeholder={lang === 'ar' ? 'مثال: Portable CXR AP view, CT Brain without contrast...' : 'e.g. Portable CXR, 12-lead ECG...'}
-                  className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-teal-500"
+                  className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500"
                   required
                 />
-                <div className="mt-1.5 px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-[11px] flex items-center justify-between gap-2 text-slate-300">
-                  <span className="flex items-center gap-1 text-teal-300 font-mono font-bold shrink-0">
-                    <Tag className="w-3 h-3 text-teal-400" />
+                <div className="mt-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-[11px] flex items-center justify-between gap-2 text-slate-700 dark:text-slate-300">
+                  <span className="flex items-center gap-1 text-teal-700 dark:text-teal-300 font-mono font-bold shrink-0">
+                    <Tag className="w-3 h-3 text-teal-600 dark:text-teal-400" />
                     <span>[{getModalityInfo(modality).code}]</span>
                   </span>
-                  <span className="truncate font-semibold text-white">
+                  <span className="truncate font-semibold text-slate-900 dark:text-white">
                     {testName || (lang === 'ar' ? '— يرجى كتابة اسم الأشعة —' : '— Enter study name —')}
                   </span>
                 </div>
@@ -797,14 +797,14 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
               {/* Status & Timestamp */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     {lang === 'ar' ? 'حالة الفحص' : 'Status'}
                   </label>
                   <select
                     value={status}
                     onChange={(e) => setStatus(e.target.value as any)}
                     required
-                    className="w-full px-3 py-2 text-xs rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-teal-500 cursor-pointer"
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500 cursor-pointer"
                   >
                     <option value="REPORTED">{lang === 'ar' ? 'تقرير معتمد (Reported)' : 'Reported'}</option>
                     <option value="RESULTED">{lang === 'ar' ? 'نتيجة أولية (Resulted)' : 'Resulted'}</option>
@@ -813,14 +813,14 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     {lang === 'ar' ? 'التاريخ والوقت' : 'Date & Time'}
                   </label>
                   <input
                     type="datetime-local"
                     value={timestamp}
                     onChange={(e) => setTimestamp(e.target.value)}
-                    className="w-full px-3 py-1.5 text-xs rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-teal-500"
+                    className="w-full px-3 py-1.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500"
                     required
                   />
                 </div>
@@ -828,7 +828,7 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
 
               {/* Report / Findings */}
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   {lang === 'ar' ? 'النتيجة أو نص التقرير الطبي' : 'Report Findings / Impression'}
                 </label>
                 <textarea
@@ -837,13 +837,13 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
                   placeholder={lang === 'ar' ? 'أدخل نص التقرير، النتائج الإشعاعية، انطباع الطبيب...' : 'Enter findings, radiological impression, acute abnormalities...'}
                   rows={4}
                   required={status !== 'ORDERED'}
-                  className="w-full px-3 py-2 text-xs rounded-xl bg-slate-900 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-teal-500 font-sans"
+                  className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-teal-500 font-sans"
                 />
               </div>
 
               {/* Notes */}
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   {lang === 'ar' ? 'ملاحظات سريرية إضافية' : 'Clinical Notes'}
                 </label>
                 <input
@@ -851,12 +851,12 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder={lang === 'ar' ? 'مثال: فحص بجانب السرير، مقارنة مع الفحص السابق...' : 'e.g. Bedside portable study, compared with baseline...'}
-                  className="w-full px-3 py-2 text-xs rounded-xl bg-slate-900 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-teal-500"
+                  className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-teal-500"
                 />
               </div>
 
               {/* Footer */}
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200 dark:border-slate-800">
                 <button
                   type="button"
                   onClick={() => {
@@ -864,7 +864,7 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
                     setEditingItem(null);
                   }}
                   disabled={isSaving}
-                  className="px-4 py-2 text-xs font-semibold text-slate-300 hover:text-white bg-slate-800 rounded-xl transition-colors cursor-pointer"
+                  className="px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white bg-slate-200 dark:bg-slate-800 rounded-xl transition-colors cursor-pointer"
                 >
                   {lang === 'ar' ? 'إلغاء' : 'Cancel'}
                 </button>

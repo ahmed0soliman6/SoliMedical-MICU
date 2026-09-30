@@ -251,6 +251,11 @@ export enum VentilatorMode {
   T_PIECE = 'T-Piece Trial',
   HIGH_FLOW_NASAL = 'HFNC',
   HIGH_FLOW_NC = 'HFNC',
+  NASAL_CANNULA = 'Nasal Cannula',
+  SIMPLE_MASK = 'Simple Face Mask',
+  RESERVOIR_MASK = 'Non-Rebreather Mask (NRBM)',
+  VENTURI_MASK = 'Venturi Mask',
+  TRACH_MASK = 'Trach Mask / Collar',
   ROOM_AIR = 'Room Air',
 }
 
@@ -367,9 +372,11 @@ export interface VentilatorHistoryEntry {
   id: string;
   timestamp: string;
   mode: VentilatorMode | string;
+  supportCategory?: 'INVASIVE_VENT' | 'NON_INVASIVE_NIV' | 'OXYGEN_THERAPY' | 'ROOM_AIR' | string;
   fio2Percent: number;
   peepCmH2O: number;
   tidalVolumeMl: number;
+  oxygenFlowLpm?: number;
   recordedByStaffName: string;
   recordedByStaffId?: string;
   deviceModel?: string;
@@ -380,6 +387,7 @@ export interface VentilatorHistoryEntry {
   drivingPressureCmH2O?: number;
   ieRatio?: string;
   circuitLeakPercent?: number;
+  notes?: string;
 }
 
 export interface VentilatorParameters {
@@ -388,11 +396,13 @@ export interface VentilatorParameters {
   bedNumber?: BedNumber | string;
   patientId: string;
   timestamp: string;
-  deviceModel: string; // e.g. Draeger Evita V800
-  mode: VentilatorMode;
+  deviceModel: string; // e.g. Draeger Evita V800, Nasal Cannula, NRBM
+  mode: VentilatorMode | string;
+  supportCategory?: 'INVASIVE_VENT' | 'NON_INVASIVE_NIV' | 'OXYGEN_THERAPY' | 'ROOM_AIR' | string;
   fio2Percent: number;
   peepCmH2O: number;
   tidalVolumeMl: number;
+  oxygenFlowLpm?: number; // L/min for Nasal Cannula, Face Mask, Reservoir Mask, HFNC
   setTidalVolumeMl?: number; // Alias for tidalVolumeMl
   peakInspiratoryPressureCmH2O: number; // Ppeak
   plateauPressureCmH2O: number; // Pplat
@@ -404,6 +414,8 @@ export interface VentilatorParameters {
   isWeaningTrialActive?: boolean;
   weaningTrialType?: 'SBT_30MIN' | 'CPAP_PS_TRIAL' | 'T_PIECE';
   circuitLeakPercent: number;
+  pao2Fio2Ratio?: number;
+  notes?: string;
   recordedByStaffName: string;
   isActive?: boolean;
   history?: VentilatorHistoryEntry[];

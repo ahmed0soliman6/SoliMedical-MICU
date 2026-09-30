@@ -321,9 +321,13 @@ export const SbarSignModal: React.FC<SbarSignModalProps> = ({
       : (lang === 'ar' ? 'بدون مهدئات مستمرة' : 'No continuous sedatives');
 
     // Airway / Vent state
-    let airwayStatus = lang === 'ar' ? 'تنفس طبيعي' : 'Room Air';
+    let airwayStatus = lang === 'ar' ? 'تنفس طبيعي (Room Air)' : 'Room Air';
     if (targetVent && targetVent.mode) {
-      airwayStatus = `${lang === 'ar' ? 'جهاز تنفس صناعي' : 'Mechanical Vent'} [${targetVent.mode}, FiO2: ${targetVent.fio2Percent}%, PEEP: ${targetVent.peepCmH2O}]`;
+      if (targetVent.supportCategory === 'OXYGEN_THERAPY' || targetVent.oxygenFlowLpm) {
+        airwayStatus = `${lang === 'ar' ? 'علاج بالأكسجين' : 'Oxygen Therapy'} [${targetVent.mode}${targetVent.oxygenFlowLpm ? ` @ ${targetVent.oxygenFlowLpm} L/min` : ''}, FiO2: ${targetVent.fio2Percent}%]`;
+      } else {
+        airwayStatus = `${lang === 'ar' ? 'جهاز تنفس صناعي' : 'Mechanical Vent'} [${targetVent.mode}, FiO2: ${targetVent.fio2Percent}%, PEEP: ${targetVent.peepCmH2O} cmH2O]`;
+      }
     } else if (targetVitals?.fio2SuppliedPercent && targetVitals.fio2SuppliedPercent > 21) {
       airwayStatus = `${lang === 'ar' ? 'أكسجين إضافي' : 'Oxygen'} (${targetVitals.fio2SuppliedPercent}% FiO2)`;
     }
@@ -355,7 +359,11 @@ export const SbarSignModal: React.FC<SbarSignModalProps> = ({
     const latestAbg = targetLabs?.[0]?.abg;
     const pfStr = latestAbg?.pao2Fio2Ratio ? `P/F: ${latestAbg.pao2Fio2Ratio}` : '';
     if (targetVent) {
-      pulmText = `${targetVent.mode} | FiO2: ${targetVent.fio2Percent}% | PEEP: ${targetVent.peepCmH2O} cmH2O | Vt: ${targetVent.tidalVolumeMl} mL. ${targetVitals?.spo2Percent ? `SpO2: ${targetVitals.spo2Percent}%` : ''} ${pfStr}`.trim();
+      if (targetVent.supportCategory === 'OXYGEN_THERAPY' || targetVent.oxygenFlowLpm) {
+        pulmText = `${targetVent.mode} ${targetVent.oxygenFlowLpm ? `@ ${targetVent.oxygenFlowLpm} L/min` : ''} | FiO2: ${targetVent.fio2Percent}%. ${targetVitals?.spo2Percent ? `SpO2: ${targetVitals.spo2Percent}%` : ''} ${pfStr}`.trim();
+      } else {
+        pulmText = `${targetVent.mode} | FiO2: ${targetVent.fio2Percent}% | PEEP: ${targetVent.peepCmH2O} cmH2O | Vt: ${targetVent.tidalVolumeMl} mL. ${targetVitals?.spo2Percent ? `SpO2: ${targetVitals.spo2Percent}%` : ''} ${pfStr}`.trim();
+      }
     } else if (targetVitals) {
       pulmText = `SpO2: ${targetVitals.spo2Percent ?? '--'}% ${targetVitals.fio2SuppliedPercent ? `(${targetVitals.fio2SuppliedPercent}% FiO2)` : ''}. ${pfStr}`.trim();
     } else {
@@ -391,13 +399,22 @@ export const SbarSignModal: React.FC<SbarSignModalProps> = ({
           ? `1. الدورة الدموية: استقرار العلامات الحيوية والحفاظ على الضغط الشرياني الوسطي MAP > 65 mmHg.`
           : `1. Hemodynamics: Maintain hemodynamics targeting MAP > 65 mmHg.`);
 
-    const rec2 = targetVent 
-      ? (lang === 'ar'
+    let rec2 = '';
+    if (targetVent) {
+      if (targetVent.supportCategory === 'OXYGEN_THERAPY' || targetVent.oxygenFlowLpm) {
+        rec2 = lang === 'ar'
+          ? `2. التنفس: تقليل تدفق الأكسجين (${targetVent.mode} @ ${targetVent.oxygenFlowLpm || 3} L/min) تدريجياً بهدف الفطام إلى هواء الغرفة مع الحفاظ على SpO2 > 92%.`
+          : `2. Pulmonary: Wean oxygen flow (${targetVent.mode} @ ${targetVent.oxygenFlowLpm || 3} L/min) targeting Room Air with SpO2 > 92%.`;
+      } else {
+        rec2 = lang === 'ar'
           ? `2. التنفس: إجراء تجربة فطام التنفس الصناعي (SBT) وتقييم الجاهزية لنزع الأنبوب الرغامي.`
-          : `2. Pulmonary: Daily Spontaneous Breathing Trial (SBT) & evaluate weaning readiness.`)
-      : (lang === 'ar'
-          ? `2. المتابعة: إعادة الفحوصات وغازات الدم الشريانية ABG عند الساعة 06:00.`
-          : `2. Diagnostics: Repeat morning ABG and serum electrolytes at 06:00.`);
+          : `2. Pulmonary: Daily Spontaneous Breathing Trial (SBT) & evaluate weaning readiness.`;
+      }
+    } else {
+      rec2 = lang === 'ar'
+        ? `2. المتابعة: إعادة الفحوصات وغازات الدم الشريانية ABG عند الساعة 06:00.`
+        : `2. Diagnostics: Repeat morning ABG and serum electrolytes at 06:00.`;
+    }
 
     const recList = [rec1, rec2]; // Strict max 2 recommendations
 

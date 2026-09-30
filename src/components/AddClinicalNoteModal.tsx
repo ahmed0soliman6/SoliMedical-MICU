@@ -168,18 +168,18 @@ RECOMMENDATIONS:
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/80 backdrop-blur-sm overflow-y-auto">
-      <div className="w-full max-w-2xl bg-[#0c1426] border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden my-auto">
+      <div className="w-full max-w-2xl bg-white dark:bg-[#0c1426] border border-slate-200 dark:border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden my-auto text-slate-900 dark:text-white">
         {/* Header */}
-        <div className="px-5 py-4 bg-[#090f1d] border-b border-slate-800 flex items-center justify-between">
+        <div className="px-5 py-4 bg-slate-50 dark:bg-[#090f1d] border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-xl bg-teal-500/10 border border-teal-500/30 flex items-center justify-center text-teal-400">
+            <div className="w-10 h-10 rounded-xl bg-teal-500/10 border border-teal-500/30 flex items-center justify-center text-teal-600 dark:text-teal-400">
               <FileText className="w-5.5 h-5.5" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-white">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
                 {lang === 'ar' ? 'توقيع ملاحظة طبية رقمية جديدة' : 'Sign New Clinical Note'}
               </h3>
-              <p className="text-[11px] text-slate-400">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
                 {lang === 'ar' 
                   ? `تسجيل مستند طبي رسمي للمريض: ${patientName}` 
                   : `Record secure clinical document for ${patientName}`}
@@ -188,15 +188,15 @@ RECOMMENDATIONS:
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors animate-all"
+            className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800/80 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white flex items-center justify-center transition-colors animate-all"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Clinical Templates Panel */}
-        <div className="p-4 bg-slate-950/50 border-b border-slate-800/60">
-          <div className="flex items-center gap-1.5 text-[11px] font-bold text-teal-400 mb-2">
+        <div className="p-4 bg-slate-50 dark:bg-slate-950/50 border-b border-slate-200 dark:border-slate-800/60">
+          <div className="flex items-center gap-1.5 text-[11px] font-bold text-teal-700 dark:text-teal-400 mb-2">
             <ClipboardList className="w-4 h-4" />
             <span>{lang === 'ar' ? 'قوالب الملاحظات الطبية الجاهزة (Clinical Presets):' : 'Medico-Clinical Presets:'}</span>
           </div>
@@ -206,9 +206,9 @@ RECOMMENDATIONS:
                 key={tpl.id}
                 type="button"
                 onClick={() => handleApplyTemplate(tpl)}
-                className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 hover:border-teal-500/50 text-[11px] text-slate-300 transition-all text-left flex items-center gap-1 cursor-pointer hover:bg-slate-800"
+                className="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-teal-500/50 text-[11px] text-slate-700 dark:text-slate-300 transition-all text-left flex items-center gap-1 cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-800"
               >
-                <span className="w-1.5 h-1.5 rounded-full bg-teal-400"></span>
+                <span className="w-1.5 h-1.5 rounded-full bg-teal-500"></span>
                 <span>{lang === 'ar' ? tpl.titleAr : tpl.titleEn}</span>
               </button>
             ))}
@@ -219,7 +219,7 @@ RECOMMENDATIONS:
         <form onSubmit={handleSubmit} className="p-5 space-y-4 text-xs">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="text-[11px] text-slate-300 font-semibold block mb-1">
+              <label className="text-[11px] text-slate-700 dark:text-slate-300 font-semibold block mb-1">
                 {lang === 'ar' ? 'نوع الملاحظة (Note Classification)' : 'Note Classification'}
               </label>
               <select
@@ -231,7 +231,7 @@ RECOMMENDATIONS:
                     setTitle(lang === 'ar' ? 'طلب عرض طبي واستشارة' : 'Medical Consultation Referral');
                   }
                 }}
-                className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-teal-500 focus:outline-none font-sans"
+                className="w-full bg-slate-50 dark:bg-[#0f172a] border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white focus:border-teal-500 focus:outline-none font-sans"
               >
                 <option value={NoteType.PROGRESS_NOTE}>{lang === 'ar' ? 'Progress Note (ملاحظة تقدمية)' : 'Clinical Progress Note'}</option>
                 <option value={NoteType.CONSULTATION_NOTE}>{lang === 'ar' ? 'Consultation Note (طلب عرض / استشارة)' : 'Clinical Consultation Referral'}</option>
@@ -241,7 +241,7 @@ RECOMMENDATIONS:
             </div>
 
             <div>
-              <label className="text-[11px] text-slate-300 font-semibold block mb-1">
+              <label className="text-[11px] text-slate-700 dark:text-slate-300 font-semibold block mb-1">
                 {lang === 'ar' ? 'عنوان المستند السريري' : 'Document Title'}
               </label>
               <input
@@ -249,15 +249,15 @@ RECOMMENDATIONS:
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder={lang === 'ar' ? "مثال: طلب عرض طبي - استشارة الكلى" : "e.g., Nephrology Consultation Request"}
-                className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-teal-500 focus:outline-none"
+                className="w-full bg-slate-50 dark:bg-[#0f172a] border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white focus:border-teal-500 focus:outline-none"
                 required
               />
             </div>
           </div>
 
           {noteType === NoteType.CONSULTATION_NOTE && (
-            <div className="p-3 bg-teal-950/20 border border-teal-800/40 rounded-xl space-y-2 animate-in fade-in slide-in-from-top-2 duration-150">
-              <label className="text-[11px] text-teal-300 font-bold block">
+            <div className="p-3 bg-teal-50 dark:bg-teal-950/20 border border-teal-200 dark:border-teal-800/40 rounded-xl space-y-2 animate-in fade-in slide-in-from-top-2 duration-150">
+              <label className="text-[11px] text-teal-800 dark:text-teal-300 font-bold block">
                 {lang === 'ar' ? 'التخصص الطبي المستهدف للاستشارة (Target Specialty) *' : 'Target Consulting Specialty *'}
               </label>
               <select
@@ -267,7 +267,7 @@ RECOMMENDATIONS:
                   const specialtyName = e.target.value.split('/')[1]?.trim() || e.target.value;
                   setTitle(lang === 'ar' ? `طلب عرض طبي: استشارة طبيب ${specialtyName}` : `Clinical Referral: ${e.target.value.split('/')[0].trim()} Consult`);
                 }}
-                className="w-full bg-[#090f1d] border border-teal-800/50 rounded-lg px-3 py-2 text-teal-200 focus:border-teal-400 focus:outline-none font-sans"
+                className="w-full bg-white dark:bg-[#090f1d] border border-teal-300 dark:border-teal-800/50 rounded-lg px-3 py-2 text-teal-900 dark:text-teal-200 focus:border-teal-400 focus:outline-none font-sans"
               >
                 <option value="Nephrology / الكلى">{lang === 'ar' ? 'Nephrology (أخصائي / استشاري أمراض الكلى)' : 'Nephrology (Kidney Specialty)'}</option>
                 <option value="Cardiology / القلب">{lang === 'ar' ? 'Cardiology (أخصائي / استشاري أمراض القلب)' : 'Cardiology (Heart Specialty)'}</option>
@@ -278,7 +278,7 @@ RECOMMENDATIONS:
                 <option value="General Surgery / الجراحة العامة">{lang === 'ar' ? 'General Surgery (الجراحة العامة)' : 'General Surgery'}</option>
                 <option value="Other Specialty / تخصص آخر">{lang === 'ar' ? 'Other Medical Specialty (تخصص آخر)' : 'Other Medical Specialty'}</option>
               </select>
-              <p className="text-[10px] text-slate-400 leading-normal">
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-normal">
                 {lang === 'ar' 
                   ? 'اختر تخصص الاستشارة المطلوب. سيظهر هذا العرض في قائمة الملاحظات كحالة معلقة باللون الأصفر، وسيتمكن الطبيب المعني من كتابة الرد الرسمي مباشرة.' 
                   : 'Select the consulting specialty. This referral will appear as pending (yellow), allowing the specific consultant to record their clinical answer.'}
@@ -288,14 +288,14 @@ RECOMMENDATIONS:
 
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="text-[11px] text-slate-300 font-semibold block">
+              <label className="text-[11px] text-slate-700 dark:text-slate-300 font-semibold block">
                 {lang === 'ar' ? 'المحتوى الطبي المفصل (Note Content)' : 'Detailed Clinical Narrative'}
               </label>
               {content && (
                 <button
                   type="button"
                   onClick={() => setContent('')}
-                  className="text-[10px] text-slate-500 hover:text-rose-400 transition-colors cursor-pointer"
+                  className="text-[10px] text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer"
                 >
                   {lang === 'ar' ? 'مسح النص' : 'Clear Text'}
                 </button>
@@ -317,44 +317,44 @@ RECOMMENDATIONS:
               value={content}
               onChange={(e) => setContent(e.target.value)}
               placeholder={lang === 'ar' ? "اكتب السرد الطبي المفصل وخطة العلاج والملاحظات التمريضية والسريرية هنا أو استخدم زر الإملاء الصوتي أعلاه..." : "Document detailed physical assessments, vitals correlation, ventilator weaning, or drug adjustments (or click Record Voice Note)..."}
-              className="w-full bg-[#0f172a] border border-slate-700 rounded-lg p-3 text-white focus:border-teal-500 focus:outline-none font-mono text-xs leading-relaxed"
+              className="w-full bg-slate-50 dark:bg-[#0f172a] border border-slate-300 dark:border-slate-700 rounded-lg p-3 text-slate-900 dark:text-white focus:border-teal-500 focus:outline-none font-mono text-xs leading-relaxed"
               required
             />
           </div>
 
           {/* Readonly Logged in User Display */}
-          <div className="p-3.5 bg-[#090f1d] border border-slate-800 rounded-xl flex items-center justify-between">
+          <div className="p-3.5 bg-slate-50 dark:bg-[#090f1d] border border-slate-200 dark:border-slate-800 rounded-xl flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-slate-400">
+              <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-400">
                 <User className="w-4 h-4" />
               </div>
               <div>
-                <span className="text-[10px] text-slate-400 block font-semibold leading-none">
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-semibold leading-none">
                   {lang === 'ar' ? 'مقدم الملاحظة الرقمية (مدخل البيانات الحالي):' : 'Digital Note Author (Data Entry Clerk):'}
                 </span>
-                <span className="text-xs font-bold text-teal-300 font-sans mt-1 block">
+                <span className="text-xs font-bold text-teal-700 dark:text-teal-300 font-sans mt-1 block">
                   {loggedInName}
                 </span>
               </div>
             </div>
             <div className="text-right">
-              <span className="text-[10px] text-slate-400 block font-semibold leading-none">
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-semibold leading-none">
                 {lang === 'ar' ? 'الدور السريري / رقم الموظف:' : 'Clinical Role / Badge ID:'}
               </span>
-              <span className="text-xs font-semibold text-slate-200 mt-1 block font-mono">
+              <span className="text-xs font-semibold text-slate-700 dark:text-slate-200 mt-1 block font-mono">
                 {loggedInRole} • ID: {loggedInBadgeId}
               </span>
             </div>
           </div>
 
           {/* Cryptographic Compliance Standard Footer */}
-          <div className="p-3 bg-[#080f1e] rounded-xl border border-teal-900/40 flex items-start gap-2.5">
-            <ShieldCheck className="w-5 h-5 text-teal-400 flex-shrink-0" />
+          <div className="p-3 bg-teal-50/50 dark:bg-[#080f1e] rounded-xl border border-teal-200 dark:border-teal-900/40 flex items-start gap-2.5">
+            <ShieldCheck className="w-5 h-5 text-teal-600 dark:text-teal-400 flex-shrink-0" />
             <div className="space-y-0.5">
-              <span className="text-[11px] font-bold text-teal-300 block">
+              <span className="text-[11px] font-bold text-teal-800 dark:text-teal-300 block">
                 {lang === 'ar' ? 'معايير التوثيق الرقمي CBAHI / HIPAA' : 'CBAHI / HIPAA Compliance Standard'}
               </span>
-              <p className="text-[10px] text-slate-400 leading-normal">
+              <p className="text-[10px] text-slate-600 dark:text-slate-400 leading-normal">
                 {lang === 'ar' 
                   ? 'بمجرد التوقيع الرقمي للملاحظة، يتم حفظها وتوثيقها رسمياً في ملف المريض. التعديلات اللاحقة تتم عبر ملحقات (Addendums) معتمدة.' 
                   : 'Upon digital signing, notes are securely logged in the patient record. Standard audits and updates can be executed via linked addendums.'}
@@ -367,7 +367,7 @@ RECOMMENDATIONS:
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold hover:text-white transition-all cursor-pointer"
+              className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold hover:text-slate-900 dark:hover:text-white transition-all cursor-pointer"
             >
               {lang === 'ar' ? 'إلغاء' : 'Cancel'}
             </button>

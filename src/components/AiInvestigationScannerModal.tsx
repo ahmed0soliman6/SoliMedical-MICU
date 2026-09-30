@@ -222,27 +222,27 @@ export const AiInvestigationScannerModal: React.FC<AiInvestigationScannerModalPr
 
   return (
     <div 
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/85 backdrop-blur-md animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/75 backdrop-blur-md animate-in fade-in duration-200"
       dir={isRTL ? 'rtl' : 'ltr'}
     >
-      <div className="w-full max-w-4xl bg-[#080e1e] border border-teal-500/30 rounded-2xl shadow-2xl shadow-teal-500/10 flex flex-col max-h-[92vh] overflow-hidden">
+      <div className="w-full max-w-4xl bg-white dark:bg-[#080e1e] border border-slate-200 dark:border-teal-500/30 rounded-2xl shadow-2xl shadow-teal-500/10 flex flex-col max-h-[92vh] overflow-hidden text-slate-900 dark:text-white">
         
         {/* Header */}
-        <div className="flex items-center justify-between p-4 sm:p-5 border-b border-slate-800 bg-slate-900/60">
+        <div className="flex items-center justify-between p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-teal-500/10 border border-teal-500/30 flex items-center justify-center text-teal-400">
+            <div className="w-10 h-10 rounded-xl bg-teal-500/10 border border-teal-500/30 flex items-center justify-center text-teal-600 dark:text-teal-400">
               <Scan className="w-5 h-5 animate-pulse" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-white flex items-center gap-2">
+                <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
                   <span>{lang === 'ar' ? 'المسح الضوئي الذكي للأشعة والتقارير' : 'AI Smart Radiology & Investigation Scanner'}</span>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-teal-500/20 text-teal-300 border border-teal-500/40">
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-teal-100 text-teal-900 border border-teal-300 dark:bg-teal-500/20 dark:text-teal-300 dark:border-teal-500/40 font-bold">
                     Gemini Vision OCR
                   </span>
                 </h2>
               </div>
-              <p className="text-xs text-slate-400 mt-0.5">
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                 {lang === 'ar' 
                   ? `التعرف الفوري على تقارير أشعة الصدر، CT، السونار، وتخطيط القلب للسرير ${bedNumber}` 
                   : `Automated recognition for CXR, CT, ultrasound, and ECG reports for Bed ${bedNumber}`}
@@ -253,7 +253,7 @@ export const AiInvestigationScannerModal: React.FC<AiInvestigationScannerModalPr
           <button
             type="button"
             onClick={onClose}
-            className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+            className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -349,19 +349,19 @@ export const AiInvestigationScannerModal: React.FC<AiInvestigationScannerModalPr
 
           {/* Selected Image Thumbnail & Re-Scan Controls */}
           {selectedImage && (
-            <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-slate-900 border border-slate-800">
+            <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
               <div className="flex items-center gap-3">
                 <img
                   src={selectedImage}
                   alt="Scanned Report"
-                  className="w-16 h-16 object-cover rounded-lg border border-slate-700 bg-black shrink-0"
+                  className="w-16 h-16 object-cover rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-200 dark:bg-black shrink-0"
                 />
                 <div>
-                  <p className="text-xs font-bold text-white flex items-center gap-1.5">
-                    <FileText className="w-3.5 h-3.5 text-teal-400" />
+                  <p className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
                     <span>{lang === 'ar' ? 'تم تجهيز الصورة للتحليل' : 'Image ready for analysis'}</span>
                   </p>
-                  <p className="text-[11px] text-slate-400 font-mono mt-0.5">
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">
                     {selectedImageMime}
                   </p>
                 </div>
@@ -372,7 +372,7 @@ export const AiInvestigationScannerModal: React.FC<AiInvestigationScannerModalPr
                   type="button"
                   onClick={() => processImageWithAI(selectedImage, selectedImageMime)}
                   disabled={isAnalyzing}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 border border-teal-500/40 text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-50 dark:bg-teal-500/20 hover:bg-teal-100 dark:hover:bg-teal-500/30 text-teal-800 dark:text-teal-300 border border-teal-300 dark:border-teal-500/40 text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${isAnalyzing ? 'animate-spin' : ''}`} />
                   <span>{lang === 'ar' ? 'إعادة التحليل' : 'Re-scan'}</span>
@@ -383,7 +383,7 @@ export const AiInvestigationScannerModal: React.FC<AiInvestigationScannerModalPr
                     setSelectedImage(null);
                     setScannedResult(null);
                   }}
-                  className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800"
+                  className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800"
                   title={lang === 'ar' ? 'مسح واختيار صورة أخرى' : 'Clear image'}
                 >
                   <X className="w-4 h-4" />
@@ -394,12 +394,12 @@ export const AiInvestigationScannerModal: React.FC<AiInvestigationScannerModalPr
 
           {/* Loading Animation */}
           {isAnalyzing && (
-            <div className="p-8 text-center rounded-2xl bg-teal-950/20 border border-teal-500/30 space-y-3 animate-pulse">
-              <Sparkles className="w-8 h-8 text-teal-400 mx-auto animate-spin" />
-              <p className="text-sm font-bold text-teal-300">
+            <div className="p-8 text-center rounded-2xl bg-teal-50 dark:bg-teal-950/20 border border-teal-200 dark:border-teal-500/30 space-y-3 animate-pulse">
+              <Sparkles className="w-8 h-8 text-teal-600 dark:text-teal-400 mx-auto animate-spin" />
+              <p className="text-sm font-bold text-teal-800 dark:text-teal-300">
                 {lang === 'ar' ? 'جارِ قراءة التقرير وفحص النتائج بالذكاء الاصطناعي...' : 'Analyzing diagnostic report and findings with Gemini AI...'}
               </p>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 {lang === 'ar' ? 'استخراج نوع الفحص، النتائج السريرية، الانطباع الطبي والعلامات الحرجة' : 'Extracting modality, findings, acute impression, and clinical flags'}
               </p>
             </div>
@@ -407,9 +407,9 @@ export const AiInvestigationScannerModal: React.FC<AiInvestigationScannerModalPr
 
           {/* Error Banner */}
           {analysisError && (
-            <div className="p-4 rounded-xl bg-rose-950/40 border border-rose-800 text-rose-300 text-xs space-y-1.5">
+            <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300 text-xs space-y-1.5">
               <div className="flex items-center gap-2 font-bold">
-                <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
                 <span>{lang === 'ar' ? 'تنبيه أثناء معالجة الصورة:' : 'Scan Processing Notice:'}</span>
               </div>
               <p className="leading-relaxed pl-6">{analysisError}</p>
@@ -422,13 +422,13 @@ export const AiInvestigationScannerModal: React.FC<AiInvestigationScannerModalPr
               
               {/* Critical Alert Banner if flagged */}
               {scannedResult.hasCriticalFinding && (
-                <div className="p-3.5 rounded-xl bg-rose-950/60 border-2 border-rose-500 text-rose-200 text-xs flex items-start gap-3 shadow-lg shadow-rose-950/50 animate-pulse">
-                  <ShieldAlert className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+                <div className="p-3.5 rounded-xl bg-rose-100 dark:bg-rose-950/60 border-2 border-rose-500 text-rose-900 dark:text-rose-200 text-xs flex items-start gap-3 shadow-lg shadow-rose-950/20 dark:shadow-rose-950/50 animate-pulse">
+                  <ShieldAlert className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
                   <div>
-                    <strong className="font-bold text-rose-300 text-sm block">
+                    <strong className="font-bold text-rose-900 dark:text-rose-300 text-sm block">
                       {lang === 'ar' ? '⚠️ تنبيه سريري حرج تم رصده في التقرير:' : '⚠️ Critical Finding Detected in Report:'}
                     </strong>
-                    <p className="mt-0.5 text-xs text-rose-100 font-medium">
+                    <p className="mt-0.5 text-xs text-rose-800 dark:text-rose-100 font-medium">
                       {scannedResult.criticalFindingText || scannedResult.summaryAr}
                     </p>
                   </div>
@@ -436,29 +436,29 @@ export const AiInvestigationScannerModal: React.FC<AiInvestigationScannerModalPr
               )}
 
               {/* Clinical AI Summary Box */}
-              <div className="p-4 rounded-xl bg-gradient-to-r from-teal-950/40 via-slate-900/60 to-slate-900/60 border border-teal-500/30 space-y-2">
+              <div className="p-4 rounded-xl bg-teal-50/80 dark:bg-gradient-to-r dark:from-teal-950/40 dark:via-slate-900/60 dark:to-slate-900/60 border border-teal-200 dark:border-teal-500/30 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-teal-400 flex items-center gap-1.5">
+                  <span className="text-xs font-bold text-teal-800 dark:text-teal-400 flex items-center gap-1.5">
                     <Sparkles className="w-4 h-4" />
                     <span>{lang === 'ar' ? 'الملخص السريري الذكي (AI Clinical Summary):' : 'AI Clinical Summary:'}</span>
                   </span>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/30">
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-teal-100 text-teal-900 border border-teal-300 dark:bg-teal-500/20 dark:text-teal-300 dark:border-teal-500/30 font-bold">
                     Confidence: {Math.round(scannedResult.confidence * 100)}%
                   </span>
                 </div>
-                <p className="text-xs text-slate-200 font-sans leading-relaxed">
+                <p className="text-xs text-slate-800 dark:text-slate-200 font-sans leading-relaxed">
                   {lang === 'ar' ? scannedResult.summaryAr : scannedResult.summaryEn}
                 </p>
               </div>
 
               {/* Editable Form for Verified Recording */}
-              <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 space-y-4">
-                <div className="flex items-center justify-between pb-2 border-b border-slate-800 text-xs">
-                  <span className="font-bold text-white flex items-center gap-1.5">
-                    <CheckCircle2 className="w-4 h-4 text-teal-400" />
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 space-y-4">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800 text-xs">
+                  <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-teal-600 dark:text-teal-400" />
                     <span>{lang === 'ar' ? 'مراجعة وتأكيد بيانات التقرير قبل الحفظ:' : 'Review & Confirm Extracted Findings:'}</span>
                   </span>
-                  <span className="text-slate-400 text-[11px]">
+                  <span className="text-slate-500 dark:text-slate-400 text-[11px]">
                     {lang === 'ar' ? 'يمكنك تعديل أي حقل مباشرة' : 'All fields are editable'}
                   </span>
                 </div>
@@ -466,13 +466,13 @@ export const AiInvestigationScannerModal: React.FC<AiInvestigationScannerModalPr
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {/* Modality & Abbreviation */}
                   <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                       {lang === 'ar' ? 'مختصر ونوع الأشعة (Modality & Code)' : 'Modality & Abbreviation'}
                     </label>
                     <select
                       value={editModality}
                       onChange={(e) => setEditModality(e.target.value)}
-                      className="w-full px-3 py-2 text-xs rounded-xl bg-slate-950 border border-slate-700 text-white focus:outline-none focus:border-teal-500 cursor-pointer font-medium"
+                      className="w-full px-3 py-2 text-xs rounded-xl bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500 cursor-pointer font-medium"
                     >
                       <option value="Chest X-Ray">[CXR] Chest X-Ray (أشعة الصدر)</option>
                       <option value="CT">[CT] CT Scan (الأشعة المقطعية)</option>
@@ -486,23 +486,23 @@ export const AiInvestigationScannerModal: React.FC<AiInvestigationScannerModalPr
 
                   {/* Test Name */}
                   <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                       {lang === 'ar' ? 'اسم الأشعة والفحص (Radiology Study Name)' : 'Radiology Study Name'}
                     </label>
                     <input
                       type="text"
                       value={editTestName}
                       onChange={(e) => setEditTestName(e.target.value)}
-                      className="w-full px-3 py-2 text-xs rounded-xl bg-slate-950 border border-slate-700 text-white focus:outline-none focus:border-teal-500 font-semibold"
+                      className="w-full px-3 py-2 text-xs rounded-xl bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500 font-semibold"
                       required
                     />
                   </div>
                 </div>
 
                 {/* Live Preview Strip for Mobile & Desktop */}
-                <div className="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-[11px] flex items-center justify-between gap-2 text-slate-300">
-                  <span className="flex items-center gap-1 text-teal-300 font-mono font-bold shrink-0">
-                    <Tag className="w-3.5 h-3.5 text-teal-400" />
+                <div className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-[11px] flex items-center justify-between gap-2 text-slate-700 dark:text-slate-300">
+                  <span className="flex items-center gap-1 text-teal-700 dark:text-teal-300 font-mono font-bold shrink-0">
+                    <Tag className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
                     <span>
                       {editModality === 'Chest X-Ray' ? '[CXR]' :
                        editModality === 'CT' ? '[CT]' :
@@ -512,7 +512,7 @@ export const AiInvestigationScannerModal: React.FC<AiInvestigationScannerModalPr
                        editModality === 'Echo' ? '[ECHO]' : '[RAD]'}
                     </span>
                   </span>
-                  <span className="truncate font-semibold text-white">
+                  <span className="truncate font-semibold text-slate-900 dark:text-white">
                     {editTestName || (lang === 'ar' ? 'اسم الأشعة غير محدد' : 'Study name not set')}
                   </span>
                 </div>
@@ -520,13 +520,13 @@ export const AiInvestigationScannerModal: React.FC<AiInvestigationScannerModalPr
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {/* Status */}
                   <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                       {lang === 'ar' ? 'حالة التقرير' : 'Status'}
                     </label>
                     <select
                       value={editStatus}
                       onChange={(e) => setEditStatus(e.target.value as any)}
-                      className="w-full px-3 py-2 text-xs rounded-xl bg-slate-950 border border-slate-700 text-white focus:outline-none focus:border-teal-500 cursor-pointer"
+                      className="w-full px-3 py-2 text-xs rounded-xl bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500 cursor-pointer"
                     >
                       <option value="REPORTED">{lang === 'ar' ? 'تقرير معتمد (Reported)' : 'Reported'}</option>
                       <option value="RESULTED">{lang === 'ar' ? 'نتيجة أولية (Resulted)' : 'Resulted'}</option>
@@ -536,14 +536,14 @@ export const AiInvestigationScannerModal: React.FC<AiInvestigationScannerModalPr
 
                   {/* Timestamp */}
                   <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                       {lang === 'ar' ? 'تاريخ ووقت الفحص' : 'Exam Date & Time'}
                     </label>
                     <input
                       type="datetime-local"
                       value={editTimestamp}
                       onChange={(e) => setEditTimestamp(e.target.value)}
-                      className="w-full px-3 py-1.5 text-xs rounded-xl bg-slate-950 border border-slate-700 text-white focus:outline-none focus:border-teal-500"
+                      className="w-full px-3 py-1.5 text-xs rounded-xl bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500"
                       required
                     />
                   </div>
@@ -551,21 +551,21 @@ export const AiInvestigationScannerModal: React.FC<AiInvestigationScannerModalPr
 
                 {/* Report Findings & Impression */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     {lang === 'ar' ? 'نص التقرير والنتائج الطبية (Findings & Impression)' : 'Report Findings & Clinical Impression'}
                   </label>
                   <textarea
                     value={editReport}
                     onChange={(e) => setEditReport(e.target.value)}
                     rows={6}
-                    className="w-full px-3 py-2 text-xs rounded-xl bg-slate-950 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-teal-500 font-sans leading-relaxed whitespace-pre-wrap"
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-teal-500 font-sans leading-relaxed whitespace-pre-wrap"
                     placeholder="Enter full findings and radiological impression..."
                   />
                 </div>
 
                 {/* Notes */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     {lang === 'ar' ? 'ملاحظات وتوجيهات سريرية' : 'Clinical Notes'}
                   </label>
                   <input
@@ -573,7 +573,7 @@ export const AiInvestigationScannerModal: React.FC<AiInvestigationScannerModalPr
                     value={editNotes}
                     onChange={(e) => setEditNotes(e.target.value)}
                     placeholder={lang === 'ar' ? 'مثال: تم إبلاغ طبيب العناية، فحص متنقل للسرير...' : 'e.g. Bedside study, ICU team alerted...'}
-                    className="w-full px-3 py-2 text-xs rounded-xl bg-slate-950 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-teal-500"
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-teal-500"
                   />
                 </div>
               </div>
@@ -582,13 +582,13 @@ export const AiInvestigationScannerModal: React.FC<AiInvestigationScannerModalPr
 
           {/* Success Banner */}
           {saveSuccess && (
-            <div className="p-4 rounded-xl bg-emerald-950/60 border border-emerald-500 text-emerald-200 text-xs flex items-center gap-3 animate-in fade-in">
-              <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+            <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-500 text-emerald-900 dark:text-emerald-200 text-xs flex items-center gap-3 animate-in fade-in">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
               <div>
-                <strong className="font-bold text-emerald-300 block text-sm">
+                <strong className="font-bold text-emerald-900 dark:text-emerald-300 block text-sm">
                   {lang === 'ar' ? 'تم حفظ التقرير في ملف المريض بنجاح!' : 'Investigation successfully recorded into patient record!'}
                 </strong>
-                <p className="text-[11px] text-emerald-100 mt-0.5">
+                <p className="text-[11px] text-emerald-800 dark:text-emerald-100 mt-0.5">
                   {lang === 'ar' ? 'تم توثيق النتائج وتحديث بطاقة الفحوصات والأشعة.' : 'Documented and synced to investigations flowsheet.'}
                 </p>
               </div>
@@ -597,11 +597,11 @@ export const AiInvestigationScannerModal: React.FC<AiInvestigationScannerModalPr
         </div>
 
         {/* Footer Actions */}
-        <div className="flex items-center justify-between p-4 sm:p-5 border-t border-slate-800 bg-slate-900/60">
+        <div className="flex items-center justify-between p-4 sm:p-5 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
+            className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
           >
             {lang === 'ar' ? 'إلغاء' : 'Close'}
           </button>
@@ -612,7 +612,7 @@ export const AiInvestigationScannerModal: React.FC<AiInvestigationScannerModalPr
                 <button
                   type="button"
                   onClick={handleApplyToForm}
-                  className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-teal-300 border border-slate-700 text-xs font-bold transition-all cursor-pointer active:scale-95"
+                  className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-teal-700 dark:text-teal-300 border border-slate-300 dark:border-slate-700 text-xs font-bold transition-all cursor-pointer active:scale-95"
                 >
                   {lang === 'ar' ? 'تعبئة في نموذج الإدخال' : 'Fill Form'}
                 </button>
