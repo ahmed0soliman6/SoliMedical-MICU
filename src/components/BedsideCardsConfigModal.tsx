@@ -65,6 +65,16 @@ export const BedsideCardsConfigModal: React.FC<BedsideCardsConfigModalProps> = (
     }
   }, [config, isOpen]);
 
+  // Lock background scroll when modal is open
+  useEffect(() => {
+    if (!isOpen) return;
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const toggleCard = (key: keyof BedsideCardsConfig) => {
@@ -94,10 +104,10 @@ export const BedsideCardsConfigModal: React.FC<BedsideCardsConfigModalProps> = (
   }[] = [
     {
       key: 'showVentilatorCard',
-      titleAr: 'بطاقة جهاز التنفس الصناعي',
-      titleEn: 'Mechanical Ventilator Card',
-      descAr: 'عرض إعدادات جهاز التنفس، نسبة الأكسجين FiO2، وضغط PEEP ومؤشرات حماية الرئة',
-      descEn: 'Display active vent parameters, FiO2, PEEP, Vt, and lung-protective metrics',
+      titleAr: 'بطاقة إعدادات دعم التنفس والأكسجين',
+      titleEn: 'Respiratory & Oxygen Support Card',
+      descAr: 'عرض إعدادات دعم التنفس والأكسجين، نسبة الأكسجين FiO2، ومعدل التدفق وضغط PEEP ومؤشرات الرئة',
+      descEn: 'Display respiratory and oxygen settings, FiO2, flow rate, PEEP, Vt, and lung-protective metrics',
       icon: <Wind className="w-5 h-5 text-cyan-400" />,
       color: 'border-cyan-500/40 bg-cyan-950/20',
     },
@@ -167,9 +177,9 @@ export const BedsideCardsConfigModal: React.FC<BedsideCardsConfigModalProps> = (
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200 overscroll-contain overflow-y-auto">
       <div 
-        className="w-full max-w-2xl bg-[#091122] border border-cyan-500/30 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+        className="w-full max-w-2xl bg-[#091122] border border-cyan-500/30 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] my-auto"
         dir={isRTL ? 'rtl' : 'ltr'}
       >
         {/* Header */}
@@ -196,7 +206,7 @@ export const BedsideCardsConfigModal: React.FC<BedsideCardsConfigModalProps> = (
         </div>
 
         {/* List of cards */}
-        <div className="p-5 space-y-3 overflow-y-auto">
+        <div className="p-5 space-y-3 overflow-y-auto overscroll-contain">
           {cardsList.map((c) => {
             const isVisible = localConfig[c.key];
             return (

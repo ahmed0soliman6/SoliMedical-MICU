@@ -12,7 +12,12 @@ import {
   ShieldCheck,
   Flame,
   Gauge,
-  PowerOff
+  PowerOff,
+  User,
+  Scale,
+  Ruler,
+  Pencil,
+  Calculator
 } from 'lucide-react';
 import { BedNumber, PatientDossier, VentilatorParameters, VentilatorMode } from '../types/schema.ts';
 import { db } from '../db/icuSyncDb.ts';
@@ -263,6 +268,65 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [hasInitialized, setHasInitialized] = useState<boolean>(false);
 
+  // Patient Height & Weight recognition and editing
+  const [customHeight, setCustomHeight] = useState<string>(patient?.heightCm ? String(patient.heightCm) : '170');
+  const [customWeight, setCustomWeight] = useState<string>(patient?.weightKg ? String(patient.weightKg) : '70');
+  const [isEditingMetrics, setIsEditingMetrics] = useState<boolean>(false);
+
+  // Sync patient demographics on open
+  useEffect(() => {
+    if (patient?.heightCm) setCustomHeight(String(patient.heightCm));
+    if (patient?.weightKg) setCustomWeight(String(patient.weightKg));
+  }, [patient, isOpen]);
+
+  // Derived patient gender, height, weight, and ARDSNet IBW calculation
+  const patientGender = patient?.gender === 'FEMALE' ? 'FEMALE' : 'MALE';
+  const heightNum = parseEnglishFloat(customHeight) || patient?.heightCm || 170;
+  const weightNum = parseEnglishFloat(customWeight) || patient?.weightKg || 70;
+
+  // ARDSNet Devine IBW Formula: Male: 50 + 0.91*(H-152.4), Female: 45.5 + 0.91*(H-152.4)
+  let calculatedIbw = patient?.idealBodyWeightKg || 0;
+  if (isEditingMetrics || !calculatedIbw || calculatedIbw <= 0) {
+    if (heightNum > 100) {
+      const base = patientGender === 'MALE' ? 50 : 45.5;
+      calculatedIbw = Math.round((base + 0.91 * (heightNum - 152.4)) * 10) / 10;
+    } else if (weightNum > 0) {
+      calculatedIbw = weightNum;
+    } else {
+      calculatedIbw = patientGender === 'MALE' ? 70 : 60;
+    }
+  }
+
+  // Lung Protective Ventilator Suggestions (ARDSNet 6 mL/kg IBW)
+  const recommendedVt6ml = Math.max(150, Math.round(calculatedIbw * 6));
+  const minVt4ml = Math.max(100, Math.round(calculatedIbw * 4));
+  const maxVt8ml = Math.max(200, Math.round(calculatedIbw * 8));
+  const recommendedVe = ((recommendedVt6ml * 14) / 1000).toFixed(1);
+
+  // Quick Apply Smart Presets Handler
+  const handleApplySmartSuggestions = () => {
+    setTidalVolume(String(recommendedVt6ml));
+    setSetRate('14');
+    setActualRate('16');
+    if (!peep || parseEnglishFloat(peep) === 0) {
+      setPeep('5');
+    }
+    if (!fio2 || parseEnglishFloat(fio2) === 0) {
+      setFio2('40');
+    }
+    setErrorMessage(null);
+  };
+
+  // Prevent background scrolling when modal is open
+  useEffect(() => {
+    if (!isOpen) return;
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [isOpen]);
+
   // Initialize values when opening
   useEffect(() => {
     if (!isOpen) {
@@ -292,7 +356,7 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
         setOxygenFlow(initialVentilator.oxygenFlowLpm !== undefined ? String(initialVentilator.oxygenFlowLpm) : '3');
         setFio2(initialVentilator.fio2Percent !== undefined ? String(initialVentilator.fio2Percent) : '32');
         setPeep(initialVentilator.peepCmH2O !== undefined ? String(initialVentilator.peepCmH2O) : '5');
-        setTidalVolume(initialVentilator.tidalVolumeMl !== undefined ? String(initialVentilator.tidalVolumeMl) : '420');
+        setTidalVolume(initialVentilator.tidalVolumeMl !== undefined ? String(initialVentilator.tidalVolumeMl) : String(recommendedVt6ml));
         setSetRate(initialVentilator.setRespiratoryRateCpm !== undefined ? String(initialVentilator.setRespiratoryRateCpm) : '14');
         setActualRate(initialVentilator.actualRespiratoryRateCpm !== undefined ? String(initialVentilator.actualRespiratoryRateCpm) : '16');
         setPeakPressure(initialVentilator.peakInspiratoryPressureCmH2O !== undefined ? String(initialVentilator.peakInspiratoryPressureCmH2O) : '');
@@ -309,7 +373,7 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
         setOxygenFlow('3');
         setFio2('32');
         setPeep('5');
-        setTidalVolume('420');
+        setTidalVolume(String(recommendedVt6ml));
         setSetRate('14');
         setActualRate('16');
         setPeakPressure('');
@@ -322,7 +386,7 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
       }
       setHasInitialized(true);
     }
-  }, [isOpen, initialVentilator, hasInitialized]);
+  }, [isOpen, initialVentilator, hasInitialized, recommendedVt6ml]);
 
   if (!isOpen) return null;
 
@@ -344,11 +408,12 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
     } else if (device.category === 'NON_INVASIVE_NIV') {
       setFio2(String(device.defaultFio2 || 40));
       setPeep('5');
+      setTidalVolume(String(recommendedVt6ml));
       setDeviceModel('BiPAP / NIV Mask');
     } else if (device.category === 'INVASIVE_VENT') {
       setFio2(String(device.defaultFio2 || 45));
       setPeep('5');
-      setTidalVolume('420');
+      setTidalVolume(String(recommendedVt6ml));
       setDeviceModel('Draeger / Hamilton ICU Ventilator');
     }
   };
@@ -392,7 +457,7 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
   const parsedPeep = parseEnglishFloat(peep);
   const calculatedDrivingPressure = (parsedPplat > 0 && parsedPeep > 0) ? Math.max(0, parsedPplat - parsedPeep) : null;
   const parsedVt = parseEnglishFloat(tidalVolume);
-  const ibw = patient?.idealBodyWeightKg || (patient?.gender === 'MALE' ? 70 : 60) || 70;
+  const ibw = calculatedIbw;
   const vtPerKg = ibw > 0 && parsedVt > 0 ? (parsedVt / ibw).toFixed(1) : null;
 
   // Save / Record
@@ -538,9 +603,9 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
   const isNiv = activeCategory === 'NON_INVASIVE_NIV';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200 overscroll-contain overflow-y-auto">
       <div 
-        className="w-full max-w-3xl bg-white dark:bg-[#091122] border border-slate-200 dark:border-cyan-500/30 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] text-slate-900 dark:text-white"
+        className="w-full max-w-3xl bg-white dark:bg-[#091122] border border-slate-200 dark:border-cyan-500/30 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] text-slate-900 dark:text-white my-auto"
         dir={isRTL ? 'rtl' : 'ltr'}
       >
         {/* Header */}
@@ -638,11 +703,38 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSave} className="p-4 sm:p-5 space-y-4 overflow-y-auto max-h-[75vh]">
+        <form onSubmit={handleSave} className="p-4 sm:p-5 space-y-4 overflow-y-auto max-h-[75vh] overscroll-contain">
           {errorMessage && (
             <div className="p-3 rounded-xl bg-rose-50 dark:bg-red-950/60 border border-rose-200 dark:border-red-800/80 text-rose-800 dark:text-red-300 text-xs flex items-center gap-2">
               <AlertCircle className="w-4 h-4 flex-shrink-0 text-rose-500 dark:text-red-400" />
               <span>{errorMessage}</span>
+            </div>
+          )}
+
+          {/* Compact Single-Row ARDSNet Suggestion Banner (Only for Mechanical Vent & NIV) */}
+          {(isInvasiveVent || isNiv) && patient && (
+            <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-teal-50 dark:bg-[#071527] border border-teal-200 dark:border-teal-500/40 text-slate-800 dark:text-slate-100 shadow-sm text-xs flex-wrap sm:flex-nowrap">
+              <div className="flex items-center gap-2 font-mono text-[11px] sm:text-xs">
+                <Sparkles className="w-4 h-4 text-teal-600 dark:text-cyan-400 shrink-0" />
+                <span className="font-sans font-bold text-teal-900 dark:text-cyan-200">
+                  {lang === 'ar' ? 'مقترح ARDSNet لحماية الرئة (6 mL/kg):' : 'ARDSNet Preset:'}
+                </span>
+                <span className="font-bold text-slate-900 dark:text-white">
+                  VT = <strong className="text-teal-700 dark:text-cyan-300 font-extrabold">{recommendedVt6ml} mL</strong>
+                </span>
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 font-sans font-medium hidden sm:inline">
+                  (IBW: {calculatedIbw}kg • {patientGender === 'MALE' ? (lang === 'ar' ? 'ذكر' : 'Male') : (lang === 'ar' ? 'أنثى' : 'Female')})
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleApplySmartSuggestions}
+                className="flex items-center gap-1 px-3 py-1 rounded-lg bg-teal-600 hover:bg-teal-700 dark:bg-cyan-600 dark:hover:bg-cyan-500 text-white font-bold text-[11px] shadow-sm transition-all active:scale-95 cursor-pointer shrink-0"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                <span>{lang === 'ar' ? 'تطبيق المقترح' : 'Apply Preset'}</span>
+              </button>
             </div>
           )}
 
@@ -689,26 +781,26 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
             const currentFio2Presets = currentDevice?.fio2Presets || [24, 28, 32, 36, 40, 44];
 
             return (
-              <div className="p-3 sm:p-4 rounded-2xl bg-slate-50 dark:bg-[#060d1b] border-2 border-teal-500/40 dark:border-teal-500/40 space-y-3 shadow-sm">
-                <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800 text-xs">
-                  <span className="font-extrabold text-teal-800 dark:text-teal-300 flex items-center gap-1.5 text-xs sm:text-sm">
-                    <Flame className="w-4 h-4 text-teal-500 shrink-0" />
+              <div className="p-2.5 sm:p-3 rounded-xl bg-slate-50 dark:bg-[#060d1b] border border-teal-500/40 space-y-2.5 shadow-sm">
+                <div className="flex items-center justify-between pb-1.5 border-b border-slate-200 dark:border-slate-800 text-xs">
+                  <span className="font-extrabold text-teal-800 dark:text-teal-300 flex items-center gap-1.5 text-xs">
+                    <Flame className="w-3.5 h-3.5 text-teal-500 shrink-0" />
                     <span>{lang === 'ar' ? 'معاملات تدفق وتركيز الأكسجين:' : 'Oxygen Flow & FiO₂ Settings:'}</span>
                   </span>
-                  <span className="text-[10px] sm:text-[11px] font-mono font-bold text-teal-700 dark:text-teal-400 bg-teal-500/10 px-2 py-0.5 rounded-lg border border-teal-500/20">
+                  <span className="text-[10px] font-mono font-bold text-teal-700 dark:text-teal-400 bg-teal-500/10 px-2 py-0.5 rounded border border-teal-500/20">
                     {currentDevice?.flowRange || (lang === 'ar' ? 'توصيل أكسجين' : 'Oxygen Delivery')}
                   </span>
                 </div>
 
-                {/* 2 Compact Columns: Flow Rate & FiO2 (Respiratory rate removed per request) */}
-                <div className="grid grid-cols-2 gap-2.5 sm:gap-3.5">
+                {/* 2 Compact Columns: Flow Rate & FiO2 */}
+                <div className="grid grid-cols-2 gap-2 sm:gap-3">
                   {/* Flow Rate (L/min) */}
-                  <div className="bg-white dark:bg-[#091122] p-2.5 sm:p-3 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
+                  <div className="bg-white dark:bg-[#091122] p-2 sm:p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
                     <div>
-                      <label className="block text-[11px] sm:text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                      <label className="block text-[10px] sm:text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
                         {lang === 'ar' ? 'معدل التدفق (Flow):' : 'Oxygen Flow Rate:'}
                       </label>
-                      <div className="flex items-center rounded-lg border-2 border-teal-500/50 dark:border-teal-500/60 bg-slate-50 dark:bg-[#060b17] px-2.5 py-1.5 focus-within:border-teal-500 focus-within:ring-2 focus-within:ring-teal-400/30">
+                      <div className="flex items-center rounded border-2 border-teal-500/50 dark:border-teal-500/60 bg-slate-50 dark:bg-[#060b17] px-2 py-1 focus-within:border-teal-500">
                         <input
                           type="text"
                           inputMode="decimal"
@@ -716,20 +808,20 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
                           onChange={(e) => handleFlowChange(e.target.value)}
                           placeholder="3"
                           required
-                          className="w-full bg-transparent text-center font-mono font-black text-base sm:text-lg text-teal-800 dark:text-teal-300 outline-none"
+                          className="w-full bg-transparent text-center font-mono font-black text-sm sm:text-base text-teal-800 dark:text-teal-300 outline-none"
                         />
-                        <span className="text-[11px] font-mono font-bold text-slate-500 shrink-0 select-none">L/min</span>
+                        <span className="text-[10px] font-mono font-bold text-slate-500 shrink-0 select-none">L/min</span>
                       </div>
                     </div>
 
                     {/* Flow Presets Tailored to Selected Device */}
-                    <div className="flex flex-wrap gap-1 mt-2">
+                    <div className="flex flex-wrap gap-1 mt-1.5">
                       {currentFlowPresets.map((presetFlow) => (
                         <button
                           key={presetFlow}
                           type="button"
                           onClick={() => handleFlowChange(String(presetFlow))}
-                          className={`px-2 py-1 rounded-md text-[10px] font-mono font-bold transition-all cursor-pointer ${
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold transition-all cursor-pointer ${
                             oxygenFlow === String(presetFlow)
                               ? 'bg-teal-600 text-white shadow-sm ring-1 ring-teal-400'
                               : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
@@ -742,12 +834,12 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
                   </div>
 
                   {/* FiO2 (%) */}
-                  <div className="bg-white dark:bg-[#091122] p-2.5 sm:p-3 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
+                  <div className="bg-white dark:bg-[#091122] p-2 sm:p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
                     <div>
-                      <label className="block text-[11px] sm:text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                      <label className="block text-[10px] sm:text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
                         {lang === 'ar' ? 'نسبة الأكسجين (FiO₂):' : 'Estimated FiO₂ (%):'}
                       </label>
-                      <div className="flex items-center rounded-lg border-2 border-teal-500/50 dark:border-teal-500/60 bg-slate-50 dark:bg-[#060b17] px-2.5 py-1.5 focus-within:border-teal-500 focus-within:ring-2 focus-within:ring-teal-400/30">
+                      <div className="flex items-center rounded border-2 border-teal-500/50 dark:border-teal-500/60 bg-slate-50 dark:bg-[#060b17] px-2 py-1 focus-within:border-teal-500">
                         <input
                           type="text"
                           inputMode="decimal"
@@ -755,20 +847,20 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
                           onChange={(e) => setFio2(toEnglishDigits(e.target.value))}
                           placeholder="32"
                           required
-                          className="w-full bg-transparent text-center font-mono font-black text-base sm:text-lg text-teal-800 dark:text-teal-300 outline-none"
+                          className="w-full bg-transparent text-center font-mono font-black text-sm sm:text-base text-teal-800 dark:text-teal-300 outline-none"
                         />
-                        <span className="text-[11px] font-mono font-bold text-slate-500 shrink-0 select-none">%</span>
+                        <span className="text-[10px] font-mono font-bold text-slate-500 shrink-0 select-none">%</span>
                       </div>
                     </div>
 
                     {/* FiO2 Presets Tailored to Selected Device */}
-                    <div className="flex flex-wrap gap-1 mt-2">
+                    <div className="flex flex-wrap gap-1 mt-1.5">
                       {currentFio2Presets.map((f) => (
                         <button
                           key={f}
                           type="button"
                           onClick={() => setFio2(String(f))}
-                          className={`px-2 py-1 rounded-md text-[10px] font-mono font-bold transition-all cursor-pointer ${
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold transition-all cursor-pointer ${
                             fio2 === String(f)
                               ? 'bg-teal-600 text-white shadow-sm ring-1 ring-teal-400'
                               : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
@@ -782,8 +874,8 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
                 </div>
 
                 {/* Summary Strip */}
-                <div className="p-2.5 rounded-xl bg-white dark:bg-[#060b17] border border-teal-200 dark:border-slate-800 text-xs flex items-center justify-between flex-wrap gap-1.5 text-slate-800 dark:text-slate-200 font-mono shadow-sm">
-                  <span className="flex items-center gap-1.5 text-teal-700 dark:text-teal-300 font-black text-[11px] sm:text-xs">
+                <div className="p-2 rounded-lg bg-white dark:bg-[#060b17] border border-teal-200 dark:border-slate-800 text-[11px] flex items-center justify-between flex-wrap gap-1 text-slate-800 dark:text-slate-200 font-mono shadow-sm">
+                  <span className="flex items-center gap-1 text-teal-700 dark:text-teal-300 font-black text-[11px]">
                     <Activity className="w-3.5 h-3.5" />
                     <span>
                       {currentDevice?.labelEn || selectedDevice} @ {oxygenFlow} L/min (FiO₂ {fio2}%)

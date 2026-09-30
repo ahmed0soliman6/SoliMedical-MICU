@@ -256,10 +256,45 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
       return;
     }
 
-    // Optional fields (Age, Height, Weight)
+    // Rule 4: Validate Mandatory Demographics (Age, Gender, Height, Weight)
     const parsedAge = age.trim() ? parseEnglishInt(age) : undefined;
+    if (parsedAge === undefined || isNaN(parsedAge) || parsedAge <= 0) {
+      setAdmissionError(
+        lang === 'ar'
+          ? 'يرجى إدخال عمر المريض بالسنوات (حقل إجباري).'
+          : 'Please enter patient age in years (mandatory field).'
+      );
+      return;
+    }
+
+    if (!gender || gender === Gender.UNSPECIFIED) {
+      setAdmissionError(
+        lang === 'ar'
+          ? 'يرجى تحديد جنس المريض (ذكر / أنثى) (حقل إجباري).'
+          : 'Please select patient gender (Male / Female) (mandatory field).'
+      );
+      return;
+    }
+
     const parsedHeight = heightCm.trim() ? parseEnglishFloat(heightCm) : undefined;
+    if (parsedHeight === undefined || isNaN(parsedHeight) || parsedHeight <= 0) {
+      setAdmissionError(
+        lang === 'ar'
+          ? 'يرجى إدخال طول المريض بالسنتيمتر (حقل إجباري).'
+          : 'Please enter patient height in cm (mandatory field).'
+      );
+      return;
+    }
+
     const parsedWeight = weightKg.trim() ? parseEnglishFloat(weightKg) : undefined;
+    if (parsedWeight === undefined || isNaN(parsedWeight) || parsedWeight <= 0) {
+      setAdmissionError(
+        lang === 'ar'
+          ? 'يرجى إدخال وزن المريض بالكيلوجرام (حقل إجباري).'
+          : 'Please enter patient weight in kg (mandatory field).'
+      );
+      return;
+    }
 
     // Rule 4: Fresh check for bed occupancy
     if (!initialPatient) {
@@ -655,25 +690,27 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
 
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3 bg-[#070c18] p-4 rounded-xl border border-slate-800/60">
             <div>
-              <label className="text-[11px] text-slate-400 block mb-1">{lang === 'ar' ? 'العمر (اختياري)' : 'Age (Optional)'}</label>
+              <label className="text-[11px] text-slate-300 font-bold block mb-1">{lang === 'ar' ? 'العمر (بالسنوات) *' : 'Age (Years) *'}</label>
               <input
                 type="text"
                 inputMode="numeric"
                 value={age}
                 onChange={(e) => setAge(toEnglishDigits(e.target.value))}
                 placeholder="65"
+                required
                 className="w-full bg-[#0b1224] border border-slate-700 rounded-lg px-3 py-1.5 text-white font-mono font-bold focus:border-teal-500 focus:outline-none text-xs"
               />
             </div>
 
             <div>
-              <label className="text-[11px] text-slate-400 block mb-1">{lang === 'ar' ? 'الجنس (Gender)' : 'Gender'}</label>
+              <label className="text-[11px] text-slate-300 font-bold block mb-1">{lang === 'ar' ? 'الجنس (Gender) *' : 'Gender *'}</label>
               <select
                 value={gender}
                 onChange={(e) => setGender(e.target.value as Gender)}
-                className="w-full bg-[#0b1224] border border-slate-700 rounded-lg px-3 py-1.5 text-white focus:border-teal-500 focus:outline-none text-xs"
+                required
+                className="w-full bg-[#0b1224] border border-slate-700 rounded-lg px-3 py-1.5 text-white font-bold focus:border-teal-500 focus:outline-none text-xs"
               >
-                <option value={Gender.UNSPECIFIED}>{lang === 'ar' ? 'غير محدد' : 'Unspecified'}</option>
+                <option value={Gender.UNSPECIFIED}>{lang === 'ar' ? 'اختر الجنس (إجباري)' : 'Select Gender'}</option>
                 <option value={Gender.MALE}>{lang === 'ar' ? 'ذكر (Male)' : 'Male'}</option>
                 <option value={Gender.FEMALE}>{lang === 'ar' ? 'أنثى (Female)' : 'Female'}</option>
               </select>
@@ -699,26 +736,28 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
             </div>
 
             <div>
-              <label className="text-[11px] text-slate-400 block mb-1">{lang === 'ar' ? 'الطول (بالسم)' : 'Height (cm)'}</label>
+              <label className="text-[11px] text-slate-300 font-bold block mb-1">{lang === 'ar' ? 'الطول (بالسم) *' : 'Height (cm) *'}</label>
               <input
                 type="text"
                 inputMode="numeric"
                 value={heightCm}
                 onChange={(e) => setHeightCm(toEnglishDigits(e.target.value))}
                 placeholder="170"
-                className="w-full bg-[#0b1224] border border-slate-700 rounded-lg px-3 py-1.5 text-white font-mono focus:border-teal-500 focus:outline-none text-xs"
+                required
+                className="w-full bg-[#0b1224] border border-slate-700 rounded-lg px-3 py-1.5 text-white font-mono font-bold focus:border-teal-500 focus:outline-none text-xs"
               />
             </div>
 
             <div>
-              <label className="text-[11px] text-slate-400 block mb-1">{lang === 'ar' ? 'الوزن (كجم)' : 'Actual Weight (kg)'}</label>
+              <label className="text-[11px] text-slate-300 font-bold block mb-1">{lang === 'ar' ? 'الوزن (كجم) *' : 'Actual Weight (kg) *'}</label>
               <input
                 type="text"
                 inputMode="numeric"
                 value={weightKg}
                 onChange={(e) => setWeightKg(toEnglishDigits(e.target.value))}
                 placeholder="78"
-                className="w-full bg-[#0b1224] border border-slate-700 rounded-lg px-3 py-1.5 text-white font-mono focus:border-teal-500 focus:outline-none text-xs"
+                required
+                className="w-full bg-[#0b1224] border border-slate-700 rounded-lg px-3 py-1.5 text-white font-mono font-bold focus:border-teal-500 focus:outline-none text-xs"
               />
               <div className="text-[10px] text-teal-400 font-mono mt-1 font-semibold truncate">
                 {lang === 'ar' ? `الوزن المثالي: ${calculatedIbw} كجم` : `IBW: ${calculatedIbw} kg`}

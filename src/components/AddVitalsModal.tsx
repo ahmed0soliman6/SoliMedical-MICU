@@ -86,6 +86,16 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
     }
   }, [vitalsToEdit, isOpen]);
 
+  // Lock background scroll when modal is open
+  useEffect(() => {
+    if (!isOpen) return;
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const sysVal = parseEnglishInt(systolicBp) || 0;
@@ -164,7 +174,7 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/80 backdrop-blur-sm overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/80 backdrop-blur-sm overflow-y-auto overscroll-contain">
       <div className="w-full max-w-lg bg-[#0c1426] border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden my-auto">
         {/* Header */}
         <div className="px-5 py-3.5 bg-[#090f1d] border-b border-slate-800 flex items-center justify-between">
@@ -194,7 +204,7 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-5 space-y-4 max-h-[80vh] overflow-y-auto text-xs">
+        <form onSubmit={handleSubmit} className="p-5 space-y-4 max-h-[80vh] overflow-y-auto overscroll-contain text-xs">
           {/* Blood Pressure & MAP */}
           <div className="bg-[#070c18] p-3.5 rounded-xl border border-slate-800 space-y-2.5">
             <div className="flex items-center justify-between">

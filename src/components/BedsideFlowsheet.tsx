@@ -2151,7 +2151,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                     <div className="flex items-center gap-2">
                       <Wind className="w-5 h-5 text-cyan-400" />
                       <div>
-                        <h3 className="text-sm font-bold text-white">{lang === 'ar' ? 'جهاز التنفس الصناعي' : 'Ventilator'}</h3>
+                        <h3 className="text-sm font-bold text-slate-900 dark:text-white">{lang === 'ar' ? 'إعدادات دعم التنفس والأكسجين' : 'Respiratory & Oxygen Support'}</h3>
                         {isPaperVentCardCollapsed && ventilator && (
                           <div className="text-[10px] text-cyan-400 font-bold font-mono mt-0.5">
                             {lang === 'ar' ? `النمط: ${ventilator.mode}` : `Mode: ${ventilator.mode}`}
@@ -3166,8 +3166,8 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
             <div className="flex items-center gap-2">
               <Wind className="w-5 h-5 text-cyan-400" />
               <div>
-                <h3 className="text-base font-bold text-white">
-                  {lang === 'ar' ? 'إعدادات جهاز التنفس الصناعي والغازات (Ventilator & ABG)' : 'Mechanical Ventilator & ABG Settings'}
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  {lang === 'ar' ? 'إعدادات دعم التنفس والأكسجين والغازات (Respiratory, Vent & ABG)' : 'Respiratory, Oxygen & ABG Settings'}
                 </h3>
                 {ventilator && (
                   <div className="text-xs text-cyan-400 font-bold font-mono mt-0.5">
@@ -3213,7 +3213,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                       type="button"
                       onClick={() => setIsVentilatorModalOpen(true)}
                       className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs shadow-md active:scale-95 cursor-pointer"
-                      title={lang === 'ar' ? 'تعديل أو ضبط إعدادات جهاز التنفس والأكسجين' : 'Adjust Oxygen / Ventilator Settings'}
+                      title={lang === 'ar' ? 'تعديل أو ضبط إعدادات دعم التنفس والأكسجين' : 'Adjust Respiratory & Oxygen Support Settings'}
                     >
                       <Edit3 className="w-3.5 h-3.5" />
                       <span>{lang === 'ar' ? 'تعديل الإعدادات' : 'Edit Settings'}</span>
