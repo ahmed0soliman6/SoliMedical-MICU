@@ -285,28 +285,20 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
             </div>
           </div>
 
-          {/* SpO2, FiO2 & Respiratory Rate */}
-          <div className="grid grid-cols-3 gap-2.5">
+          {/* SpO2 & Respiratory Rate (2 Columns - FiO2 removed per user request) */}
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-[11px] text-slate-400">SpO₂ (%)</label>
+              <label className="text-[11px] text-slate-400 flex items-center gap-1">
+                <Activity className="w-3 h-3 text-teal-400" />
+                <span>{lang === 'ar' ? 'نسبة الأكسجين SpO₂ (%)' : 'Oxygen Saturation SpO₂ (%)'}</span>
+              </label>
               <input
                 type="text"
                 inputMode="numeric"
                 value={spo2}
                 onChange={(e) => setSpo2(toEnglishDigits(e.target.value))}
-                className="w-full mt-1 bg-[#0f172a] border border-slate-700 rounded-lg px-2.5 py-2 text-white font-mono font-bold focus:border-teal-500 focus:outline-none"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="text-[11px] text-slate-400">FiO₂ (%)</label>
-              <input
-                type="text"
-                inputMode="numeric"
-                value={fio2}
-                onChange={(e) => setFio2(toEnglishDigits(e.target.value))}
-                className="w-full mt-1 bg-[#0f172a] border border-slate-700 rounded-lg px-2.5 py-2 text-white font-mono font-bold focus:border-teal-500 focus:outline-none"
+                placeholder="e.g. 98"
+                className="w-full mt-1 bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 text-white font-mono font-bold focus:border-teal-500 focus:outline-none"
                 required
               />
             </div>
@@ -314,14 +306,15 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
             <div>
               <label className="text-[11px] text-slate-400 flex items-center gap-1">
                 <Wind className="w-3 h-3 text-cyan-400" />
-                <span>{lang === 'ar' ? 'التنفس (RR)' : 'Resp Rate (RR)'}</span>
+                <span>{lang === 'ar' ? 'معدل التنفس (RR bpm)' : 'Resp Rate (RR bpm)'}</span>
               </label>
               <input
                 type="text"
                 inputMode="numeric"
                 value={respiratoryRate}
                 onChange={(e) => setRespiratoryRate(toEnglishDigits(e.target.value))}
-                className="w-full mt-1 bg-[#0f172a] border border-slate-700 rounded-lg px-2.5 py-2 text-white font-mono font-bold focus:border-teal-500 focus:outline-none"
+                placeholder="e.g. 16"
+                className="w-full mt-1 bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 text-white font-mono font-bold focus:border-teal-500 focus:outline-none"
                 required
               />
             </div>

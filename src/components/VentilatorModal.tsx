@@ -48,83 +48,83 @@ interface RespiratoryDeviceOption {
 }
 
 const RESPIRATORY_DEVICES: RespiratoryDeviceOption[] = [
-  // 1. Oxygen Therapy Devices
+  // 1. Oxygen Therapy Devices (Concise Medical Terms)
   { 
     id: 'NASAL_CANNULA', 
     category: 'OXYGEN_THERAPY', 
     labelEn: 'Nasal Cannula (NC)', 
-    labelAr: 'قنية أنفية (نيزل كانيولا)', 
+    labelAr: 'قنية أنفية (Nasal Cannula - NC)', 
     defaultFlow: 3, 
     defaultFio2: 32, 
     flowRange: '1 - 6 L/min',
-    descriptionAr: '1-6 لتر/د (FiO₂ تقريبي 24% - 44%)',
+    descriptionAr: '1-6 L/min (~24-44% FiO₂)',
     descriptionEn: '1-6 L/min (~24-44% FiO2)'
   },
   { 
     id: 'SIMPLE_MASK', 
     category: 'OXYGEN_THERAPY', 
-    labelEn: 'Simple Face Mask', 
-    labelAr: 'قناع أكسجين بسيط (Face Mask)', 
+    labelEn: 'Simple Mask (Face Mask)', 
+    labelAr: 'ماسك أكسجين (Simple Face Mask)', 
     defaultFlow: 8, 
     defaultFio2: 50, 
     flowRange: '5 - 10 L/min',
-    descriptionAr: '5-10 لتر/د (FiO₂ تقريبي 40% - 60%)',
+    descriptionAr: '5-10 L/min (~40-60% FiO₂)',
     descriptionEn: '5-10 L/min (~40-60% FiO2)'
   },
   { 
     id: 'RESERVOIR_MASK', 
     category: 'OXYGEN_THERAPY', 
-    labelEn: 'Non-Rebreather Mask (NRBM / Reservoir)', 
-    labelAr: 'قناع ريزرفوار ذو كيس حزام (NRBM)', 
+    labelEn: 'Reservoir Mask (NRBM)', 
+    labelAr: 'ماسك ريزرفوار (NRBM / Reservoir)', 
     defaultFlow: 15, 
     defaultFio2: 90, 
     flowRange: '10 - 15 L/min',
-    descriptionAr: '10-15 لتر/د (FiO₂ عالي 60% - 95%)',
+    descriptionAr: '10-15 L/min (~60-95% FiO₂)',
     descriptionEn: '10-15 L/min (~60-95% FiO2)'
   },
   { 
     id: 'VENTURI_MASK', 
     category: 'OXYGEN_THERAPY', 
     labelEn: 'Venturi Mask (Fixed FiO₂)', 
-    labelAr: 'قناع فنتوري (تركيز أكسجين دقيق)', 
+    labelAr: 'ماسك فينتوري (Venturi Mask)', 
     defaultFlow: 8, 
     defaultFio2: 35, 
     flowRange: '4 - 12 L/min',
-    descriptionAr: 'توصيل تركيز أكسجين ثابت ومحدد (24% - 50%)',
-    descriptionEn: 'Fixed, precise FiO2 delivery (24-50%)'
+    descriptionAr: '4-12 L/min (24% - 50% FiO₂)',
+    descriptionEn: '4-12 L/min (24-50% FiO2)'
   },
   { 
     id: 'HIGH_FLOW_NC', 
     category: 'OXYGEN_THERAPY', 
-    labelEn: 'High-Flow Nasal Cannula (HFNC)', 
-    labelAr: 'قنية أنفية عالية التدفق (HFNC)', 
+    labelEn: 'High-Flow Cannula (HFNC)', 
+    labelAr: 'قنية عالية التدفق (HFNC)', 
     defaultFlow: 40, 
     defaultFio2: 50, 
     flowRange: '20 - 60 L/min',
-    descriptionAr: 'تدفق عالي 20-60 لتر/د مع ترطيب وتدفئة',
-    descriptionEn: 'High-flow humidified oxygen 20-60 L/min'
+    descriptionAr: '20-60 L/min (21% - 100% FiO₂)',
+    descriptionEn: '20-60 L/min (21-100% FiO2)'
   },
   { 
     id: 'TRACH_MASK', 
     category: 'OXYGEN_THERAPY', 
-    labelEn: 'Tracheostomy Mask / Collar', 
-    labelAr: 'قناع الشق الحنجري (Trach Collar)', 
+    labelEn: 'Trach Collar / T-Piece', 
+    labelAr: 'قناع شق حنجري (Trach Collar)', 
     defaultFlow: 8, 
     defaultFio2: 35, 
     flowRange: '5 - 15 L/min',
-    descriptionAr: 'توصيل الأكسجين والرذاذ للشق الحنجري',
-    descriptionEn: 'Oxygen and mist collar for tracheostomy'
+    descriptionAr: '5-15 L/min (28% - 50% FiO₂)',
+    descriptionEn: '5-15 L/min (28-50% FiO2)'
   },
   { 
     id: 'ROOM_AIR', 
     category: 'ROOM_AIR', 
-    labelEn: 'Room Air (Spontaneous Breathing)', 
-    labelAr: 'هواء الغرفة (تنفس طبيعي بدون أكسجين)', 
+    labelEn: 'Room Air (Spontaneous)', 
+    labelAr: 'هواء الغرفة (Room Air)', 
     defaultFlow: 0, 
     defaultFio2: 21, 
     flowRange: '0 L/min',
-    descriptionAr: 'المريض يتنفس تلقائياً هواء الغرفة (21% FiO₂)',
-    descriptionEn: 'Spontaneous breathing on ambient room air'
+    descriptionAr: 'تنفس تلقائي (21% FiO₂)',
+    descriptionEn: 'Spontaneous ambient air'
   },
 
   // 2. Non-Invasive Ventilation (NIV)
@@ -132,68 +132,68 @@ const RESPIRATORY_DEVICES: RespiratoryDeviceOption[] = [
     id: 'BIPAP', 
     category: 'NON_INVASIVE_NIV', 
     labelEn: 'BiPAP (IPAP / EPAP)', 
-    labelAr: 'BiPAP تهوية ثنائية الضغط غير جائرة', 
+    labelAr: 'BiPAP (IPAP / EPAP)', 
     defaultFlow: 0, 
     defaultFio2: 40,
-    descriptionAr: 'دعم تنفس غير جائر بقناع وجه',
-    descriptionEn: 'Non-invasive positive pressure mask'
+    descriptionAr: 'دعم ضغط إيجابي ثنائي غير جائر',
+    descriptionEn: 'Non-invasive positive pressure'
   },
   { 
     id: 'PSV_CPAP', 
     category: 'NON_INVASIVE_NIV', 
-    labelEn: 'CPAP / PS (Spontaneous)', 
-    labelAr: 'CPAP / PS ضغط مستمر مع دعم تنفس', 
+    labelEn: 'CPAP / PSV', 
+    labelAr: 'CPAP / PSV (Spontaneous)', 
     defaultFlow: 0, 
     defaultFio2: 40,
-    descriptionAr: 'ضغط مجرى هوائي إيجابي مستمر',
-    descriptionEn: 'Continuous positive airway pressure'
+    descriptionAr: 'ضغط مستمر ودعم تنفس تلقائي',
+    descriptionEn: 'Continuous airway pressure & PS'
   },
 
   // 3. Invasive Mechanical Ventilation
   { 
     id: 'PRVC', 
     category: 'INVASIVE_VENT', 
-    labelEn: 'PRVC / AC (Pressure Regulated Vol)', 
-    labelAr: 'PRVC / AC الحجم المنظم بالضغط', 
+    labelEn: 'PRVC / AC', 
+    labelAr: 'PRVC / AC (Lung-Protective)', 
     defaultFio2: 45,
-    descriptionAr: 'النمط الموصى به لحماية الرئة (Lung-Protective)',
-    descriptionEn: 'Lung-protective dual control mode'
+    descriptionAr: 'حجم منظم بالضغط لحماية الرئة',
+    descriptionEn: 'Dual-control lung-protective mode'
   },
   { 
     id: 'SIMV_PC', 
     category: 'INVASIVE_VENT', 
-    labelEn: 'SIMV-PC (Pressure Control)', 
-    labelAr: 'SIMV بالتحكم بالضغط', 
+    labelEn: 'SIMV-PC', 
+    labelAr: 'SIMV-PC (Pressure Control)', 
     defaultFio2: 45,
-    descriptionAr: 'تهوية إجبارية متزامنة بالضغط',
+    descriptionAr: 'تهوية متزامنة بالتحكم بالضغط',
     descriptionEn: 'Synchronized intermittent mandatory PC'
   },
   { 
     id: 'SIMV_VC', 
     category: 'INVASIVE_VENT', 
-    labelEn: 'SIMV-VC (Volume Control)', 
-    labelAr: 'SIMV بالتحكم بالحجم', 
+    labelEn: 'SIMV-VC', 
+    labelAr: 'SIMV-VC (Volume Control)', 
     defaultFio2: 45,
-    descriptionAr: 'تهوية إجبارية متزامنة بالحجم',
+    descriptionAr: 'تهوية متزامنة بالتحكم بالحجم',
     descriptionEn: 'Synchronized intermittent mandatory VC'
   },
   { 
     id: 'APRV', 
     category: 'INVASIVE_VENT', 
     labelEn: 'APRV (BiLevel Release)', 
-    labelAr: 'APRV تحرير ضغط مجرى الهواء', 
+    labelAr: 'APRV (BiLevel Release)', 
     defaultFio2: 60,
-    descriptionAr: 'لحالات ARDS الشديدة وتبادل الغازات الصعب',
+    descriptionAr: 'لحالات ARDS الشديدة واضطراب الأكسجة',
     descriptionEn: 'Airway pressure release for severe ARDS'
   },
   { 
     id: 'T_PIECE', 
     category: 'INVASIVE_VENT', 
-    labelEn: 'T-Piece Weaning Trial', 
-    labelAr: 'اختبار فطام وصلة T-Piece', 
+    labelEn: 'T-Piece Trial', 
+    labelAr: 'T-Piece Trial (Weaning)', 
     defaultFio2: 35,
-    descriptionAr: 'تقييم جاهزية نزع الأنبوب الحنجري (Extubation)',
-    descriptionEn: 'Spontaneous breathing trial before extubation'
+    descriptionAr: 'تجربة فطام وتقييم نزع الأنبوب الرغامي',
+    descriptionEn: 'Spontaneous breathing trial (Extubation)'
   },
 ];
 
@@ -498,23 +498,18 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
         dir={isRTL ? 'rtl' : 'ltr'}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60">
+        <div className="flex items-center justify-between p-3.5 sm:p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-600 dark:text-cyan-400">
+            <div className="w-9 h-9 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-600 dark:text-cyan-400 shrink-0">
               <Wind className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white flex items-center gap-2 flex-wrap">
                 <span>{lang === 'ar' ? `إعدادات دعم التنفس والأكسجين - سرير ${bedNumber}` : `Respiratory & Oxygen Support - Bed ${bedNumber}`}</span>
                 <span className="text-xs px-2.5 py-0.5 rounded-full bg-cyan-100 text-cyan-900 border border-cyan-300 dark:bg-cyan-950 dark:text-cyan-300 dark:border-cyan-800 font-mono font-bold">
                   {patient?.fullNameAr || patient?.fullNameEn || `Bed ${bedNumber}`}
                 </span>
               </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                {lang === 'ar' 
-                  ? 'تسجيل وتوثيق أجهزة الأكسجين (كانيولا، ماسك، ريزرفوار) وأجهزة التنفس الصناعي والـ NIV' 
-                  : 'Configure Oxygen Delivery (Cannula, Masks, HFNC), NIV & Mechanical Ventilation'}
-              </p>
             </div>
           </div>
           <button
@@ -526,7 +521,7 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
         </div>
 
         {/* Category Filter Tabs */}
-        <div className="px-4 sm:px-5 pt-3 bg-slate-100 dark:bg-[#070d1a] border-b border-slate-200 dark:border-slate-800 flex items-center gap-1.5 overflow-x-auto">
+        <div className="px-3 sm:px-5 pt-2 bg-slate-100 dark:bg-[#070d1a] border-b border-slate-200 dark:border-slate-800 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
           <button
             type="button"
             onClick={() => {
@@ -534,14 +529,14 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
               const firstOxygen = RESPIRATORY_DEVICES.find(d => d.category === 'OXYGEN_THERAPY');
               if (firstOxygen) handleSelectDevice(firstOxygen);
             }}
-            className={`px-3.5 py-2 rounded-t-xl text-xs font-bold transition-all flex items-center gap-1.5 border-b-2 cursor-pointer ${
+            className={`px-3 py-2 rounded-t-xl text-xs font-bold transition-all flex items-center gap-1.5 border-b-2 cursor-pointer shrink-0 ${
               activeCategory === 'OXYGEN_THERAPY'
                 ? 'bg-white dark:bg-[#091122] text-teal-600 dark:text-teal-300 border-teal-500 shadow-sm'
                 : 'text-slate-600 dark:text-slate-400 border-transparent hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             <Flame className="w-3.5 h-3.5 text-teal-500" />
-            <span>{lang === 'ar' ? 'أجهزة العلاج بالأكسجين (Oxygen Therapy)' : 'Oxygen Delivery Devices'}</span>
+            <span>{lang === 'ar' ? 'العلاج بالأكسجين (O₂ Therapy)' : 'O₂ Therapy'}</span>
           </button>
 
           <button
@@ -551,14 +546,14 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
               const firstVent = RESPIRATORY_DEVICES.find(d => d.category === 'INVASIVE_VENT');
               if (firstVent) handleSelectDevice(firstVent);
             }}
-            className={`px-3.5 py-2 rounded-t-xl text-xs font-bold transition-all flex items-center gap-1.5 border-b-2 cursor-pointer ${
+            className={`px-3 py-2 rounded-t-xl text-xs font-bold transition-all flex items-center gap-1.5 border-b-2 cursor-pointer shrink-0 ${
               activeCategory === 'INVASIVE_VENT'
                 ? 'bg-white dark:bg-[#091122] text-cyan-600 dark:text-cyan-300 border-cyan-500 shadow-sm'
                 : 'text-slate-600 dark:text-slate-400 border-transparent hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             <Wind className="w-3.5 h-3.5 text-cyan-500" />
-            <span>{lang === 'ar' ? 'جهاز تنفس صناعي جائر (Mechanical Vent)' : 'Mechanical Ventilation'}</span>
+            <span>{lang === 'ar' ? 'تنفس صناعي جائر (Mechanical Vent)' : 'Mechanical Vent'}</span>
           </button>
 
           <button
@@ -568,7 +563,7 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
               const firstNiv = RESPIRATORY_DEVICES.find(d => d.category === 'NON_INVASIVE_NIV');
               if (firstNiv) handleSelectDevice(firstNiv);
             }}
-            className={`px-3.5 py-2 rounded-t-xl text-xs font-bold transition-all flex items-center gap-1.5 border-b-2 cursor-pointer ${
+            className={`px-3 py-2 rounded-t-xl text-xs font-bold transition-all flex items-center gap-1.5 border-b-2 cursor-pointer shrink-0 ${
               activeCategory === 'NON_INVASIVE_NIV'
                 ? 'bg-white dark:bg-[#091122] text-indigo-600 dark:text-indigo-300 border-indigo-500 shadow-sm'
                 : 'text-slate-600 dark:text-slate-400 border-transparent hover:text-slate-900 dark:hover:text-white'
@@ -585,7 +580,7 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
               const roomAir = RESPIRATORY_DEVICES.find(d => d.category === 'ROOM_AIR');
               if (roomAir) handleSelectDevice(roomAir);
             }}
-            className={`px-3.5 py-2 rounded-t-xl text-xs font-bold transition-all flex items-center gap-1.5 border-b-2 cursor-pointer ${
+            className={`px-3 py-2 rounded-t-xl text-xs font-bold transition-all flex items-center gap-1.5 border-b-2 cursor-pointer shrink-0 ${
               activeCategory === 'ROOM_AIR'
                 ? 'bg-white dark:bg-[#091122] text-emerald-600 dark:text-emerald-300 border-emerald-500 shadow-sm'
                 : 'text-slate-600 dark:text-slate-400 border-transparent hover:text-slate-900 dark:hover:text-white'
@@ -597,7 +592,7 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSave} className="p-4 sm:p-5 space-y-4 overflow-y-auto">
+        <form onSubmit={handleSave} className="p-4 sm:p-5 space-y-4 overflow-y-auto max-h-[75vh]">
           {errorMessage && (
             <div className="p-3 rounded-xl bg-rose-50 dark:bg-red-950/60 border border-rose-200 dark:border-red-800/80 text-rose-800 dark:text-red-300 text-xs flex items-center gap-2">
               <AlertCircle className="w-4 h-4 flex-shrink-0 text-rose-500 dark:text-red-400" />
@@ -605,12 +600,12 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
             </div>
           )}
 
-          {/* Device Selection Grid */}
+          {/* Device Selection Grid (Strictly 2 Columns Per Row with Medical Abbreviations) */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-              {lang === 'ar' ? 'اختر جهاز ونوع دعم التنفس المطلوب:' : 'Select Specific Respiratory Delivery Device:'}
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">
+              {lang === 'ar' ? 'اختر جهاز ونوع دعم التنفس المطلوب (عمودين لكل صف):' : 'Select Respiratory Delivery Device (2 columns):'}
             </label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:gap-2.5">
               {RESPIRATORY_DEVICES.filter(d => d.category === activeCategory).map((dev) => {
                 const isSelected = selectedDevice === dev.id;
                 return (
@@ -618,19 +613,19 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
                     key={dev.id}
                     type="button"
                     onClick={() => handleSelectDevice(dev)}
-                    className={`p-3 rounded-xl text-xs text-start border transition-all cursor-pointer flex flex-col justify-between gap-1 shadow-sm ${
+                    className={`p-2.5 sm:p-3 rounded-xl text-xs text-start border transition-all cursor-pointer flex flex-col justify-between gap-1 shadow-sm ${
                       isSelected
-                        ? 'bg-teal-50 dark:bg-cyan-500/20 text-slate-900 dark:text-cyan-200 border-teal-500 dark:border-cyan-400 ring-2 ring-teal-400/30'
-                        : 'bg-slate-50 dark:bg-[#060b17] text-slate-700 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-200'
+                        ? 'bg-teal-50 dark:bg-cyan-500/20 text-slate-900 dark:text-cyan-200 border-teal-500 dark:border-cyan-400 ring-2 ring-teal-400/40'
+                        : 'bg-white dark:bg-[#060b17] text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:border-slate-300 dark:hover:border-slate-700'
                     }`}
                   >
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-xs font-sans text-slate-900 dark:text-white">
+                    <div className="flex items-center justify-between gap-1.5">
+                      <span className="font-bold text-xs font-sans text-slate-900 dark:text-white truncate">
                         {lang === 'ar' ? dev.labelAr : dev.labelEn}
                       </span>
                       {isSelected && <Check className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0" />}
                     </div>
-                    <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono font-medium">
                       {lang === 'ar' ? dev.descriptionAr : dev.descriptionEn}
                     </span>
                   </button>
@@ -641,24 +636,26 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
 
           {/* DYNAMIC PARAMETER SECTION BASED ON SELECTED CATEGORY */}
 
-          {/* A. OXYGEN THERAPY SECTION (Nasal Cannula, Simple Mask, Reservoir Mask, Venturi, HFNC, Trach Mask) */}
+          {/* A. OXYGEN THERAPY SECTION (High-contrast, clearly separated & styled) */}
           {isOxygenTherapy && (
-            <div className="p-4 rounded-xl bg-teal-50/70 dark:bg-[#060d1b] border border-teal-200 dark:border-slate-800 space-y-4">
-              <div className="flex items-center justify-between pb-2 border-b border-teal-200 dark:border-slate-800 text-xs">
-                <span className="font-bold text-teal-800 dark:text-teal-300 flex items-center gap-1.5">
-                  <Flame className="w-4 h-4" />
-                  <span>{lang === 'ar' ? 'معاملات تدفق الأكسجين والتركيز:' : 'Oxygen Flow & FiO₂ Settings:'}</span>
+            <div className="p-4 sm:p-5 rounded-2xl bg-slate-50 dark:bg-[#060d1b] border-2 border-teal-500/40 dark:border-teal-500/40 space-y-4 shadow-sm">
+              <div className="flex items-center justify-between pb-2.5 border-b border-slate-200 dark:border-slate-800 text-xs">
+                <span className="font-extrabold text-teal-800 dark:text-teal-300 flex items-center gap-1.5 text-sm">
+                  <Flame className="w-4 h-4 text-teal-500" />
+                  <span>{lang === 'ar' ? 'معاملات تدفق الأكسجين والتركيز المقدر:' : 'Active Oxygen Flow & Estimated FiO₂:'}</span>
                 </span>
-                <span className="text-[11px] font-mono text-slate-600 dark:text-slate-400">
-                  {selectedDevice === 'NASAL_CANNULA' ? (lang === 'ar' ? 'كل 1 لتر/د يرفع FiO₂ بمعدل 4%' : 'Rule of 4: +4% FiO2 per L/min') : ''}
+                <span className="text-[11px] font-mono font-bold text-teal-700 dark:text-teal-400 bg-teal-500/10 px-2 py-0.5 rounded-lg border border-teal-500/20">
+                  {selectedDevice === 'NASAL_CANNULA' 
+                    ? (lang === 'ar' ? 'القاعدة: كل 1 L/min $\\approx$ +4% FiO₂' : 'Rule: +4% FiO2 per L/min') 
+                    : (lang === 'ar' ? 'توصيل أكسجين نشط' : 'Active Oxygen Delivery')}
                 </span>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
                 {/* Flow Rate (L/min) */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    {lang === 'ar' ? 'معدل تدفق الأكسجين (L/min):' : 'Oxygen Flow Rate (L/min):'}
+                <div className="bg-white dark:bg-[#091122] p-3 rounded-xl border border-slate-200 dark:border-slate-800">
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                    {lang === 'ar' ? 'معدل تدفق الأكسجين (Flow L/min):' : 'Oxygen Flow Rate (Flow L/min):'}
                   </label>
                   <div className="relative">
                     <input
@@ -668,22 +665,22 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
                       onChange={(e) => handleFlowChange(e.target.value)}
                       placeholder="e.g. 3, 5, 8, 15"
                       required
-                      className="w-full bg-white dark:bg-[#060b17] border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-teal-800 dark:text-teal-300 font-mono font-bold text-base focus:border-teal-500 focus:outline-none"
+                      className="w-full bg-slate-50 dark:bg-[#060b17] border-2 border-teal-500/50 dark:border-teal-500/60 rounded-xl px-3 py-2 text-teal-800 dark:text-teal-300 font-mono font-black text-lg focus:border-teal-500 focus:outline-none"
                     />
-                    <span className="absolute right-2.5 top-2.5 text-xs text-slate-500 font-mono font-bold">L/min</span>
+                    <span className="absolute right-3 top-2.5 text-xs text-slate-500 font-mono font-bold">L/min</span>
                   </div>
 
                   {/* Flow Presets Pills */}
-                  <div className="flex flex-wrap gap-1.5 mt-2">
+                  <div className="flex flex-wrap gap-1 mt-2.5">
                     {[1, 2, 3, 4, 5, 6, 8, 10, 12, 15].map((presetFlow) => (
                       <button
                         key={presetFlow}
                         type="button"
                         onClick={() => handleFlowChange(String(presetFlow))}
-                        className={`px-2 py-0.5 rounded-lg text-[10px] font-mono font-bold transition-all cursor-pointer ${
+                        className={`px-2 py-1 rounded-lg text-[10px] font-mono font-bold transition-all cursor-pointer ${
                           oxygenFlow === String(presetFlow)
-                            ? 'bg-teal-600 text-white'
-                            : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700'
+                            ? 'bg-teal-600 text-white shadow-sm ring-1 ring-teal-400'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
                         }`}
                       >
                         {presetFlow}L
@@ -693,9 +690,9 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
                 </div>
 
                 {/* FiO2 (%) */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    {lang === 'ar' ? 'نسبة الأكسجين المستنشق FiO₂ (%):' : 'Fraction of Inspired O₂ (FiO₂ %):'}
+                <div className="bg-white dark:bg-[#091122] p-3 rounded-xl border border-slate-200 dark:border-slate-800">
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                    {lang === 'ar' ? 'نسبة الأكسجين المقدرة FiO₂ (%):' : 'Estimated FiO₂ (%):'}
                   </label>
                   <div className="relative">
                     <input
@@ -705,22 +702,22 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
                       onChange={(e) => setFio2(toEnglishDigits(e.target.value))}
                       placeholder="21 - 100"
                       required
-                      className="w-full bg-white dark:bg-[#060b17] border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-teal-800 dark:text-teal-300 font-mono font-bold text-base focus:border-teal-500 focus:outline-none"
+                      className="w-full bg-slate-50 dark:bg-[#060b17] border-2 border-teal-500/50 dark:border-teal-500/60 rounded-xl px-3 py-2 text-teal-800 dark:text-teal-300 font-mono font-black text-lg focus:border-teal-500 focus:outline-none"
                     />
-                    <span className="absolute right-2.5 top-2.5 text-xs text-slate-500 font-mono font-bold">%</span>
+                    <span className="absolute right-3 top-2.5 text-xs text-slate-500 font-mono font-bold">%</span>
                   </div>
 
                   {/* FiO2 Quick Presets */}
-                  <div className="flex flex-wrap gap-1.5 mt-2">
+                  <div className="flex flex-wrap gap-1 mt-2.5">
                     {[24, 28, 32, 35, 40, 50, 60, 80, 100].map((f) => (
                       <button
                         key={f}
                         type="button"
                         onClick={() => setFio2(String(f))}
-                        className={`px-2 py-0.5 rounded-lg text-[10px] font-mono font-bold transition-all cursor-pointer ${
+                        className={`px-2 py-1 rounded-lg text-[10px] font-mono font-bold transition-all cursor-pointer ${
                           fio2 === String(f)
-                            ? 'bg-teal-600 text-white'
-                            : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700'
+                            ? 'bg-teal-600 text-white shadow-sm ring-1 ring-teal-400'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
                         }`}
                       >
                         {f}%
@@ -730,9 +727,9 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
                 </div>
 
                 {/* Respiratory Rate (RR) */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    {lang === 'ar' ? 'معدل التنفس الفعلي (RR bpm):' : 'Respiratory Rate (RR bpm):'}
+                <div className="bg-white dark:bg-[#091122] p-3 rounded-xl border border-slate-200 dark:border-slate-800">
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                    {lang === 'ar' ? 'معدل التنفس الفعلي (RR bpm):' : 'Patient Respiratory Rate (RR):'}
                   </label>
                   <div className="relative">
                     <input
@@ -741,23 +738,26 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
                       value={actualRate}
                       onChange={(e) => setActualRate(toEnglishDigits(e.target.value))}
                       placeholder="12 - 35"
-                      className="w-full bg-white dark:bg-[#060b17] border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white font-mono font-bold text-base focus:border-teal-500 focus:outline-none"
+                      className="w-full bg-slate-50 dark:bg-[#060b17] border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white font-mono font-bold text-lg focus:border-teal-500 focus:outline-none"
                     />
-                    <span className="absolute right-2.5 top-2.5 text-xs text-slate-500 font-mono font-bold">bpm</span>
+                    <span className="absolute right-3 top-2.5 text-xs text-slate-500 font-mono font-bold">bpm</span>
                   </div>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-2 font-mono">
+                    {lang === 'ar' ? 'المعدل الطبيعي: 12 - 20 bpm' : 'Normal: 12 - 20 bpm'}
+                  </p>
                 </div>
               </div>
 
               {/* Summary Strip */}
-              <div className="p-3 rounded-xl bg-white dark:bg-[#060b17] border border-teal-200 dark:border-slate-800 text-xs flex items-center justify-between flex-wrap gap-2 text-slate-800 dark:text-slate-200 font-mono">
-                <span className="flex items-center gap-1.5 text-teal-700 dark:text-teal-300 font-bold">
+              <div className="p-3 rounded-xl bg-white dark:bg-[#060b17] border border-teal-200 dark:border-slate-800 text-xs flex items-center justify-between flex-wrap gap-2 text-slate-800 dark:text-slate-200 font-mono shadow-sm">
+                <span className="flex items-center gap-2 text-teal-700 dark:text-teal-300 font-black">
                   <Activity className="w-4 h-4" />
                   <span>
                     {RESPIRATORY_DEVICES.find(d => d.id === selectedDevice)?.labelEn || selectedDevice} @ {oxygenFlow} L/min (FiO₂ {fio2}%)
                   </span>
                 </span>
-                <span className="text-[11px] text-slate-500">
-                  {lang === 'ar' ? 'سيتم حفظ هذا الجهاز وتوثيقه في السجل وتسليم SBAR' : 'Logged into flowsheet & SBAR handover'}
+                <span className="text-[11px] text-slate-500 font-medium">
+                  {lang === 'ar' ? 'يتم حفظ هذا الجهاز فورياً في السجلات وتسليم SBAR' : 'Auto-synced into Flowsheet & SBAR'}
                 </span>
               </div>
             </div>
