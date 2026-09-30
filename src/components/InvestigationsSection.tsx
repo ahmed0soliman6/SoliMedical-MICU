@@ -274,7 +274,7 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
   };
 
   const handleDelete = async (inv: InvestigationItem) => {
-    if (!canDeleteRecord(currentUser)) {
+    if (!canDeleteRecord(currentUser, inv)) {
       alert(lang === 'ar' ? 'غير مصرح: حذف السجلات الطبية يتطلب صلاحيات إدارية خاصة.' : 'Unauthorized: Deleting medical records requires special administrative permissions.');
       return;
     }
@@ -596,7 +596,7 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
                                   <span>{lang === 'ar' ? 'تعديل' : 'Edit'}</span>
                                 </button>
 
-                                {canDeleteRecord(currentUser) && (
+                                {canDeleteRecord(currentUser, inv) && (
                                   <button
                                     type="button"
                                     onClick={(e) => { e.stopPropagation(); handleDelete(inv); }}

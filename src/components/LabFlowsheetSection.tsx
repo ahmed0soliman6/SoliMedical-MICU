@@ -584,22 +584,13 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
 
   const triggerDeleteLabType = (testName: string) => {
     const items = groupedLabs.get(testName) || [];
-    const distinctDoctors = new Set(
-      items
-        .map(it => it.recordedByStaffId || it.recordedByName)
-        .filter(Boolean)
-    );
-    const hasMultipleDoctors = distinctDoctors.size > 1;
-    const canDelete = !hasMultipleDoctors || 
-                      currentUser?.role === StaffRole.ADMIN || 
-                      currentUser?.isSuperAdmin || 
-                      currentUser?.role === StaffRole.CONSULTANT ||
-                      canDeleteRecord(currentUser);
+    const canDelete = canDeleteRecord(currentUser, items) || 
+                      currentUser?.role === StaffRole.CONSULTANT;
 
     if (!canDelete) {
       setDeleteErrorMsg(lang === 'ar' 
-        ? 'عذراً، هذا التحليل يحتوي على قراءات مسجلة بواسطة أكثر من طبيب. لا يسمح بحذفه إلا لمدير النظام (Admin) أو الطبيب الاستشاري (Consultant) أو من يملك صلاحية حذف السجلات الطبية.' 
-        : 'Sorry, this lab contains readings recorded by multiple doctors. Only Admin, Consultant, or users with medical records delete permission can delete it.'
+        ? 'عذراً، هذا التحليل يحتوي على قراءات مسجلة بواسطة طبيب آخر أو ليس لديك صلاحية حذف السجلات الطبية.' 
+        : 'Sorry, this lab contains readings recorded by another doctor or you do not have permission to delete medical records.'
       );
       return;
     }

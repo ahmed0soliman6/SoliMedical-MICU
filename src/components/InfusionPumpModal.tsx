@@ -620,7 +620,7 @@ export const InfusionPumpModal: React.FC<InfusionPumpModalProps> = ({
   const handleDeletePump = async () => {
     if (!editingPump) return;
 
-    if (!canDeleteRecord(currentUser)) {
+    if (!canDeleteRecord(currentUser, editingPump)) {
       alert(lang === 'ar' ? 'غير مصرح: حذف السجلات الطبية يتطلب صلاحيات إدارية خاصة.' : 'Unauthorized: Deleting medical records requires special administrative permissions.');
       return;
     }
@@ -971,7 +971,7 @@ export const InfusionPumpModal: React.FC<InfusionPumpModalProps> = ({
 
           {/* Action Buttons */}
           <div className="flex items-center justify-between gap-3 pt-3.5 border-t border-slate-200 dark:border-slate-800">
-            {editingPump && canDeleteRecord(currentUser) ? (
+            {editingPump && canDeleteRecord(currentUser, editingPump) ? (
               <button
                 type="button"
                 onClick={handleDeletePump}

@@ -566,7 +566,7 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
 
   // Complete Delete of Record
   const handleRemoveVentilator = async () => {
-    if (!canDeleteRecord(currentUser)) {
+    if (!canDeleteRecord(currentUser, initialVentilator)) {
       alert(lang === 'ar' ? 'غير مصرح: حذف السجلات الطبية يتطلب صلاحيات إدارية خاصة.' : 'Unauthorized: Deleting medical records requires administrative permissions.');
       return;
     }
@@ -1115,7 +1115,7 @@ export const VentilatorModal: React.FC<VentilatorModalProps> = ({
               </button>
 
               {/* Complete Delete button */}
-              {initialVentilator && canDeleteRecord(currentUser) && (
+              {initialVentilator && canDeleteRecord(currentUser, initialVentilator) && (
                 <button
                   type="button"
                   onClick={handleRemoveVentilator}

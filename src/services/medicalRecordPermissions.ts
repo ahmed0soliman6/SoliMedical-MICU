@@ -68,17 +68,53 @@ export function canEditRecord(
 /**
  * Validates if a user is authorized to delete a record.
  * Rules:
- * 1. Doctors CANNOT delete records just because they can edit.
- * 2. Only ADMIN or users with explicit medicalRecords.delete permission can perform deletions.
+ * 1. ADMIN (or Super Admin) can delete ALL records.
+ * 2. User with explicit 'medicalRecords.delete' permission can delete ALL records.
+ * 3. Doctors / Clinicians can delete records created by themselves (matching UID or staff/badge ID).
  */
-export function canDeleteRecord(user: UserContextForPermission | null | undefined): boolean {
+export function canDeleteRecord(
+  user: UserContextForPermission | null | undefined,
+  record?: RecordOwnershipContext | RecordOwnershipContext[] | null | undefined
+): boolean {
   if (!user || !user.uid) return false;
-  return (
-    user.role === StaffRole.ADMIN ||
-    user.role === 'ADMIN' ||
-    user.isSuperAdmin === true ||
-    user.permissions?.['medicalRecords.delete'] === true
-  );
+
+  // 1. ADMIN / Super Admin can delete all records
+  if (user.role === StaffRole.ADMIN || user.role === 'ADMIN' || user.isSuperAdmin === true) {
+    return true;
+  }
+
+  // 2. User has explicit permission to delete medical records
+  if (user.permissions?.['medicalRecords.delete'] === true) {
+    return true;
+  }
+
+  // 3. User is the creator/owner of the record
+  if (record) {
+    const recordsToCheck = Array.isArray(record) ? record : [record];
+    const userIdsToCheck = [user.uid, user.badgeId, user.staffId].filter(Boolean) as string[];
+
+    return recordsToCheck.every((rec) => {
+      if (!rec) return false;
+
+      const ownerIds = [
+        rec.createdByUid,
+        rec.doctorId,
+        rec.authorId,
+        rec.authorStaffId,
+        rec.recordedByStaffId,
+        rec.userId,
+        rec.transferredBy,
+      ].filter(Boolean) as string[];
+
+      if (ownerIds.length === 0) return false;
+
+      return ownerIds.some((ownerId) =>
+        userIdsToCheck.some((userId) => ownerId === userId || ownerId === `staff-${userId}`)
+      );
+    });
+  }
+
+  return false;
 }
 
 /**

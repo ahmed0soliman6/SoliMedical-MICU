@@ -1193,8 +1193,8 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
   };
 
   const handleDelete = async (abx: PatientAntibiotic) => {
-    if (!canDeleteRecord(activeUser)) {
-      alert(lang === 'ar' ? 'غير مصرح: حذف السجلات الطبية متاح فقط لمدير النظام (ADMIN).' : 'Unauthorized: Deleting records is available for ADMIN only.');
+    if (!canDeleteRecord(activeUser, abx)) {
+      alert(lang === 'ar' ? 'غير مصرح: حذف هذا السجل يتطلب صلاحيات الحذف أو أن تكون الطبيب الذي قام بإنشائه.' : 'Unauthorized: Deleting this record requires delete permission or being the doctor who created it.');
       return;
     }
 

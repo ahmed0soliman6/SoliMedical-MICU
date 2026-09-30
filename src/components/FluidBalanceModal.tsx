@@ -372,7 +372,7 @@ export const FluidBalanceModal: React.FC<FluidBalanceModalProps> = ({
   const handleDelete = async () => {
     if (!initialFluidBalance?.id) return;
 
-    if (!canDeleteRecord(currentUser)) {
+    if (!canDeleteRecord(currentUser, initialFluidBalance)) {
       alert(lang === 'ar' ? 'غير مصرح: حذف السجلات الطبية يتطلب صلاحيات إدارية خاصة.' : 'Unauthorized: Deleting medical records requires special administrative permissions.');
       return;
     }
