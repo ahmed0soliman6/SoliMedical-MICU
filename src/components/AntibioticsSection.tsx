@@ -128,10 +128,12 @@ export const COMMON_ANTIBIOTIC_DOSES_MAP: Record<string, { doses: string[]; defa
   'zithromax': { doses: ['250 mg', '500 mg'], defaultRoute: 'IV', defaultFreq: 'Q24H', category: 'Macrolide' },
   'أزيثرومايسين': { doses: ['250 mg', '500 mg'], defaultRoute: 'IV', defaultFreq: 'Q24H', category: 'Macrolide' },
 
-  'imipenem/cilastatin': { doses: ['500 mg', '1 g'], defaultRoute: 'IV', defaultFreq: 'Q6H', category: 'Beta-Lactam / Carbapenem' },
-  'imipenem': { doses: ['500 mg', '1 g'], defaultRoute: 'IV', defaultFreq: 'Q6H', category: 'Beta-Lactam / Carbapenem' },
-  'tienam': { doses: ['500 mg', '1 g'], defaultRoute: 'IV', defaultFreq: 'Q6H', category: 'Beta-Lactam / Carbapenem' },
-  'تنام': { doses: ['500 mg', '1 g'], defaultRoute: 'IV', defaultFreq: 'Q6H', category: 'Beta-Lactam / Carbapenem' },
+  'imipenem/cilastatin': { doses: ['250 mg', '500 mg', '1 g'], defaultRoute: 'IV', defaultFreq: 'Q6H', category: 'Beta-Lactam / Carbapenem' },
+  'imipenem': { doses: ['250 mg', '500 mg', '1 g'], defaultRoute: 'IV', defaultFreq: 'Q6H', category: 'Beta-Lactam / Carbapenem' },
+  'tienam': { doses: ['250 mg', '500 mg', '1 g'], defaultRoute: 'IV', defaultFreq: 'Q6H', category: 'Beta-Lactam / Carbapenem' },
+  'تينام': { doses: ['250 mg', '500 mg', '1 g'], defaultRoute: 'IV', defaultFreq: 'Q6H', category: 'Beta-Lactam / Carbapenem' },
+  'تنام': { doses: ['250 mg', '500 mg', '1 g'], defaultRoute: 'IV', defaultFreq: 'Q6H', category: 'Beta-Lactam / Carbapenem' },
+  'إيميبينيم': { doses: ['250 mg', '500 mg', '1 g'], defaultRoute: 'IV', defaultFreq: 'Q6H', category: 'Beta-Lactam / Carbapenem' },
 
   'ertapenem': { doses: ['1 g'], defaultRoute: 'IV', defaultFreq: 'Q24H', category: 'Beta-Lactam / Carbapenem' },
   'invanz': { doses: ['1 g'], defaultRoute: 'IV', defaultFreq: 'Q24H', category: 'Beta-Lactam / Carbapenem' },
@@ -298,6 +300,78 @@ export function evaluateRenalDosingMatrix(
         recommendedDose: '500 mg',
         recommendedFrequency: 'Q24H',
         note: `Dose adjusted for CrCl ${crCl} mL/min: 500 mg Q24H instead of Q8H`,
+        requiresAdjustment: true,
+        severityLevel: 'ESRD',
+      };
+    }
+  }
+
+  // Imipenem/Cilastatin / Tienam / تينام / إيميبينيم
+  if (norm.includes('imipenem') || norm.includes('tienam') || norm.includes('تينام') || norm.includes('تنام') || norm.includes('إيميبينيم')) {
+    if (crCl === null) {
+      return {
+        drugMatch: 'Imipenem/Cilastatin (Tienam)',
+        category: 'Beta-Lactam / Carbapenem',
+        crClRange: 'CrCl Pending',
+        recommendedDose: '500 mg',
+        recommendedFrequency: 'Q6H',
+        note: 'Standard dose: 500 mg Q6H (or 1 g Q8H for severe sepsis). Awaiting creatinine for CrCl adjustment.',
+        requiresAdjustment: false,
+        severityLevel: 'NORMAL',
+      };
+    }
+    if (crCl > 70) {
+      return {
+        drugMatch: 'Imipenem/Cilastatin (Tienam)',
+        category: 'Beta-Lactam / Carbapenem',
+        crClRange: 'CrCl > 70 mL/min',
+        recommendedDose: '500 mg',
+        recommendedFrequency: 'Q6H',
+        note: `CrCl ${crCl} mL/min: Normal renal function (500 mg Q6H or 1 g Q8H - No adjustment needed)`,
+        requiresAdjustment: false,
+        severityLevel: 'NORMAL',
+      };
+    } else if (crCl >= 41) {
+      return {
+        drugMatch: 'Imipenem/Cilastatin (Tienam)',
+        category: 'Beta-Lactam / Carbapenem',
+        crClRange: 'CrCl 41–70 mL/min',
+        recommendedDose: '500 mg',
+        recommendedFrequency: 'Q8H',
+        note: `Dose adjusted for CrCl ${crCl} mL/min: 500 mg Q8H instead of Q6H`,
+        requiresAdjustment: true,
+        severityLevel: 'MILD',
+      };
+    } else if (crCl >= 21) {
+      return {
+        drugMatch: 'Imipenem/Cilastatin (Tienam)',
+        category: 'Beta-Lactam / Carbapenem',
+        crClRange: 'CrCl 21–40 mL/min',
+        recommendedDose: '500 mg',
+        recommendedFrequency: 'Q12H',
+        note: `Dose adjusted for CrCl ${crCl} mL/min: 500 mg Q12H (or 250 mg Q6H) instead of 500 mg Q6H`,
+        requiresAdjustment: true,
+        severityLevel: 'MODERATE',
+      };
+    } else if (crCl >= 6) {
+      return {
+        drugMatch: 'Imipenem/Cilastatin (Tienam)',
+        category: 'Beta-Lactam / Carbapenem',
+        crClRange: 'CrCl 6–20 mL/min',
+        recommendedDose: '250 mg',
+        recommendedFrequency: 'Q12H',
+        note: `Dose adjusted for CrCl ${crCl} mL/min: 250 mg Q12H instead of 500 mg Q6H`,
+        requiresAdjustment: true,
+        severityLevel: 'SEVERE',
+      };
+    } else {
+      return {
+        drugMatch: 'Imipenem/Cilastatin (Tienam)',
+        category: 'Beta-Lactam / Carbapenem',
+        crClRange: 'CrCl < 6 mL/min (or HD)',
+        recommendedDose: '250 mg',
+        recommendedFrequency: 'Q12H',
+        note: `Dose adjusted for CrCl ${crCl} mL/min: 250 mg Q12H (give dose post-hemodialysis on HD days)`,
         requiresAdjustment: true,
         severityLevel: 'ESRD',
       };
@@ -771,7 +845,7 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
   const presetsList = settings.antibioticsPresets || [];
   const getRecommendedDuration = (name: string): number => {
     const lower = name.toLowerCase();
-    if (lower.includes('meropenem') || lower.includes('meronem') || lower.includes('ميرونام') || lower.includes('ميروبينيم')) return 5;
+    if (lower.includes('meropenem') || lower.includes('meronem') || lower.includes('ميرونام') || lower.includes('ميروبينيم') || lower.includes('tienam') || lower.includes('تينام') || lower.includes('imipenem')) return 7;
     if (lower.includes('metronidazole') || lower.includes('flagyl') || lower.includes('فلاجيل') || lower.includes('مترونيدازول')) return 7;
     if (lower.includes('vancomycin') || lower.includes('vancocin') || lower.includes('فانكومايسين')) return 10;
     if (lower.includes('colistin') || lower.includes('كوليستين')) return 10;
@@ -903,6 +977,7 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
 
   const ICU_ANTIBIOTIC_CHIPS = [
     { name: 'Meropenem', ar: 'ميرونام', defDose: '1 g', defFreq: 'Q8H' },
+    { name: 'Tienam (Imipenem)', ar: 'تينام', defDose: '500 mg', defFreq: 'Q6H' },
     { name: 'Piperacillin/Tazobactam', ar: 'تازوسين', defDose: '4.5 g', defFreq: 'Q6H' },
     { name: 'Vancomycin', ar: 'فانكومايسين', defDose: '1 g', defFreq: 'Q12H' },
     { name: 'Ceftriaxone', ar: 'سفترياكسون', defDose: '2 g', defFreq: 'Q24H' },
@@ -1595,10 +1670,10 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
 
             {/* Modal Form */}
             <form onSubmit={handleSaveAntibiotic} className="p-4 sm:p-5 overflow-y-auto space-y-3.5 sm:space-y-4 flex-1">
-              {/* Quick ICU Antibiotics Presets Toolbar (2 Compact Rows with '+ إضافة دواء' at the end) */}
+              {/* Quick ICU Antibiotics Presets Toolbar (3 Compact Rows with '+ إضافة دواء' at the end) */}
               {!editingAbx && (
                 <div className="bg-slate-100/90 dark:bg-[#060b17] border border-slate-200 dark:border-slate-800/80 rounded-xl p-2 sm:p-2.5">
-                  <div className="grid grid-rows-2 grid-flow-col auto-cols-max gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
+                  <div className="grid grid-rows-3 grid-flow-col auto-cols-max gap-1.5 overflow-x-auto pb-1.5 scrollbar-thin">
                     {combinedChips.map((chip) => {
                       const isSelected = !isCustomDrug && (
                         drugNameEn.toLowerCase() === chip.name.toLowerCase() ||
@@ -1634,6 +1709,93 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                       <Plus className="w-3.5 h-3.5" />
                       <span>{lang === 'ar' ? '+ إضافة دواء' : '+ Add Drug'}</span>
                     </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Live Recommended Renal Dose Prompt while selecting drug */}
+              {!editingAbx && (
+                <div className={`rounded-xl p-3 border transition-all ${
+                  effectiveCr !== null && currentRenalRec?.requiresAdjustment
+                    ? 'bg-amber-500/10 dark:bg-amber-950/30 border-amber-400 dark:border-amber-500/50 shadow-xs'
+                    : effectiveCr !== null
+                    ? 'bg-emerald-50/80 dark:bg-emerald-950/25 border-emerald-300 dark:border-emerald-600/40'
+                    : 'bg-slate-100/80 dark:bg-slate-900/60 border-slate-200 dark:border-slate-800'
+                }`}>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className={`p-1.5 rounded-lg ${
+                        effectiveCr !== null && currentRenalRec?.requiresAdjustment
+                          ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400'
+                          : effectiveCr !== null
+                          ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                          : 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                      }`}>
+                        {effectiveCr !== null && currentRenalRec?.requiresAdjustment ? (
+                          <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                        ) : (
+                          <Calculator className="w-4 h-4" />
+                        )}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-xs font-bold text-slate-900 dark:text-white">
+                            {lang === 'ar' ? 'الجرعة الموصى بها كلوياً:' : 'Recommended Renal Dose:'}
+                          </span>
+                          {currentRenalRec?.recommendedDose ? (
+                            <span className="font-mono font-black text-xs px-2 py-0.5 rounded bg-amber-500 text-slate-950 dark:bg-amber-400 shadow-xs">
+                              {currentRenalRec.recommendedDose} {currentRenalRec.recommendedFrequency || ''}
+                            </span>
+                          ) : (
+                            <span className="font-mono font-bold text-xs text-slate-700 dark:text-slate-300">
+                              {dose} {frequency}
+                            </span>
+                          )}
+                          {effectiveCr !== null && (
+                            <span className="text-[10px] font-mono text-cyan-700 dark:text-cyan-400 bg-cyan-100 dark:bg-cyan-950/60 px-1.5 py-0.5 rounded border border-cyan-300 dark:border-cyan-800/60">
+                              CrCl: {currentCrCl !== null ? `${currentCrCl} mL/min` : '--'} (SCr: {effectiveCr.toFixed(2)} mg/dL)
+                            </span>
+                          )}
+                        </div>
+                        {currentRenalRec?.note ? (
+                          <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5 font-medium">
+                            {currentRenalRec.note}
+                          </p>
+                        ) : effectiveCr === null ? (
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-[10px] text-amber-700 dark:text-amber-400 italic">
+                              {lang === 'ar' ? 'لم يتم تسجيل تحليل كرياتينين للمريض.' : 'No recent creatinine found.'}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setShowManualCrEntry(true)}
+                              className="text-[10px] text-cyan-600 dark:text-cyan-400 underline font-bold cursor-pointer"
+                            >
+                              {lang === 'ar' ? 'أدخل الكرياتينين يدوياً' : 'Enter Cr manually'}
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    {currentRenalRec && currentRenalRec.requiresAdjustment && currentCrCl !== null && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (currentRenalRec.recommendedDose) setDose(currentRenalRec.recommendedDose);
+                          if (currentRenalRec.recommendedFrequency) {
+                            setFrequency(currentRenalRec.recommendedFrequency);
+                            setIsCustomFrequency(!['Q6H', 'Q8H', 'Q12H', 'Q24H', 'Q48H', 'Q36H', 'Q72H', 'Continuous', 'Once / STAT', 'Post-HD'].includes(currentRenalRec.recommendedFrequency));
+                          }
+                          if (currentRenalRec.note) setRenalAdjustment(currentRenalRec.note);
+                          setIsRenalAutoApplied(true);
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-[11px] flex items-center gap-1 shadow-xs cursor-pointer transition-all shrink-0"
+                      >
+                        <Zap className="w-3 h-3" />
+                        <span>{lang === 'ar' ? 'تطبيق الجرعة المقترحة' : 'Apply Dose'}</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
@@ -1675,9 +1837,17 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                     <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300">
                       {lang === 'ar' ? 'الجرعة المتوفرة *' : 'Available Dose *'}
                     </label>
-                    <span className="text-[10px] text-amber-600 dark:text-amber-400 font-mono font-medium">
-                      {availableDoses.length} {lang === 'ar' ? 'خيارات' : 'options'}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      {currentRenalRec?.recommendedDose && effectiveCr !== null && (
+                        <span className="text-[10px] bg-amber-100 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300 px-1.5 py-0.5 rounded font-bold border border-amber-300 dark:border-amber-700/60 flex items-center gap-0.5">
+                          <Zap className="w-2.5 h-2.5" />
+                          {lang === 'ar' ? `الموصى بها: ${currentRenalRec.recommendedDose}` : `Rec: ${currentRenalRec.recommendedDose}`}
+                        </span>
+                      )}
+                      <span className="text-[10px] text-amber-600 dark:text-amber-400 font-mono font-medium">
+                        {availableDoses.length} {lang === 'ar' ? 'خيارات' : 'options'}
+                      </span>
+                    </div>
                   </div>
                   <select
                     value={availableDoses.includes(dose) ? dose : 'CUSTOM'}
@@ -1741,9 +1911,16 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300">
-                      {lang === 'ar' ? 'التكرار / الجدول' : 'Frequency'}
-                    </label>
+                    <div className="flex items-center gap-1.5">
+                      <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300">
+                        {lang === 'ar' ? 'التكرار / الجدول' : 'Frequency'}
+                      </label>
+                      {currentRenalRec?.recommendedFrequency && effectiveCr !== null && (
+                        <span className="text-[10px] bg-cyan-100 dark:bg-cyan-950/70 text-cyan-800 dark:text-cyan-300 px-1.5 py-0.5 rounded font-bold border border-cyan-300 dark:border-cyan-700/60">
+                          {lang === 'ar' ? `الموصى به: ${currentRenalRec.recommendedFrequency}` : `Rec: ${currentRenalRec.recommendedFrequency}`}
+                        </span>
+                      )}
+                    </div>
                     <button
                       type="button"
                       onClick={() => {

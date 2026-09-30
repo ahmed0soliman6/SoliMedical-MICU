@@ -235,13 +235,13 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
       return;
     }
 
-    // Rule 2: Validate National ID / Card ID is strictly 4 numeric digits
+    // Rule 2: Validate National ID / Card ID is strictly 4 numeric digits IF provided (optional)
     const cleanNatId = toEnglishDigits(nationalId.trim());
-    if (!/^\d{4}$/.test(cleanNatId)) {
+    if (cleanNatId && !/^\d{4}$/.test(cleanNatId)) {
       setAdmissionError(
         lang === 'ar'
-          ? 'يرجى إدخال آخر 4 أرقام من بطاقة الهوية / الرقم القومي (تتكون من 4 أرقام فقط).'
-          : 'Please enter the last 4 digits of Card ID (strictly 4 digits).'
+          ? 'في حال إدخال آخر 4 أرقام من بطاقة الهوية / الرقم القومي، يجب أن تتكون من 4 أرقام فقط.'
+          : 'If provided, the last 4 digits of Card ID must be strictly 4 digits.'
       );
       return;
     }
@@ -620,19 +620,19 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Box 2: Card ID (Last 4 Digits) - Mandatory */}
+              {/* Box 2: Card ID (Last 4 Digits) - Optional */}
               <div>
-                <label className="text-[11px] text-slate-300 font-semibold block mb-1">
-                  {lang === 'ar' ? 'آخر 4 أرقام من بطاقة الهوية / الرقم القومي *' : 'Last 4 Digits of Card ID *'}
+                <label className="text-[11px] text-slate-300 font-semibold block mb-1 flex items-center justify-between">
+                  <span>{lang === 'ar' ? 'آخر 4 أرقام من بطاقة الهوية / الرقم القومي' : 'Last 4 Digits of Card ID'}</span>
+                  <span className="text-[10px] text-teal-400 font-normal">({lang === 'ar' ? 'اختياري' : 'Optional'})</span>
                 </label>
                 <input
                   type="text"
                   value={nationalId}
                   onChange={(e) => setNationalId(toEnglishDigits(e.target.value).slice(0, 4))}
-                  placeholder={lang === 'ar' ? 'مثال: 5044' : 'e.g. 5044'}
+                  placeholder={lang === 'ar' ? 'مثال: 5044 (اختياري)' : 'e.g. 5044 (Optional)'}
                   maxLength={4}
                   className="w-full bg-[#070c18] border border-slate-700 rounded-lg px-3 py-2 text-white font-mono font-bold focus:border-teal-500 focus:outline-none text-xs"
-                  required
                 />
               </div>
 
@@ -733,36 +733,7 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
             2. {lang === 'ar' ? 'التشخيص الطبي والمسار السريري للحالة' : 'Clinical Diagnosis & Intake Pathway'}
           </h3>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-            <div>
-              <label className="text-[11px] text-slate-300 font-semibold block mb-1">
-                {lang === 'ar' ? 'الطبيب المعالج / الاستشاري (Attending)' : 'Attending Physician'}
-              </label>
-              <input
-                type="text"
-                value={attendingDoctorName}
-                onChange={(e) => setAttendingDoctorName(e.target.value)}
-                placeholder={lang === 'ar' ? 'اسم الطبيب المعالج أو اتركه فارغاً' : 'Attending Physician (or leave blank)'}
-                className="w-full bg-[#070c18] border border-slate-700 rounded-lg px-3 py-2 text-white font-bold text-indigo-300 focus:border-indigo-500 focus:outline-none text-xs"
-              />
-            </div>
-
-            <div>
-              <label className="text-[11px] text-slate-300 font-semibold block mb-1">
-                {lang === 'ar' ? 'حالة الإنعاش الطبي (Code Status)' : 'Code Status (Clinical Directive)'}
-              </label>
-              <select
-                value={codeStatus}
-                onChange={(e) => setCodeStatus(e.target.value as CodeStatus)}
-                className="w-full bg-[#070c18] border border-slate-700 rounded-lg px-3 py-2 text-white font-bold focus:border-teal-500 focus:outline-none"
-              >
-                <option value={CodeStatus.FULL_CODE}>{lang === 'ar' ? 'FULL CODE (إنعاش قلبي رئوي كامل)' : 'FULL CODE (CPR / Defib / Intubate)'}</option>
-                <option value={CodeStatus.DNR}>{lang === 'ar' ? 'DNR (عدم إجراء إنعاش قلبي رئوي)' : 'DNR (Do Not Resuscitate)'}</option>
-                <option value={CodeStatus.DNI_ONLY}>{lang === 'ar' ? 'DNI ONLY (عدم التنبيب الرئوي)' : 'DNI ONLY (Do Not Intubate)'}</option>
-                <option value={CodeStatus.PALLIATIVE_COMFORT}>{lang === 'ar' ? 'PALLIATIVE COMFORT (تلطيفي مريح)' : 'PALLIATIVE COMFORT'}</option>
-              </select>
-            </div>
-
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="text-[11px] text-slate-300 font-semibold block mb-1">
                 {lang === 'ar' ? 'مستوى الخطورة ونسبة الرعاية (Acuity Level)' : 'Acuity Level & Staffing Ratio'}
