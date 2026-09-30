@@ -131,10 +131,15 @@ export const AiInvestigationScannerModal: React.FC<AiInvestigationScannerModalPr
       }
     } catch (err: any) {
       console.error('Camera access error:', err);
+      const isDenied = err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError' || err.message?.includes('Permission');
       setCameraError(
-        lang === 'ar'
-          ? 'تعذر الوصول إلى الكاميرا. يرجى التأكد من منح الإذن أو استخدام خيار رفع الصورة.'
-          : 'Could not access camera. Please allow permission or upload an image file.'
+        isDenied
+          ? (lang === 'ar'
+              ? 'يرجى الضغط على زر "السماح بالكاميرا" أو الموافقة على رسالة الإذن التي تظهر على الشاشة لاستخدام الكاميرا.'
+              : 'Camera permission required. Please allow camera access in the system prompt or click Allow below.')
+          : (lang === 'ar'
+              ? 'تعذر الوصول إلى الكاميرا. يرجى التأكد من توصيل الكاميرا ومنح الإذن أو استخدام خيار رفع الصورة.'
+              : 'Could not access camera. Please allow permission or upload an image file.')
       );
       setIsCameraActive(false);
     }
@@ -382,9 +387,19 @@ export const AiInvestigationScannerModal: React.FC<AiInvestigationScannerModalPr
           {activeInputMode === 'camera' && (
             <div className="space-y-3">
               {cameraError ? (
-                <div className="p-4 rounded-xl bg-rose-950/40 border border-rose-800 text-rose-300 text-xs flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
-                  <span>{cameraError}</span>
+                <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm animate-in fade-in">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-amber-400 mt-0.5" />
+                    <span>{cameraError}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={startCamera}
+                    className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 shrink-0 shadow-sm transition-all cursor-pointer"
+                  >
+                    <Camera className="w-3.5 h-3.5" />
+                    <span>{lang === 'ar' ? 'السماح وتشغيل الكاميرا الآن' : 'Allow & Start Camera'}</span>
+                  </button>
                 </div>
               ) : (
                 <div className="relative rounded-2xl overflow-hidden bg-black border border-slate-700 aspect-video max-h-[360px] flex items-center justify-center">

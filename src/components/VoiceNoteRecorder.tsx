@@ -99,11 +99,36 @@ export const VoiceNoteRecorder: React.FC<VoiceNoteRecorderProps> = ({
     return formatted;
   };
 
-  const startListening = () => {
+  const requestMicrophoneAccess = async (): Promise<boolean> => {
+    try {
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach((track) => track.stop());
+        return true;
+      }
+      return true;
+    } catch (err: any) {
+      console.warn('Microphone permission request error:', err);
+      return false;
+    }
+  };
+
+  const startListening = async () => {
     setErrorMsg(null);
     setInterimText('');
     setLastTranscribedPhrase('');
     isExplicitStopRef.current = false;
+
+    // Explicitly prompt the user for microphone permission via getUserMedia
+    const hasMicPermission = await requestMicrophoneAccess();
+    if (!hasMicPermission) {
+      setErrorMsg(
+        lang === 'ar'
+          ? 'تم حظر إذن الميكروفون أو لم يتم منحه. يُرجى النقر على زر "السماح بالميكروفون" أدناه أو تفعيل الإذن من إعدادات الجهاز.'
+          : 'Microphone permission was not granted. Please click "Allow Microphone" below or enable permission in device settings.'
+      );
+      return;
+    }
 
     const win = window as IWindowSpeechRecognition;
     const SpeechAPI = win.SpeechRecognition || win.webkitSpeechRecognition;
@@ -158,8 +183,8 @@ export const VoiceNoteRecorder: React.FC<VoiceNoteRecorderProps> = ({
         if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
           setErrorMsg(
             lang === 'ar'
-              ? 'تم حظر إذن الميكروفون. يُرجى السماح بالوصول إلى الميكروفون من إعدادات المتصفح.'
-              : 'Microphone permission denied. Please allow microphone access in your browser settings.'
+              ? 'تم حظر إذن الميكروفون. يُرجى النقر على زر "السماح بالميكروفون" أدناه أو تفعيل الإذن من إعدادات المتصفح / التطبيق.'
+              : 'Microphone permission denied. Please click "Allow Microphone" below or enable access in settings.'
           );
           setIsListening(false);
         } else if (event.error === 'no-speech') {
@@ -198,8 +223,8 @@ export const VoiceNoteRecorder: React.FC<VoiceNoteRecorderProps> = ({
       console.error('Failed to start SpeechRecognition:', err);
       setErrorMsg(
         lang === 'ar'
-          ? `تعذر بدء التسجيل الصوتي: ${err.message || 'خطأ غير معروف'}`
-          : `Failed to initiate voice recording: ${err.message || 'Unknown error'}`
+          ? `تعذر بدء التسجيل الصوتي: ${err.message || 'يرجى التأكد من تشغيل الميكروفون ومنح الإذن'}`
+          : `Failed to initiate voice recording: ${err.message || 'Please ensure microphone permission is granted'}`
       );
       setIsListening(false);
     }
@@ -367,18 +392,28 @@ export const VoiceNoteRecorder: React.FC<VoiceNoteRecorderProps> = ({
 
       {/* Error alert banner */}
       {errorMsg && (
-        <div className="p-2.5 bg-rose-950/30 border border-rose-800/50 rounded-xl text-rose-300 text-[11px] flex items-start justify-between gap-2">
+        <div className="p-2.5 bg-rose-950/30 border border-rose-800/50 rounded-xl text-rose-300 text-[11px] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 shadow-sm animate-in fade-in">
           <div className="flex items-start gap-2">
             <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />
             <span>{errorMsg}</span>
           </div>
-          <button
-            type="button"
-            onClick={() => setErrorMsg(null)}
-            className="text-rose-400 hover:text-white p-0.5 cursor-pointer"
-          >
-            <X className="w-3 h-3" />
-          </button>
+          <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+            <button
+              type="button"
+              onClick={startListening}
+              className="px-2.5 py-1 bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold rounded-lg text-[10px] flex items-center gap-1 shadow-sm transition-all cursor-pointer"
+            >
+              <Mic className="w-3 h-3" />
+              <span>{lang === 'ar' ? 'منح الإذن والتسجيل الآن' : 'Allow & Record'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setErrorMsg(null)}
+              className="text-rose-400 hover:text-white p-0.5 cursor-pointer"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </div>
         </div>
       )}
     </div>
