@@ -33,6 +33,7 @@ import { useAuth } from '../services/AuthContext.tsx';
 import { canEditRecord, canDeleteRecord, preserveRecordOwnership } from '../services/medicalRecordPermissions.ts';
 import { db } from '../db/icuSyncDb.ts';
 import { syncPatientAntibioticToCloud, deletePatientAntibioticFromCloud, fetchFullCategoryFromCloud } from '../services/firebase.ts';
+import { useLockBodyScroll } from '../hooks/useLockBodyScroll.ts';
 
 // Dictionary of standard ICU antimicrobial doses & parameters
 export const COMMON_ANTIBIOTIC_DOSES_MAP: Record<string, { doses: string[]; defaultRoute?: string; defaultFreq?: string; category?: string }> = {
@@ -788,6 +789,9 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
   const [isCollapsed, setIsCollapsed] = useState(true);
   const [activeFilter, setActiveFilter] = useState<'ALL' | 'ACTIVE' | 'COMPLETED_DISCONTINUED'>('ACTIVE');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  
+  // Lock body scroll when modal is open
+  useLockBodyScroll(isAddModalOpen);
   const [editingAbx, setEditingAbx] = useState<PatientAntibiotic | null>(null);
   const [showAllAbx, setShowAllAbx] = useState(false);
   const [isLoadingMoreAbx, setIsLoadingMoreAbx] = useState(false);
@@ -1637,9 +1641,9 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
 
       {/* Add / Edit Antibiotic Modal */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200 overscroll-contain overflow-y-auto">
           <div 
-            className="w-full max-w-xl bg-white dark:bg-[#091122] text-slate-900 dark:text-white border border-slate-200 dark:border-amber-500/40 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]"
+            className="w-full max-w-xl bg-white dark:bg-[#091122] text-slate-900 dark:text-white border border-slate-200 dark:border-amber-500/40 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] overscroll-contain"
             dir={isRTL ? 'rtl' : 'ltr'}
           >
             {/* Modal Header */}

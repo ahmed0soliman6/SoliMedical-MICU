@@ -26,6 +26,7 @@ import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { DEFAULT_FLUID_CATEGORIES, FluidCategoryPreset } from '../types/settings.ts';
 import { toEnglishDigits, parseEnglishFloat } from '../services/numberUtils.ts';
 import { canDeleteRecord } from '../services/medicalRecordPermissions.ts';
+import { useLockBodyScroll } from '../hooks/useLockBodyScroll.ts';
 
 interface FluidBalanceModalProps {
   isOpen: boolean;
@@ -49,6 +50,9 @@ export const FluidBalanceModal: React.FC<FluidBalanceModalProps> = ({
   const { lang, isRTL } = useTranslation();
   const { currentUser } = useAuth();
   const { settings } = useSystemSettings();
+
+  // Lock background body scroll when modal is open
+  useLockBodyScroll(isOpen);
 
   const activeCategories = settings.fluidCategories && settings.fluidCategories.length > 0
     ? settings.fluidCategories
@@ -394,10 +398,12 @@ export const FluidBalanceModal: React.FC<FluidBalanceModalProps> = ({
     }
   };
 
+  if (!isOpen) return null;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200 overscroll-contain overflow-y-auto">
       <div 
-        className="w-full max-w-2xl bg-[#091122] border border-teal-500/30 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]"
+        className="w-full max-w-2xl bg-[#091122] border border-teal-500/30 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] overscroll-contain"
         dir={isRTL ? 'rtl' : 'ltr'}
       >
         {/* Header */}

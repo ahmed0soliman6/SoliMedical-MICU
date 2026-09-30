@@ -18,6 +18,7 @@ import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { toEnglishDigits, parseEnglishFloat } from '../services/numberUtils.ts';
 import { useAuth } from '../services/AuthContext.tsx';
 import { canDeleteRecord } from '../services/medicalRecordPermissions.ts';
+import { useLockBodyScroll } from '../hooks/useLockBodyScroll.ts';
 
 interface InfusionPumpModalProps {
   isOpen: boolean;
@@ -343,6 +344,9 @@ export const InfusionPumpModal: React.FC<InfusionPumpModalProps> = ({
   const { settings } = useSystemSettings();
   const { currentUser } = useAuth();
 
+  // Lock background body scroll when modal is open
+  useLockBodyScroll(isOpen);
+
   // Selected drug knowledge
   const [selectedDrugId, setSelectedDrugId] = useState<string>('noradrenaline');
   const [drugNameEn, setDrugNameEn] = useState('');
@@ -644,10 +648,12 @@ export const InfusionPumpModal: React.FC<InfusionPumpModalProps> = ({
     }
   };
 
+  if (!isOpen) return null;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200 overscroll-contain overflow-y-auto">
       <div 
-        className="infusion-pump-input-modal w-full max-w-2xl bg-white dark:bg-[#091122] text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-amber-500/30 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[94vh]"
+        className="infusion-pump-input-modal w-full max-w-2xl bg-white dark:bg-[#091122] text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-amber-500/30 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[94vh] overscroll-contain"
         dir={isRTL ? 'rtl' : 'ltr'}
         data-testid="infusion-pump-input-modal"
       >

@@ -5,25 +5,39 @@ import { doc, setDoc } from 'firebase/firestore';
 import { IcuUser } from '../types/schema.ts';
 
 export type Language = 'en' | 'ar';
+export type ThemeOption = 'light' | 'dark' | 'system';
 
 const SETTINGS_STORAGE_KEY = 'soli_medical_icu_settings_v1';
 export const USER_LANG_STORAGE_KEY = 'soli_icu_user_language';
 export const USER_THEME_STORAGE_KEY = 'soli_icu_user_theme';
 
 /**
+ * Auto-detects device/browser language (e.g. Arabic or English).
+ */
+export function detectDeviceLanguage(): Language {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') return 'ar';
+  const deviceLocales = [
+    navigator.language,
+    ...(navigator.languages || [])
+  ];
+  for (const loc of deviceLocales) {
+    if (loc && loc.toLowerCase().startsWith('ar')) return 'ar';
+    if (loc && loc.toLowerCase().startsWith('en')) return 'en';
+  }
+  return 'ar';
+}
+
+/**
  * Retrieves the user-specific or device-specific preferred language.
- * Never allows cloud broadcasts from other users to override this.
  */
 export function getLocalUserLanguage(uid?: string): Language {
-  if (typeof window === 'undefined') return 'en';
+  if (typeof window === 'undefined') return detectDeviceLanguage();
   try {
-    // 1. If explicit UID provided, check for account-specific language
     if (uid) {
       const accountLang = localStorage.getItem(`soli_icu_user_lang_${uid}`);
       if (accountLang === 'ar' || accountLang === 'en') return accountLang;
     }
 
-    // 2. Check if an active user session exists in localStorage
     const activeUserRaw = localStorage.getItem('soli_icu_active_user');
     if (activeUserRaw) {
       const activeUser = JSON.parse(activeUserRaw);
@@ -33,11 +47,10 @@ export function getLocalUserLanguage(uid?: string): Language {
       }
     }
 
-    // 3. Check browser/device saved language
     const deviceLang = localStorage.getItem(USER_LANG_STORAGE_KEY);
     if (deviceLang === 'ar' || deviceLang === 'en') return deviceLang;
 
-    // 4. Backward compatibility check from legacy settings key
+    // Backward compatibility check
     const legacy = localStorage.getItem(SETTINGS_STORAGE_KEY);
     if (legacy) {
       const parsed = JSON.parse(legacy);
@@ -46,19 +59,44 @@ export function getLocalUserLanguage(uid?: string): Language {
   } catch (e) {
     console.error('Error reading local user language:', e);
   }
-  return 'en';
+  return detectDeviceLanguage();
 }
 
 /**
- * Retrieves the device/user-specific theme ('dark' | 'light').
+ * Retrieves saved ThemeOption ('light' | 'dark' | 'system').
  */
-export function getLocalUserTheme(): 'light' | 'dark' {
-  if (typeof window === 'undefined') return 'dark';
+export function getLocalUserThemeOption(): ThemeOption {
+  if (typeof window === 'undefined') return 'system';
   try {
     const saved = localStorage.getItem(USER_THEME_STORAGE_KEY);
-    if (saved === 'light' || saved === 'dark') return saved;
+    if (saved === 'light' || saved === 'dark' || saved === 'system') return saved as ThemeOption;
   } catch {}
-  return 'dark';
+  return 'system'; // Default to Device/System theme
+}
+
+/**
+ * Evaluates current system device theme ('dark' or 'light').
+ */
+export function getSystemDeviceTheme(): 'light' | 'dark' {
+  if (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+    return 'dark';
+  }
+  return 'light';
+}
+
+/**
+ * Resolves effective theme ('light' or 'dark') based on ThemeOption.
+ */
+export function getEffectiveTheme(option?: ThemeOption): 'light' | 'dark' {
+  const opt = option || getLocalUserThemeOption();
+  if (opt === 'system') {
+    return getSystemDeviceTheme();
+  }
+  return opt;
+}
+
+export function getLocalUserTheme(): 'light' | 'dark' {
+  return getEffectiveTheme();
 }
 
 export function loadSavedSettings(): SystemSettings {
@@ -139,6 +177,8 @@ export function saveSettingsToStorage(settings: SystemSettings): void {
 
 interface SettingsContextType {
   settings: SystemSettings;
+  themeOption: ThemeOption;
+  setThemeOption: (option: ThemeOption) => void;
   updateSettings: (newSettings: Partial<SystemSettings>) => void;
   updateNotificationSettings: (newNotifs: Partial<NotificationSettings>) => void;
   toggleFeature: (featureKey: keyof SystemSettings['features']) => void;
@@ -150,6 +190,58 @@ const SettingsContext = createContext<SettingsContextType | null>(null);
 
 export const SettingsProvider = ({ children }: { children: ReactNode }) => {
   const [settings, setSettings] = useState<SystemSettings>(loadSavedSettings);
+  const [themeOption, setThemeOptionState] = useState<ThemeOption>(getLocalUserThemeOption);
+
+  // Set Theme Option (light, dark, or system)
+  const setThemeOption = (option: ThemeOption) => {
+    setThemeOptionState(option);
+    try {
+      localStorage.setItem(USER_THEME_STORAGE_KEY, option);
+    } catch {}
+
+    const effTheme = getEffectiveTheme(option);
+    setSettings(prev => {
+      const updated = {
+        ...prev,
+        theme: effTheme,
+        lastUpdated: new Date().toISOString(),
+      };
+      saveSettingsToStorage(updated);
+      return updated;
+    });
+  };
+
+  // Real-time listener for system prefers-color-scheme changes when themeOption === 'system'
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+
+    const handleSystemThemeChange = () => {
+      if (themeOption === 'system') {
+        const effTheme = mediaQuery.matches ? 'dark' : 'light';
+        setSettings(prev => {
+          if (prev.theme === effTheme) return prev;
+          const updated = { ...prev, theme: effTheme };
+          saveSettingsToStorage(updated);
+          return updated;
+        });
+      }
+    };
+
+    try {
+      mediaQuery.addEventListener('change', handleSystemThemeChange);
+    } catch {
+      mediaQuery.addListener(handleSystemThemeChange);
+    }
+
+    return () => {
+      try {
+        mediaQuery.removeEventListener('change', handleSystemThemeChange);
+      } catch {
+        mediaQuery.removeListener(handleSystemThemeChange);
+      }
+    };
+  }, [themeOption]);
 
   // 1. Single-doc real-time listener for Clinical System Settings from Cloud Firestore
   useEffect(() => {
@@ -363,7 +455,7 @@ export const SettingsProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <SettingsContext.Provider value={{ settings, updateSettings, updateNotificationSettings, toggleFeature, toggleTheme, resetToDefaults }}>
+    <SettingsContext.Provider value={{ settings, themeOption, setThemeOption, updateSettings, updateNotificationSettings, toggleFeature, toggleTheme, resetToDefaults }}>
       {children}
     </SettingsContext.Provider>
   );

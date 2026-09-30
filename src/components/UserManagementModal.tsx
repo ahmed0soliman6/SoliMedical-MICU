@@ -35,6 +35,7 @@ import { doc, setDoc } from 'firebase/firestore';
 import { API_BASE_URL } from '../config/api.ts';
 import { AuditLogsSection } from './AuditLogsSection.tsx';
 import { formatRelativeTime, formatDetailedTimestamp } from '../services/auditService.ts';
+import { useLockBodyScroll } from '../hooks/useLockBodyScroll.ts';
 
 interface UserManagementModalProps {
   isOpen: boolean;
@@ -43,6 +44,9 @@ interface UserManagementModalProps {
 
 export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClose }) => {
   const { allUsers, currentUser, createUser, updateUser, changeUserPassword, toggleUserStatus, deleteUser, hasPermission, refreshUsers } = useAuth();
+  
+  // Lock background body scroll when modal is open
+  useLockBodyScroll(isOpen);
   const { lang, isRTL } = useTranslation();
 
   useEffect(() => {

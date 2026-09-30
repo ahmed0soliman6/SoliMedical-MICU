@@ -14,7 +14,8 @@ import {
   MessageSquare, 
   KeyRound, 
   Sun, 
-  Moon
+  Moon,
+  Monitor
 } from 'lucide-react';
 import { BedRecord, PatientDossier, BedNumber } from '../types/schema.ts';
 import { useSystemSettings } from '../services/SettingsContext.tsx';
@@ -55,11 +56,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
   selectedBedNumber,
   onSelectBed,
 }) => {
-  const { settings, toggleTheme } = useSystemSettings();
+  const { settings, themeOption, setThemeOption } = useSystemSettings();
   const { t, lang, setLanguage, isRTL } = useTranslation();
   const { currentUser, logout, hasPermission } = useAuth();
 
   const [showChangePassModal, setShowChangePassModal] = useState(false);
+
+  const cycleTheme = () => {
+    if (themeOption === 'light') setThemeOption('dark');
+    else if (themeOption === 'dark') setThemeOption('system');
+    else setThemeOption('light');
+  };
 
   const occupiedBedsCount = (beds || []).filter((b) => {
     if (!b) return false;
@@ -360,11 +367,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
               <div className="flex items-center gap-1.5">
                 <button
-                  onClick={toggleTheme}
+                  onClick={cycleTheme}
                   className="p-1.5 rounded-lg bg-white dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 transition-all cursor-pointer"
-                  title={settings.theme === 'dark' ? (lang === 'ar' ? 'الوضع النهاري' : 'Day Mode') : (lang === 'ar' ? 'الوضع الليلي' : 'Night Mode')}
+                  title={themeOption === 'light' ? (lang === 'ar' ? 'وضع نهاري (Light)' : 'Light theme') : themeOption === 'dark' ? (lang === 'ar' ? 'وضع ليلي (Dark)' : 'Dark theme') : (lang === 'ar' ? 'تلقائي بحسب وضع الجهاز' : 'Device default')}
                 >
-                  {settings.theme === 'dark' ? <Sun className="w-3.5 h-3.5 text-amber-400" /> : <Moon className="w-3.5 h-3.5 text-slate-700 dark:text-indigo-400" />}
+                  {themeOption === 'light' ? <Sun className="w-3.5 h-3.5 text-amber-500" /> : themeOption === 'dark' ? <Moon className="w-3.5 h-3.5 text-cyan-400" /> : <Monitor className="w-3.5 h-3.5 text-teal-500" />}
                 </button>
 
                 <button
@@ -414,11 +421,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           <div className="flex items-center gap-1.5">
             <button
-              onClick={toggleTheme}
+              onClick={cycleTheme}
               className="p-1.5 rounded-xl bg-white dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 transition-all shadow-sm active:scale-95 cursor-pointer"
-              title={settings.theme === 'dark' ? (lang === 'ar' ? 'التبديل إلى الوضع النهاري' : 'Switch to Day Mode') : (lang === 'ar' ? 'التبديل إلى الوضع الليلي' : 'Switch to Night Mode')}
+              title={themeOption === 'light' ? (lang === 'ar' ? 'وضع نهاري (Light)' : 'Light theme') : themeOption === 'dark' ? (lang === 'ar' ? 'وضع ليلي (Dark)' : 'Dark theme') : (lang === 'ar' ? 'تلقائي بحسب وضع الجهاز' : 'Device default')}
             >
-              {settings.theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-700 dark:text-indigo-400" />}
+              {themeOption === 'light' ? <Sun className="w-4 h-4 text-amber-500" /> : themeOption === 'dark' ? <Moon className="w-4 h-4 text-cyan-400" /> : <Monitor className="w-4 h-4 text-teal-500" />}
             </button>
 
             <button

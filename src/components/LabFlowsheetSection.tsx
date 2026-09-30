@@ -36,6 +36,7 @@ import { COLLECTIONS } from '../types/contracts.ts';
 import { AiLabScannerModal } from './AiLabScannerModal.tsx';
 import { toEnglishDigits } from '../services/numberUtils.ts';
 import { canDeleteRecord } from '../services/medicalRecordPermissions.ts';
+import { useLockBodyScroll } from '../hooks/useLockBodyScroll.ts';
 
 // Helper to determine clinical median/guidance value for lab tests
 export const getGuidanceValue = (testName: string, normalRange?: string): string => {
@@ -343,6 +344,9 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
   const [filterQuery, setFilterQuery] = useState('');
   const [isAiScannerOpen, setIsAiScannerOpen] = useState(false);
   const [aiPreset, setAiPreset] = useState<'ABG' | 'CBC' | 'ALL'>('ALL');
+
+  // Lock body scroll when any modal in LabFlowsheet is open
+  useLockBodyScroll(Boolean(isAddModalOpen || isAiScannerOpen || selectedTestName));
 
   // Form State
   const [formTestName, setFormTestName] = useState('Hb');
@@ -1128,9 +1132,9 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
 
       {/* Drill-down Modal for a Selected Test (Shows ALL previous history) */}
       {selectedTestName && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200 overscroll-contain overflow-y-auto">
           <div 
-            className="w-full max-w-2xl bg-[#0a1224] border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"
+            className="w-full max-w-2xl bg-[#0a1224] border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] overscroll-contain"
             dir={isRTL ? 'rtl' : 'ltr'}
           >
             {/* Modal Header */}
@@ -1325,9 +1329,9 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
 
       {/* Add New Lab Result Modal */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200 overscroll-contain overflow-y-auto">
           <div 
-            className="w-full max-w-lg bg-[#0a1224] border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col"
+            className="w-full max-w-lg bg-[#0a1224] border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col overscroll-contain"
             dir={isRTL ? 'rtl' : 'ltr'}
           >
             <div className="flex items-center justify-between p-4 sm:p-5 border-b border-slate-800 bg-slate-900/50">

@@ -29,6 +29,7 @@ import { db } from '../db/icuSyncDb.ts';
 import { syncInvestigationToCloud, deleteInvestigationFromCloud, fetchFullCategoryFromCloud } from '../services/firebase.ts';
 import { AiInvestigationScannerModal } from './AiInvestigationScannerModal.tsx';
 import { canDeleteRecord } from '../services/medicalRecordPermissions.ts';
+import { useLockBodyScroll } from '../hooks/useLockBodyScroll.ts';
 
 interface InvestigationsSectionProps {
   patientId: string;
@@ -160,6 +161,9 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isAiScanModalOpen, setIsAiScanModalOpen] = useState(false);
+
+  // Lock background body scroll when modal is open
+  useLockBodyScroll(Boolean(isAddModalOpen || isAiScanModalOpen));
   const [editingItem, setEditingItem] = useState<InvestigationItem | null>(null);
 
   // Form states
@@ -683,9 +687,9 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
 
       {/* Add / Edit Investigation Modal */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200 overscroll-contain overflow-y-auto">
           <div 
-            className="w-full max-w-lg bg-white dark:bg-[#0a1224] border border-slate-200 dark:border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] text-slate-900 dark:text-white"
+            className="w-full max-w-lg bg-white dark:bg-[#0a1224] border border-slate-200 dark:border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] text-slate-900 dark:text-white overscroll-contain"
             dir={isRTL ? 'rtl' : 'ltr'}
           >
             <div className="flex items-center justify-between p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
