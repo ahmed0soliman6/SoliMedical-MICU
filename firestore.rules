@@ -242,70 +242,70 @@ service cloud.firestore {
       allow read: if hasPerm('vitals.view') || hasPerm('beds.view') || hasPerm('patients.view');
       allow create: if hasPerm('vitals.create') || hasPerm('patients.update');
       allow update: if hasPerm('vitals.update') || hasPerm('vitals.create') || hasPerm('patients.update') || isAdmin();
-      allow delete: if isAdmin() || hasPerm('medicalRecords.delete');
+      allow delete: if isAdmin() || hasPerm('medicalRecords.delete') || isRecordOwner();
     }
 
     match /infusionPumps/{id} {
       allow read: if hasPerm('vitals.view') || hasPerm('beds.view') || hasPerm('patients.view');
       allow create: if hasPerm('vitals.create') || hasPerm('patients.update');
       allow update: if hasPerm('vitals.update') || hasPerm('vitals.create') || hasPerm('patients.update') || isAdmin();
-      allow delete: if isAdmin() || hasPerm('medicalRecords.delete');
+      allow delete: if isAdmin() || hasPerm('medicalRecords.delete') || isRecordOwner();
     }
 
     match /infusion_pumps/{id} {
       allow read: if hasPerm('vitals.view') || hasPerm('beds.view') || hasPerm('patients.view');
       allow create: if hasPerm('vitals.create') || hasPerm('patients.update');
       allow update: if hasPerm('vitals.update') || hasPerm('vitals.create') || hasPerm('patients.update') || isAdmin();
-      allow delete: if isAdmin() || hasPerm('medicalRecords.delete');
+      allow delete: if isAdmin() || hasPerm('medicalRecords.delete') || isRecordOwner();
     }
 
     match /patientAntibiotics/{id} {
       allow read: if hasPerm('vitals.view') || hasPerm('beds.view') || hasPerm('patients.view');
       allow create: if hasPerm('vitals.create') || hasPerm('patients.update');
       allow update: if hasPerm('vitals.update') || hasPerm('vitals.create') || hasPerm('patients.update') || isAdmin();
-      allow delete: if isAdmin() || hasPerm('medicalRecords.delete');
+      allow delete: if isAdmin() || hasPerm('medicalRecords.delete') || isRecordOwner();
     }
 
     match /fluidBalances/{id} {
       allow read: if hasPerm('vitals.view') || hasPerm('beds.view') || hasPerm('patients.view');
       allow create: if hasPerm('vitals.create') || hasPerm('patients.update');
       allow update: if hasPerm('vitals.update') || hasPerm('vitals.create') || hasPerm('patients.update') || isAdmin();
-      allow delete: if isAdmin() || hasPerm('medicalRecords.delete');
+      allow delete: if isAdmin() || hasPerm('medicalRecords.delete') || isRecordOwner();
     }
 
     match /fluid_balances/{id} {
       allow read: if hasPerm('vitals.view') || hasPerm('beds.view') || hasPerm('patients.view');
       allow create: if hasPerm('vitals.create') || hasPerm('patients.update');
       allow update: if hasPerm('vitals.update') || hasPerm('vitals.create') || hasPerm('patients.update') || isAdmin();
-      allow delete: if isAdmin() || hasPerm('medicalRecords.delete');
+      allow delete: if isAdmin() || hasPerm('medicalRecords.delete') || isRecordOwner();
     }
 
     match /fluidBalances24H/{id} {
       allow read: if hasPerm('vitals.view') || hasPerm('beds.view') || hasPerm('patients.view');
       allow create: if hasPerm('vitals.create') || hasPerm('patients.update');
       allow update: if hasPerm('vitals.update') || hasPerm('vitals.create') || hasPerm('patients.update') || isAdmin();
-      allow delete: if isAdmin() || hasPerm('medicalRecords.delete');
+      allow delete: if isAdmin() || hasPerm('medicalRecords.delete') || isRecordOwner();
     }
 
     match /statLabs/{id} {
       allow read: if hasPerm('labs.view') || hasPerm('patients.view');
       allow create: if hasPerm('labs.create');
       allow update: if hasPerm('labs.update') || hasPerm('labs.create') || isAdmin();
-      allow delete: if isAdmin() || hasPerm('medicalRecords.delete');
+      allow delete: if isAdmin() || hasPerm('medicalRecords.delete') || isRecordOwner();
     }
 
     match /labResults/{id} {
       allow read: if hasPerm('labs.view') || hasPerm('patients.view');
       allow create: if hasPerm('labs.create') || hasPerm('patients.update');
       allow update: if hasPerm('labs.update') || hasPerm('labs.create') || hasPerm('patients.update') || isAdmin();
-      allow delete: if isAdmin() || hasPerm('medicalRecords.delete');
+      allow delete: if isAdmin() || hasPerm('medicalRecords.delete') || isRecordOwner();
     }
 
     match /investigations/{id} {
       allow read: if hasPerm('investigations.view') || hasPerm('patients.view');
       allow create: if hasPerm('investigations.create');
       allow update: if hasPerm('investigations.update') || hasPerm('investigations.create') || isAdmin();
-      allow delete: if isAdmin() || hasPerm('medicalRecords.delete');
+      allow delete: if isAdmin() || hasPerm('medicalRecords.delete') || isRecordOwner();
     }
 
     match /transfusions/{id} {
