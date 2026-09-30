@@ -10,7 +10,7 @@ const firebaseConfig = {
   projectId: "solimedical-micu",
   storageBucket: "solimedical-micu.firebasestorage.app",
   messagingSenderId: "356354051601",
-  appId: "1:356354051601:web:dbd4be1b6a39d5954dabb0"
+  appId: "1:356354051601:web:f2e0510dc522804d4dabb0"
 };
 
 try {

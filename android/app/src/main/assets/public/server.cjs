@@ -39,6 +39,59 @@ var import_path = __toESM(require("path"), 1);
 var adminApp;
 var firestoreDb;
 var authAdmin;
+function safeParseServiceAccount(raw) {
+  if (!raw) return null;
+  if (typeof raw === "object" && raw !== null) return raw;
+  if (typeof raw !== "string") return null;
+  let str = raw.trim();
+  if (!str) return null;
+  try {
+    const res = JSON.parse(str);
+    if (typeof res === "object" && res !== null) return res;
+    if (typeof res === "string") {
+      return safeParseServiceAccount(res);
+    }
+  } catch {
+  }
+  if (str.includes('\\"')) {
+    try {
+      const unescaped = str.replace(/\\"/g, '"');
+      const candidate = unescaped.startsWith("{") ? unescaped : `{${unescaped}}`;
+      const res = JSON.parse(candidate);
+      if (typeof res === "object" && res !== null) return res;
+    } catch {
+    }
+  }
+  if (!str.startsWith("{")) {
+    try {
+      let candidate = str;
+      if (!candidate.startsWith("{")) candidate = "{" + candidate;
+      if (!candidate.endsWith("}")) candidate = candidate + "}";
+      const res = JSON.parse(candidate);
+      if (typeof res === "object" && res !== null) return res;
+    } catch {
+    }
+  }
+  if (str.startsWith('"') && str.endsWith('"') && str.length > 2 || str.startsWith("'") && str.endsWith("'") && str.length > 2) {
+    const inner = str.slice(1, -1).trim();
+    try {
+      const res = JSON.parse(inner.startsWith("{") ? inner : `{${inner}}`);
+      if (typeof res === "object" && res !== null) return res;
+    } catch {
+    }
+  }
+  if (!str.startsWith("{") && /^[A-Za-z0-9+/=\s]+$/.test(str)) {
+    try {
+      const decoded = Buffer.from(str.replace(/\s+/g, ""), "base64").toString("utf-8").trim();
+      if (decoded.startsWith("{") || decoded.includes('"client_email"')) {
+        const res = safeParseServiceAccount(decoded);
+        if (typeof res === "object" && res !== null) return res;
+      }
+    } catch {
+    }
+  }
+  return null;
+}
 function formatPrivateKey(key) {
   if (!key) return void 0;
   let cleanKey = key.trim();
@@ -46,10 +99,10 @@ function formatPrivateKey(key) {
     cleanKey = cleanKey.slice(1, -1).trim();
   }
   cleanKey = cleanKey.replace(/\\r\\n/g, "\n").replace(/\\n/g, "\n").replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/\\\\n/g, "\n");
-  if (cleanKey.startsWith("{") && cleanKey.endsWith("}")) {
+  if (cleanKey.includes('"private_key"') || cleanKey.startsWith("{")) {
     try {
-      const parsed = JSON.parse(cleanKey);
-      if (parsed.private_key) {
+      const parsed = safeParseServiceAccount(cleanKey);
+      if (parsed?.private_key) {
         return formatPrivateKey(parsed.private_key);
       }
     } catch {
@@ -79,33 +132,31 @@ ${formattedBody}
 `;
 }
 function parseServiceAccountCredentials() {
+  const targetProjectId = process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID || "solimedical-micu";
+  const directClientEmail = process.env.FIREBASE_CLIENT_EMAIL?.trim();
+  const directPrivateKey = process.env.FIREBASE_PRIVATE_KEY?.trim();
+  if (directClientEmail && directPrivateKey) {
+    if (directClientEmail.includes(targetProjectId) || !process.env.FIREBASE_SERVICE_ACCOUNT) {
+      const formattedKey = formatPrivateKey(directPrivateKey);
+      if (formattedKey) {
+        return {
+          projectId: targetProjectId,
+          clientEmail: directClientEmail,
+          privateKey: formattedKey
+        };
+      }
+    }
+  }
   const rawJson = process.env.FIREBASE_SERVICE_ACCOUNT || process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
   if (rawJson) {
     try {
-      const parsed = typeof rawJson === "string" ? JSON.parse(rawJson) : rawJson;
-      if (parsed.client_email && parsed.private_key) {
+      const parsed = safeParseServiceAccount(rawJson);
+      if (parsed && parsed.client_email && parsed.private_key) {
+        const credProjectId = parsed.project_id || targetProjectId;
         const formattedKey = formatPrivateKey(parsed.private_key);
         if (formattedKey) {
           return {
-            projectId: parsed.project_id,
-            clientEmail: parsed.client_email,
-            privateKey: formattedKey
-          };
-        }
-      }
-    } catch (e) {
-      console.warn("[Firebase Admin] JSON parse error in service account:", e);
-    }
-  }
-  const rawKey = process.env.FIREBASE_PRIVATE_KEY?.trim();
-  if (rawKey && rawKey.startsWith("{") && rawKey.endsWith("}")) {
-    try {
-      const parsed = JSON.parse(rawKey);
-      if (parsed.client_email && parsed.private_key) {
-        const formattedKey = formatPrivateKey(parsed.private_key);
-        if (formattedKey) {
-          return {
-            projectId: parsed.project_id || process.env.FIREBASE_PROJECT_ID,
+            projectId: credProjectId,
             clientEmail: parsed.client_email,
             privateKey: formattedKey
           };
@@ -114,13 +165,28 @@ function parseServiceAccountCredentials() {
     } catch {
     }
   }
-  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL?.trim();
-  if (clientEmail && rawKey) {
-    const formattedKey = formatPrivateKey(rawKey);
+  if (directPrivateKey) {
+    try {
+      const parsed = safeParseServiceAccount(directPrivateKey);
+      if (parsed && parsed.client_email && parsed.private_key) {
+        const formattedKey = formatPrivateKey(parsed.private_key);
+        if (formattedKey) {
+          return {
+            projectId: parsed.project_id || targetProjectId,
+            clientEmail: parsed.client_email,
+            privateKey: formattedKey
+          };
+        }
+      }
+    } catch {
+    }
+  }
+  if (directClientEmail && directPrivateKey) {
+    const formattedKey = formatPrivateKey(directPrivateKey);
     if (formattedKey) {
       return {
-        projectId: process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID || "solimedical-micu",
-        clientEmail,
+        projectId: targetProjectId,
+        clientEmail: directClientEmail,
         privateKey: formattedKey
       };
     }
