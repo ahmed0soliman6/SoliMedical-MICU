@@ -68,13 +68,6 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
     setSelectedPresetType((targetPreset as any) || 'ALL');
   }, [targetPreset]);
   
-  // Camera state
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
-  const [cameraError, setCameraError] = useState<string | null>(null);
-  const [isCameraActive, setIsCameraActive] = useState(false);
-
   // Image & Analysis state
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [selectedImageMime, setSelectedImageMime] = useState<string>('image/jpeg');
@@ -85,31 +78,12 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
   const [sampleDate, setSampleDate] = useState<string>(new Date().toISOString().slice(0, 16));
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
-  const [showSourceModal, setShowSourceModal] = useState<boolean>(false);
 
-  // File input ref for unified capture / upload box
+  // File & Camera input refs
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-
-  // Clean up camera on unmount or close
-  useEffect(() => {
-    if (!isOpen) {
-      stopCamera();
-      resetState();
-    }
-  }, [isOpen]);
-
-  // Connect stream to video element whenever stream and video element are both present
-  useEffect(() => {
-    if (isCameraActive && cameraStream && videoRef.current) {
-      videoRef.current.srcObject = cameraStream;
-      videoRef.current.play().catch((err) => {
-        console.warn('Video auto-play interrupted:', err);
-      });
-    }
-  }, [isCameraActive, cameraStream]);
+  const cameraInputRef = useRef<HTMLInputElement | null>(null);
 
   const resetState = () => {
-    stopCamera();
     setSelectedImage(null);
     setSelectedImageMime('image/jpeg');
     setIsAnalyzing(false);
@@ -117,75 +91,16 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
     setScannedResult(null);
     setEditableFields({});
     setSaveSuccess(false);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (cameraInputRef.current) cameraInputRef.current.value = '';
   };
 
-  const startCamera = async () => {
-    setCameraError(null);
-    try {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        throw new Error(lang === 'ar' ? 'الكاميرا غير مدعومة في هذا المتصفح أو بيئة العرض.' : 'Camera not supported in this browser.');
-      }
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: 'environment' },
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-        },
-        audio: false,
-      });
-      setCameraStream(stream);
-      setIsCameraActive(true);
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play().catch(e => console.warn('Video play error:', e));
-      }
-    } catch (err: any) {
-      console.error('Camera access error:', err);
-      const isDenied = err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError' || err.message?.includes('Permission');
-      setCameraError(
-        isDenied
-          ? (lang === 'ar'
-              ? 'يرجى الضغط على زر "السماح بالكاميرا" أو الموافقة على رسالة الإذن التي تظهر على الشاشة لاستخدام الكاميرا.'
-              : 'Camera permission required. Please allow camera access in the system prompt or click Allow below.')
-          : (lang === 'ar'
-              ? 'تعذر الوصول إلى الكاميرا. يرجى التأكد من توصيل الكاميرا ومنح الإذن أو استخدام خيار رفع الصورة.'
-              : 'Could not access camera. Please allow permission or upload an image file.')
-      );
-      setIsCameraActive(false);
+  // Clean up on unmount or close
+  useEffect(() => {
+    if (!isOpen) {
+      resetState();
     }
-  };
-
-  const stopCamera = () => {
-    if (cameraStream) {
-      cameraStream.getTracks().forEach(track => track.stop());
-      setCameraStream(null);
-    }
-    setIsCameraActive(false);
-  };
-
-  const capturePhoto = async () => {
-    if (!videoRef.current) return;
-    const video = videoRef.current;
-    const canvas = canvasRef.current || document.createElement('canvas');
-    canvas.width = video.videoWidth || 1920;
-    canvas.height = video.videoHeight || 1080;
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const rawDataUrl = canvas.toDataURL('image/jpeg', 0.95);
-      stopCamera();
-      try {
-        const { base64, mimeType } = await compressImageForOcr(rawDataUrl);
-        setSelectedImage(base64);
-        setSelectedImageMime(mimeType || 'image/jpeg');
-        processImageWithAI(base64, mimeType || 'image/jpeg');
-      } catch {
-        setSelectedImage(rawDataUrl);
-        setSelectedImageMime('image/jpeg');
-        processImageWithAI(rawDataUrl, 'image/jpeg');
-      }
-    }
-  };
+  }, [isOpen]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -482,9 +397,6 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
           </button>
         </div>
 
-        {/* Hidden Canvas for capture */}
-        <canvas ref={canvasRef} className="hidden" />
-
         {/* Content Body */}
         <div className="overflow-y-auto flex-1 pr-1 space-y-4">
           
@@ -563,102 +475,22 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
                     {lang === 'ar' ? 'كشف شامل (ALL)' : 'ALL'}
                   </button>
                 </div>
-
-                {/* Only button retained: "تشغيل الكاميرا للتصوير" */}
-                <div>
-                  <button
-                    type="button"
-                    onClick={isCameraActive ? stopCamera : startCamera}
-                    className={`w-full sm:w-auto px-4 py-2 rounded-xl font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md text-xs ${
-                      isCameraActive
-                        ? 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-600/30'
-                        : 'bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-slate-950 font-black'
-                    }`}
-                  >
-                    <Camera className="w-4 h-4" />
-                    <span>
-                      {isCameraActive 
-                        ? (lang === 'ar' ? 'إغلاق الكاميرا' : 'Close Camera') 
-                        : (lang === 'ar' ? 'تشغيل الكاميرا للتصوير' : 'Start Camera')}
-                    </span>
-                  </button>
-                </div>
               </div>
             </div>
           )}
 
-          {/* LIVE CAMERA VIEWFINDER (Identical to Investigations & Radiology Modal) */}
-          {isCameraActive && (
-            <div className="space-y-3">
-              {cameraError ? (
-                <div className="p-4 rounded-xl bg-rose-950/40 border border-rose-800 text-rose-300 text-xs flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
-                  <span>{cameraError}</span>
-                </div>
-              ) : (
-                <div className="relative rounded-2xl overflow-hidden bg-black border border-slate-700 aspect-video max-h-[360px] flex items-center justify-center">
-                  <video
-                    ref={videoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    className="w-full h-full object-cover"
-                  />
-                  {/* Camera overlay guide */}
-                  <div className="absolute inset-4 border-2 border-dashed border-teal-400/40 rounded-xl pointer-events-none flex flex-col items-center justify-between p-3">
-                    <span className="text-[11px] bg-black/60 px-2.5 py-1 rounded text-teal-300 font-mono">
-                      {lang === 'ar' ? 'وجّه كاميرا الجوال على ورقة التحليل داخل الإطار' : 'Align lab report inside frame'}
-                    </span>
-                  </div>
-
-                  <div className="absolute bottom-4 flex items-center gap-2.5 z-10">
-                    <button
-                      type="button"
-                      onClick={stopCamera}
-                      className="px-3.5 py-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-300 font-bold text-xs border border-slate-700 backdrop-blur-sm cursor-pointer transition-all"
-                    >
-                      {lang === 'ar' ? 'إلغاء' : 'Cancel'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={capturePhoto}
-                      disabled={isAnalyzing}
-                      className="px-5 py-2.5 rounded-xl bg-teal-400 hover:bg-teal-300 text-slate-950 font-bold text-xs shadow-lg shadow-teal-500/30 flex items-center gap-2 cursor-pointer active:scale-95 transition-all"
-                    >
-                      <Camera className="w-4 h-4" />
-                      <span>{lang === 'ar' ? 'التقاط الصورة وتحليلها' : 'Capture & Scan'}</span>
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {cameraError && !isCameraActive && (
-            <div className="p-3.5 bg-amber-50 dark:bg-amber-500/10 border border-amber-300 dark:border-amber-500/30 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-amber-900 dark:text-amber-300 shadow-sm animate-in fade-in">
-              <div className="flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
-                <span>{cameraError}</span>
-              </div>
-              <button
-                type="button"
-                onClick={startCamera}
-                className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 shrink-0 shadow-sm transition-all cursor-pointer"
-              >
-                <Camera className="w-3.5 h-3.5" />
-                <span>{lang === 'ar' ? 'السماح وتشغيل الكاميرا الآن' : 'Allow & Start Camera'}</span>
-              </button>
-            </div>
-          )}
-
-          {/* MERGED SINGLE CAPTURE / UPLOAD BOX (Matching Investigations Box Style) */}
-          {!isCameraActive && !selectedImage && (
-            <div
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={handleDrop}
-              onClick={() => setShowSourceModal(true)}
-              className="p-8 sm:p-12 text-center rounded-2xl border-2 border-dashed border-slate-700 hover:border-teal-500 bg-slate-900/30 hover:bg-slate-900/60 transition-all cursor-pointer space-y-3"
-            >
+          {/* TWO DIRECT OPTIONS ONLY: MOBILE CAMERA & CHOOSE PHOTO FROM DEVICE */}
+          {!selectedImage && !isAnalyzing && (
+            <div className="space-y-4 py-1 animate-in fade-in duration-200">
+              {/* Hidden Inputs */}
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={handleFileUpload}
+              />
               <input
                 ref={fileInputRef}
                 type="file"
@@ -666,122 +498,55 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
                 className="hidden"
                 onChange={handleFileUpload}
               />
-              <div className="w-14 h-14 rounded-2xl bg-teal-500/10 border border-teal-500/30 flex items-center justify-center text-teal-400 mx-auto">
-                <Upload className="w-7 h-7" />
-              </div>
-              <div>
-                <p className="text-sm font-bold text-white">
-                  {lang === 'ar' ? 'انقر لالتقاط صورة أو رفع صورة التحليل' : 'Click to capture photo or upload lab image here'}
-                </p>
-                <p className="text-xs text-slate-400 mt-1">
-                  {lang === 'ar' ? 'يدعم صور PNG, JPG, JPEG أو تصوير الكاميرا' : 'Supports PNG, JPG, JPEG or camera captures'}
-                </p>
-              </div>
 
-              {/* Two Direct Option Buttons */}
-              <div className="flex items-center justify-center gap-2.5 pt-2 flex-wrap">
+              {/* Two Prominent Action Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* 1. Mobile Camera (Opens Native Camera) */}
                 <button
                   type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    startCamera();
-                  }}
-                  className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-slate-950 font-bold text-xs flex items-center gap-2 shadow-md shadow-teal-500/20 cursor-pointer active:scale-95 transition-all"
+                  onClick={() => cameraInputRef.current?.click()}
+                  className="group relative p-6 sm:p-7 rounded-2xl bg-gradient-to-br from-emerald-500/15 via-teal-500/10 to-teal-500/5 hover:from-emerald-500/25 hover:to-teal-500/20 border-2 border-emerald-500/40 hover:border-emerald-400 flex flex-col items-center justify-center gap-3 transition-all cursor-pointer shadow-lg shadow-teal-950/20 active:scale-[0.98]"
                 >
-                  <Camera className="w-4 h-4" />
-                  <span>{lang === 'ar' ? 'فتح كاميرا الموبايل' : 'Open Mobile Camera'}</span>
+                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center text-slate-950 shadow-md group-hover:scale-105 transition-transform">
+                    <Camera className="w-8 h-8" />
+                  </div>
+                  <div className="text-center">
+                    <span className="block text-base font-black text-slate-900 dark:text-white">
+                      {lang === 'ar' ? 'فتح كاميرا الموبايل' : 'Open Mobile Camera'}
+                    </span>
+                    <span className="block text-xs text-slate-500 dark:text-slate-400 mt-1">
+                      {lang === 'ar' ? 'التقاط صورة التحليل مباشرة بكاميرا الهاتف' : 'Take a photo of lab report now'}
+                    </span>
+                  </div>
                 </button>
 
+                {/* 2. Choose Photo from Device */}
                 <button
                   type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    fileInputRef.current?.click();
-                  }}
-                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-teal-300 font-bold text-xs border border-slate-700 flex items-center gap-2 cursor-pointer active:scale-95 transition-all"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="group relative p-6 sm:p-7 rounded-2xl bg-slate-100 hover:bg-slate-200/80 dark:bg-slate-900/60 dark:hover:bg-slate-800/80 border-2 border-slate-300 dark:border-slate-700 hover:border-teal-500/60 flex flex-col items-center justify-center gap-3 transition-all cursor-pointer shadow-md active:scale-[0.98]"
                 >
-                  <Upload className="w-4 h-4" />
-                  <span>{lang === 'ar' ? 'اختيار صورة' : 'Choose Photo'}</span>
+                  <div className="w-16 h-16 rounded-2xl bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-300 group-hover:text-teal-400 group-hover:scale-105 transition-all">
+                    <Upload className="w-8 h-8" />
+                  </div>
+                  <div className="text-center">
+                    <span className="block text-base font-bold text-slate-900 dark:text-white">
+                      {lang === 'ar' ? 'اختيار صورة من الجهاز' : 'Choose Photo from Device'}
+                    </span>
+                    <span className="block text-xs text-slate-500 dark:text-slate-400 mt-1">
+                      {lang === 'ar' ? 'رفع صورة من الاستوديو أو مكتبة الصور' : 'Select from gallery or files'}
+                    </span>
+                  </div>
                 </button>
               </div>
-            </div>
-          )}
 
-          {/* Selection Modal when clicking on the capture / upload box */}
-          {showSourceModal && (
-            <div 
-              className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150"
-              onClick={() => setShowSourceModal(false)}
-            >
-              <div 
-                className="w-full max-w-sm bg-white dark:bg-[#0c1324] border border-slate-300 dark:border-slate-700 rounded-2xl shadow-2xl p-5 space-y-4 animate-in zoom-in-95 duration-150"
-                onClick={(e) => e.stopPropagation()}
+              {/* Desktop Drag and Drop Dropzone */}
+              <div
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={handleDrop}
+                className="p-3 text-center rounded-xl border border-dashed border-slate-300 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400"
               >
-                <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                    <Camera className="w-4 h-4 text-teal-500" />
-                    <span>{lang === 'ar' ? 'إدخال صورة التحليل' : 'Add Lab Image'}</span>
-                  </h3>
-                  <button
-                    type="button"
-                    onClick={() => setShowSourceModal(false)}
-                    className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-white cursor-pointer"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-
-                <div className="space-y-2.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowSourceModal(false);
-                      startCamera();
-                    }}
-                    className="w-full p-3.5 rounded-xl bg-teal-500/10 hover:bg-teal-500/20 border border-teal-500/40 text-teal-700 dark:text-teal-300 flex items-center gap-3 transition-all cursor-pointer text-start active:scale-[0.98]"
-                  >
-                    <div className="w-10 h-10 rounded-lg bg-teal-500/20 flex items-center justify-center shrink-0">
-                      <Camera className="w-5 h-5 text-teal-400" />
-                    </div>
-                    <div>
-                      <div className="text-xs font-bold text-slate-900 dark:text-white">
-                        {lang === 'ar' ? 'فتح كاميرا الموبايل' : 'Open Mobile Camera'}
-                      </div>
-                      <div className="text-[10px] text-slate-500 dark:text-slate-400">
-                        {lang === 'ar' ? 'تشغيل الكاميرا والتقاط صورة مباشرة للتحليل' : 'Take a live photo of lab report'}
-                      </div>
-                    </div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowSourceModal(false);
-                      fileInputRef.current?.click();
-                    }}
-                    className="w-full p-3.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800/80 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 flex items-center gap-3 transition-all cursor-pointer text-start active:scale-[0.98]"
-                  >
-                    <div className="w-10 h-10 rounded-lg bg-slate-200 dark:bg-slate-700 flex items-center justify-center shrink-0">
-                      <Upload className="w-5 h-5 text-slate-600 dark:text-slate-300" />
-                    </div>
-                    <div>
-                      <div className="text-xs font-bold text-slate-900 dark:text-white">
-                        {lang === 'ar' ? 'اختيار صورة' : 'Choose Photo'}
-                      </div>
-                      <div className="text-[10px] text-slate-500 dark:text-slate-400">
-                        {lang === 'ar' ? 'رفع صورة من الاستوديو أو ملفات الجهاز' : 'Upload photo from device gallery / files'}
-                      </div>
-                    </div>
-                  </button>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setShowSourceModal(false)}
-                  className="w-full py-2 text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer text-center"
-                >
-                  {lang === 'ar' ? 'إلغاء' : 'Cancel'}
-                </button>
+                {lang === 'ar' ? 'أو اسحب وأفلت صورة التحليل هنا مباشرة' : 'Or drag and drop lab report image here'}
               </div>
             </div>
           )}
