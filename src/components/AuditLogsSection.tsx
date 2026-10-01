@@ -258,41 +258,41 @@ export const AuditLogsSection: React.FC = () => {
     <div className="space-y-4">
       {/* Stats Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="p-3 bg-[#080f1e] border border-slate-800 rounded-xl">
-          <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
+        <div className="p-3 bg-white border border-slate-200 rounded-xl shadow-sm">
+          <div className="flex items-center justify-between text-slate-500 text-xs mb-1">
             <span>{lang === 'ar' ? 'إجمالي السجلات المحملة' : 'Loaded Logs'}</span>
-            <History className="w-4 h-4 text-teal-400" />
+            <History className="w-4 h-4 text-teal-600" />
           </div>
-          <div className="text-lg font-bold text-white font-mono">{logs.length}</div>
+          <div className="text-lg font-bold text-slate-900 font-mono">{logs.length}</div>
         </div>
 
-        <div className="p-3 bg-[#080f1e] border border-slate-800 rounded-xl">
-          <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
+        <div className="p-3 bg-white border border-slate-200 rounded-xl shadow-sm">
+          <div className="flex items-center justify-between text-slate-500 text-xs mb-1">
             <span>{lang === 'ar' ? 'عمليات تسجيل الدخول' : 'Logins'}</span>
-            <LogIn className="w-4 h-4 text-emerald-400" />
+            <LogIn className="w-4 h-4 text-emerald-600" />
           </div>
-          <div className="text-lg font-bold text-emerald-400 font-mono">{loginCount}</div>
+          <div className="text-lg font-bold text-emerald-700 font-mono">{loginCount}</div>
         </div>
 
-        <div className="p-3 bg-[#080f1e] border border-slate-800 rounded-xl">
-          <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
+        <div className="p-3 bg-white border border-slate-200 rounded-xl shadow-sm">
+          <div className="flex items-center justify-between text-slate-500 text-xs mb-1">
             <span>{lang === 'ar' ? 'تعديلات أمنية وكلمات سر' : 'Security Changes'}</span>
-            <Key className="w-4 h-4 text-purple-400" />
+            <Key className="w-4 h-4 text-purple-600" />
           </div>
-          <div className="text-lg font-bold text-purple-400 font-mono">{securityCount}</div>
+          <div className="text-lg font-bold text-purple-700 font-mono">{securityCount}</div>
         </div>
 
-        <div className="p-3 bg-[#080f1e] border border-slate-800 rounded-xl">
-          <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
+        <div className="p-3 bg-white border border-slate-200 rounded-xl shadow-sm">
+          <div className="flex items-center justify-between text-slate-500 text-xs mb-1">
             <span>{lang === 'ar' ? 'إنشاء / حذف حسابات' : 'User Changes'}</span>
-            <UserPlus className="w-4 h-4 text-blue-400" />
+            <UserPlus className="w-4 h-4 text-blue-600" />
           </div>
-          <div className="text-lg font-bold text-blue-400 font-mono">{accountCount}</div>
+          <div className="text-lg font-bold text-blue-700 font-mono">{accountCount}</div>
         </div>
       </div>
 
       {/* Control & Filter Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-[#080f1e] border border-slate-800 rounded-2xl">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-white border border-slate-200 rounded-2xl shadow-sm">
         <div className="flex items-center gap-2 flex-1 max-w-md">
           <div className="relative flex-1">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 rtl:left-auto rtl:right-3" />
@@ -301,18 +301,18 @@ export const AuditLogsSection: React.FC = () => {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={lang === 'ar' ? "بحث في سجلات التدقيق بالاسم أو الحدث..." : "Search logs by staff name or action..."}
-              className="w-full bg-[#0c1529] border border-slate-700/80 focus:border-teal-400 rounded-xl pl-9 pr-3 rtl:pl-3 rtl:pr-9 py-1.5 text-xs text-white focus:outline-none placeholder-slate-500"
+              className="w-full bg-slate-50 border border-slate-300 focus:border-teal-500 rounded-xl pl-9 pr-3 rtl:pl-3 rtl:pr-9 py-1.5 text-xs text-slate-900 focus:outline-none placeholder-slate-400"
             />
           </div>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-1 bg-[#0c1529] p-1 rounded-xl border border-slate-800 text-[11px]">
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 text-[11px]">
             <button
               type="button"
               onClick={() => setFilterType('ALL')}
               className={`px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
-                filterType === 'ALL' ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40' : 'text-slate-400 hover:text-slate-200'
+                filterType === 'ALL' ? 'bg-teal-100 text-teal-800 border border-teal-200' : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               {lang === 'ar' ? 'الكل' : 'All'}
@@ -321,7 +321,7 @@ export const AuditLogsSection: React.FC = () => {
               type="button"
               onClick={() => setFilterType('LOGINS')}
               className={`px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
-                filterType === 'LOGINS' ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40' : 'text-slate-400 hover:text-slate-200'
+                filterType === 'LOGINS' ? 'bg-teal-100 text-teal-800 border border-teal-200' : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               {lang === 'ar' ? 'تسجيل الدخول' : 'Logins'}
@@ -330,7 +330,7 @@ export const AuditLogsSection: React.FC = () => {
               type="button"
               onClick={() => setFilterType('SECURITY')}
               className={`px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
-                filterType === 'SECURITY' ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40' : 'text-slate-400 hover:text-slate-200'
+                filterType === 'SECURITY' ? 'bg-teal-100 text-teal-800 border border-teal-200' : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               {lang === 'ar' ? 'الأمان وكلمات السر' : 'Security'}
@@ -339,7 +339,7 @@ export const AuditLogsSection: React.FC = () => {
               type="button"
               onClick={() => setFilterType('ACCOUNTS')}
               className={`px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
-                filterType === 'ACCOUNTS' ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40' : 'text-slate-400 hover:text-slate-200'
+                filterType === 'ACCOUNTS' ? 'bg-teal-100 text-teal-800 border border-teal-200' : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               {lang === 'ar' ? 'الحسابات' : 'Accounts'}
@@ -350,20 +350,20 @@ export const AuditLogsSection: React.FC = () => {
             type="button"
             onClick={handleRefresh}
             disabled={isRefreshing}
-            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-teal-300 transition-colors border border-slate-700/60 cursor-pointer"
+            className="p-2 rounded-xl bg-white hover:bg-slate-50 text-slate-600 hover:text-teal-700 transition-colors border border-slate-200 cursor-pointer"
             title={lang === 'ar' ? 'تحديث السجلات من السحابة' : 'Refresh logs from cloud'}
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-teal-400' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-teal-600' : ''}`} />
           </button>
 
           <button
             type="button"
             onClick={exportToCsv}
             disabled={logs.length === 0}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700/60 cursor-pointer disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold border border-slate-200 cursor-pointer disabled:opacity-50"
             title={lang === 'ar' ? 'تصدير التقرير إلى ملف CSV' : 'Export audit report as CSV'}
           >
-            <Download className="w-3.5 h-3.5 text-teal-400" />
+            <Download className="w-3.5 h-3.5 text-teal-600" />
             <span className="hidden sm:inline">{lang === 'ar' ? 'تصدير CSV' : 'Export'}</span>
           </button>
         </div>
@@ -372,9 +372,9 @@ export const AuditLogsSection: React.FC = () => {
       {/* Logs List */}
       <div className="space-y-2">
         {filteredLogs.length === 0 ? (
-          <div className="py-12 text-center bg-[#080f1e] border border-slate-800/80 rounded-2xl p-6">
-            <History className="w-8 h-8 text-slate-600 mx-auto mb-2" />
-            <p className="text-xs text-slate-400 font-semibold">
+          <div className="py-12 text-center bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+            <History className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+            <p className="text-xs text-slate-600 font-semibold">
               {lang === 'ar' ? 'لا توجد سجلات تدقيق تطابق معايير البحث.' : 'No audit logs found matching criteria.'}
             </p>
             <p className="text-[11px] text-slate-500 mt-1">
@@ -396,62 +396,62 @@ export const AuditLogsSection: React.FC = () => {
             return (
               <div 
                 key={log.id}
-                className="p-3 bg-[#080f1e] border border-slate-800/80 hover:border-slate-700 rounded-xl transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs group"
+                className="p-3 bg-white border border-slate-200 hover:border-slate-300 rounded-xl transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs group shadow-sm"
               >
                 <div className="flex items-start sm:items-center gap-3 min-w-0">
-                  <div className={`p-2 rounded-xl border flex-shrink-0 ${badge.bg}`}>
+                  <div className={`p-2 rounded-xl border flex-shrink-0 ${badge.bg.replace(/950\/40/g, '100').replace(/900/g, '50').replace(/border-.*-500\/30/g, 'border-slate-200').replace(/text-.*-300/g, 'text-slate-800')}`}>
                     <IconComp className="w-4 h-4" />
                   </div>
 
                   <div className="space-y-0.5 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-bold text-white">
+                      <span className="font-bold text-slate-900">
                         {actionTitle}
                       </span>
-                      <span className="px-1.5 py-0.2 rounded text-[10px] font-mono bg-slate-800 text-slate-300 border border-slate-700">
+                      <span className="px-1.5 py-0.2 rounded text-[10px] font-mono bg-slate-100 text-slate-600 border border-slate-200">
                         {log.action || 'ACTIVITY'}
                       </span>
                       {log.action === 'USER_LOGIN' && (
-                        <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                        <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
                           {relativeTimeStr}
                         </span>
                       )}
                     </div>
 
-                    <div className="text-[11px] text-slate-300 leading-relaxed break-words">
+                    <div className="text-[11px] text-slate-700 leading-relaxed break-words">
                       {logDetails}
                     </div>
 
-                    <div className="flex items-center gap-2 text-[10px] text-slate-400 flex-wrap">
+                    <div className="flex items-center gap-2 text-[10px] text-slate-500 flex-wrap">
                       <span className="flex items-center gap-1">
-                        <User className="w-3 h-3 text-teal-400" />
+                        <User className="w-3 h-3 text-teal-600" />
                         <span>{lang === 'ar' ? 'المنفذ:' : 'Actor:'}</span>
-                        <strong className="text-slate-200 font-semibold">{actorName}</strong>
-                        {log.actorRole && <span className="text-teal-400 font-mono">({log.actorRole})</span>}
+                        <strong className="text-slate-900 font-semibold">{actorName}</strong>
+                        {log.actorRole && <span className="text-teal-700 font-mono">({log.actorRole})</span>}
                       </span>
 
                       {targetName && (
-                        <span className="flex items-center gap-1 border-r border-slate-700 pr-2 rtl:border-r-0 rtl:border-l rtl:pr-0 rtl:pl-2">
-                          <Shield className="w-3 h-3 text-amber-400" />
+                        <span className="flex items-center gap-1 border-r border-slate-300 pr-2 rtl:border-r-0 rtl:border-l rtl:pr-0 rtl:pl-2">
+                          <Shield className="w-3 h-3 text-amber-600" />
                           <span>{lang === 'ar' ? 'المستهدف:' : 'Target:'}</span>
-                          <strong className="text-slate-200 font-semibold">{targetName}</strong>
+                          <strong className="text-slate-900 font-semibold">{targetName}</strong>
                         </span>
                       )}
                     </div>
                   </div>
                 </div>
 
-                <div className="flex sm:flex-col items-start sm:items-end justify-between sm:justify-center border-t sm:border-t-0 border-slate-800 pt-2 sm:pt-0 text-[10px] text-slate-400 font-mono flex-shrink-0">
+                <div className="flex sm:flex-col items-start sm:items-end justify-between sm:justify-center border-t sm:border-t-0 border-slate-200 pt-2 sm:pt-0 text-[10px] text-slate-500 font-mono flex-shrink-0">
                   <div className="flex items-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5 text-teal-400 flex-shrink-0" />
-                    <span className="font-bold text-teal-300 bg-teal-950/70 border border-teal-800/40 px-2 py-0.5 rounded-md text-[10px]">
+                    <Clock className="w-3.5 h-3.5 text-teal-600 flex-shrink-0" />
+                    <span className="font-bold text-teal-800 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded-md text-[10px]">
                       {relativeTimeStr}
                     </span>
                   </div>
                   <div className="text-[9px] text-slate-400 mt-1" title={exactTimestampStr}>
                     {exactTimestampStr}
                   </div>
-                  <div className="flex items-center gap-1 text-emerald-400 text-[9px] mt-0.5">
+                  <div className="flex items-center gap-1 text-emerald-700 text-[9px] mt-0.5">
                     <CheckCircle2 className="w-2.5 h-2.5" />
                     <span>{lang === 'ar' ? 'موثق بالسحابة' : 'Firestore Synced'}</span>
                   </div>
@@ -469,7 +469,7 @@ export const AuditLogsSection: React.FC = () => {
             type="button"
             onClick={handleLoadMore}
             disabled={isLoading}
-            className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-teal-300 text-xs font-bold border border-slate-700 transition-all cursor-pointer flex items-center gap-2 mx-auto disabled:opacity-50"
+            className="px-4 py-2 rounded-xl bg-white hover:bg-slate-50 text-teal-800 text-xs font-bold border border-slate-200 shadow-sm transition-all cursor-pointer flex items-center gap-2 mx-auto disabled:opacity-50"
           >
             {isLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
             <span>{lang === 'ar' ? 'تحميل المزيد من السجلات (25 سجلاً إضافياً)' : 'Load More (Next 25 Logs)'}</span>
