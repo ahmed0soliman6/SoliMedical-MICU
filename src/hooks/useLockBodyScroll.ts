@@ -1,3 +1,9 @@
+import { useEffect } from 'react';
+
+/**
+ * Custom hook to lock body & document scrolling when a modal or drawer is open.
+ * Ensures the background page cannot scroll behind the open modal.
+ */
 export function useLockBodyScroll(isOpen: boolean = true) {
   useEffect(() => {
     if (!isOpen) return;

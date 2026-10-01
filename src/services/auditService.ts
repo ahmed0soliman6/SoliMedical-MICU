@@ -4,9 +4,7 @@ import {
   doc, 
   setDoc, 
   getDocs, 
-  deleteDoc,
   query, 
-  where,
   orderBy, 
   limit, 
   startAfter, 
@@ -360,55 +358,4 @@ export function formatDetailedTimestamp(dateInput?: string | number | Date | nul
     hour12: true,
   });
 }
-
-/**
- * Automatically purges and deletes any audit logs older than 1 year (365 days)
- * from both Cloud Firestore and local Dexie IndexedDB cache.
- */
-export async function purgeAuditLogsOlderThanOneYear(): Promise<{ deletedCount: number; message: string }> {
-  const oneYearAgo = new Date();
-  oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-  const cutoffIso = oneYearAgo.toISOString();
-
-  let deletedCount = 0;
-
-  try {
-    // 1. Delete from Cloud Firestore
-    const auditCol = collection(firestore, 'auditLogs');
-    const oldQuery = query(auditCol, where('timestamp', '<', cutoffIso), limit(200));
-    const oldSnap = await getDocs(oldQuery);
-
-    if (!oldSnap.empty) {
-      for (const docSnap of oldSnap.docs) {
-        await deleteDoc(doc(firestore, 'auditLogs', docSnap.id)).catch(() => {});
-        deletedCount++;
-      }
-    }
-
-    // 2. Delete from local Dexie IndexedDB
-    try {
-      const localOld = await db.auditLogs.where('timestamp').below(cutoffIso).toArray();
-      if (localOld.length > 0) {
-        const oldIds = localOld.map((item: any) => item.id);
-        await db.auditLogs.bulkDelete(oldIds);
-      }
-    } catch (e) {
-      console.warn('[AuditService] Local prune notice:', e);
-    }
-
-    return {
-      deletedCount,
-      message: deletedCount > 0
-        ? `تم مسح وقص ${deletedCount} سجلاً أمنياً أقدم من سنة من السحابة بنجاح.`
-        : 'لا توجد سجلات أمنية أقدم من سنة في السحابة.'
-    };
-  } catch (err: any) {
-    console.warn('[AuditService] Purge error:', err);
-    return {
-      deletedCount: 0,
-      message: `تعذر مسح السجلات القديمة: ${err?.message || 'خطأ غير معروف'}`
-    };
-  }
-}
-
 

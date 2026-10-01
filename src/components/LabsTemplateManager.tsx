@@ -444,3 +444,4 @@ export const LabsTemplateManager: React.FC<LabsTemplateManagerProps> = ({
       )}
     </div>
   );
+};

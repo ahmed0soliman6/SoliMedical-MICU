@@ -1,1154 +1,1187 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Wind, 
   X, 
-  Check, 
-  AlertCircle, 
+  Users, 
+  UserPlus, 
+  ShieldCheck, 
+  CheckCircle2, 
+  XCircle, 
+  Edit, 
+  Lock, 
+  KeyRound, 
+  Stethoscope, 
   Activity, 
-  Trash2, 
-  Sliders, 
-  Layers,
+  BadgeCheck,
+  Building,
   Sparkles,
-  ShieldCheck,
-  Flame,
-  Gauge,
-  PowerOff,
-  User,
-  Scale,
-  Ruler,
-  Pencil,
-  Calculator
+  Sliders,
+  Search,
+  Filter,
+  Eye,
+  EyeOff,
+  Trash2,
+  AlertTriangle,
+  UserX,
+  Loader2,
+  Clock,
+  Calendar,
+  History
 } from 'lucide-react';
-import { BedNumber, PatientDossier, VentilatorParameters, VentilatorMode } from '../types/schema.ts';
-import { db } from '../db/icuSyncDb.ts';
-import { doc, deleteDoc } from 'firebase/firestore';
-import { firestore, setDoc } from '../services/firebase.ts';
 import { useAuth } from '../services/AuthContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
-import { useSystemSettings } from '../services/SettingsContext.tsx';
-import { toEnglishDigits, parseEnglishFloat } from '../services/numberUtils.ts';
-import { canDeleteRecord } from '../services/medicalRecordPermissions.ts';
+import { StaffRole, IcuUser, UserPermissions } from '../types/schema.ts';
+import { getDefaultPermissionsForRole, auth, firestore } from '../services/firebase.ts';
+import { doc, setDoc } from 'firebase/firestore';
+import { API_BASE_URL } from '../config/api.ts';
+import { AuditLogsSection } from './AuditLogsSection.tsx';
+import { formatRelativeTime, formatDetailedTimestamp } from '../services/auditService.ts';
 
-interface VentilatorModalProps {
+interface UserManagementModalProps {
   isOpen: boolean;
   onClose: () => void;
-  bedNumber: BedNumber;
-  patient?: PatientDossier | null;
-  initialVentilator?: VentilatorParameters | null;
-  onSaved: () => void;
 }
 
-export type RespiratoryCategory = 'OXYGEN_THERAPY' | 'NON_INVASIVE_NIV' | 'INVASIVE_VENT' | 'ROOM_AIR';
-
-interface RespiratoryDeviceOption {
-  id: string;
-  category: RespiratoryCategory;
-  labelEn: string;
-  labelAr: string;
-  defaultFlow?: number;
-  defaultFio2?: number;
-  flowRange?: string;
-  descriptionEn?: string;
-  descriptionAr?: string;
-  flowPresets?: number[];
-  fio2Presets?: number[];
-}
-
-const RESPIRATORY_DEVICES: RespiratoryDeviceOption[] = [
-  // 1. Oxygen Therapy Devices (Concise Medical Terms & Tailored Ranges)
-  { 
-    id: 'NASAL_CANNULA', 
-    category: 'OXYGEN_THERAPY', 
-    labelEn: 'Nasal Cannula (NC)', 
-    labelAr: 'قنية أنفية (Nasal Cannula - NC)', 
-    defaultFlow: 3, 
-    defaultFio2: 32, 
-    flowRange: '1 - 6 L/min (24% - 44% FiO₂)',
-    descriptionAr: '1-6 L/min (24% - 44% FiO₂)',
-    descriptionEn: '1-6 L/min (24% - 44% FiO2)',
-    flowPresets: [1, 2, 3, 4, 5, 6],
-    fio2Presets: [24, 28, 32, 36, 40, 44]
-  },
-  { 
-    id: 'SIMPLE_MASK', 
-    category: 'OXYGEN_THERAPY', 
-    labelEn: 'Simple Mask (Face Mask)', 
-    labelAr: 'ماسك وجه بسيط (Simple Face Mask)', 
-    defaultFlow: 6, 
-    defaultFio2: 45, 
-    flowRange: '5 - 8 L/min (40% - 60% FiO₂)',
-    descriptionAr: '5-8 L/min (40% - 60% FiO₂)',
-    descriptionEn: '5-8 L/min (40% - 60% FiO2)',
-    flowPresets: [5, 6, 7, 8],
-    fio2Presets: [40, 45, 50, 55, 60]
-  },
-  { 
-    id: 'PARTIAL_REBREATHER', 
-    category: 'OXYGEN_THERAPY', 
-    labelEn: 'Partial Rebreather (PRBM)', 
-    labelAr: 'ماسك بارشيال ريبريزر (PRBM)', 
-    defaultFlow: 8, 
-    defaultFio2: 70, 
-    flowRange: '6 - 10 L/min (60% - 80% FiO₂)',
-    descriptionAr: '6-10 L/min (60% - 80% FiO₂)',
-    descriptionEn: '6-10 L/min (60% - 80% FiO2)',
-    flowPresets: [6, 7, 8, 9, 10],
-    fio2Presets: [60, 65, 70, 75, 80]
-  },
-  { 
-    id: 'RESERVOIR_MASK', 
-    category: 'OXYGEN_THERAPY', 
-    labelEn: 'Non-Rebreather (NRBM)', 
-    labelAr: 'ماسك نون ريبريزر (NRBM)', 
-    defaultFlow: 12, 
-    defaultFio2: 80, 
-    flowRange: '10 - 15 L/min (60% - 95% FiO₂)',
-    descriptionAr: '10-15 L/min (60% - 95% FiO₂)',
-    descriptionEn: '10-15 L/min (60% - 95% FiO2)',
-    flowPresets: [10, 11, 12, 13, 14, 15],
-    fio2Presets: [60, 70, 80, 90, 95]
-  },
-  { 
-    id: 'VENTURI_MASK', 
-    category: 'OXYGEN_THERAPY', 
-    labelEn: 'Venturi Mask (Fixed FiO₂)', 
-    labelAr: 'ماسك فينتوري (Venturi Mask)', 
-    defaultFlow: 6, 
-    defaultFio2: 28, 
-    flowRange: '4 - 10 L/min (24% - 55% FiO₂)',
-    descriptionAr: '4-10 L/min (24% - 55% FiO₂)',
-    descriptionEn: '4-10 L/min (24% - 55% FiO2)',
-    flowPresets: [4, 6, 8, 10],
-    fio2Presets: [24, 28, 31, 35, 40, 50, 55]
-  },
-  { 
-    id: 'HIGH_FLOW_NC', 
-    category: 'OXYGEN_THERAPY', 
-    labelEn: 'High-Flow Cannula (HFNC)', 
-    labelAr: 'قنية عالية التدفق (HFNC)', 
-    defaultFlow: 40, 
-    defaultFio2: 50, 
-    flowRange: '20 - 60 L/min (21% - 100% FiO₂)',
-    descriptionAr: '20-60 L/min (21% - 100% FiO₂)',
-    descriptionEn: '20-60 L/min (21-100% FiO2)',
-    flowPresets: [20, 30, 40, 50, 60],
-    fio2Presets: [30, 40, 50, 60, 80, 100]
-  },
-  { 
-    id: 'TRACH_MASK', 
-    category: 'OXYGEN_THERAPY', 
-    labelEn: 'Trach Collar / T-Piece', 
-    labelAr: 'قناع شق حنجري (Trach Collar)', 
-    defaultFlow: 8, 
-    defaultFio2: 35, 
-    flowRange: '5 - 15 L/min (28% - 50% FiO₂)',
-    descriptionAr: '5-15 L/min (28% - 50% FiO₂)',
-    descriptionEn: '5-15 L/min (28-50% FiO2)',
-    flowPresets: [5, 8, 10, 12, 15],
-    fio2Presets: [28, 35, 40, 50]
-  },
-  { 
-    id: 'ROOM_AIR', 
-    category: 'ROOM_AIR', 
-    labelEn: 'Room Air (Spontaneous)', 
-    labelAr: 'هواء الغرفة (Room Air)', 
-    defaultFlow: 0, 
-    defaultFio2: 21, 
-    flowRange: '0 L/min (21% FiO₂)',
-    descriptionAr: 'تنفس تلقائي (21% FiO₂)',
-    descriptionEn: 'Spontaneous ambient air',
-    flowPresets: [0],
-    fio2Presets: [21]
-  },
-
-  // 2. Non-Invasive Ventilation (NIV)
-  { 
-    id: 'BIPAP', 
-    category: 'NON_INVASIVE_NIV', 
-    labelEn: 'BiPAP (IPAP / EPAP)', 
-    labelAr: 'BiPAP (IPAP / EPAP)', 
-    defaultFlow: 0, 
-    defaultFio2: 40,
-    descriptionAr: 'دعم ضغط إيجابي ثنائي غير جائر',
-    descriptionEn: 'Non-invasive positive pressure'
-  },
-  { 
-    id: 'PSV_CPAP', 
-    category: 'NON_INVASIVE_NIV', 
-    labelEn: 'CPAP / PSV', 
-    labelAr: 'CPAP / PSV (Spontaneous)', 
-    defaultFlow: 0, 
-    defaultFio2: 40,
-    descriptionAr: 'ضغط مستمر ودعم تنفس تلقائي',
-    descriptionEn: 'Continuous airway pressure & PS'
-  },
-
-  // 3. Invasive Mechanical Ventilation
-  { 
-    id: 'PRVC', 
-    category: 'INVASIVE_VENT', 
-    labelEn: 'PRVC / AC', 
-    labelAr: 'PRVC / AC (Lung-Protective)', 
-    defaultFio2: 45,
-    descriptionAr: 'حجم منظم بالضغط لحماية الرئة',
-    descriptionEn: 'Dual-control lung-protective mode'
-  },
-  { 
-    id: 'SIMV_PC', 
-    category: 'INVASIVE_VENT', 
-    labelEn: 'SIMV-PC', 
-    labelAr: 'SIMV-PC (Pressure Control)', 
-    defaultFio2: 45,
-    descriptionAr: 'تهوية متزامنة بالتحكم بالضغط',
-    descriptionEn: 'Synchronized intermittent mandatory PC'
-  },
-  { 
-    id: 'SIMV_VC', 
-    category: 'INVASIVE_VENT', 
-    labelEn: 'SIMV-VC', 
-    labelAr: 'SIMV-VC (Volume Control)', 
-    defaultFio2: 45,
-    descriptionAr: 'تهوية متزامنة بالتحكم بالحجم',
-    descriptionEn: 'Synchronized intermittent mandatory VC'
-  },
-  { 
-    id: 'APRV', 
-    category: 'INVASIVE_VENT', 
-    labelEn: 'APRV (BiLevel Release)', 
-    labelAr: 'APRV (BiLevel Release)', 
-    defaultFio2: 60,
-    descriptionAr: 'لحالات ARDS الشديدة واضطراب الأكسجة',
-    descriptionEn: 'Airway pressure release for severe ARDS'
-  },
-  { 
-    id: 'T_PIECE', 
-    category: 'INVASIVE_VENT', 
-    labelEn: 'T-Piece Trial', 
-    labelAr: 'T-Piece Trial (Weaning)', 
-    defaultFio2: 35,
-    descriptionAr: 'تجربة فطام وتقييم نزع الأنبوب الرغامي',
-    descriptionEn: 'Spontaneous breathing trial (Extubation)'
-  },
-];
-
-export const VentilatorModal: React.FC<VentilatorModalProps> = ({
-  isOpen,
-  onClose,
-  bedNumber,
-  patient,
-  initialVentilator,
-  onSaved,
-}) => {
+export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClose }) => {
+  const { allUsers, currentUser, createUser, updateUser, changeUserPassword, toggleUserStatus, deleteUser, hasPermission, refreshUsers } = useAuth();
+  
   const { lang, isRTL } = useTranslation();
-  const { currentUser } = useAuth();
-  const { settings } = useSystemSettings();
 
-  // Active Category Tab
-  const [activeCategory, setActiveCategory] = useState<RespiratoryCategory>('OXYGEN_THERAPY');
-  
-  // Selected Device / Mode
-  const [selectedDevice, setSelectedDevice] = useState<string>('NASAL_CANNULA');
-  
-  // Fields
-  const [oxygenFlow, setOxygenFlow] = useState<string>('3');
-  const [fio2, setFio2] = useState<string>('32');
-  const [peep, setPeep] = useState<string>('5');
-  const [tidalVolume, setTidalVolume] = useState<string>('420');
-  const [setRate, setSetRate] = useState<string>('14');
-  const [actualRate, setActualRate] = useState<string>('16');
-  const [peakPressure, setPeakPressure] = useState<string>('');
-  const [plateauPressure, setPlateauPressure] = useState<string>('');
-  const [ieRatio, setIeRatio] = useState<string>('1:2');
-  const [circuitLeak, setCircuitLeak] = useState<string>('0');
-  const [deviceModel, setDeviceModel] = useState<string>('');
-  const [clinicalNotes, setClinicalNotes] = useState<string>('');
-  const [isWeaning, setIsWeaning] = useState<boolean>(false);
-
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [hasInitialized, setHasInitialized] = useState<boolean>(false);
-
-  // Patient Height & Weight recognition and editing
-  const [customHeight, setCustomHeight] = useState<string>(patient?.heightCm ? String(patient.heightCm) : '170');
-  const [customWeight, setCustomWeight] = useState<string>(patient?.weightKg ? String(patient.weightKg) : '70');
-  const [isEditingMetrics, setIsEditingMetrics] = useState<boolean>(false);
-
-  // Sync patient demographics on open
   useEffect(() => {
-    if (patient?.heightCm) setCustomHeight(String(patient.heightCm));
-    if (patient?.weightKg) setCustomWeight(String(patient.weightKg));
-  }, [patient, isOpen]);
-
-  // Derived patient gender, height, weight, and ARDSNet IBW calculation
-  const patientGender = patient?.gender === 'FEMALE' ? 'FEMALE' : 'MALE';
-  const heightNum = parseEnglishFloat(customHeight) || patient?.heightCm || 170;
-  const weightNum = parseEnglishFloat(customWeight) || patient?.weightKg || 70;
-
-  // ARDSNet Devine IBW Formula: Male: 50 + 0.91*(H-152.4), Female: 45.5 + 0.91*(H-152.4)
-  let calculatedIbw = patient?.idealBodyWeightKg || 0;
-  if (isEditingMetrics || !calculatedIbw || calculatedIbw <= 0) {
-    if (heightNum > 100) {
-      const base = patientGender === 'MALE' ? 50 : 45.5;
-      calculatedIbw = Math.round((base + 0.91 * (heightNum - 152.4)) * 10) / 10;
-    } else if (weightNum > 0) {
-      calculatedIbw = weightNum;
-    } else {
-      calculatedIbw = patientGender === 'MALE' ? 70 : 60;
+    if (isOpen && refreshUsers) {
+      refreshUsers();
     }
-  }
+  }, [isOpen, refreshUsers]);
 
-  // Lung Protective Ventilator Suggestions (ARDSNet 6 mL/kg IBW)
-  const recommendedVt6ml = Math.max(150, Math.round(calculatedIbw * 6));
-  const minVt4ml = Math.max(100, Math.round(calculatedIbw * 4));
-  const maxVt8ml = Math.max(200, Math.round(calculatedIbw * 8));
-  const recommendedVe = ((recommendedVt6ml * 14) / 1000).toFixed(1);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [roleFilter, setRoleFilter] = useState<string>('ALL');
+  const [activeTab, setActiveTab] = useState<'users' | 'audit'>('users');
+  const [isAddMode, setIsAddMode] = useState(false);
+  const [editingUser, setEditingUser] = useState<IcuUser | null>(null);
+  const [showFormPassword, setShowFormPassword] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<IcuUser | null>(null);
 
-  // Quick Apply Smart Presets Handler
-  const handleApplySmartSuggestions = () => {
-    setTidalVolume(String(recommendedVt6ml));
-    setSetRate('14');
-    setActualRate('16');
-    if (!peep || parseEnglishFloat(peep) === 0) {
-      setPeep('5');
-    }
-    if (!fio2 || parseEnglishFloat(fio2) === 0) {
-      setFio2('40');
-    }
-    setErrorMessage(null);
-  };
+  // Change Password state
+  const [userToChangePassword, setUserToChangePassword] = useState<IcuUser | null>(null);
+  const [newPasswordInput, setNewPasswordInput] = useState('');
+  const [confirmPasswordInput, setConfirmPasswordInput] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [changePassStatus, setChangePassStatus] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Prevent background scrolling when modal is open
-  useEffect(() => {
-    if (!isOpen) return;
-    const originalOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = originalOverflow;
-    };
-  }, [isOpen]);
+  // Recovery Token state
+  const [showRecoveryModal, setShowRecoveryModal] = useState(false);
+  const [recoveryCodeInput, setRecoveryCodeInput] = useState('');
+  const [recoveryStatus, setRecoveryStatus] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [recoveryLoading, setRecoveryLoading] = useState(false);
 
-  // Initialize values when opening
-  useEffect(() => {
-    if (!isOpen) {
-      setHasInitialized(false);
+  const handleSaveRecoveryCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanCode = recoveryCodeInput.trim();
+    if (!cleanCode || cleanCode.length < 6) {
+      setRecoveryStatus({ type: 'error', text: 'رمز التشفير يجب ألا يقل عن 6 خانات.' });
       return;
     }
+    setRecoveryLoading(true);
+    setRecoveryStatus(null);
+    let serverSuccess = false;
 
-    if (isOpen && !hasInitialized) {
-      if (initialVentilator) {
-        const devMode = String(initialVentilator.mode || '');
-        const matched = RESPIRATORY_DEVICES.find(d => d.id === devMode || d.labelEn === devMode || d.labelAr === devMode);
-        
-        if (matched) {
-          setActiveCategory(matched.category);
-          setSelectedDevice(matched.id);
-        } else if (initialVentilator.supportCategory) {
-          setActiveCategory(initialVentilator.supportCategory as RespiratoryCategory);
-          setSelectedDevice(devMode);
-        } else if (devMode.includes('Nasal') || devMode.includes('Mask') || devMode.includes('HFNC') || devMode.includes('Room')) {
-          setActiveCategory('OXYGEN_THERAPY');
-          setSelectedDevice(devMode);
+    try {
+      const idToken = await auth.currentUser?.getIdToken().catch(() => null);
+      const authHeader = idToken ? `Bearer ${idToken}` : '';
+      const response = await fetch(`${API_BASE_URL}/api/admin/recovery/set`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': authHeader
+        },
+        body: JSON.stringify({ recoveryCode: cleanCode })
+      });
+
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const data = await response.json();
+        if (data.success) {
+          serverSuccess = true;
+          setRecoveryStatus({ type: 'success', text: data.message || 'تم تحديث رمز التشفير بنجاح.' });
         } else {
-          setActiveCategory('INVASIVE_VENT');
-          setSelectedDevice(devMode || 'PRVC');
+          setRecoveryStatus({ type: 'error', text: data.message || 'فشل تحديث رمز التشفير.' });
         }
-
-        setOxygenFlow(initialVentilator.oxygenFlowLpm !== undefined ? String(initialVentilator.oxygenFlowLpm) : '3');
-        setFio2(initialVentilator.fio2Percent !== undefined ? String(initialVentilator.fio2Percent) : '32');
-        setPeep(initialVentilator.peepCmH2O !== undefined ? String(initialVentilator.peepCmH2O) : '5');
-        setTidalVolume(initialVentilator.tidalVolumeMl !== undefined ? String(initialVentilator.tidalVolumeMl) : String(recommendedVt6ml));
-        setSetRate(initialVentilator.setRespiratoryRateCpm !== undefined ? String(initialVentilator.setRespiratoryRateCpm) : '14');
-        setActualRate(initialVentilator.actualRespiratoryRateCpm !== undefined ? String(initialVentilator.actualRespiratoryRateCpm) : '16');
-        setPeakPressure(initialVentilator.peakInspiratoryPressureCmH2O !== undefined ? String(initialVentilator.peakInspiratoryPressureCmH2O) : '');
-        setPlateauPressure(initialVentilator.plateauPressureCmH2O !== undefined ? String(initialVentilator.plateauPressureCmH2O) : '');
-        setIeRatio(initialVentilator.ieRatio || '1:2');
-        setCircuitLeak(initialVentilator.circuitLeakPercent !== undefined ? String(initialVentilator.circuitLeakPercent) : '0');
-        setDeviceModel(initialVentilator.deviceModel || '');
-        setClinicalNotes(initialVentilator.notes || '');
-        setIsWeaning(initialVentilator.isWeaningTrialActive || false);
-      } else {
-        // Default to Nasal Cannula 3 L/min
-        setActiveCategory('OXYGEN_THERAPY');
-        setSelectedDevice('NASAL_CANNULA');
-        setOxygenFlow('3');
-        setFio2('32');
-        setPeep('5');
-        setTidalVolume(String(recommendedVt6ml));
-        setSetRate('14');
-        setActualRate('16');
-        setPeakPressure('');
-        setPlateauPressure('');
-        setIeRatio('1:2');
-        setCircuitLeak('0');
-        setDeviceModel('Standard O2 Flowmeter');
-        setClinicalNotes('');
-        setIsWeaning(false);
       }
-      setHasInitialized(true);
+    } catch (err: any) {
+      console.warn('[RecoveryToken] Server sync notice:', err);
     }
-  }, [isOpen, initialVentilator, hasInitialized, recommendedVt6ml]);
+
+    // Client-side Firestore and local storage backup
+    try {
+      localStorage.setItem('soli_admin_recovery_token', cleanCode);
+      if (firestore && auth.currentUser) {
+        await setDoc(doc(firestore, 'system_settings', 'recovery'), {
+          hasCustomRecoveryCode: true,
+          updatedAt: new Date().toISOString(),
+          updatedByUid: auth.currentUser.uid
+        }, { merge: true });
+      }
+      if (!serverSuccess) {
+        setRecoveryStatus({ type: 'success', text: 'تم حفظ وتحديث رمز الاستعادة بنجاح في قاعدة البيانات المحلية والسحابية.' });
+      }
+    } catch {
+      if (!serverSuccess && !recoveryStatus) {
+        setRecoveryStatus({ type: 'error', text: 'تعذر الاتصال بخادم النظام، يرجى المحاولة بعد قليل.' });
+      }
+    } finally {
+      setRecoveryLoading(false);
+    }
+  };
+
+  // Form states for creating/editing user
+  const [formUsername, setFormUsername] = useState('');
+  const [formDisplayName, setFormDisplayName] = useState('');
+  const [formPassword, setFormPassword] = useState('');
+  const [formRole, setFormRole] = useState<StaffRole>(StaffRole.BEDSIDE_RN);
+  const [formPermissions, setFormPermissions] = useState<UserPermissions>(
+    getDefaultPermissionsForRole(StaffRole.BEDSIDE_RN)
+  );
+  const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [togglingUid, setTogglingUid] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
-  // Handler when selecting a device
-  const handleSelectDevice = (device: RespiratoryDeviceOption) => {
-    setSelectedDevice(device.id);
-    setActiveCategory(device.category);
-
-    if (device.category === 'OXYGEN_THERAPY') {
-      const flow = device.defaultFlow || 3;
-      setOxygenFlow(String(flow));
-      setFio2(String(device.defaultFio2 || Math.min(100, 20 + flow * 4)));
-      setDeviceModel(device.labelEn);
-    } else if (device.category === 'ROOM_AIR') {
-      setOxygenFlow('0');
-      setFio2('21');
-      setPeep('0');
-      setDeviceModel('Room Air');
-    } else if (device.category === 'NON_INVASIVE_NIV') {
-      setFio2(String(device.defaultFio2 || 40));
-      setPeep('5');
-      setTidalVolume(String(recommendedVt6ml));
-      setDeviceModel('BiPAP / NIV Mask');
-    } else if (device.category === 'INVASIVE_VENT') {
-      setFio2(String(device.defaultFio2 || 45));
-      setPeep('5');
-      setTidalVolume(String(recommendedVt6ml));
-      setDeviceModel('Draeger / Hamilton ICU Ventilator');
-    }
+  const handleRoleChange = (role: StaffRole) => {
+    setFormRole(role);
+    setFormPermissions(getDefaultPermissionsForRole(role));
   };
 
-  // Helper when changing oxygen flow rate
-  const handleFlowChange = (valStr: string) => {
-    const rawVal = toEnglishDigits(valStr);
-    setOxygenFlow(rawVal);
-    const flowNum = parseEnglishFloat(rawVal);
-    if (isNaN(flowNum) || flowNum <= 0) return;
-
-    if (selectedDevice === 'NASAL_CANNULA') {
-      // 1L=24%, 2L=28%, 3L=32%, 4L=36%, 5L=40%, 6L=44%
-      const calculatedFio2 = Math.min(44, Math.max(24, Math.round(20 + flowNum * 4)));
-      setFio2(String(calculatedFio2));
-    } else if (selectedDevice === 'SIMPLE_MASK') {
-      // 5L=40%, 6L=45%, 7L=50%, 8L=60%
-      const table: Record<number, number> = { 5: 40, 6: 45, 7: 50, 8: 60 };
-      const nearest = table[Math.round(flowNum)] || Math.min(60, Math.max(40, Math.round(40 + (flowNum - 5) * 6.6)));
-      setFio2(String(nearest));
-    } else if (selectedDevice === 'PARTIAL_REBREATHER') {
-      // 6L=60%, 7L=65%, 8L=70%, 9L=75%, 10L=80%
-      const table: Record<number, number> = { 6: 60, 7: 65, 8: 70, 9: 75, 10: 80 };
-      const nearest = table[Math.round(flowNum)] || Math.min(80, Math.max(60, Math.round(60 + (flowNum - 6) * 5)));
-      setFio2(String(nearest));
-    } else if (selectedDevice === 'RESERVOIR_MASK') {
-      // 10L=60%, 11L=70%, 12L=80%, 13L=85%, 14L=90%, 15L=95%
-      const table: Record<number, number> = { 10: 60, 11: 70, 12: 80, 13: 85, 14: 90, 15: 95 };
-      const nearest = table[Math.round(flowNum)] || Math.min(95, Math.max(60, Math.round(60 + (flowNum - 10) * 7)));
-      setFio2(String(nearest));
-    } else if (selectedDevice === 'VENTURI_MASK') {
-      // 4L=24%, 6L=28%, 8L=35%, 10L=50%
-      const table: Record<number, number> = { 4: 24, 6: 28, 8: 35, 10: 50 };
-      const nearest = table[Math.round(flowNum)];
-      if (nearest) setFio2(String(nearest));
-    }
+  const handleOpenAdd = () => {
+    setEditingUser(null);
+    setFormUsername('');
+    setFormDisplayName('');
+    setFormPassword('');
+    setShowFormPassword(false);
+    setFormRole(StaffRole.BEDSIDE_RN);
+    setFormPermissions(getDefaultPermissionsForRole(StaffRole.BEDSIDE_RN));
+    setIsAddMode(true);
+    setStatusMsg(null);
   };
 
-  // Calculations for mechanical ventilator
-  const parsedPplat = parseEnglishFloat(plateauPressure);
-  const parsedPeep = parseEnglishFloat(peep);
-  const calculatedDrivingPressure = (parsedPplat > 0 && parsedPeep > 0) ? Math.max(0, parsedPplat - parsedPeep) : null;
-  const parsedVt = parseEnglishFloat(tidalVolume);
-  const ibw = calculatedIbw;
-  const vtPerKg = ibw > 0 && parsedVt > 0 ? (parsedVt / ibw).toFixed(1) : null;
+  const handleOpenEdit = (user: IcuUser) => {
+    setEditingUser(user);
+    const uname = user.email.includes('@solimedical-micu.org') 
+      ? user.email.replace('@solimedical-micu.org', '') 
+      : (user.email.split('@')[0] || user.badgeId);
+    setFormUsername(uname);
+    setFormDisplayName(user.nameAr || user.nameEn);
+    setFormPassword('');
+    setShowFormPassword(false);
+    setFormRole(user.role as StaffRole);
+    setFormPermissions(user.permissions || getDefaultPermissionsForRole(user.role as StaffRole));
+    setIsAddMode(true);
+    setStatusMsg(null);
+  };
 
-  // Save / Record
-  const handleSave = async (e: React.FormEvent) => {
+  const handleOpenChangePassword = (user: IcuUser) => {
+    setUserToChangePassword(user);
+    setNewPasswordInput('');
+    setConfirmPasswordInput('');
+    setShowNewPassword(false);
+    setShowConfirmPassword(false);
+    setChangePassStatus(null);
+  };
+
+  const handleSaveNewPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSubmitting(true);
-    setErrorMessage(null);
+    if (!userToChangePassword) return;
 
-    const patientId = patient?.id || 'unknown_patient';
+    if (!newPasswordInput.trim() || newPasswordInput.trim().length < 6) {
+      setChangePassStatus({
+        type: 'error',
+        text: lang === 'ar' ? 'كلمة المرور يجب ألا تقل عن 6 أحرف أو أرقام (auth/weak-password).' : 'Password must be at least 6 characters (auth/weak-password).'
+      });
+      return;
+    }
 
+    if (newPasswordInput.trim() !== confirmPasswordInput.trim()) {
+      setChangePassStatus({
+        type: 'error',
+        text: lang === 'ar' ? 'كلمتا المرور غير متطابقتين.' : 'Passwords do not match.'
+      });
+      return;
+    }
+
+    const res = await changeUserPassword(userToChangePassword.uid, newPasswordInput.trim(), confirmPasswordInput.trim());
+    if (res.success) {
+      setChangePassStatus({
+        type: 'success',
+        text: res.message || (lang === 'ar' ? 'تم تغيير كلمة المرور بنجاح في Firebase Authentication.' : 'Password updated successfully')
+      });
+      setTimeout(() => {
+        setUserToChangePassword(null);
+      }, 1200);
+    } else {
+      setChangePassStatus({
+        type: 'error',
+        text: res.message || (lang === 'ar' ? 'فشل تحديث كلمة المرور في Firebase.' : 'Error changing password')
+      });
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!userToDelete) return;
+    setStatusMsg(null);
+    const res = await deleteUser(userToDelete.uid);
+    if (res.success) {
+      setStatusMsg({ type: 'success', text: res.message || (lang === 'ar' ? 'تم حذف الحساب بنجاح' : 'User deleted successfully') });
+    } else {
+      setStatusMsg({ type: 'error', text: res.message || (lang === 'ar' ? 'خطأ أثناء حذف الحساب' : 'Error deleting user') });
+    }
+    setUserToDelete(null);
+  };
+
+  const handleToggleUserStatus = async (targetUser: IcuUser) => {
+    if (togglingUid) return;
+    setTogglingUid(targetUser.uid);
+    setStatusMsg(null);
     try {
-      const existingRecordId = initialVentilator?.id || `vent_${bedNumber}_${patientId}`;
-      const existingRecord = await db.ventilators.get(existingRecordId);
-      const existingHistory = existingRecord?.history || [];
-
-      // Find current device details for clean labeling
-      const matchedDevice = RESPIRATORY_DEVICES.find(d => d.id === selectedDevice);
-      const modeLabel = matchedDevice 
-        ? matchedDevice.labelEn 
-        : selectedDevice;
-
-      const flowVal = parseEnglishFloat(oxygenFlow) || 0;
-      const fio2Val = parseEnglishFloat(fio2) || (activeCategory === 'ROOM_AIR' ? 21 : 40);
-      const peepVal = parseEnglishFloat(peep) || 0;
-      const vtVal = parseEnglishFloat(tidalVolume) || 0;
-
-      const newHistoryEntry = {
-        id: `vent_hist_${Date.now()}`,
-        timestamp: new Date().toISOString(),
-        mode: modeLabel,
-        supportCategory: activeCategory,
-        oxygenFlowLpm: activeCategory === 'OXYGEN_THERAPY' ? flowVal : undefined,
-        fio2Percent: fio2Val,
-        peepCmH2O: (activeCategory === 'INVASIVE_VENT' || activeCategory === 'NON_INVASIVE_NIV') ? peepVal : 0,
-        tidalVolumeMl: activeCategory === 'INVASIVE_VENT' ? vtVal : 0,
-        recordedByStaffName: currentUser?.nameEn || currentUser?.nameAr || 'ICU Clinician',
-        recordedByStaffId: currentUser?.badgeId || currentUser?.uid,
-        deviceModel: deviceModel.trim() || modeLabel,
-        setRespiratoryRateCpm: parseEnglishFloat(setRate) || 14,
-        actualRespiratoryRateCpm: parseEnglishFloat(actualRate) || 16,
-        peakInspiratoryPressureCmH2O: parseEnglishFloat(peakPressure) || 0,
-        plateauPressureCmH2O: parseEnglishFloat(plateauPressure) || 0,
-        drivingPressureCmH2O: calculatedDrivingPressure || 0,
-        ieRatio: ieRatio.trim(),
-        circuitLeakPercent: parseEnglishFloat(circuitLeak) || 0,
-        notes: clinicalNotes.trim(),
-      };
-
-      const ventRecord: VentilatorParameters = {
-        id: existingRecordId,
-        bedId: bedNumber,
-        patientId: patientId,
-        timestamp: new Date().toISOString(),
-        deviceModel: deviceModel.trim() || modeLabel,
-        mode: modeLabel as any,
-        supportCategory: activeCategory,
-        oxygenFlowLpm: activeCategory === 'OXYGEN_THERAPY' ? flowVal : undefined,
-        fio2Percent: fio2Val,
-        peepCmH2O: (activeCategory === 'INVASIVE_VENT' || activeCategory === 'NON_INVASIVE_NIV') ? peepVal : 0,
-        tidalVolumeMl: activeCategory === 'INVASIVE_VENT' ? vtVal : 0,
-        peakInspiratoryPressureCmH2O: parseEnglishFloat(peakPressure) || 0,
-        plateauPressureCmH2O: parseEnglishFloat(plateauPressure) || 0,
-        drivingPressureCmH2O: calculatedDrivingPressure || 0,
-        setRespiratoryRateCpm: parseEnglishFloat(setRate) || 14,
-        actualRespiratoryRateCpm: parseEnglishFloat(actualRate) || 16,
-        ieRatio: ieRatio.trim(),
-        isWeaningTrialActive: isWeaning,
-        circuitLeakPercent: parseEnglishFloat(circuitLeak) || 0,
-        notes: clinicalNotes.trim(),
-        recordedByStaffName: currentUser?.nameEn || currentUser?.nameAr || 'ICU Clinician',
-        history: [...existingHistory, newHistoryEntry],
-      };
-
-      // Save to Dexie local DB
-      await db.ventilators.put(ventRecord);
-
-      // Sync to Firebase Cloud Firestore
-      try {
-        const ventRef = doc(firestore, 'ventilators', ventRecord.id);
-        await setDoc(ventRef, {
-          ...ventRecord,
-          updatedAt: Date.now(),
+      const res = await toggleUserStatus(targetUser.uid);
+      if (res?.success) {
+        setStatusMsg({
+          type: 'success',
+          text: res.message || (targetUser.isActive 
+            ? (lang === 'ar' ? 'تم تعطيل الحساب وإبطال جلساته بنجاح.' : 'Account disabled successfully.')
+            : (lang === 'ar' ? 'تم إعادة تفعيل الحساب بنجاح.' : 'Account activated successfully.'))
         });
-      } catch (cloudErr) {
-        console.warn('Firestore offline sync will queue ventilator record:', cloudErr);
+      } else {
+        setStatusMsg({
+          type: 'error',
+          text: res?.message || (lang === 'ar' ? 'فشل تعديل حالة الحساب.' : 'Failed to update user status.')
+        });
       }
-
-      onSaved();
-      onClose();
     } catch (err: any) {
-      console.error('Error saving respiratory record:', err);
-      setErrorMessage(err?.message || (lang === 'ar' ? 'فشل حفظ بيانات دعم التنفس' : 'Failed to save respiratory parameters'));
+      setStatusMsg({
+        type: 'error',
+        text: err?.message || (lang === 'ar' ? 'حدث خطأ أثناء الاتصال بالخادم.' : 'Error contacting server.')
+      });
     } finally {
-      setIsSubmitting(false);
+      setTogglingUid(null);
     }
   };
 
-  // Discontinue / Set to Room Air
-  const handleDiscontinueToRoomAir = async () => {
-    if (!confirm(lang === 'ar' ? 'هل أنت متأكد من فصل دعم الأكسجين/التنفس وتأكيد تنفس المريض على هواء الغرفة (Room Air)؟' : 'Confirm weaning/discontinuing to Room Air (Spontaneous Breathing)?')) {
+  const handleSaveUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setStatusMsg(null);
+
+    const cleanUsername = formUsername.trim().toLowerCase().replace(/\s+/g, '');
+    const userEmail = cleanUsername.includes('@') ? cleanUsername : `${cleanUsername}@solimedical-micu.org`;
+    const cleanDisplayName = formDisplayName.trim() || cleanUsername;
+    
+    if (!editingUser && formPassword.length < 6) {
+      setStatusMsg({ type: 'error', text: lang === 'ar' ? 'كلمة المرور يجب ألا تقل عن 6 أحرف أو أرقام (auth/weak-password).' : 'Password must be at least 6 characters (auth/weak-password).' });
       return;
     }
+    const cleanPassword = formPassword;
 
-    handleSelectDevice(RESPIRATORY_DEVICES.find(d => d.id === 'ROOM_AIR')!);
-  };
-
-  // Complete Delete of Record
-  const handleRemoveVentilator = async () => {
-    if (!canDeleteRecord(currentUser, initialVentilator)) {
-      alert(lang === 'ar' ? 'غير مصرح: حذف السجلات الطبية يتطلب صلاحيات إدارية خاصة.' : 'Unauthorized: Deleting medical records requires administrative permissions.');
-      return;
-    }
-
-    if (!confirm(lang === 'ar' ? 'هل أنت متأكد من حذف سجل التنفس والأكسجين نهائياً لهذا السرير؟' : 'Confirm complete deletion of respiratory record?')) {
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      const existing = await db.ventilators.where('patientId').equals(patient?.id || '').first();
-      if (existing) {
-        await db.ventilators.delete(existing.id);
-        try {
-          const ventRef = doc(firestore, 'ventilators', existing.id);
-          await deleteDoc(ventRef);
-        } catch (cloudErr) {
-          console.warn('Firestore delete offline sync:', cloudErr);
-        }
+    if (editingUser) {
+      // Update
+      const updated: IcuUser = {
+        ...editingUser,
+        nameAr: cleanDisplayName,
+        nameEn: cleanDisplayName,
+        email: userEmail,
+        role: formRole,
+        permissions: formPermissions,
+      };
+      delete (updated as any).pinCode;
+      delete (updated as any).password;
+      const res = await updateUser(updated);
+      if (res.success) {
+        setStatusMsg({ type: 'success', text: lang === 'ar' ? 'تم تحديث بيانات المستخدم بنجاح' : 'User updated successfully' });
+        setTimeout(() => setIsAddMode(false), 1000);
+      } else {
+        setStatusMsg({ type: 'error', text: res.message || 'Error updating user' });
       }
-      onSaved();
-      onClose();
-    } catch (err: any) {
-      console.error('Failed to remove ventilator:', err);
-      setErrorMessage(err?.message || (lang === 'ar' ? 'فشل إزالة السجل' : 'Failed to remove record'));
-    } finally {
-      setIsSubmitting(false);
+    } else {
+      // Create
+      const res = await createUser({
+        nameAr: cleanDisplayName,
+        nameEn: cleanDisplayName,
+        email: userEmail,
+        role: formRole,
+        licenseNumber: `LIC-${Math.floor(100000 + Math.random() * 900000)}`,
+        department: 'Medical Intensive Care Unit',
+        badgeId: cleanUsername,
+        pinCode: cleanPassword,
+        permissions: formPermissions,
+      });
+      if (res.success) {
+        setStatusMsg({ type: 'success', text: lang === 'ar' ? 'تمت إضافة المستخدم وتفعيل الصلاحيات بنجاح' : 'User created successfully' });
+        setTimeout(() => setIsAddMode(false), 1000);
+      } else {
+        setStatusMsg({ type: 'error', text: res.message || 'Error creating user' });
+      }
     }
   };
 
-  const isOxygenTherapy = activeCategory === 'OXYGEN_THERAPY';
-  const isRoomAir = activeCategory === 'ROOM_AIR';
-  const isInvasiveVent = activeCategory === 'INVASIVE_VENT';
-  const isNiv = activeCategory === 'NON_INVASIVE_NIV';
+  const filteredUsers = (allUsers || []).filter(u => {
+    if (!u) return false;
+    const q = (searchQuery || '').toLowerCase();
+    const nameAr = (u.nameAr || '').toLowerCase();
+    const nameEn = (u.nameEn || '').toLowerCase();
+    const displayName = ((u as any).displayName || '').toLowerCase();
+    const username = ((u as any).username || '').toLowerCase();
+    const email = (u.email || '').toLowerCase();
+    const badgeId = (u.badgeId || '').toLowerCase();
+
+    const matchesSearch = 
+      nameAr.includes(q) ||
+      nameEn.includes(q) ||
+      displayName.includes(q) ||
+      username.includes(q) ||
+      email.includes(q) ||
+      badgeId.includes(q);
+    const matchesRole = roleFilter === 'ALL' || u.role === roleFilter;
+    return matchesSearch && matchesRole;
+  });
+
+interface PermissionCategory {
+  title: { ar: string; en: string };
+  permissions: Array<{
+    key: keyof UserPermissions;
+    label: { ar: string; en: string };
+  }>;
+}
+
+const PERMISSION_GROUPS: PermissionCategory[] = [
+  {
+    title: { ar: 'الأسرّة وتدفق المرضى (Beds & Patient Flow)', en: 'Beds & Patient Flow' },
+    permissions: [
+      { key: 'beds.view', label: { ar: 'استعراض الأسرّة', en: 'View Beds (beds.view)' } },
+      { key: 'patients.view', label: { ar: 'استعراض ملفات المرضى', en: 'View Patients (patients.view)' } },
+      { key: 'patients.create', label: { ar: 'إدخال وتنويم مريض جديد', en: 'Admit Patient (patients.create)' } },
+      { key: 'patients.update', label: { ar: 'تعديل وتحديث ملف المريض', en: 'Update Patient (patients.update)' } },
+      { key: 'archive.view', label: { ar: 'استعراض الأرشيف وسجلات التخريج', en: 'View Archive (archive.view)' } },
+      { key: 'transfer.create', label: { ar: 'نقل مريض لسرير آخر', en: 'Transfer Patient (transfer.create)' } },
+      { key: 'bedSwap.create', label: { ar: 'تبديل أسرّة بين مريضين', en: 'Swap Beds (bedSwap.create)' } },
+      { key: 'discharge.create', label: { ar: 'تخريج المريض من العناية', en: 'Discharge Patient (discharge.create)' } },
+    ]
+  },
+  {
+    title: { ar: 'العلامات الحيوية والتوثيق الطبي (Telemetry & Clinical)', en: 'Telemetry & Clinical Records' },
+    permissions: [
+      { key: 'vitals.view', label: { ar: 'استعراض العلامات الحيوية والمضخات', en: 'View Vitals (vitals.view)' } },
+      { key: 'vitals.create', label: { ar: 'توثيق قراءات حيوية ومضخات جديدة', en: 'Record Vitals (vitals.create)' } },
+      { key: 'vitals.update', label: { ar: 'تعديل العلامات الحيوية والمضخات', en: 'Update Vitals (vitals.update)' } },
+      { key: 'labs.view', label: { ar: 'استعراض نتائج التحاليل المخبرية', en: 'View Labs (labs.view)' } },
+      { key: 'labs.create', label: { ar: 'توثيق وتسجيل نتائج تحاليل', en: 'Record Labs (labs.create)' } },
+      { key: 'labs.update', label: { ar: 'تعديل نتائج التحاليل', en: 'Update Labs (labs.update)' } },
+      { key: 'investigations.view', label: { ar: 'استعراض الأشعة والفحوصات', en: 'View Investigations (investigations.view)' } },
+      { key: 'investigations.create', label: { ar: 'توثيق أشعة وفحوصات', en: 'Record Investigations (investigations.create)' } },
+      { key: 'investigations.update', label: { ar: 'تعديل الأشعة والفحوصات', en: 'Update Investigations (investigations.update)' } },
+      { key: 'clinicalNotes.view', label: { ar: 'استعراض الملاحظات السريرية', en: 'View Clinical Notes (clinicalNotes.view)' } },
+      { key: 'clinicalNotes.create', label: { ar: 'كتابة وتوثيق ملاحظات طبية', en: 'Sign Clinical Notes (clinicalNotes.create)' } },
+      { key: 'clinicalNotes.update', label: { ar: 'إضافة ملاحق غير قابلة للحذف', en: 'Add Note Addendum (clinicalNotes.update)' } },
+      { key: 'clinicalNotes.delete', label: { ar: 'حذف الملاحظات الطبية والعروضات', en: 'Delete Clinical Notes (clinicalNotes.delete)' } },
+      { key: 'sbar.view', label: { ar: 'استعراض تقارير التسليم SBAR', en: 'View SBAR Handover (sbar.view)' } },
+      { key: 'sbar.create', label: { ar: 'إنشاء تقرير تسليم مناوبة SBAR', en: 'Create SBAR Handover (sbar.create)' } },
+      { key: 'sbar.update', label: { ar: 'اعتماد وتوقيع تقرير SBAR', en: 'Sign SBAR Handover (sbar.update)' } },
+    ]
+  },
+  {
+    title: { ar: 'إدارة المنظومة والصلاحيات والرقابة (Governance & Security)', en: 'Governance & Security' },
+    permissions: [
+      { key: 'chat.view', label: { ar: 'استعراض محادثات القسم', en: 'View Chat (chat.view)' } },
+      { key: 'chat.create', label: { ar: 'إرسال رسائل محادثة', en: 'Send Chat Messages (chat.create)' } },
+      { key: 'chat.delete', label: { ar: 'حذف رسائل المحادثة', en: 'Delete Chat Messages (chat.delete)' } },
+      { key: 'settings.view', label: { ar: 'استعراض إعدادات المنظومة', en: 'View Settings (settings.view)' } },
+      { key: 'settings.update', label: { ar: 'تعديل إعدادات المنظومة', en: 'Update Settings (settings.update)' } },
+      { key: 'sections.manage', label: { ar: 'إدارة وتخصيص أقسام النظام', en: 'Manage Sections (sections.manage)' } },
+      { key: 'cards.manage', label: { ar: 'إدارة وتخصيص بطاقات النظام', en: 'Manage Cards (cards.manage)' } },
+      { key: 'users.view', label: { ar: 'استعراض قائمة المستخدمين', en: 'View Users (users.view)' } },
+      { key: 'users.create', label: { ar: 'إضافة كوادر طبية جديدة', en: 'Create User (users.create)' } },
+      { key: 'users.update', label: { ar: 'تعديل بيانات وصلاحيات الكوادر', en: 'Update User (users.update)' } },
+      { key: 'users.disable', label: { ar: 'إيقاف وتعطيل حسابات الكوادر', en: 'Disable User (users.disable)' } },
+      { key: 'users.delete', label: { ar: 'حذف حسابات الكوادر نهائياً', en: 'Delete User (users.delete)' } },
+      { key: 'audit.view', label: { ar: 'الاطلاع على سجلات الرقابة CBAHI/JCI', en: 'View Audit Logs (audit.view)' } },
+      { key: 'medicalRecords.delete', label: { ar: 'حذف السجلات الطبية (الملاحظات الطبية، العروضات، المضادات، الفحوصات، المضخات، جهاز التنفس، السوائل، التحاليل)', en: 'Delete Medical Records (medicalRecords.delete)' } },
+    ]
+  }
+];
+
+  const canCreateUsers = hasPermission('users.create');
+  const canUpdateUsers = hasPermission('users.update');
+  const canDisableUsers = hasPermission('users.disable');
+  const canDeleteUsers = hasPermission('users.delete');
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200 overscroll-contain overflow-y-auto">
-      <div 
-        className="w-full max-w-3xl bg-white dark:bg-[#091122] border border-slate-200 dark:border-cyan-500/30 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] text-slate-900 dark:text-white my-auto"
-        dir={isRTL ? 'rtl' : 'ltr'}
-      >
+    <div className="w-full space-y-4 animate-in fade-in duration-300" dir={isRTL ? 'rtl' : 'ltr'}>
+      <div className="relative w-full max-w-6xl mx-auto bg-[#0a1224] border border-slate-800 rounded-3xl shadow-xl p-5 sm:p-7 text-slate-100 flex flex-col">
+        
         {/* Header */}
-        <div className="flex items-center justify-between p-3.5 sm:p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60">
+        <div className="flex items-center justify-between pb-4 border-b border-slate-800/80">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-600 dark:text-cyan-400 shrink-0">
-              <Wind className="w-5 h-5" />
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-teal-500 to-cyan-400 p-0.5 shadow-md shadow-teal-500/20">
+              <div className="w-full h-full bg-[#070d1a] rounded-[10px] flex items-center justify-center text-teal-400">
+                <Users className="w-5 h-5" />
+              </div>
             </div>
             <div>
-              <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white flex items-center gap-2 flex-wrap">
-                <span>{lang === 'ar' ? `إعدادات دعم التنفس والأكسجين - سرير ${bedNumber}` : `Respiratory & Oxygen Support - Bed ${bedNumber}`}</span>
-                <span className="text-xs px-2.5 py-0.5 rounded-full bg-cyan-100 text-cyan-900 border border-cyan-300 dark:bg-cyan-950 dark:text-cyan-300 dark:border-cyan-800 font-mono font-bold">
-                  {patient?.fullNameAr || patient?.fullNameEn || `Bed ${bedNumber}`}
+              <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+                <span>{lang === 'ar' ? 'إدارة المستخدمين والكوادر الطبية (RBAC)' : 'Clinical Staff & Access Control (RBAC)'}</span>
+                <span className="px-2 py-0.5 rounded-full bg-teal-950 border border-teal-800 text-[10px] font-mono text-teal-300">
+                  {allUsers.length} {lang === 'ar' ? 'مستخدم' : 'Users'}
                 </span>
               </h2>
+              <p className="text-xs text-slate-400">
+                {lang === 'ar' ? 'تحديد الصلاحيات السريرية وإدارة حسابات مناوبات العناية المركزة' : 'Role-Based Access Control and Shift Staff Management'}
+              </p>
             </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {!isAddMode && activeTab === 'users' && (
+              <>
+                <button
+                  onClick={() => {
+                    setRecoveryCodeInput('');
+                    setRecoveryStatus(null);
+                    setShowRecoveryModal(true);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-teal-300 text-xs font-bold transition-all cursor-pointer"
+                  title="إدارة وتوليد رمز استعادة كلمة سر المدير"
+                >
+                  <KeyRound className="w-3.5 h-3.5" />
+                  <span>{lang === 'ar' ? 'رمز استعادة المدير' : 'Recovery Token'}</span>
+                </button>
+
+                {canCreateUsers && (
+                  <button
+                    onClick={handleOpenAdd}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-teal-600 to-teal-500 hover:from-teal-500 hover:to-teal-400 text-slate-950 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
+                  >
+                    <UserPlus className="w-3.5 h-3.5" />
+                    <span>{lang === 'ar' ? 'إضافة كادر طبي' : 'Add Staff'}</span>
+                  </button>
+                )}
+              </>
+            )}
+            <button
+              onClick={onClose}
+              className="w-8 h-8 rounded-lg bg-slate-800/60 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-all cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Navigation Tabs */}
+        {!isAddMode && (
+          <div className="flex items-center gap-2 border-b border-slate-800/80 pt-3 pb-2">
+            <button
+              type="button"
+              onClick={() => setActiveTab('users')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                activeTab === 'users'
+                  ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent'
+              }`}
+            >
+              <Users className="w-4 h-4" />
+              <span>{lang === 'ar' ? 'دليل المستخدمين والكوادر' : 'Staff & Users Directory'}</span>
+              <span className="px-1.5 py-0.2 rounded-full bg-black/40 text-[10px] font-mono">
+                {allUsers.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('audit')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                activeTab === 'audit'
+                  ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent'
+              }`}
+            >
+              <History className="w-4 h-4" />
+              <span>{lang === 'ar' ? 'سجلات الأمان والتدقيق (Audit Logs)' : 'Security & Audit Logs'}</span>
+            </button>
+          </div>
+        )}
+
+        {/* Content Body */}
+        <div className="flex-1 overflow-y-auto py-4 space-y-4">
+          
+          {activeTab === 'audit' ? (
+            <AuditLogsSection />
+          ) : (
+            <>
+              {statusMsg && (
+                <div className={`p-3 rounded-xl text-xs flex items-center gap-2 ${
+                  statusMsg.type === 'success' ? 'bg-teal-950/60 border border-teal-500/50 text-teal-200' : 'bg-red-950/60 border border-red-500/50 text-red-200'
+                }`}>
+                  {statusMsg.type === 'success' ? <CheckCircle2 className="w-4 h-4 text-teal-400" /> : <XCircle className="w-4 h-4 text-red-400" />}
+                  <span>{statusMsg.text}</span>
+                </div>
+              )}
+
+          {isAddMode ? (
+            /* Add / Edit Form */
+            <form onSubmit={handleSaveUser} className="space-y-4 bg-[#080f1e] p-4 sm:p-5 rounded-2xl border border-slate-800">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                <h3 className="text-sm font-bold text-teal-300 flex items-center gap-2">
+                  <UserPlus className="w-4 h-4 text-teal-400" />
+                  <span>{editingUser ? (lang === 'ar' ? 'تعديل بيانات المستخدم' : 'Edit User Profile') : (lang === 'ar' ? 'إضافة مستخدم جديد إلى المنظومة:' : 'Add New User to System:')}</span>
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setIsAddMode(false)}
+                  className="text-xs text-slate-400 hover:text-white px-2.5 py-1 rounded-lg bg-slate-800/60 transition-colors"
+                >
+                  {lang === 'ar' ? 'إلغاء' : 'Cancel'}
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <div>
+                  <label className="block text-[11px] font-semibold text-teal-300 mb-1">
+                    {lang === 'ar' ? 'اسم المستخدم (Username) *' : 'Username *'}
+                  </label>
+                  <input
+                    type="text"
+                    value={formUsername}
+                    onChange={(e) => setFormUsername(e.target.value)}
+                    required
+                    className="w-full bg-[#0a1224] border border-slate-700 focus:border-teal-400 rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-mono"
+                    placeholder="admin"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-teal-300 mb-1">
+                    {lang === 'ar' ? 'الاسم الظاهر (Display Name) *' : 'Display Name *'}
+                  </label>
+                  <input
+                    type="text"
+                    value={formDisplayName}
+                    onChange={(e) => setFormDisplayName(e.target.value)}
+                    required
+                    className="w-full bg-[#0a1224] border border-slate-700 focus:border-teal-400 rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
+                    placeholder="د. أحمد سليمان"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                    {lang === 'ar' ? 'كلمة المرور (6 أحرف فأكثر) *' : 'Password (6+ chars) *'}
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showFormPassword ? 'text' : 'password'}
+                      value={formPassword}
+                      onChange={(e) => setFormPassword(e.target.value)}
+                      required={!editingUser}
+                      minLength={6}
+                      className="w-full bg-[#0a1224] border border-slate-700 focus:border-teal-400 rounded-xl pl-3 pr-9 py-2 text-xs text-white focus:outline-none font-mono"
+                      placeholder={editingUser ? (lang === 'ar' ? 'اتركه فارغاً للإبقاء' : 'Leave empty to keep') : '••••••••'}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowFormPassword(!showFormPassword)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-teal-300 p-1 rounded-md transition-colors cursor-pointer"
+                      title={showFormPassword ? (lang === 'ar' ? 'إخفاء كلمة المرور' : 'Hide password') : (lang === 'ar' ? 'إظهار كلمة المرور' : 'Show password')}
+                    >
+                      {showFormPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                    {lang === 'ar' ? 'الدور والصلاحية (Role) *' : 'Role & Permissions *'}
+                  </label>
+                  <select
+                    value={formRole}
+                    onChange={(e) => handleRoleChange(e.target.value as StaffRole)}
+                    className="w-full bg-[#0a1224] border border-slate-700 focus:border-teal-400 rounded-xl px-3 py-2 text-xs text-teal-300 focus:outline-none"
+                  >
+                    <option value={StaffRole.ADMIN}>مدير النظام (Admin)</option>
+                    <option value={StaffRole.CONSULTANT}>استشاري عناية (Consultant)</option>
+                    <option value={StaffRole.SPECIALIST}>أخصائي عناية (Specialist)</option>
+                    <option value={StaffRole.RESIDENT}>طبيب مقيم (Resident)</option>
+                    <option value={StaffRole.LEAD_RN}>مسؤول تمريض (Charge Nurse)</option>
+                    <option value={StaffRole.BEDSIDE_RN}>تمريض سريري (Bedside RN)</option>
+                    <option value={StaffRole.CLINICAL_PHARMACIST}>صيدلي إكلينيكي (Pharmacist)</option>
+                    <option value={StaffRole.RESPIRATORY_THERAPIST}>علاج تنفسي (RT)</option>
+                    <option value={StaffRole.AUDITOR}>سكرتير (استقبال وحجوزات)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* System Pages Permission Matrix Grouped by Canonical Scope */}
+              <div className="mt-4 pt-3 border-t border-slate-800 space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-teal-300 flex items-center gap-1.5">
+                    <Sliders className="w-3.5 h-3.5" />
+                    <span>
+                      {lang === 'ar' 
+                        ? `مصفوفة الصلاحيات الموحدة (PAGE.ACTION) - (${Object.values(formPermissions).filter(Boolean).length} صلاحية مفعّلة)`
+                        : `Canonical Permission Matrix (PAGE.ACTION) - (${Object.values(formPermissions).filter(Boolean).length} granted)`
+                      }
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setFormPermissions(getDefaultPermissionsForRole(formRole))}
+                    className="text-[10px] text-teal-400 hover:underline cursor-pointer"
+                  >
+                    {lang === 'ar' ? 'استعادة الافتراضي للدور' : 'Reset to Role Default'}
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {PERMISSION_GROUPS.map((group, gIdx) => (
+                    <div key={gIdx} className="bg-[#0a1224] p-3 rounded-2xl border border-slate-800/80 space-y-2">
+                      <div className="text-xs font-bold text-slate-300 flex items-center justify-between">
+                        <span>{lang === 'ar' ? group.title.ar : group.title.en}</span>
+                        <span className="text-[10px] font-mono text-teal-400">
+                          {group.permissions.filter(p => !!formPermissions[p.key]).length} / {group.permissions.length}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                        {group.permissions.map((p) => {
+                          const isChecked = !!formPermissions[p.key];
+                          return (
+                            <label
+                              key={p.key}
+                              className={`p-2 rounded-xl border flex items-center justify-between cursor-pointer transition-colors text-[11px] ${
+                                isChecked 
+                                  ? 'bg-teal-950/40 border-teal-800/60 text-teal-200' 
+                                  : 'bg-[#070d1a] border-slate-800/80 text-slate-400 hover:border-slate-700'
+                              }`}
+                            >
+                              <span className="truncate pr-2 font-medium">
+                                {lang === 'ar' ? p.label.ar : p.label.en}
+                              </span>
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={(e) => setFormPermissions({ ...formPermissions, [p.key]: e.target.checked })}
+                                className="w-4 h-4 rounded text-teal-500 focus:ring-teal-400 bg-slate-900 border-slate-700"
+                              />
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsAddMode(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300"
+                >
+                  {lang === 'ar' ? 'إلغاء' : 'Cancel'}
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-slate-950 font-bold text-xs shadow-md"
+                >
+                  {editingUser 
+                    ? (lang === 'ar' ? 'حفظ التعديلات' : 'Save Changes')
+                    : (lang === 'ar' ? '+ إنشاء المستخدم' : '+ Create User')
+                  }
+                </button>
+              </div>
+            </form>
+          ) : (
+            /* Staff List View */
+            <div className="space-y-3">
+              
+              {/* Filter & Search Bar */}
+              <div className="flex flex-col sm:flex-row items-center gap-2">
+                <div className="relative flex-1 w-full">
+                  <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder={lang === 'ar' ? 'بحث بالاسم، البريد أو معرف البطاقة...' : 'Search staff by name, email or badge...'}
+                    className="w-full bg-[#080f1e] border border-slate-800 focus:border-teal-400 rounded-xl pl-9 pr-3 py-2 text-xs text-white focus:outline-none"
+                  />
+                </div>
+
+                <div className="flex items-center gap-1.5 w-full sm:w-auto">
+                  <Filter className="w-3.5 h-3.5 text-slate-500" />
+                  <select
+                    value={roleFilter}
+                    onChange={(e) => setRoleFilter(e.target.value)}
+                    className="bg-[#080f1e] border border-slate-800 focus:border-teal-400 rounded-xl px-2.5 py-2 text-xs text-slate-300 focus:outline-none"
+                  >
+                    <option value="ALL">{lang === 'ar' ? 'جميع الأدوار' : 'All Roles'}</option>
+                    <option value={StaffRole.ADMIN}>👑 Admin</option>
+                    <option value={StaffRole.CONSULTANT}>🩺 Consultant</option>
+                    <option value={StaffRole.SPECIALIST}>👨‍⚕️ Specialist</option>
+                    <option value={StaffRole.RESIDENT}>👨‍⚕️ Resident</option>
+                    <option value={StaffRole.LEAD_RN}>👩‍⚕️ Charge Nurse</option>
+                    <option value={StaffRole.BEDSIDE_RN}>💉 Bedside RN</option>
+                    <option value={StaffRole.CLINICAL_PHARMACIST}>💊 Pharmacist</option>
+                    <option value={StaffRole.RESPIRATORY_THERAPIST}>🫁 RT</option>
+                    <option value={StaffRole.AUDITOR}>📋 Auditor</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Users Cards Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {filteredUsers.map((user) => {
+                  const isCurrent = currentUser?.uid === user.uid;
+                  return (
+                    <div
+                      key={user.uid}
+                      className={`p-3.5 rounded-2xl border transition-all ${
+                        user.isActive 
+                          ? isCurrent 
+                            ? 'bg-[#0e1b30] border-teal-500/70 shadow-md shadow-teal-500/10' 
+                            : 'bg-[#080f1e] border-slate-800/80 hover:border-slate-700' 
+                          : 'bg-slate-900/40 border-red-900/30 opacity-60'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2.5">
+                          <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs ${
+                            user.role === StaffRole.ADMIN 
+                              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' 
+                              : user.role === StaffRole.CONSULTANT || user.role === StaffRole.SPECIALIST
+                              ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40'
+                              : 'bg-blue-500/20 text-blue-300 border border-blue-500/40'
+                          }`}>
+                            {(
+                              user.nameEn ||
+                              user.nameAr ||
+                              user.displayName ||
+                              user.username ||
+                              user.email ||
+                              'U'
+                            ).slice(0, 2).toUpperCase()}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs font-bold text-white">
+                                {lang === 'ar'
+                                  ? (user.nameAr || user.nameEn || user.displayName || user.username || user.email)
+                                  : (user.nameEn || user.nameAr || user.displayName || user.username || user.email)}
+                              </span>
+                              {user.isSuperAdmin && (
+                                <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[9px] font-bold">
+                                  ADMIN
+                                </span>
+                              )}
+                              {isCurrent && (
+                                <span className="px-1.5 py-0.2 rounded bg-teal-500/20 text-teal-300 border border-teal-500/40 text-[9px] font-bold">
+                                  {lang === 'ar' ? 'أنت' : 'You'}
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[10px] text-slate-400">{user.email}</span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {canUpdateUsers && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEdit(user)}
+                              className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-teal-300 text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer border border-slate-700/60"
+                              title={lang === 'ar' ? 'تعديل البيانات والصلاحيات' : 'Edit profile & permissions'}
+                            >
+                              <Edit className="w-3.5 h-3.5 text-teal-400" />
+                              <span>{lang === 'ar' ? 'تعديل' : 'Edit'}</span>
+                            </button>
+                          )}
+
+                          {canUpdateUsers && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenChangePassword(user)}
+                              className="px-2.5 py-1 rounded-lg bg-[#0d2a2a] hover:bg-teal-900/60 text-teal-300 hover:text-teal-200 text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer border border-teal-800/40"
+                              title={lang === 'ar' ? 'تغيير كلمة السر' : 'Change Password'}
+                            >
+                              <KeyRound className="w-3.5 h-3.5 text-teal-400" />
+                              <span>{lang === 'ar' ? 'كلمة السر' : 'Password'}</span>
+                            </button>
+                          )}
+
+                          {!isCurrent && canDisableUsers && (
+                            <button
+                              type="button"
+                              disabled={togglingUid === user.uid}
+                              onClick={() => handleToggleUserStatus(user)}
+                              className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer border disabled:opacity-50 disabled:cursor-not-allowed ${
+                                user.isActive 
+                                  ? 'bg-amber-950/50 hover:bg-amber-900/70 text-amber-300 border-amber-800/50' 
+                                  : 'bg-emerald-950/50 hover:bg-emerald-900/70 text-emerald-300 border-emerald-800/50'
+                              }`}
+                              title={user.isActive ? (lang === 'ar' ? 'إيقاف الحساب مؤقتاً' : 'Deactivate') : (lang === 'ar' ? 'إعادة تفعيل الحساب' : 'Activate')}
+                            >
+                              {togglingUid === user.uid ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : user.isActive ? (
+                                <>
+                                  <UserX className="w-3.5 h-3.5 text-amber-400" />
+                                  <span>{lang === 'ar' ? 'تعطيل' : 'Disable'}</span>
+                                </>
+                              ) : (
+                                <>
+                                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                                  <span>{lang === 'ar' ? 'تفعيل' : 'Activate'}</span>
+                                </>
+                              )}
+                            </button>
+                          )}
+
+                          {!isCurrent && canDeleteUsers && (
+                            <button
+                              type="button"
+                              onClick={() => setUserToDelete(user)}
+                              className="px-2.5 py-1 rounded-lg bg-red-950/60 hover:bg-red-900/80 text-red-300 border border-red-800/60 text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer shadow-sm"
+                              title={lang === 'ar' ? 'حذف الحساب نهائياً' : 'Delete Account'}
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                              <span>{lang === 'ar' ? 'حذف' : 'Delete'}</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Meta Tags & Status */}
+                      <div className="mt-3 pt-2.5 border-t border-slate-800/60 flex flex-wrap items-center justify-between gap-2 text-[10px] text-slate-400 font-mono">
+                        <div className="flex items-center gap-2">
+                          <span className="text-teal-400 font-bold">{user.role}</span>
+                          <span>•</span>
+                          <span>{user.badgeId}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                            user.isActive ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-800/40' : 'bg-red-950/80 text-red-300 border border-red-800/40'
+                          }`}>
+                            {user.isActive ? (lang === 'ar' ? 'نشط' : 'Active') : (lang === 'ar' ? 'موقوف' : 'Deactivated')}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Last Login & Session Timestamp */}
+                      <div className="mt-2 pt-2 border-t border-slate-800/40 flex items-center justify-between text-[10px] text-slate-400">
+                        <div className="flex items-center gap-1.5 text-slate-300 flex-wrap">
+                          <Clock className="w-3.5 h-3.5 text-teal-400 flex-shrink-0" />
+                          <span>{lang === 'ar' ? 'آخر تسجيل دخول:' : 'Last Login:'}</span>
+                          {user.lastLoginAt ? (
+                            <div className="flex items-center gap-1.5 font-mono">
+                              <span className="font-semibold text-teal-300 bg-teal-950/60 border border-teal-800/40 px-1.5 py-0.2 rounded text-[10px]">
+                                {formatRelativeTime(user.lastLoginAt, lang)}
+                              </span>
+                              <span className="text-[9px] text-slate-400" title={formatDetailedTimestamp(user.lastLoginAt, lang)}>
+                                ({formatDetailedTimestamp(user.lastLoginAt, lang)})
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="font-mono text-slate-500 italic">
+                              {lang === 'ar' ? 'لم يسجل دخول بعد' : 'Never logged in'}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Key Canonical Permissions Badges */}
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {user.permissions?.['patients.create'] && (
+                          <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[9px]">Admission</span>
+                        )}
+                        {user.permissions?.['clinicalNotes.create'] && (
+                          <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[9px]">Clinical Notes</span>
+                        )}
+                        {user.permissions?.['sbar.create'] && (
+                          <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[9px]">SBAR</span>
+                        )}
+                        {user.permissions?.['vitals.create'] && (
+                          <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[9px]">Vitals</span>
+                        )}
+                        {user.permissions?.['labs.create'] && (
+                          <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[9px]">Labs</span>
+                        )}
+                        {user.permissions?.['users.view'] && (
+                          <span className="px-1.5 py-0.5 rounded bg-amber-950/60 border border-amber-800/40 text-amber-300 text-[9px]">RBAC</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+            </div>
+          )}
+          </>
+          )}
+
+        </div>
+
+        {/* Footer */}
+        <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
+          <div className="flex items-center gap-1.5 font-mono text-[11px]">
+            <ShieldCheck className="w-3.5 h-3.5 text-teal-400" />
+            <span>Active Policy: Zero-Trust Clinical RBAC</span>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            className="px-4 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300"
           >
-            <X className="w-5 h-5" />
+            {lang === 'ar' ? 'إغلاق' : 'Close'}
           </button>
         </div>
 
-        {/* Category Filter Tabs */}
-        <div className="px-3 sm:px-5 pt-2 bg-slate-100 dark:bg-[#070d1a] border-b border-slate-200 dark:border-slate-800 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-          <button
-            type="button"
-            onClick={() => {
-              setActiveCategory('OXYGEN_THERAPY');
-              const firstOxygen = RESPIRATORY_DEVICES.find(d => d.category === 'OXYGEN_THERAPY');
-              if (firstOxygen) handleSelectDevice(firstOxygen);
-            }}
-            className={`px-3 py-2 rounded-t-xl text-xs font-bold transition-all flex items-center gap-1.5 border-b-2 cursor-pointer shrink-0 ${
-              activeCategory === 'OXYGEN_THERAPY'
-                ? 'bg-white dark:bg-[#091122] text-teal-600 dark:text-teal-300 border-teal-500 shadow-sm'
-                : 'text-slate-600 dark:text-slate-400 border-transparent hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            <Flame className="w-3.5 h-3.5 text-teal-500" />
-            <span>{lang === 'ar' ? 'العلاج بالأكسجين (O₂ Therapy)' : 'O₂ Therapy'}</span>
-          </button>
+      </div>
 
-          <button
-            type="button"
-            onClick={() => {
-              setActiveCategory('INVASIVE_VENT');
-              const firstVent = RESPIRATORY_DEVICES.find(d => d.category === 'INVASIVE_VENT');
-              if (firstVent) handleSelectDevice(firstVent);
-            }}
-            className={`px-3 py-2 rounded-t-xl text-xs font-bold transition-all flex items-center gap-1.5 border-b-2 cursor-pointer shrink-0 ${
-              activeCategory === 'INVASIVE_VENT'
-                ? 'bg-white dark:bg-[#091122] text-cyan-600 dark:text-cyan-300 border-cyan-500 shadow-sm'
-                : 'text-slate-600 dark:text-slate-400 border-transparent hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            <Wind className="w-3.5 h-3.5 text-cyan-500" />
-            <span>{lang === 'ar' ? 'تنفس صناعي جائر (Mechanical Vent)' : 'Mechanical Vent'}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setActiveCategory('NON_INVASIVE_NIV');
-              const firstNiv = RESPIRATORY_DEVICES.find(d => d.category === 'NON_INVASIVE_NIV');
-              if (firstNiv) handleSelectDevice(firstNiv);
-            }}
-            className={`px-3 py-2 rounded-t-xl text-xs font-bold transition-all flex items-center gap-1.5 border-b-2 cursor-pointer shrink-0 ${
-              activeCategory === 'NON_INVASIVE_NIV'
-                ? 'bg-white dark:bg-[#091122] text-indigo-600 dark:text-indigo-300 border-indigo-500 shadow-sm'
-                : 'text-slate-600 dark:text-slate-400 border-transparent hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            <Activity className="w-3.5 h-3.5 text-indigo-500" />
-            <span>{lang === 'ar' ? 'تهوية غير جائرة (NIV / BiPAP)' : 'NIV / BiPAP'}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setActiveCategory('ROOM_AIR');
-              const roomAir = RESPIRATORY_DEVICES.find(d => d.category === 'ROOM_AIR');
-              if (roomAir) handleSelectDevice(roomAir);
-            }}
-            className={`px-3 py-2 rounded-t-xl text-xs font-bold transition-all flex items-center gap-1.5 border-b-2 cursor-pointer shrink-0 ${
-              activeCategory === 'ROOM_AIR'
-                ? 'bg-white dark:bg-[#091122] text-emerald-600 dark:text-emerald-300 border-emerald-500 shadow-sm'
-                : 'text-slate-600 dark:text-slate-400 border-transparent hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-            <span>{lang === 'ar' ? 'هواء الغرفة (Room Air)' : 'Room Air'}</span>
-          </button>
-        </div>
-
-        {/* Form Body */}
-        <form onSubmit={handleSave} className="p-4 sm:p-5 space-y-4 overflow-y-auto max-h-[75vh] overscroll-contain">
-          {errorMessage && (
-            <div className="p-3 rounded-xl bg-rose-50 dark:bg-red-950/60 border border-rose-200 dark:border-red-800/80 text-rose-800 dark:text-red-300 text-xs flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 flex-shrink-0 text-rose-500 dark:text-red-400" />
-              <span>{errorMessage}</span>
-            </div>
-          )}
-
-          {/* Compact Single-Row ARDSNet Suggestion Banner (Only for Mechanical Vent & NIV) */}
-          {(isInvasiveVent || isNiv) && patient && (
-            <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-teal-50 dark:bg-[#071527] border border-teal-200 dark:border-teal-500/40 text-slate-800 dark:text-slate-100 shadow-sm text-xs flex-wrap sm:flex-nowrap">
-              <div className="flex items-center gap-2 font-mono text-[11px] sm:text-xs">
-                <Sparkles className="w-4 h-4 text-teal-600 dark:text-cyan-400 shrink-0" />
-                <span className="font-sans font-bold text-teal-900 dark:text-cyan-200">
-                  {lang === 'ar' ? 'مقترح ARDSNet لحماية الرئة (6 mL/kg):' : 'ARDSNet Preset:'}
-                </span>
-                <span className="font-bold text-slate-900 dark:text-white">
-                  VT = <strong className="text-teal-700 dark:text-cyan-300 font-extrabold">{recommendedVt6ml} mL</strong>
-                </span>
-                <span className="text-[10px] text-slate-500 dark:text-slate-400 font-sans font-medium hidden sm:inline">
-                  (IBW: {calculatedIbw}kg • {patientGender === 'MALE' ? (lang === 'ar' ? 'ذكر' : 'Male') : (lang === 'ar' ? 'أنثى' : 'Female')})
-                </span>
+      {/* Delete User Confirmation Modal */}
+      {userToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+          <div className="w-full max-w-md bg-[#0a1224] border border-red-900/60 rounded-3xl p-6 text-slate-100 shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-red-950/80 border border-red-500/50 flex items-center justify-center text-red-400 shrink-0">
+                <AlertTriangle className="w-5 h-5" />
               </div>
-
-              <button
-                type="button"
-                onClick={handleApplySmartSuggestions}
-                className="flex items-center gap-1 px-3 py-1 rounded-lg bg-teal-600 hover:bg-teal-700 dark:bg-cyan-600 dark:hover:bg-cyan-500 text-white font-bold text-[11px] shadow-sm transition-all active:scale-95 cursor-pointer shrink-0"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                <span>{lang === 'ar' ? 'تطبيق المقترح' : 'Apply Preset'}</span>
-              </button>
-            </div>
-          )}
-
-          {/* Device Selection Grid (Strictly 2 Columns Per Row with Medical Abbreviations) */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">
-              {lang === 'ar' ? 'اختر جهاز ونوع دعم التنفس المطلوب (عمودين لكل صف):' : 'Select Respiratory Delivery Device (2 columns):'}
-            </label>
-            <div className="grid grid-cols-2 gap-2 sm:gap-2.5">
-              {RESPIRATORY_DEVICES.filter(d => d.category === activeCategory).map((dev) => {
-                const isSelected = selectedDevice === dev.id;
-                return (
-                  <button
-                    key={dev.id}
-                    type="button"
-                    onClick={() => handleSelectDevice(dev)}
-                    className={`p-2.5 sm:p-3 rounded-xl text-xs text-start border transition-all cursor-pointer flex flex-col justify-between gap-1 shadow-sm ${
-                      isSelected
-                        ? 'bg-teal-50 dark:bg-cyan-500/20 text-slate-900 dark:text-cyan-200 border-teal-500 dark:border-cyan-400 ring-2 ring-teal-400/40'
-                        : 'bg-white dark:bg-[#060b17] text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:border-slate-300 dark:hover:border-slate-700'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-1.5">
-                      <span className="font-bold text-xs font-sans text-slate-900 dark:text-white truncate">
-                        {lang === 'ar' ? dev.labelAr : dev.labelEn}
-                      </span>
-                      {isSelected && <Check className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0" />}
-                    </div>
-                    <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono font-medium">
-                      {lang === 'ar' ? dev.descriptionAr : dev.descriptionEn}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* DYNAMIC PARAMETER SECTION BASED ON SELECTED CATEGORY */}
-
-          {/* A. OXYGEN THERAPY SECTION (Compact 2-Column High-Contrast Design with Device-Specific Presets) */}
-          {isOxygenTherapy && (() => {
-            const currentDevice = RESPIRATORY_DEVICES.find(d => d.id === selectedDevice);
-            const currentFlowPresets = currentDevice?.flowPresets || [1, 2, 3, 4, 5, 6];
-            const currentFio2Presets = currentDevice?.fio2Presets || [24, 28, 32, 36, 40, 44];
-
-            return (
-              <div className="p-2.5 sm:p-3 rounded-xl bg-slate-50 dark:bg-[#060d1b] border border-teal-500/40 space-y-2.5 shadow-sm">
-                <div className="flex items-center justify-between pb-1.5 border-b border-slate-200 dark:border-slate-800 text-xs">
-                  <span className="font-extrabold text-teal-800 dark:text-teal-300 flex items-center gap-1.5 text-xs">
-                    <Flame className="w-3.5 h-3.5 text-teal-500 shrink-0" />
-                    <span>{lang === 'ar' ? 'معاملات تدفق وتركيز الأكسجين:' : 'Oxygen Flow & FiO₂ Settings:'}</span>
-                  </span>
-                  <span className="text-[10px] font-mono font-bold text-teal-700 dark:text-teal-400 bg-teal-500/10 px-2 py-0.5 rounded border border-teal-500/20">
-                    {currentDevice?.flowRange || (lang === 'ar' ? 'توصيل أكسجين' : 'Oxygen Delivery')}
-                  </span>
-                </div>
-
-                {/* 2 Compact Columns: Flow Rate & FiO2 */}
-                <div className="grid grid-cols-2 gap-2 sm:gap-3">
-                  {/* Flow Rate (L/min) */}
-                  <div className="bg-white dark:bg-[#091122] p-2 sm:p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
-                    <div>
-                      <label className="block text-[10px] sm:text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
-                        {lang === 'ar' ? 'معدل التدفق (Flow):' : 'Oxygen Flow Rate:'}
-                      </label>
-                      <div className="flex items-center rounded border-2 border-teal-500/50 dark:border-teal-500/60 bg-slate-50 dark:bg-[#060b17] px-2 py-1 focus-within:border-teal-500">
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          value={oxygenFlow}
-                          onChange={(e) => handleFlowChange(e.target.value)}
-                          placeholder="3"
-                          required
-                          className="w-full bg-transparent text-center font-mono font-black text-sm sm:text-base text-teal-800 dark:text-teal-300 outline-none"
-                        />
-                        <span className="text-[10px] font-mono font-bold text-slate-500 shrink-0 select-none">L/min</span>
-                      </div>
-                    </div>
-
-                    {/* Flow Presets Tailored to Selected Device */}
-                    <div className="flex flex-wrap gap-1 mt-1.5">
-                      {currentFlowPresets.map((presetFlow) => (
-                        <button
-                          key={presetFlow}
-                          type="button"
-                          onClick={() => handleFlowChange(String(presetFlow))}
-                          className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold transition-all cursor-pointer ${
-                            oxygenFlow === String(presetFlow)
-                              ? 'bg-teal-600 text-white shadow-sm ring-1 ring-teal-400'
-                              : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-                          }`}
-                        >
-                          {presetFlow}L
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* FiO2 (%) */}
-                  <div className="bg-white dark:bg-[#091122] p-2 sm:p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
-                    <div>
-                      <label className="block text-[10px] sm:text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
-                        {lang === 'ar' ? 'نسبة الأكسجين (FiO₂):' : 'Estimated FiO₂ (%):'}
-                      </label>
-                      <div className="flex items-center rounded border-2 border-teal-500/50 dark:border-teal-500/60 bg-slate-50 dark:bg-[#060b17] px-2 py-1 focus-within:border-teal-500">
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          value={fio2}
-                          onChange={(e) => setFio2(toEnglishDigits(e.target.value))}
-                          placeholder="32"
-                          required
-                          className="w-full bg-transparent text-center font-mono font-black text-sm sm:text-base text-teal-800 dark:text-teal-300 outline-none"
-                        />
-                        <span className="text-[10px] font-mono font-bold text-slate-500 shrink-0 select-none">%</span>
-                      </div>
-                    </div>
-
-                    {/* FiO2 Presets Tailored to Selected Device */}
-                    <div className="flex flex-wrap gap-1 mt-1.5">
-                      {currentFio2Presets.map((f) => (
-                        <button
-                          key={f}
-                          type="button"
-                          onClick={() => setFio2(String(f))}
-                          className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold transition-all cursor-pointer ${
-                            fio2 === String(f)
-                              ? 'bg-teal-600 text-white shadow-sm ring-1 ring-teal-400'
-                              : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-                          }`}
-                        >
-                          {f}%
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Summary Strip */}
-                <div className="p-2 rounded-lg bg-white dark:bg-[#060b17] border border-teal-200 dark:border-slate-800 text-[11px] flex items-center justify-between flex-wrap gap-1 text-slate-800 dark:text-slate-200 font-mono shadow-sm">
-                  <span className="flex items-center gap-1 text-teal-700 dark:text-teal-300 font-black text-[11px]">
-                    <Activity className="w-3.5 h-3.5" />
-                    <span>
-                      {currentDevice?.labelEn || selectedDevice} @ {oxygenFlow} L/min (FiO₂ {fio2}%)
-                    </span>
-                  </span>
-                  <span className="text-[10px] text-slate-500 font-medium">
-                    {lang === 'ar' ? 'توثيق في السجل وتسليم SBAR' : 'Auto-synced into Flowsheet & SBAR'}
-                  </span>
-                </div>
+              <div>
+                <h3 className="text-base font-bold text-white">
+                  {lang === 'ar'
+                    ? `تأكيد حذف حساب المستخدم: ${userToDelete.nameAr || userToDelete.nameEn || userToDelete.displayName || userToDelete.username || userToDelete.email}`
+                    : `Confirm Deleting User: ${userToDelete.nameEn || userToDelete.nameAr || userToDelete.displayName || userToDelete.username || userToDelete.email}`}
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  {userToDelete.email} • {userToDelete.role}
+                </p>
               </div>
-            );
-          })()}
+            </div>
 
-          {/* B. ROOM AIR SECTION */}
-          {isRoomAir && (
-            <div className="p-5 rounded-xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-300 dark:border-emerald-800/40 text-center space-y-2">
-              <ShieldCheck className="w-8 h-8 text-emerald-600 dark:text-emerald-400 mx-auto" />
-              <h4 className="text-sm font-bold text-emerald-900 dark:text-emerald-300">
-                {lang === 'ar' ? 'تنفس طبيعي على هواء الغرفة (Room Air)' : 'Spontaneous Breathing on Room Air'}
-              </h4>
-              <p className="text-xs text-slate-600 dark:text-slate-400 max-w-md mx-auto">
-                {lang === 'ar' 
-                  ? 'المريض لا يحتاج لأي أجهزة أو أنابيب أكسجين ويتنفس تلقائياً بتركيز FiO₂ 21%.' 
-                  : 'Patient is extubated and maintaining adequate saturation on ambient room air (21% FiO2).'}
+            <div className="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 text-xs text-slate-300 space-y-2">
+              <div className="flex items-center gap-2 text-amber-300 font-bold">
+                <ShieldCheck className="w-4 h-4 text-amber-400" />
+                <span>{lang === 'ar' ? 'حماية الأرشيف السريري وسجلات المرضى' : 'Clinical Record Integrity Guarantee'}</span>
+              </div>
+              <p className="text-[11px] leading-relaxed text-slate-300">
+                {lang === 'ar'
+                  ? 'عند حذف هذا الحساب، لن يتمكن الكادر من تسجيل الدخول مجدداً. ومراعاةً للمعايير الطبية الدولية (CBAHI / JCI)، تظل جميع السجلات الطبية والملاحظات والتقارير (SBAR) المكتوبة مسبقاً باسمه محفوظة بأسماء أصحابها التاريخية في ملفات المرضى.'
+                  : 'Upon deletion, this staff member will no longer be able to log in. In compliance with CBAHI/JCI regulations, all historic clinical notes, SBAR reports, and vital sign logs recorded by this user will remain fully preserved under their original name in patient files.'}
               </p>
             </div>
-          )}
 
-          {/* C. INVASIVE MECHANICAL VENTILATOR & NIV PARAMETERS */}
-          {(isInvasiveVent || isNiv) && (
-            <div className="space-y-4">
-              {/* Lung-Protective Strip */}
-              {isInvasiveVent && (
-                <div className="p-3 rounded-xl bg-cyan-50 dark:bg-[#060d1b] border border-cyan-200 dark:border-slate-800 grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs font-mono">
-                  <div>
-                    <div className="text-[10px] text-slate-500">{lang === 'ar' ? 'حجم التنفس لكل كجم IBW:' : 'Vt / kg IBW:'}</div>
-                    <div className="text-teal-700 dark:text-teal-300 font-bold text-sm">
-                      {vtPerKg ? `${vtPerKg} mL/kg` : '—'} 
-                      <span className="text-[10px] font-normal text-slate-500 ml-1">(IBW: {ibw}kg)</span>
-                    </div>
-                  </div>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setUserToDelete(null)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 cursor-pointer"
+              >
+                {lang === 'ar' ? 'إلغاء الأمر' : 'Cancel'}
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-bold text-xs shadow-md shadow-red-950/50 flex items-center gap-1.5 cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{lang === 'ar' ? 'حذف الحساب نهائياً' : 'Delete Account'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
-                  <div>
-                    <div className="text-[10px] text-slate-500">{lang === 'ar' ? 'ضغط القيادة (Driving P):' : 'Driving Pressure (ΔP):'}</div>
-                    <div className={`font-bold text-sm ${calculatedDrivingPressure && calculatedDrivingPressure > 14 ? 'text-red-500 animate-pulse' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                      {calculatedDrivingPressure !== null ? `${calculatedDrivingPressure} cmH2O` : '—'}
-                      <span className="text-[9px] font-normal text-slate-500 ml-1">(&lt; 14 safe)</span>
-                    </div>
-                  </div>
-
-                  <div className="col-span-2 sm:col-span-1">
-                    <div className="text-[10px] text-slate-500">{lang === 'ar' ? 'طراز جهاز التنفس:' : 'Ventilator Model:'}</div>
-                    <input
-                      type="text"
-                      value={deviceModel}
-                      onChange={(e) => setDeviceModel(e.target.value)}
-                      placeholder="e.g. Draeger Evita V800"
-                      className="w-full bg-white dark:bg-transparent border border-slate-300 dark:border-slate-700 rounded-lg dark:border-0 dark:border-b text-slate-900 dark:text-slate-200 text-xs px-2 py-1 focus:border-cyan-400 focus:outline-none"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Numerical Parameters Grid */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {/* FiO2 */}
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    FiO₂ (%)
-                  </label>
-                  <div className="flex items-center rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#060b17] px-3 py-1.5 focus-within:border-cyan-400">
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      value={fio2}
-                      onChange={(e) => setFio2(toEnglishDigits(e.target.value))}
-                      placeholder="21 - 100"
-                      required
-                      className="w-full bg-transparent text-center text-teal-700 dark:text-teal-300 font-mono font-bold text-sm outline-none"
-                    />
-                    <span className="text-xs text-slate-500 font-mono shrink-0 select-none">%</span>
-                  </div>
-                </div>
-
-                {/* PEEP / EPAP */}
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    {isNiv ? 'EPAP / PEEP (cmH2O)' : 'PEEP (cmH2O)'}
-                  </label>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={peep}
-                    onChange={(e) => setPeep(toEnglishDigits(e.target.value))}
-                    placeholder="0 - 24"
-                    required
-                    className="w-full bg-white dark:bg-[#060b17] border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-cyan-700 dark:text-cyan-300 font-mono font-bold text-sm focus:border-cyan-400 focus:outline-none"
-                  />
-                </div>
-
-                {/* Tidal Volume (Vt) */}
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Tidal Volume (mL)
-                  </label>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={tidalVolume}
-                    onChange={(e) => setTidalVolume(toEnglishDigits(e.target.value))}
-                    placeholder="300 - 650"
-                    required={isInvasiveVent}
-                    className="w-full bg-white dark:bg-[#060b17] border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white font-mono font-bold text-sm focus:border-cyan-400 focus:outline-none"
-                  />
-                </div>
-
-                {/* Set Rate */}
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Set Rate (RR bpm)
-                  </label>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={setRate}
-                    onChange={(e) => setSetRate(toEnglishDigits(e.target.value))}
-                    placeholder="10 - 35"
-                    required={isInvasiveVent}
-                    className="w-full bg-white dark:bg-[#060b17] border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-700 dark:text-slate-200 font-mono font-bold text-sm focus:border-cyan-400 focus:outline-none"
-                  />
-                </div>
-
-                {/* Peak Pressure PIP */}
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    {isNiv ? 'IPAP / PIP (cmH2O)' : 'Ppeak / PIP (cmH2O)'}
-                  </label>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={peakPressure}
-                    onChange={(e) => setPeakPressure(toEnglishDigits(e.target.value))}
-                    placeholder="15 - 40"
-                    className="w-full bg-white dark:bg-[#060b17] border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-amber-600 dark:text-amber-300 font-mono font-bold text-sm focus:border-cyan-400 focus:outline-none"
-                  />
-                </div>
-
-                {/* Plateau Pressure Pplat */}
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Pplat (cmH2O)
-                  </label>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={plateauPressure}
-                    onChange={(e) => setPlateauPressure(toEnglishDigits(e.target.value))}
-                    placeholder="10 - 30"
-                    className="w-full bg-white dark:bg-[#060b17] border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-indigo-600 dark:text-indigo-300 font-mono font-bold text-sm focus:border-cyan-400 focus:outline-none"
-                  />
-                </div>
-
-                {/* Actual Rate */}
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Actual Total RR
-                  </label>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={actualRate}
-                    onChange={(e) => setActualRate(toEnglishDigits(e.target.value))}
-                    placeholder="12 - 40"
-                    className="w-full bg-white dark:bg-[#060b17] border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-700 dark:text-slate-300 font-mono font-bold text-sm focus:border-cyan-400 focus:outline-none"
-                  />
-                </div>
-
-                {/* I:E Ratio */}
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    I:E Ratio
-                  </label>
-                  <input
-                    type="text"
-                    value={ieRatio}
-                    onChange={(e) => setIeRatio(e.target.value)}
-                    placeholder="1:2"
-                    className="w-full bg-white dark:bg-[#060b17] border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-700 dark:text-slate-300 font-mono font-bold text-sm focus:border-cyan-400 focus:outline-none"
-                  />
-                </div>
+      {/* Change Password Modal */}
+      {userToChangePassword && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-[#0a1224] border border-teal-500/40 rounded-3xl p-6 text-slate-100 shadow-2xl space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center gap-3 border-b border-slate-800 pb-3">
+              <div className="w-9 h-9 rounded-xl bg-teal-500/10 border border-teal-500/30 flex items-center justify-center text-teal-400">
+                <KeyRound className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-white">
+                  {lang === 'ar' ? `تغيير كلمة السر للمستخدم:` : 'Change Password for User:'}
+                </h3>
+                <p className="text-xs text-teal-300 font-bold font-mono mt-0.5">
+                  {lang === 'ar'
+                    ? (userToChangePassword.nameAr || userToChangePassword.nameEn || userToChangePassword.displayName || userToChangePassword.username || userToChangePassword.email)
+                    : (userToChangePassword.nameEn || userToChangePassword.nameAr || userToChangePassword.displayName || userToChangePassword.username || userToChangePassword.email)}{' '}
+                  ({userToChangePassword.badgeId})
+                </p>
               </div>
             </div>
-          )}
 
-          {/* Notes & Additional Clinical Observations */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              {lang === 'ar' ? 'ملاحظات وتوجيهات سريرية (Clinical Notes):' : 'Clinical Notes & Weaning Observations:'}
-            </label>
-            <input
-              type="text"
-              value={clinicalNotes}
-              onChange={(e) => setClinicalNotes(e.target.value)}
-              placeholder={lang === 'ar' ? 'مثال: نيزل كانيولا 3 لتر للحفاظ على SpO2 > 94%، مريض متعاون...' : 'e.g. NC 3L maintaining SpO2 > 94%, patient comfortable...'}
-              className="w-full bg-slate-50 dark:bg-[#060b17] border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white text-xs focus:border-teal-500 focus:outline-none"
-            />
-          </div>
+            {changePassStatus && (
+              <div className={`p-3 rounded-xl text-xs flex items-center gap-2 ${
+                changePassStatus.type === 'success' 
+                  ? 'bg-teal-950/60 border border-teal-500/50 text-teal-200' 
+                  : 'bg-red-950/60 border border-red-500/50 text-red-200'
+              }`}>
+                {changePassStatus.type === 'success' ? (
+                  <CheckCircle2 className="w-4 h-4 text-teal-400" />
+                ) : (
+                  <XCircle className="w-4 h-4 text-red-400" />
+                )}
+                <span>{changePassStatus.text}</span>
+              </div>
+            )}
 
-          {/* Weaning Checkbox */}
-          {(isInvasiveVent || isNiv) && (
-            <div className="flex items-center gap-2 pt-1">
-              <input
-                type="checkbox"
-                id="isWeaning"
-                checked={isWeaning}
-                onChange={(e) => setIsWeaning(e.target.checked)}
-                className="w-4 h-4 rounded text-teal-600 focus:ring-teal-500 cursor-pointer"
-              />
-              <label htmlFor="isWeaning" className="text-xs text-slate-700 dark:text-slate-300 font-semibold cursor-pointer">
-                {lang === 'ar' ? 'تفعيل اختبار الفطام السريري (Spontaneous Breathing / Weaning Trial)' : 'Active Spontaneous Breathing / Weaning Trial'}
-              </label>
-            </div>
-          )}
+            <form onSubmit={handleSaveNewPassword} className="space-y-4">
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                  {lang === 'ar' ? 'كلمة المرور الجديدة (6 أحرف على الأقل) *' : 'New Password (min 6 chars) *'}
+                </label>
+                <div className="relative">
+                  <input
+                    type={showNewPassword ? 'text' : 'password'}
+                    value={newPasswordInput}
+                    onChange={(e) => setNewPasswordInput(e.target.value)}
+                    required
+                    minLength={6}
+                    className="w-full bg-[#070d1a] border border-slate-700 focus:border-teal-400 rounded-xl pl-3 pr-9 py-2.5 text-xs text-white focus:outline-none font-mono"
+                    placeholder={lang === 'ar' ? 'أدخل كلمة المرور الجديدة' : 'Enter new password'}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword(!showNewPassword)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-teal-300 p-1 rounded-md transition-colors cursor-pointer"
+                  >
+                    {showNewPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              </div>
 
-          {/* Action Footer */}
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
-            <div className="flex items-center gap-2">
-              {/* Discontinue / Room Air button */}
-              <button
-                type="button"
-                onClick={handleDiscontinueToRoomAir}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-900/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700/80 text-xs font-bold transition-all cursor-pointer"
-                title={lang === 'ar' ? 'إيقاف الدعم والتنفس على هواء الغرفة' : 'Discontinue to Room Air'}
-              >
-                <PowerOff className="w-3.5 h-3.5" />
-                <span>{lang === 'ar' ? 'إيقاف / هواء الغرفة' : 'Set to Room Air'}</span>
-              </button>
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                  {lang === 'ar' ? 'تأكيد كلمة المرور الجديدة *' : 'Confirm New Password *'}
+                </label>
+                <div className="relative">
+                  <input
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    value={confirmPasswordInput}
+                    onChange={(e) => setConfirmPasswordInput(e.target.value)}
+                    required
+                    minLength={6}
+                    className="w-full bg-[#070d1a] border border-slate-700 focus:border-teal-400 rounded-xl pl-3 pr-9 py-2.5 text-xs text-white focus:outline-none font-mono"
+                    placeholder={lang === 'ar' ? 'أعد إدخال كلمة المرور للتأكيد' : 'Confirm new password'}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-teal-300 p-1 rounded-md transition-colors cursor-pointer"
+                  >
+                    {showConfirmPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  {lang === 'ar' ? 'يجب أن تتطابق كلمة المرور وتكون 6 أحرف أو أرقام على الأقل.' : 'Passwords must match and be at least 6 characters.'}
+                </p>
+              </div>
 
-              {/* Complete Delete button */}
-              {initialVentilator && canDeleteRecord(currentUser, initialVentilator) && (
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
                 <button
                   type="button"
-                  onClick={handleRemoveVentilator}
-                  className="flex items-center gap-1 px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-400 border border-rose-300 dark:border-rose-800/80 text-xs font-bold transition-all cursor-pointer"
-                  title={lang === 'ar' ? 'حذف السجل نهائياً' : 'Delete Record'}
+                  onClick={() => setUserToChangePassword(null)}
+                  className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 cursor-pointer"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>{lang === 'ar' ? 'حذف السجل' : 'Delete'}</span>
+                  {lang === 'ar' ? 'إلغاء' : 'Cancel'}
                 </button>
-              )}
-            </div>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shadow-lg shadow-teal-500/20 transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <KeyRound className="w-3.5 h-3.5" />
+                  <span>{lang === 'ar' ? 'تحديث كلمة المرور' : 'Update Password'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
-            <div className="flex items-center gap-2">
+      {/* Recovery Token Management Modal */}
+      {showRecoveryModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-[#0a1224] border border-teal-500/40 rounded-3xl p-6 text-slate-100 shadow-2xl space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-teal-500/10 border border-teal-500/30 flex items-center justify-center text-teal-400">
+                  <KeyRound className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">
+                    {lang === 'ar' ? 'إدارة رمز استعادة المدير (Recovery Token)' : 'Admin Recovery Token Management'}
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    {lang === 'ar' ? 'توليد أو تعديل رمز التشفير السري الخاص باستعادة حساب المدير عند النسيان' : 'Set or update the encryption recovery code for admin'}
+                  </p>
+                </div>
+              </div>
               <button
                 type="button"
-                onClick={onClose}
-                className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold transition-colors cursor-pointer"
+                onClick={() => setShowRecoveryModal(false)}
+                className="w-8 h-8 rounded-lg bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
               >
-                {lang === 'ar' ? 'إلغاء' : 'Cancel'}
-              </button>
-
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="flex items-center gap-1.5 px-5 py-2 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 text-xs font-bold shadow-md shadow-teal-500/20 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
-              >
-                <Check className="w-4 h-4" />
-                <span>{isSubmitting ? (lang === 'ar' ? 'جارِ الحفظ...' : 'Saving...') : (lang === 'ar' ? 'حفظ وتوثيق الإعدادات' : 'Save & Record Settings')}</span>
+                <X className="w-4 h-4" />
               </button>
             </div>
+
+            {recoveryStatus && (
+              <div className={`p-3 rounded-xl text-xs flex items-center gap-2 ${
+                recoveryStatus.type === 'success' ? 'bg-teal-950/60 border border-teal-500/50 text-teal-200' : 'bg-red-950/60 border border-red-500/50 text-red-200'
+              }`}>
+                {recoveryStatus.type === 'success' ? <CheckCircle2 className="w-4 h-4 text-teal-400 shrink-0" /> : <XCircle className="w-4 h-4 text-red-400 shrink-0" />}
+                <span>{recoveryStatus.text}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveRecoveryCode} className="space-y-4">
+              <div>
+                <label className="block text-right text-xs font-semibold text-slate-300 mb-1.5">
+                  {lang === 'ar' ? 'رمز التشفير / كود الاستعادة السري *' : 'Secret Recovery Code *'}
+                </label>
+                <input
+                  type="text"
+                  value={recoveryCodeInput}
+                  onChange={(e) => setRecoveryCodeInput(e.target.value)}
+                  required
+                  minLength={6}
+                  autoComplete="off"
+                  className="w-full bg-[#070d1a] border border-slate-700 focus:border-teal-400 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none font-mono tracking-wider"
+                  placeholder=""
+                />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  {lang === 'ar' ? 'احتفظ بهذا الرمز في مكان آمن. سيحتاجه المدير في شاشة تسجيل الدخول عبر رابط "نسيت كلمة المرور؟".' : 'Keep this token secure. Admin will need it on the login screen if password is forgotten.'}
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowRecoveryModal(false)}
+                  className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 cursor-pointer"
+                >
+                  {lang === 'ar' ? 'إغلاق' : 'Cancel'}
+                </button>
+                <button
+                  type="submit"
+                  disabled={recoveryLoading}
+                  className="px-4 py-2 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shadow-lg shadow-teal-500/20 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {recoveryLoading ? (
+                    <div className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <KeyRound className="w-3.5 h-3.5" />
+                      <span>{lang === 'ar' ? 'حفظ رمز الاستعادة' : 'Save Recovery Token'}</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
-        </form>
-      </div>
+        </div>
+      )}
     </div>
   );
 };

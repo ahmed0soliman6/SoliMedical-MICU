@@ -1,646 +1,4665 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
-  Camera, 
-  Upload, 
-  Sparkles, 
-  X, 
-  Check, 
-  AlertCircle, 
-  RefreshCw, 
+  Heart, 
+  Wind, 
+  Droplet, 
+  Activity, 
   FileText, 
+  ShieldCheck, 
+  ArrowLeft, 
+  Plus, 
+  Clock, 
+  Lock, 
   CheckCircle2, 
-  Activity,
-  Layers,
-  Eye,
-  Scan,
-  ShieldAlert,
-  Clock,
+  ExternalLink,
+  History,
+  Scale,
+  Trash2,
+  Edit3,
+  Save,
+  AlertCircle,
+  Calendar,
   User,
-  ArrowRight,
-  Maximize2,
-  Tag
+  Check,
+  ArrowRightLeft,
+  ShieldAlert,
+  FlaskConical,
+  Microscope,
+  Phone,
+  Fingerprint,
+  Layers,
+  Sparkles,
+  AlertTriangle,
+  Camera,
+  Sliders,
+  ChevronDown,
+  ChevronUp,
+  Scan,
+  Minus,
+  Play,
+  Pause,
+  PowerOff,
+  Pill
 } from 'lucide-react';
-import { useTranslation } from '../services/i18n.ts';
-import { compressImageForOcr } from '../services/imageCompression.ts';
 import { 
-  scanInvestigationImage, 
-  ScannedInvestigationResponse
-} from '../services/aiInvestigationService.ts';
-import { InvestigationItem } from '../types/schema.ts';
+  BedRecord, 
+  PatientDossier, 
+  TelemetryVitals, 
+  VentilatorParameters, 
+  InfusionPumpLine, 
+  FluidBalance24H, 
+  SbarHandoverReport, 
+  ClinicalNote,
+  PatientAntibiotic,
+  CodeStatus,
+  StaffRole,
+  DispositionType,
+  StatLabPanel,
+  LabResultItem,
+  InvestigationItem,
+  BedStatus,
+  AcuityLevel,
+  IntakePathway,
+  BedNumber,
+  PumpStatus
+} from '../types/schema.ts';
+import { db } from '../db/icuSyncDb.ts';
+import { dischargeOrTransferPatient, getPatientForBed } from '../services/dataModel.ts';
+import { useSystemSettings } from '../services/SettingsContext.tsx';
+import { useTranslation } from '../services/i18n.ts';
+import { useAuth } from '../services/AuthContext.tsx';
+import { useAppNotifications } from '../services/NotificationContext.tsx';
+import { syncStatLabsToCloud, deleteStatLabFromCloud, syncLabResultToCloud, syncPatientToCloud, syncPumpToCloud, deletePumpFromCloud, deleteClinicalNoteFromCloud, firestore, fetchFullCategoryFromCloud, subscribeToActivePatientFlowsheet } from '../services/firebase.ts';
+import { canDeleteRecord, canDeleteClinicalNote } from '../services/medicalRecordPermissions.ts';
+import { doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { FullPageAdmission } from './FullPageAdmission.tsx';
+import { LabFlowsheetSection } from './LabFlowsheetSection.tsx';
+import { AntibioticsSection } from './AntibioticsSection.tsx';
+import { InvestigationsSection } from './InvestigationsSection.tsx';
+import { PatientTransferModal } from './PatientTransferModal.tsx';
+import { BedSwapModal } from './BedSwapModal.tsx';
+import { BedIsolationModal } from './BedIsolationModal.tsx';
+import { AiLabScannerModal } from './AiLabScannerModal.tsx';
+import { VentilatorModal } from './VentilatorModal.tsx';
+import { InfusionPumpModal } from './InfusionPumpModal.tsx';
+import { FluidBalanceModal } from './FluidBalanceModal.tsx';
+import { SbarSignModal } from './SbarSignModal.tsx';
+import { AddVitalsModal } from './AddVitalsModal.tsx';
+import { LabsTemplateManager } from './LabsTemplateManager.tsx';
+import { 
+  BedsideCardsConfigModal, 
+  BedsideCardsConfig, 
+  DEFAULT_BEDSIDE_CARDS_CONFIG 
+} from './BedsideCardsConfigModal.tsx';
 
-interface AiInvestigationScannerModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  patientId: string;
-  patientName?: string;
-  bedNumber: string;
-  onApplyToForm?: (data: {
-    modality: string;
-    testName: string;
-    status: 'ORDERED' | 'RESULTED' | 'REPORTED';
-    timestamp: string;
-    resultReport: string;
-    notes?: string;
-  }) => void;
-  onDirectSave?: (item: Omit<InvestigationItem, 'id'>) => Promise<void>;
-  onInvestigationAdded?: () => void;
+interface BedsideFlowsheetProps {
+  bed: BedRecord;
+  patient: PatientDossier;
+  allBeds?: BedRecord[];
+  allPatients?: PatientDossier[];
+  onSelectBed?: (bedNumber: BedNumber) => void;
+  onBack: () => void;
+  onOpenAddVitals: () => void;
+  onOpenAddClinicalNote?: () => void;
+  onOpenAddAddendum: (noteId: string, author: string, defaultReason?: any) => void;
+  onOpenSbarSign: () => void;
+  onDataUpdated: () => void;
+  readOnly?: boolean;
 }
 
-export const AiInvestigationScannerModal: React.FC<AiInvestigationScannerModalProps> = ({
-  isOpen,
-  onClose,
-  patientId,
-  patientName,
-  bedNumber,
-  onApplyToForm,
-  onDirectSave,
-  onInvestigationAdded,
+const formatNumericDate = (dateVal?: string | Date | number): string => {
+  if (!dateVal) return '—';
+  try {
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return String(dateVal);
+    const day = d.getDate();
+    const month = d.getMonth() + 1;
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  } catch {
+    return '—';
+  }
+};
+
+export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
+  bed,
+  patient,
+  allBeds = [],
+  allPatients = [],
+  onSelectBed,
+  onBack,
+  onOpenAddVitals,
+  onOpenAddClinicalNote,
+  onOpenAddAddendum,
+  onOpenSbarSign,
+  onDataUpdated,
+  readOnly = false,
 }) => {
-  const { lang, isRTL } = useTranslation();
-
-  const [expectedModality, setExpectedModality] = useState<string>('ANY');
-
-  // File & Camera input refs
-  const cameraInputRef = useRef<HTMLInputElement | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-
-  // Image & Analysis state
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const [selectedImageMime, setSelectedImageMime] = useState<string>('image/jpeg');
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [analysisError, setAnalysisError] = useState<string | null>(null);
-  const [scannedResult, setScannedResult] = useState<ScannedInvestigationResponse | null>(null);
-
-  // Editable fields after scan
-  const [editModality, setEditModality] = useState<string>('Chest X-Ray');
-  const [editTestName, setEditTestName] = useState<string>('');
-  const [editStatus, setEditStatus] = useState<'ORDERED' | 'RESULTED' | 'REPORTED'>('REPORTED');
-  const [editTimestamp, setEditTimestamp] = useState<string>('');
-  const [editReport, setEditReport] = useState<string>('');
-  const [editNotes, setEditNotes] = useState<string>('');
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
-
-  // Clean state when closed
-  useEffect(() => {
-    if (!isOpen) {
-      setSelectedImage(null);
-      setScannedResult(null);
-      setAnalysisError(null);
-      setIsAnalyzing(false);
-      setSaveSuccess(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-      if (cameraInputRef.current) cameraInputRef.current.value = '';
-    }
-  }, [isOpen]);
-
-  const handleFileUpload = async (file: File) => {
-    if (!file) return;
-    setAnalysisError(null);
+  const { settings } = useSystemSettings();
+  const { t, lang, isRTL } = useTranslation();
+  const { currentUser } = useAuth();
+  const { triggerNotification } = useAppNotifications();
+  
+  const [activeTab, setActiveTab] = useState<'all' | 'paperFlowsheet' | 'labs' | 'antibiotics' | 'investigations' | 'vitals' | 'vent' | 'pumps' | 'fluids' | 'sbar' | 'notes' | 'disposition' | 'labTemplates'>(() => {
     try {
-      const mime = file.type || 'image/jpeg';
-      setSelectedImageMime(mime);
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        const rawBase64 = e.target?.result as string;
-        if (!rawBase64) return;
-
-        let finalImage = rawBase64;
-        let finalMime = mime;
-        if (!mime.includes('svg')) {
-          try {
-            const compressed = await compressImageForOcr(rawBase64);
-            finalImage = compressed.base64;
-            finalMime = compressed.mimeType;
-          } catch {
-            finalImage = rawBase64;
-          }
-        }
-        setSelectedImage(finalImage);
-        setSelectedImageMime(finalMime);
-        processImageWithAI(finalImage, finalMime);
-      };
-      reader.readAsDataURL(file);
-    } catch (err: any) {
-      setAnalysisError(err.message || 'فشل تحميل الملف');
-    }
-  };
-
-  const processImageWithAI = async (
-    image: string,
-    mimeType: string,
-    modalityHint: string = expectedModality
-  ) => {
-    setIsAnalyzing(true);
-    setAnalysisError(null);
-    setScannedResult(null);
-    setSaveSuccess(false);
-
-    try {
-      const result = await scanInvestigationImage(image, mimeType, modalityHint);
-      setScannedResult(result);
-
-      // Populate edit states
-      setEditModality(result.modality || 'Chest X-Ray');
-      setEditTestName(result.testName || 'Diagnostic Report');
-      setEditStatus(result.status || 'REPORTED');
-      
-      // Timestamp
-      let localDatetime = new Date().toISOString().slice(0, 16);
-      if (result.timestamp) {
-        const parsed = new Date(result.timestamp);
-        if (!isNaN(parsed.getTime())) {
-          localDatetime = new Date(parsed.getTime() - parsed.getTimezoneOffset() * 60000)
-            .toISOString()
-            .slice(0, 16);
-        }
+      const saved = localStorage.getItem('soli_icu_flowsheet_tab');
+      if (saved && ['all', 'paperFlowsheet', 'labs', 'antibiotics', 'investigations', 'vitals', 'vent', 'pumps', 'fluids', 'sbar', 'notes', 'disposition', 'labTemplates'].includes(saved)) {
+        return saved as any;
       }
-      setEditTimestamp(localDatetime);
-      setEditReport(result.resultReport || '');
-      setEditNotes(result.notes || '');
-    } catch (err: any) {
-      console.error('[AI Investigation Scanner Error]:', err);
-      setAnalysisError(
-        err.message ||
-          (lang === 'ar'
-            ? 'فشل تحليل الصورة بالذكاء الاصطناعي. يرجى التأكد من وضوح التقرير والمحاولة مجدداً.'
-            : 'AI scan failed. Please ensure report is clear and try again.')
-      );
-    } finally {
-      setIsAnalyzing(false);
+    } catch {}
+    return 'all';
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('soli_icu_flowsheet_tab', activeTab);
+    } catch {}
+  }, [activeTab]);
+  const [isPatientCardCollapsed, setIsPatientCardCollapsed] = useState<boolean>(true);
+  const [isDispositionCardCollapsed, setIsDispositionCardCollapsed] = useState<boolean>(true);
+  const [isHistoryCardCollapsed, setIsHistoryCardCollapsed] = useState<boolean>(true);
+  const [isDemographicsCardCollapsed, setIsDemographicsCardCollapsed] = useState<boolean>(true);
+  const [isMicrobiologyCardCollapsed, setIsMicrobiologyCardCollapsed] = useState<boolean>(true);
+  const [isPaperVitalsCardCollapsed, setIsPaperVitalsCardCollapsed] = useState<boolean>(true);
+  const [isPaperVentCardCollapsed, setIsPaperVentCardCollapsed] = useState<boolean>(true);
+  const [isVentHistoryExpanded, setIsVentHistoryExpanded] = useState<boolean>(false);
+  const [isPaperPumpsCardCollapsed, setIsPaperPumpsCardCollapsed] = useState<boolean>(true);
+  const [isPaperFluidsCardCollapsed, setIsPaperFluidsCardCollapsed] = useState<boolean>(true);
+  const [isPaperLabsCardCollapsed, setIsPaperLabsCardCollapsed] = useState<boolean>(true);
+  const [isPaperAntibioticsCardCollapsed, setIsPaperAntibioticsCardCollapsed] = useState<boolean>(true);
+  const [isPaperInvestigationsCardCollapsed, setIsPaperInvestigationsCardCollapsed] = useState<boolean>(true);
+  const [isPaperSbarCardCollapsed, setIsPaperSbarCardCollapsed] = useState<boolean>(true);
+  const [isPaperNotesCardCollapsed, setIsPaperNotesCardCollapsed] = useState<boolean>(true);
+  const [isPaperDispCardCollapsed, setIsPaperDispCardCollapsed] = useState<boolean>(true);
+  
+  const [vitalsHistory, setVitalsHistory] = useState<TelemetryVitals[]>([]);
+  const [ventilator, setVentilator] = useState<VentilatorParameters | null>(null);
+  const [pumps, setPumps] = useState<InfusionPumpLine[]>([]);
+  const [fluidBalance, setFluidBalance] = useState<FluidBalance24H | null>(null);
+  const [allFluidBalances, setAllFluidBalances] = useState<FluidBalance24H[]>([]);
+  const [antibioticsList, setAntibioticsList] = useState<PatientAntibiotic[]>([]);
+  const [sbarList, setSbarList] = useState<SbarHandoverReport[]>([]);
+  const [notesList, setNotesList] = useState<ClinicalNote[]>([]);
+  const [labsList, setLabsList] = useState<StatLabPanel[]>([]);
+  const [labResults, setLabResults] = useState<LabResultItem[]>([]);
+  const [investigations, setInvestigations] = useState<InvestigationItem[]>([]);
+
+  // Clinical equipment and card management modals
+  const [isVentilatorModalOpen, setIsVentilatorModalOpen] = useState(false);
+  const [isPumpModalOpen, setIsPumpModalOpen] = useState(false);
+  const [selectedPumpForEdit, setSelectedPumpForEdit] = useState<InfusionPumpLine | null>(null);
+  const [isFluidModalOpen, setIsFluidModalOpen] = useState(false);
+  const [selectedFluidBalanceForEdit, setSelectedFluidBalanceForEdit] = useState<FluidBalance24H | null>(null);
+  const [isCardsConfigModalOpen, setIsCardsConfigModalOpen] = useState(false);
+  const [isBedsideSbarModalOpen, setIsBedsideSbarModalOpen] = useState(false);
+  const [selectedTemplateSbar, setSelectedTemplateSbar] = useState<SbarHandoverReport | null>(null);
+  const [selectedSbarIdForView, setSelectedSbarIdForView] = useState<string | 'ALL'>('ALL');
+  const [showMoreSbars, setShowMoreSbars] = useState(false);
+  const [showMoreBedsideFluids, setShowMoreBedsideFluids] = useState(false);
+  const [showMoreNotes, setShowMoreNotes] = useState(false);
+  const [expandedBedsideNotes, setExpandedBedsideNotes] = useState<Record<string, boolean>>({});
+
+  // Vitals pagination and edit states
+  const [showAllVitals, setShowAllVitals] = useState(false);
+  const [selectedVitalForEdit, setSelectedVitalForEdit] = useState<TelemetryVitals | null>(null);
+  const [isEditVitalsModalOpen, setIsEditVitalsModalOpen] = useState(false);
+
+  // Bedside cards configuration per bed
+  const [cardsConfig, setCardsConfig] = useState<BedsideCardsConfig>(() => {
+    try {
+      const saved = localStorage.getItem(`icu_cards_config_${bed.bedNumber}`);
+      return saved ? JSON.parse(saved) : DEFAULT_BEDSIDE_CARDS_CONFIG;
+    } catch {
+      return DEFAULT_BEDSIDE_CARDS_CONFIG;
+    }
+  });
+
+  const handleSaveCardsConfig = (newConfig: BedsideCardsConfig) => {
+    setCardsConfig(newConfig);
+    try {
+      localStorage.setItem(`icu_cards_config_${bed.bedNumber}`, JSON.stringify(newConfig));
+    } catch (e) {
+      console.error('Failed to persist cards config:', e);
     }
   };
 
-  const handleApplyToForm = () => {
-    if (!onApplyToForm) return;
-    onApplyToForm({
-      modality: editModality,
-      testName: editTestName,
-      status: editStatus,
-      timestamp: editTimestamp ? new Date(editTimestamp).toISOString() : new Date().toISOString(),
-      resultReport: editReport,
-      notes: editNotes,
-    });
-    onClose();
+  // Operation modals & Full Demographics Edit Modal
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+  const [isSwapModalOpen, setIsSwapModalOpen] = useState(false);
+  const [isIsolationModalOpen, setIsIsolationModalOpen] = useState(false);
+  const [isEditPatientModalOpen, setIsEditPatientModalOpen] = useState(false);
+
+  // Acuity & Pathway Helper Functions
+  const getAcuityArLabel = (level?: AcuityLevel) => {
+    switch (level) {
+      case AcuityLevel.CRITICAL_STAT: return lang === 'ar' ? 'حالة حرجة جداً (STAT)' : 'Critical (STAT)';
+      case AcuityLevel.HIGH_VIGILANCE: return lang === 'ar' ? 'حرجة مع يقظة عالية' : 'High Vigilance';
+      case AcuityLevel.GUARDED_STABLE: return lang === 'ar' ? 'مستقر تحت الملاحظة' : 'Guarded Stable';
+      case AcuityLevel.STEP_DOWN: return lang === 'ar' ? 'نقاهة / قسم داخلي' : 'Step-Down';
+      default: return level || (lang === 'ar' ? 'حرجة / تحت التقييم' : 'Critical');
+    }
   };
 
-  const handleDirectSave = async () => {
-    if (!onDirectSave) {
-      handleApplyToForm();
+  const getAcuityStyle = (level?: AcuityLevel) => {
+    switch (level) {
+      case AcuityLevel.CRITICAL_STAT: return 'bg-red-950/80 text-red-300 border-red-800/80';
+      case AcuityLevel.HIGH_VIGILANCE: return 'bg-amber-950/80 text-amber-300 border-amber-800/80';
+      case AcuityLevel.GUARDED_STABLE: return 'bg-teal-950/80 text-teal-300 border-teal-800/80';
+      case AcuityLevel.STEP_DOWN: return 'bg-blue-950/80 text-blue-300 border-blue-800/80';
+      default: return 'bg-red-950/80 text-red-300 border-red-800/80';
+    }
+  };
+
+  const getPathwayArLabel = (pathway?: IntakePathway) => {
+    switch (pathway) {
+      case IntakePathway.STAT_CRITICAL: return lang === 'ar' ? 'طوارئ / استقبال (ER)' : 'ER / Stat Critical';
+      case IntakePathway.ELECTIVE_POST_OP: return lang === 'ar' ? 'عمليات / جراحة (OR)' : 'OR / Elective Post-Op';
+      case IntakePathway.FLOOR_TRANSFER: return lang === 'ar' ? 'قسم داخلي (Ward)' : 'Floor Transfer';
+      case IntakePathway.ER_REFERRAL: return lang === 'ar' ? 'استقبال حرج (ER)' : 'ER Referral';
+      default: return pathway || (lang === 'ar' ? 'استقبال حرج (ER)' : 'ER Admission');
+    }
+  };
+
+  // History & Diagnosis edit states
+  const [isHistoryEditing, setIsHistoryEditing] = useState(false);
+  const [historyInput, setHistoryInput] = useState(patient.history || '');
+  const [presentingComplaintInput, setPresentingComplaintInput] = useState(patient.presentingComplaint || '');
+  const [chronicDiseasesInput, setChronicDiseasesInput] = useState(patient.chronicDiseases || '');
+  const [primaryDiagnosisEnInput, setPrimaryDiagnosisEnInput] = useState(patient.primaryDiagnosisEn || '');
+  const [primaryDiagnosisArInput, setPrimaryDiagnosisArInput] = useState(patient.primaryDiagnosisAr || '');
+
+  // Lab modal and form states
+  const [isAddLabModalOpen, setIsAddLabModalOpen] = useState(false);
+  const [selectedModalCatId, setSelectedModalCatId] = useState<string>('all');
+  const [editingLabId, setEditingLabId] = useState<string | null>(null);
+  const [isAiLabScannerOpen, setIsAiLabScannerOpen] = useState(false);
+  const [aiScannerPreset, setAiScannerPreset] = useState<'ABG' | 'CBC' | 'CHEMISTRY' | 'ALL'>('ALL');
+  const [labForm, setLabForm] = useState({
+    timestamp: '',
+    wbc: '', hb: '', hct: '', plt: '', diff: '', typeAnemia: '',
+    inr: '', pt: '', ptt: '', fib: '',
+    k: '', na: '', creat: '', bun: '', totalBili: '', alb: '', procalc: '', crp: '',
+    ca: '', phos: '', mg: '', alt: '', ast: '', alp: '', ggt: '',
+    amylase: '', lipase: '', troponin: '', ck: '', ckMb: '', esr: '',
+    urea: '', uricAcid: '',
+    ph: '', pco2: '', po2: '', hco3: '', be: '', lactate: '', pf: '',
+  });
+
+  // Disposition form state
+  const [dispType, setDispType] = useState<DispositionType | null>(null);
+  const [dispSummary, setDispSummary] = useState<string>('');
+  const [physicianSign, setPhysicianSign] = useState<string>('Dr. Hesham Talaat');
+  const [useOtherConsultant, setUseOtherConsultant] = useState<boolean>(false);
+  const [otherConsultantName, setOtherConsultantName] = useState<string>('');
+  const [isDispPanelOpen, setIsDispPanelOpen] = useState<boolean>(false);
+
+  const loadBedsideData = useCallback(async () => {
+    if (!patient?.id) return;
+
+    const vitals = await db.vitals
+      .where('patientId')
+      .equals(patient.id)
+      .reverse()
+      .sortBy('timestamp');
+
+    setVitalsHistory(vitals);
+
+    const vent = await db.ventilators
+      .where('patientId')
+      .equals(patient.id)
+      .first();
+    setVentilator(vent || null);
+
+    const pumpLines = await db.infusionPumps
+      .where('patientId')
+      .equals(patient.id)
+      .toArray();
+    setPumps(pumpLines);
+
+    const fluids = await db.fluidBalances
+      .where('patientId')
+      .equals(patient.id)
+      .toArray();
+    fluids.sort((a, b) => new Date(b.periodEndTimestamp || (b as any).date || 0).getTime() - new Date(a.periodEndTimestamp || (a as any).date || 0).getTime());
+    setAllFluidBalances(fluids);
+    setFluidBalance(fluids[0] || null);
+
+    const sbars = await db.sbarHandovers
+      .where('patientId')
+      .equals(patient.id)
+      .toArray();
+    sbars.sort((a, b) => new Date(b.outgoingDoctor?.signedAt || b.shiftDate || 0).getTime() - new Date(a.outgoingDoctor?.signedAt || a.shiftDate || 0).getTime());
+    setSbarList(sbars);
+
+    const notes = await db.clinicalNotes
+      .where('patientId')
+      .equals(patient.id)
+      .reverse()
+      .sortBy('timestamp');
+    setNotesList(notes);
+
+    const labs = await db.statLabs
+      .where('patientId')
+      .equals(patient.id)
+      .sortBy('timestamp');
+    setLabsList(labs);
+
+    // Load Daily Lab Flowsheet Items (Trend-enabled)
+    const labItems = await db.labResults
+      .where('patientId')
+      .equals(patient.id)
+      .sortBy('timestamp');
+    setLabResults(labItems);
+
+    // Load Investigations & Imaging Items
+    const invItems = await db.investigations
+      .where('patientId')
+      .equals(patient.id)
+      .sortBy('timestamp');
+    setInvestigations(invItems);
+
+    // Load Active & Past Antibiotics for patient
+    const abxItems = await db.patientAntibiotics
+      .where('patientId')
+      .equals(patient.id)
+      .reverse()
+      .sortBy('createdAt');
+    setAntibioticsList(abxItems);
+  }, [patient?.id]);
+
+  useEffect(() => {
+    // Reset edit states on patient change
+    setHistoryInput(patient.history || '');
+    setPresentingComplaintInput(patient.presentingComplaint || '');
+    setChronicDiseasesInput(patient.chronicDiseases || '');
+    setPrimaryDiagnosisEnInput(patient.primaryDiagnosisEn || patient.primaryDiagnosisAr || '');
+    setPrimaryDiagnosisArInput(patient.primaryDiagnosisAr || '');
+    setIsHistoryEditing(false);
+
+    // 1) Load Dexie local data once on patient/bed change
+    loadBedsideData();
+
+    // 2) & 3) If readOnly is false and patient.id exists, subscribe to realtime flowsheet updates
+    let unsubActivePatientSync: (() => void) | null = null;
+    if (!readOnly && patient?.id) {
+      unsubActivePatientSync = subscribeToActivePatientFlowsheet(patient.id, () => {
+        loadBedsideData();
+      });
+    }
+
+    // 4) Clean up unsubscribe when patient changes or card closes
+    return () => {
+      if (unsubActivePatientSync) {
+        unsubActivePatientSync();
+      }
+    };
+  }, [bed.bedNumber, patient?.id, readOnly, loadBedsideData]);
+
+  const latestVitals = vitalsHistory[0] || null;
+
+  // Ventilator Driving Pressure & PF Ratio Calculations
+  const drivingPressure = (ventilator?.plateauPressureCmH2O && ventilator?.peepCmH2O)
+    ? ventilator.plateauPressureCmH2O - ventilator.peepCmH2O
+    : null;
+
+  const handleSavePatientHistory = async () => {
+    try {
+      const doctorName = patient.attendingPhysician?.name && patient.attendingPhysician.name !== 'غير محدد' && patient.attendingPhysician.name !== 'Unassigned'
+        ? patient.attendingPhysician.name
+        : (lang === 'ar' ? 'غير محدد' : 'Unassigned');
+
+      const updatedPatient = {
+        ...patient,
+        attendingPhysician: {
+          staffId: patient.attendingPhysician?.staffId || 'DOC-101',
+          name: doctorName,
+          role: patient.attendingPhysician?.role || StaffRole.CONSULTANT,
+        },
+        history: historyInput,
+        presentingComplaint: presentingComplaintInput,
+        chronicDiseases: chronicDiseasesInput,
+        primaryDiagnosisEn: primaryDiagnosisEnInput,
+        primaryDiagnosisAr: primaryDiagnosisEnInput,
+        updatedAt: new Date().toISOString()
+      };
+      await db.patients.put(updatedPatient);
+      await syncPatientToCloud(updatedPatient);
+      setIsHistoryEditing(false);
+      onDataUpdated();
+      alert(lang === 'ar' ? 'تم حفظ التاريخ المرضي والبيانات الطبية بنجاح!' : 'Medical history and clinical data saved successfully!');
+    } catch (err) {
+      console.error(err);
+      alert(lang === 'ar' ? 'حدث خطأ أثناء حفظ التاريخ الطبي.' : 'Error saving patient details.');
+    }
+  };
+
+  const getStepForUnit = (unit: string): number => {
+    switch (unit) {
+      case 'mcg/kg/min': return 0.02;
+      case 'mcg/h': return 10;
+      case 'mg/h': return 1;
+      case 'Units/hr': return 0.5;
+      case 'ml/h': return 5;
+      default: return 1;
+    }
+  };
+
+  const handleTitratePump = async (pump: InfusionPumpLine, direction: 'UP' | 'DOWN', customStep?: number) => {
+    try {
+      const step = customStep ?? getStepForUnit(pump.rateUnit);
+      const delta = direction === 'UP' ? step : -step;
+      const newRate = Math.max(0, Math.round((pump.currentRate + delta) * 100) / 100);
+
+      let newFlowRate = pump.flowRateMlPerHour;
+      if (pump.currentRate > 0 && pump.flowRateMlPerHour > 0) {
+        newFlowRate = Math.max(0, Math.round((pump.flowRateMlPerHour * (newRate / pump.currentRate)) * 10) / 10);
+      } else if (pump.rateUnit === 'ml/h') {
+        newFlowRate = newRate;
+      }
+
+      const updated: InfusionPumpLine = {
+        ...pump,
+        currentRate: newRate,
+        flowRateMlPerHour: newFlowRate,
+        status: newRate === 0 ? PumpStatus.STOPPED : (pump.status === PumpStatus.STOPPED ? PumpStatus.RUNNING : pump.status),
+      };
+
+      await db.infusionPumps.put(updated);
+      try {
+        await syncPumpToCloud(updated);
+      } catch (e) {
+        console.warn('Firestore offline sync for pump titration:', e);
+      }
+      await loadBedsideData();
+      onDataUpdated();
+    } catch (err) {
+      console.error('Error titrating infusion pump:', err);
+    }
+  };
+
+  const handleTogglePumpStatus = async (pump: InfusionPumpLine) => {
+    try {
+      const nextStatus = pump.status === PumpStatus.RUNNING ? PumpStatus.STANDBY : PumpStatus.RUNNING;
+      const updated: InfusionPumpLine = {
+        ...pump,
+        status: nextStatus,
+      };
+      await db.infusionPumps.put(updated);
+      try {
+        await syncPumpToCloud(updated);
+      } catch (e) {
+        console.warn('Firestore offline sync for pump status:', e);
+      }
+      await loadBedsideData();
+      onDataUpdated();
+    } catch (err) {
+      console.error('Error toggling pump status:', err);
+    }
+  };
+
+  const handleDeletePumpLine = async (pump: InfusionPumpLine) => {
+    try {
+      await db.infusionPumps.delete(pump.id);
+      try {
+        const pumpRef = doc(firestore, 'infusionPumps', pump.id);
+        await deleteDoc(pumpRef);
+      } catch (e) {
+        console.warn('Firestore delete pump offline sync:', e);
+      }
+      await loadBedsideData();
+      onDataUpdated();
+    } catch (err) {
+      console.error('Error deleting pump line:', err);
+    }
+  };
+
+  const getLabParamValue = (lab: StatLabPanel, paramId: string): string => {
+    if (lab.values && lab.values[paramId] !== undefined) {
+      return lab.values[paramId];
+    }
+    const pid = (paramId || '').toLowerCase();
+    switch (pid) {
+      case 'wbc': return lab.cbc?.wbcCountKPerUl?.toString() || '';
+      case 'hb': return lab.cbc?.hemoglobinGPerDl?.toString() || '';
+      case 'hct': return lab.cbc?.hematocritPercent?.toString() || '';
+      case 'plt': return lab.cbc?.plateletCountKPerUl?.toString() || '';
+      case 'diff': return lab.cbc?.differential || '';
+      case 'typeanemia': return lab.cbc?.typeAnemia || '';
+      case 'inr': return lab.coagulation?.inr?.toString() || '';
+      case 'pt': return lab.coagulation?.ptSeconds?.toString() || '';
+      case 'ptt': return lab.coagulation?.pttSeconds?.toString() || '';
+      case 'fib': return lab.coagulation?.fibrinogenMgPerDl?.toString() || '';
+      case 'k': return lab.biochemistry?.potassiumMeqPerL?.toString() || '';
+      case 'na': return lab.biochemistry?.sodiumMeqPerL?.toString() || '';
+      case 'creat': return lab.biochemistry?.creatinineMgPerDl?.toString() || '';
+      case 'bun': return lab.biochemistry?.bunMgPerDl?.toString() || '';
+      case 'totalbili': return lab.biochemistry?.totalBilirubinMgPerDl?.toString() || '';
+      case 'alb': return lab.biochemistry?.albuminGPerDl?.toString() || '';
+      case 'procalc': return lab.biochemistry?.procalcitoninNgPerMl?.toString() || '';
+      case 'crp': return lab.biochemistry?.crpMgPerL?.toString() || '';
+      case 'ca': return lab.biochemistry?.calciumMeqPerL?.toString() || '';
+      case 'phos': return lab.biochemistry?.phosphorusMeqPerL?.toString() || '';
+      case 'mg': return lab.biochemistry?.magnesiumMeqPerL?.toString() || '';
+      case 'alt': return lab.biochemistry?.altUPerL?.toString() || '';
+      case 'ast': return lab.biochemistry?.astUPerL?.toString() || '';
+      case 'alp': return lab.biochemistry?.alpUPerL?.toString() || '';
+      case 'ggt': return lab.biochemistry?.ggtUPerL?.toString() || '';
+      case 'amylase': return lab.biochemistry?.amylaseUPerL?.toString() || '';
+      case 'lipase': return lab.biochemistry?.lipaseUPerL?.toString() || '';
+      case 'troponin': return lab.biochemistry?.troponinNgPerMl?.toString() || '';
+      case 'ck': return lab.biochemistry?.ckUPerL?.toString() || '';
+      case 'ckmb': return lab.biochemistry?.ckMbUPerL?.toString() || '';
+      case 'esr': return lab.biochemistry?.esrMmHr?.toString() || '';
+      case 'urea': return lab.biochemistry?.ureaMgPerDl?.toString() || '';
+      case 'uricacid': return lab.biochemistry?.uricAcidMgPerDl?.toString() || '';
+      case 'ph': return lab.abg?.ph?.toString() || '';
+      case 'pco2': return lab.abg?.pco2MmHg?.toString() || '';
+      case 'po2': return lab.abg?.po2MmHg?.toString() || '';
+      case 'hco3': return lab.abg?.hco3MmolPerL?.toString() || '';
+      case 'be': return lab.abg?.baseExcessMmolPerL?.toString() || '';
+      case 'lactate': return lab.abg?.lactateMmolPerL?.toString() || '';
+      case 'pf': return lab.abg?.pao2Fio2Ratio?.toString() || '';
+      default: return '';
+    }
+  };
+
+  const handleOpenAddLabColumn = () => {
+    setEditingLabId(null);
+    const initialForm: Record<string, string> = {
+      timestamp: new Date().toISOString().slice(0, 16)
+    };
+    settings.labCategories?.forEach((cat: any) => {
+      cat.parameters?.forEach((p: any) => {
+        initialForm[p.id] = '';
+      });
+    });
+    setLabForm(initialForm as any);
+    setIsAddLabModalOpen(true);
+  };
+
+  const handleApplyScannedToForm = (fields: Record<string, string>, timestamp?: string) => {
+    setLabForm(prev => ({
+      ...prev,
+      ...fields,
+      timestamp: timestamp || prev.timestamp || new Date().toISOString().slice(0, 16),
+    }));
+    setIsAddLabModalOpen(true);
+  };
+
+  const handleDirectSaveScannedLab = async (data: {
+    fields: Record<string, string>;
+    items: Array<{
+      testName: string;
+      category: string;
+      value: string;
+      unit: string;
+      normalRange: string;
+      flag?: string;
+    }>;
+    timestamp: string;
+    summaryEn: string;
+    summaryAr: string;
+  }) => {
+    const doctorName = currentUser?.nameEn || currentUser?.nameAr || currentUser?.email || 'Dr. Guest';
+    const labId = `labs-${Date.now()}`;
+    const f = data.fields;
+    
+    const labEntry: StatLabPanel = {
+      id: labId,
+      bedId: bed.bedNumber,
+      patientId: patient.id,
+      timestamp: new Date(data.timestamp || new Date()).toISOString(),
+      abg: {
+        ph: parseFloat(f.ph) || 0,
+        pco2MmHg: parseFloat(f.pco2) || 0,
+        po2MmHg: parseFloat(f.po2) || 0,
+        hco3MmolPerL: parseFloat(f.hco3) || 0,
+        baseExcessMmolPerL: parseFloat(f.be) || 0,
+        lactateMmolPerL: parseFloat(f.lactate) || 0,
+        pao2Fio2Ratio: parseFloat(f.pf) || 0,
+      },
+      cbc: {
+        wbcCountKPerUl: parseFloat(f.wbc) || 0,
+        hemoglobinGPerDl: parseFloat(f.hb) || 0,
+        hematocritPercent: parseFloat(f.hct) || 0,
+        plateletCountKPerUl: parseFloat(f.plt) || 0,
+        differential: f.diff || '',
+        typeAnemia: f.typeAnemia || '',
+      },
+      coagulation: {
+        inr: parseFloat(f.inr) || 0,
+        ptSeconds: parseFloat(f.pt) || 0,
+        pttSeconds: parseFloat(f.ptt) || 0,
+        fibrinogenMgPerDl: parseFloat(f.fib) || undefined,
+      },
+      biochemistry: {
+        potassiumMeqPerL: parseFloat(f.k) || 0,
+        sodiumMeqPerL: parseFloat(f.na) || 0,
+        creatinineMgPerDl: parseFloat(f.creat) || 0,
+        bunMgPerDl: parseFloat(f.bun) || undefined,
+        totalBilirubinMgPerDl: parseFloat(f.totalBili) || 0,
+        albuminGPerDl: parseFloat(f.alb) || 0,
+        procalcitoninNgPerMl: parseFloat(f.procalc) || undefined,
+        crpMgPerL: parseFloat(f.crp) || undefined,
+        calciumMeqPerL: parseFloat(f.ca) || undefined,
+        phosphorusMeqPerL: parseFloat(f.phos) || undefined,
+        magnesiumMeqPerL: parseFloat(f.mg) || undefined,
+        altUPerL: parseFloat(f.alt) || undefined,
+        astUPerL: parseFloat(f.ast) || undefined,
+        alpUPerL: parseFloat(f.alp) || undefined,
+        ggtUPerL: parseFloat(f.ggt) || undefined,
+        amylaseUPerL: parseFloat(f.amylase) || undefined,
+        lipaseUPerL: parseFloat(f.lipase) || undefined,
+        troponinNgPerMl: parseFloat(f.troponin) || undefined,
+        ckUPerL: parseFloat(f.ck) || undefined,
+        ckMbUPerL: parseFloat(f.ckMb) || undefined,
+        esrMmHr: parseFloat(f.esr) || undefined,
+        ureaMgPerDl: parseFloat(f.urea) || undefined,
+        uricAcidMgPerDl: parseFloat(f.uricAcid) || undefined,
+      },
+      isCriticalAlert: (parseFloat(f.lactate) > 2.0 || (parseFloat(f.ph) > 0 && (parseFloat(f.ph) < 7.30 || parseFloat(f.ph) > 7.50))),
+      reviewedByDoctorName: `${doctorName} (AI Verified)`,
+    };
+
+    await db.statLabs.put(labEntry);
+    await syncStatLabsToCloud(labEntry);
+
+    // Also add to individual lab results for cumulative trend visualization
+    if (data.items && data.items.length > 0) {
+      const newItems: LabResultItem[] = data.items.map((it, idx) => ({
+        id: `labitem-${Date.now()}-${idx}`,
+        patientId: patient.id,
+        bedNumber: bed.bedNumber,
+        testName: it.testName,
+        category: it.category as any || 'Other',
+        value: it.value,
+        unit: it.unit || '',
+        normalRange: it.normalRange || '',
+        status: 'RESULTED',
+        timestamp: new Date(data.timestamp || new Date()).toISOString(),
+        notes: `AI OCR Extracted - ${data.summaryEn}`,
+        recordedByName: doctorName,
+        recordedByStaffId: currentUser?.id,
+      }));
+      await db.labResults.bulkPut(newItems);
+      for (const item of newItems) {
+        await syncLabResultToCloud(item);
+      }
+    }
+
+    await loadBedsideData();
+    onDataUpdated();
+  };
+
+  const handleStartEditLabColumn = (lab: StatLabPanel) => {
+    const doctorName = currentUser?.nameEn || currentUser?.nameAr || currentUser?.email || 'Dr. Guest';
+    const author = lab.reviewedByDoctorName || 'Dr. Guest';
+    const isAuthor = author === doctorName || currentUser?.role === 'ADMIN' || currentUser?.role === 'SUPER_ADMIN';
+    
+    if (!isAuthor) {
+      alert(lang === 'ar' 
+        ? `⚠️ غير مصرح: تم تسجيل هذا العمود بواسطة [${author}]. لا يمكن التعديل عليه لضمان نزاهة السجلات السريرية.`
+        : `⚠️ Unauthorized: This column was recorded by [${author}]. It cannot be edited to maintain clinical record integrity.`);
       return;
     }
-    setIsSaving(true);
-    try {
-      await onDirectSave({
-        patientId,
-        bedNumber,
-        modality: editModality,
-        testName: editTestName.trim() || 'Diagnostic Report',
-        timestamp: editTimestamp ? new Date(editTimestamp).toISOString() : new Date().toISOString(),
-        status: editStatus,
-        resultReport: editReport.trim(),
-        notes: editNotes.trim() || undefined,
-        recordedByName: 'AI Smart Scanner (Gemini)',
-      });
 
-      setSaveSuccess(true);
-      if (onInvestigationAdded) {
-        onInvestigationAdded();
-      }
-      setTimeout(() => {
-        onClose();
-      }, 1200);
-    } catch (err: any) {
-      console.error('Direct save error:', err);
-      setAnalysisError(err.message || 'فشل حفظ الفحص في السجل الطبي');
-    } finally {
-      setIsSaving(false);
+    setEditingLabId(lab.id);
+    const editForm: Record<string, string> = {
+      timestamp: lab.timestamp.slice(0, 16)
+    };
+    settings.labCategories?.forEach((cat: any) => {
+      cat.parameters?.forEach((p: any) => {
+        editForm[p.id] = getLabParamValue(lab, p.id);
+      });
+    });
+    setLabForm(editForm as any);
+    setIsAddLabModalOpen(true);
+  };
+
+  const handleDeleteLabColumn = async (id: string, author: string) => {
+    const doctorName = currentUser?.nameEn || currentUser?.nameAr || currentUser?.email || 'Dr. Guest';
+    const isAuthor = author === doctorName || currentUser?.role === 'ADMIN' || currentUser?.role === 'SUPER_ADMIN';
+    if (!isAuthor) {
+      alert(lang === 'ar' 
+        ? `⚠️ غير مصرح: تم تسجيل هذا العمود بواسطة [${author}]. ولا يمكن حذفه لضمان سلامة السجلات الطبية.`
+        : `⚠️ Unauthorized: This column was recorded by [${author}]. It cannot be deleted to preserve medical records integrity.`);
+      return;
+    }
+
+    const confirmPrompt = lang === 'ar'
+      ? 'هل أنت متأكد من حذف هذا العمود بالكامل؟'
+      : 'Are you sure you want to delete this lab column?';
+    if (!confirm(confirmPrompt)) return;
+
+    try {
+      await db.statLabs.delete(id);
+      await deleteStatLabFromCloud(id);
+      const labs = await db.statLabs
+        .where('patientId')
+        .equals(patient.id)
+        .sortBy('timestamp');
+      setLabsList(labs);
+      onDataUpdated();
+    } catch (err) {
+      console.error(err);
     }
   };
 
-  if (!isOpen) return null;
+  const handleSaveLabColumn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const labId = editingLabId || `labs-${Date.now()}`;
+      const doctorName = currentUser?.nameEn || currentUser?.nameAr || currentUser?.email || 'Dr. Guest';
+      
+      const labEntry: StatLabPanel = {
+        id: labId,
+        bedId: bed.bedNumber,
+        patientId: patient.id,
+        timestamp: new Date(labForm.timestamp).toISOString(),
+        abg: {
+          ph: parseFloat(labForm.ph) || 0,
+          pco2MmHg: parseFloat(labForm.pco2) || 0,
+          po2MmHg: parseFloat(labForm.po2) || 0,
+          hco3MmolPerL: parseFloat(labForm.hco3) || 0,
+          baseExcessMmolPerL: parseFloat(labForm.be) || 0,
+          lactateMmolPerL: parseFloat(labForm.lactate) || 0,
+          pao2Fio2Ratio: parseFloat(labForm.pf) || 0,
+        },
+        cbc: {
+          wbcCountKPerUl: parseFloat(labForm.wbc) || 0,
+          hemoglobinGPerDl: parseFloat(labForm.hb) || 0,
+          hematocritPercent: parseFloat(labForm.hct) || 0,
+          plateletCountKPerUl: parseFloat(labForm.plt) || 0,
+          differential: labForm.diff || '',
+          typeAnemia: labForm.typeAnemia || '',
+        },
+        coagulation: {
+          inr: parseFloat(labForm.inr) || 0,
+          ptSeconds: parseFloat(labForm.pt) || 0,
+          pttSeconds: parseFloat(labForm.ptt) || 0,
+          fibrinogenMgPerDl: parseFloat(labForm.fib) || undefined,
+        },
+        biochemistry: {
+          potassiumMeqPerL: parseFloat(labForm.k) || 0,
+          sodiumMeqPerL: parseFloat(labForm.na) || 0,
+          creatinineMgPerDl: parseFloat(labForm.creat) || 0,
+          bunMgPerDl: parseFloat(labForm.bun) || undefined,
+          totalBilirubinMgPerDl: parseFloat(labForm.totalBili) || 0,
+          albuminGPerDl: parseFloat(labForm.alb) || 0,
+          procalcitoninNgPerMl: parseFloat(labForm.procalc) || undefined,
+          crpMgPerL: parseFloat(labForm.crp) || undefined,
+          calciumMeqPerL: parseFloat(labForm.ca) || undefined,
+          phosphorusMeqPerL: parseFloat(labForm.phos) || undefined,
+          magnesiumMeqPerL: parseFloat(labForm.mg) || undefined,
+          altUPerL: parseFloat(labForm.alt) || undefined,
+          astUPerL: parseFloat(labForm.ast) || undefined,
+          alpUPerL: parseFloat(labForm.alp) || undefined,
+          ggtUPerL: parseFloat(labForm.ggt) || undefined,
+          amylaseUPerL: parseFloat(labForm.amylase) || undefined,
+          lipaseUPerL: parseFloat(labForm.lipase) || undefined,
+          troponinNgPerMl: parseFloat(labForm.troponin) || undefined,
+          ckUPerL: parseFloat(labForm.ck) || undefined,
+          ckMbUPerL: parseFloat(labForm.ckMb) || undefined,
+          esrMmHr: parseFloat(labForm.esr) || undefined,
+          ureaMgPerDl: parseFloat(labForm.urea) || undefined,
+          uricAcidMgPerDl: parseFloat(labForm.uricAcid) || undefined,
+        },
+        isCriticalAlert: false,
+        reviewedByDoctorName: editingLabId 
+          ? (labsList.find(l => l.id === editingLabId)?.reviewedByDoctorName || doctorName)
+          : doctorName,
+        values: { ...labForm },
+      };
+
+      await db.statLabs.put(labEntry);
+      await syncStatLabsToCloud(labEntry);
+      
+      setIsAddLabModalOpen(false);
+      setEditingLabId(null);
+      
+      const labs = await db.statLabs
+        .where('patientId')
+        .equals(patient.id)
+        .sortBy('timestamp');
+      setLabsList(labs);
+      onDataUpdated();
+      
+      alert(lang === 'ar' ? 'تم تسجيل قراءة التحاليل بنجاح!' : 'Lab column recorded successfully!');
+    } catch (err) {
+      console.error(err);
+      alert(lang === 'ar' ? 'حدث خطأ أثناء الحفظ.' : 'Error saving lab values.');
+    }
+  };
+
+  const handleExecuteDisposition = async () => {
+    if (!dispType) {
+      alert(lang === 'ar' ? 'يرجى اختيار مسار إنهاء الإقامة أولاً.' : 'Please select a disposition pathway first.');
+      return;
+    }
+    const currentUserName = currentUser ? (lang === 'ar' ? currentUser.nameAr || currentUser.nameEn : currentUser.nameEn || currentUser.nameAr) : 'Dr. Hesham Talaat';
+    const finalPhysicianSign = useOtherConsultant ? otherConsultantName.trim() : currentUserName;
+    if (useOtherConsultant && !otherConsultantName.trim()) {
+      alert(lang === 'ar' ? 'يرجى إدخال اسم الطبيب الاستشاري المعتمد الآخر.' : 'Please enter the name of the other attending consultant.');
+      return;
+    }
+    const confirmPrompt = lang === 'ar'
+      ? `هل أنت متأكد من تسجيل خروج / نقل مريض السرير ${bed.bedNumber}؟`
+      : `Confirm discharge/transfer for Bed ${bed.bedNumber}?`;
+    if (!confirm(confirmPrompt)) return;
+    try {
+      await dischargeOrTransferPatient({
+        bedNumber: bed.bedNumber,
+        patientId: patient.id,
+        dispositionType: dispType,
+        summaryText: dispSummary,
+        authorStaff: {
+          staffId: 'DOC-8811',
+          name: finalPhysicianSign,
+          role: StaffRole.CONSULTANT,
+        },
+      });
+
+      // Trigger Smart Discharge / Death / Transfer Notification
+      const isDeceased = dispType === DispositionType.CLINICAL_MORTALITY;
+      const isTransfer = dispType === DispositionType.TRANSFER_GENERAL_WARD || 
+                         dispType === DispositionType.TRANSFER_SURGERY || 
+                         dispType === DispositionType.TRANSFER_CARDIOLOGY || 
+                         dispType === DispositionType.TRANSFER_EXTERNAL_HOSPITAL;
+      const notifType = 'DISCHARGE';
+      const patientName = patient.fullNameAr || patient.fullNameEn || `Bed ${bed.bedNumber}`;
+
+      triggerNotification({
+        type: notifType,
+        titleEn: isDeceased ? `Patient Deceased - Bed ${bed.bedNumber}` : isTransfer ? `Patient Transferred - Bed ${bed.bedNumber}` : `Patient Discharged - Bed ${bed.bedNumber}`,
+        titleAr: isDeceased ? `تسجيل وفاة - سرير ${bed.bedNumber}` : isTransfer ? `تحويل مريض - سرير ${bed.bedNumber}` : `خروج مريض - سرير ${bed.bedNumber}`,
+        messageEn: `Patient ${patientName} dispositioned (${dispType}). Click to view archive record.`,
+        messageAr: `تم تسجيل خروج المريض ${patientName} (${dispType}) ونقل السجل للأرشيف. اضغط لعرض الملف.`,
+        target: {
+          action: 'OPEN_ARCHIVE',
+          patientId: patient.id,
+          patientMrn: patient.mrn,
+          patientName: patientName,
+          bedNumber: bed.bedNumber,
+        },
+      });
+
+      onDataUpdated();
+      onBack();
+    } catch (err) {
+      console.error(err);
+      alert(lang === 'ar' ? 'حدث خطأ أثناء تنفيذ إجراء الخروج.' : 'An error occurred during disposition.');
+    }
+  };
 
   return (
-    <div 
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/75 backdrop-blur-md animate-in fade-in duration-200"
-      dir={isRTL ? 'rtl' : 'ltr'}
-    >
-      <div className="w-full max-w-4xl bg-white dark:bg-[#080e1e] border border-slate-200 dark:border-teal-500/30 rounded-2xl shadow-2xl shadow-teal-500/10 flex flex-col max-h-[92vh] overflow-hidden text-slate-900 dark:text-white">
-        
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-teal-500/10 border border-teal-500/30 flex items-center justify-center text-teal-600 dark:text-teal-400">
-              <Scan className="w-5 h-5 animate-pulse" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                  <span>{lang === 'ar' ? 'المسح الضوئي الذكي للأشعة والتقارير' : 'AI Smart Radiology & Investigation Scanner'}</span>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-teal-100 text-teal-900 border border-teal-300 dark:bg-teal-500/20 dark:text-teal-300 dark:border-teal-500/40 font-bold">
-                    Gemini Vision OCR
+    <div className="space-y-4 animate-in fade-in duration-200">
+      {readOnly && (
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex items-center gap-3 text-amber-300">
+          <ShieldAlert className="w-5 h-5 text-amber-400 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <h4 className="text-sm font-extrabold font-sans">
+              {lang === 'ar' ? 'سجل طبي تاريخي مؤرشف (للقراءة فقط)' : 'HISTORICAL CLINICAL DOSSIER (READ-ONLY)'}
+            </h4>
+            <p className="text-[11px] text-amber-200/80 mt-0.5">
+              {lang === 'ar' 
+                ? 'ملف هذا المريض مؤرشف ومغلق بالكامل. كافة عمليات التعديل أو التوقيع معطلة وقيد الحماية.'
+                : 'This patient record is archived and completely closed. All modifications, signatures, and notes are protected and disabled.'}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Bed Switcher Bar (Direct Single-Click Page Navigation) */}
+      {allBeds.length > 0 && onSelectBed && !readOnly && (
+        <div className="bg-white dark:bg-[#0a1224] border border-slate-200 dark:border-slate-800/80 rounded-xl px-3 py-2 flex items-center gap-1.5 overflow-x-auto shadow-sm">
+          <button
+            onClick={onBack}
+            className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 text-xs font-semibold flex items-center gap-1 shrink-0 transition-all cursor-pointer"
+            title={lang === 'ar' ? 'العودة لشبكة الأسِرّة الستة' : 'Back to Bed Console'}
+          >
+            <ArrowLeft className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+            <span className="hidden sm:inline">{lang === 'ar' ? 'شبكة الأسِرّة' : 'Console'}</span>
+          </button>
+
+          <span className="text-slate-300 dark:text-slate-700 mx-1">|</span>
+
+          {allBeds.map((b) => {
+            const isCurrent = b.bedNumber === bed.bedNumber;
+            const bPatient = getPatientForBed(b, allPatients);
+            const isOccupied = b.status === 'OCCUPIED' || (b.status === 'ISOLATION' && !!bPatient) || !!bPatient;
+
+            return (
+              <button
+                key={b.bedNumber}
+                onClick={() => onSelectBed(b.bedNumber as BedNumber)}
+                className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-2 shrink-0 transition-all cursor-pointer ${
+                  isCurrent
+                    ? 'bg-teal-500/20 text-teal-800 dark:text-teal-200 border border-teal-500/60 font-black shadow-sm'
+                    : 'bg-slate-50 hover:bg-slate-100 text-slate-700 hover:text-slate-900 border border-slate-200 dark:bg-[#0e172a] dark:hover:bg-slate-800 dark:text-slate-400 dark:hover:text-slate-200 dark:border-slate-800'
+                }`}
+              >
+                <span className="font-mono font-bold text-teal-600 dark:text-teal-400">{b.bedNumber}</span>
+                <span className="truncate max-w-[90px] text-[11px]">
+                  {isOccupied 
+                    ? (bPatient?.fullNameAr?.split(' ')[0] || bPatient?.fullNameEn?.split(' ')[0] || (lang === 'ar' ? 'مشغول' : 'Occupied'))
+                    : (lang === 'ar' ? 'شاغر' : 'Vacant')}
+                </span>
+                <span className={`w-2 h-2 rounded-full shrink-0 ${isOccupied ? 'bg-emerald-500' : 'bg-slate-400 dark:bg-slate-600'}`} />
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Top Patient Header Banner Card (Clean minimal view, folded by default) */}
+      <div 
+        data-expanded={!isPatientCardCollapsed ? "true" : "false"}
+        className="icu-collapsible-section rounded-2xl p-3 sm:p-4 shadow-sm dark:shadow-xl transition-all space-y-3 border"
+      >
+        <div className="flex items-center justify-between gap-3">
+          {/* Back Button, Bed Number, Patient Name & Age */}
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
+            <button
+              onClick={onBack}
+              className="p-2 sm:p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 hover:text-white transition-all flex-shrink-0 cursor-pointer"
+              title={lang === 'ar' ? 'العودة لشبكة الأسِرّة' : 'Back to Bed Matrix'}
+            >
+              <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
+            </button>
+
+            {/* Bed Number Indicator (Red if bed is isolated) */}
+            <span className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl font-mono font-black text-xs sm:text-sm flex items-center justify-center shadow-md flex-shrink-0 ${
+              (bed.status === 'ISOLATION' || bed.isolation?.isIsolated)
+                ? 'bg-red-950 text-red-500 border border-red-500/40 animate-pulse'
+                : 'bg-teal-500/20 text-teal-700 dark:text-teal-300 border border-teal-500/40'
+            }`}>
+              {bed.bedNumber}
+            </span>
+ 
+            {/* Name, Age, Diagnosis Column */}
+            <div className="flex flex-col min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-nowrap min-w-0">
+                <h1 className="text-xs xs:text-sm sm:text-base md:text-lg font-black text-slate-900 dark:text-white truncate min-w-0 flex-shrink">
+                  {patient.fullNameAr || patient.fullNameEn}
+                </h1>
+                {patient.age && (
+                  <span className="text-[10px] sm:text-xs font-extrabold text-teal-700 dark:text-teal-300 font-mono bg-teal-500/10 dark:bg-teal-950/90 px-1.5 py-0.5 rounded-lg border border-teal-500/30 dark:border-teal-800/80 shrink-0 whitespace-nowrap">
+                    {patient.age} {lang === 'ar' ? 'سنة' : 'Y'}
                   </span>
-                </h2>
+                )}
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                {lang === 'ar' 
-                  ? `التعرف الفوري على تقارير أشعة الصدر، CT، السونار، وتخطيط القلب للسرير ${bedNumber}` 
-                  : `Automated recognition for CXR, CT, ultrasound, and ECG reports for Bed ${bedNumber}`}
-              </p>
+              {isPatientCardCollapsed && (
+                <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 font-medium mt-1 leading-normal break-words">
+                  <span className="text-slate-400 dark:text-slate-500">{lang === 'ar' ? 'التشخيص:' : 'Dx:'}</span>{' '}
+                  <span className="text-teal-700 dark:text-teal-300 font-semibold">
+                    {lang === 'ar' 
+                      ? (patient.primaryDiagnosisAr || patient.primaryDiagnosisEn || '—') 
+                      : (patient.primaryDiagnosisEn || patient.primaryDiagnosisAr || '—')}
+                  </span>
+                </p>
+              )}
             </div>
           </div>
 
+          {/* Toggle Fold / Expand Button */}
           <button
             type="button"
-            onClick={onClose}
-            className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            onClick={() => setIsPatientCardCollapsed(!isPatientCardCollapsed)}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800/90 dark:hover:bg-slate-700 dark:text-slate-300 hover:text-white text-xs font-medium border border-slate-300 dark:border-slate-700/60 transition-all cursor-pointer shrink-0"
+            title={isPatientCardCollapsed ? (lang === 'ar' ? 'توسيع البطاقة' : 'Expand Card') : (lang === 'ar' ? 'طي البطاقة' : 'Collapse Card')}
           >
-            <X className="w-5 h-5" />
+            <span className="hidden sm:inline text-[11px] text-slate-500 dark:text-slate-400">
+              {isPatientCardCollapsed ? (lang === 'ar' ? 'تفاصيل السرير' : 'Details') : (lang === 'ar' ? 'طي' : 'Collapse')}
+            </span>
+            {isPatientCardCollapsed ? (
+              <ChevronDown className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+            ) : (
+              <ChevronUp className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+            )}
           </button>
         </div>
 
-        {/* Content Body */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
-          
-          {/* TWO DIRECT OPTIONS ONLY: MOBILE CAMERA & CHOOSE IMAGE FROM DEVICE */}
-          {!selectedImage && !isAnalyzing && (
-            <div className="space-y-4 py-1 animate-in fade-in duration-200">
-              {/* Hidden Inputs */}
-              <input
-                ref={cameraInputRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                className="hidden"
-                onChange={(e) => {
-                  if (e.target.files && e.target.files[0]) {
-                    handleFileUpload(e.target.files[0]);
-                  }
-                }}
-              />
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*,.pdf"
-                className="hidden"
-                onChange={(e) => {
-                  if (e.target.files && e.target.files[0]) {
-                    handleFileUpload(e.target.files[0]);
-                  }
-                }}
-              />
-
-              {/* Two Prominent Action Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* 1. Mobile Camera (Opens Native Camera) */}
+        {/* Responsive Mobile-Friendly Shift Handover Buttons Row */}
+        {settings.features.enableSbarHandover && (() => {
+          const latestSbar = sbarList && sbarList.length > 0 ? sbarList[0] : null;
+          const pendingSbar = (latestSbar && !latestSbar.incomingDoctor?.signedAt) ? latestSbar : null;
+          return (
+            <div className="pt-2 border-t border-slate-200 dark:border-slate-800/80 flex items-center gap-2 flex-wrap sm:flex-nowrap w-full">
+              {/* Receive Shift Button */}
+              {pendingSbar && (
                 <button
-                  type="button"
-                  onClick={() => cameraInputRef.current?.click()}
-                  className="group relative p-6 sm:p-7 rounded-2xl bg-gradient-to-br from-emerald-500/15 via-teal-500/10 to-teal-500/5 hover:from-emerald-500/25 hover:to-teal-500/20 border-2 border-emerald-500/40 hover:border-emerald-400 flex flex-col items-center justify-center gap-3 transition-all cursor-pointer shadow-lg shadow-teal-950/20 active:scale-[0.98]"
-                >
-                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center text-slate-950 shadow-md group-hover:scale-105 transition-transform">
-                    <Camera className="w-8 h-8" />
-                  </div>
-                  <div className="text-center">
-                    <span className="block text-base font-black text-slate-900 dark:text-white">
-                      {lang === 'ar' ? 'فتح كاميرا الموبايل' : 'Open Mobile Camera'}
-                    </span>
-                    <span className="block text-xs text-slate-500 dark:text-slate-400 mt-1">
-                      {lang === 'ar' ? 'التقاط صورة التقرير أو الأشعة مباشرة بكاميرا الهاتف' : 'Take a photo of report / film now'}
-                    </span>
-                  </div>
-                </button>
-
-                {/* 2. Choose Image / File from Device */}
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="group relative p-6 sm:p-7 rounded-2xl bg-slate-100 hover:bg-slate-200/80 dark:bg-slate-900/60 dark:hover:bg-slate-800/80 border-2 border-slate-300 dark:border-slate-700 hover:border-teal-500/60 flex flex-col items-center justify-center gap-3 transition-all cursor-pointer shadow-md active:scale-[0.98]"
-                >
-                  <div className="w-16 h-16 rounded-2xl bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-300 group-hover:text-teal-400 group-hover:scale-105 transition-all">
-                    <Upload className="w-8 h-8" />
-                  </div>
-                  <div className="text-center">
-                    <span className="block text-base font-bold text-slate-900 dark:text-white">
-                      {lang === 'ar' ? 'اختيار صورة أو ملف' : 'Choose Photo or File'}
-                    </span>
-                    <span className="block text-xs text-slate-500 dark:text-slate-400 mt-1">
-                      {lang === 'ar' ? 'رفع صورة أو PDF من الاستوديو أو ملفات الجهاز' : 'Select image or PDF from device'}
-                    </span>
-                  </div>
-                </button>
-              </div>
-
-              {/* Desktop Drag and Drop Dropzone */}
-              <div
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-                    handleFileUpload(e.dataTransfer.files[0]);
-                  }
-                }}
-                className="p-3 text-center rounded-xl border border-dashed border-slate-300 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400"
-              >
-                {lang === 'ar' ? 'أو اسحب وأفلت صورة التقرير أو الأشعة هنا مباشرة' : 'Or drag and drop radiology file here'}
-              </div>
-            </div>
-          )}
-
-          {/* Selected Image Thumbnail & Re-Scan Controls */}
-          {selectedImage && (
-            <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-              <div className="flex items-center gap-3">
-                <img
-                  src={selectedImage}
-                  alt="Scanned Report"
-                  className="w-16 h-16 object-cover rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-200 dark:bg-black shrink-0"
-                />
-                <div>
-                  <p className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                    <FileText className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
-                    <span>{lang === 'ar' ? 'تم تجهيز الصورة للتحليل' : 'Image ready for analysis'}</span>
-                  </p>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">
-                    {selectedImageMime}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => processImageWithAI(selectedImage, selectedImageMime)}
-                  disabled={isAnalyzing}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-50 dark:bg-teal-500/20 hover:bg-teal-100 dark:hover:bg-teal-500/30 text-teal-800 dark:text-teal-300 border border-teal-300 dark:border-teal-500/40 text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isAnalyzing ? 'animate-spin' : ''}`} />
-                  <span>{lang === 'ar' ? 'إعادة التحليل' : 'Re-scan'}</span>
-                </button>
-                <button
-                  type="button"
                   onClick={() => {
-                    setSelectedImage(null);
-                    setScannedResult(null);
+                    setSelectedTemplateSbar(pendingSbar);
+                    setIsBedsideSbarModalOpen(true);
                   }}
-                  className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800"
-                  title={lang === 'ar' ? 'مسح واختيار صورة أخرى' : 'Clear image'}
+                  className="flex-1 min-w-[130px] flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black transition-all shadow-lg shadow-amber-500/20 active:scale-98 cursor-pointer animate-pulse border border-amber-300"
+                  title={lang === 'ar' ? 'استلام ومراجعة المناوبة الحالية' : 'Receive Pending Shift Handover'}
                 >
-                  <X className="w-4 h-4" />
+                  <CheckCircle2 className="w-4 h-4 stroke-[2.5] text-slate-950 shrink-0" />
+                  <span className="truncate">
+                    {lang === 'ar' 
+                      ? `استلام مناوبة ${pendingSbar.shiftType === 'NIGHT' ? 'ليلية' : 'صباحية'}` 
+                      : `Receive ${pendingSbar.shiftType === 'NIGHT' ? 'Night' : 'Day'} Shift`}
+                  </span>
                 </button>
-              </div>
-            </div>
-          )}
-
-          {/* Loading Animation */}
-          {isAnalyzing && (
-            <div className="p-8 text-center rounded-2xl bg-teal-50 dark:bg-teal-950/20 border border-teal-200 dark:border-teal-500/30 space-y-3 animate-pulse">
-              <Sparkles className="w-8 h-8 text-teal-600 dark:text-teal-400 mx-auto animate-spin" />
-              <p className="text-sm font-bold text-teal-800 dark:text-teal-300">
-                {lang === 'ar' ? 'جارِ قراءة التقرير وفحص النتائج بالذكاء الاصطناعي...' : 'Analyzing diagnostic report and findings with Gemini AI...'}
-              </p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                {lang === 'ar' ? 'استخراج نوع الفحص، النتائج السريرية، الانطباع الطبي والعلامات الحرجة' : 'Extracting modality, findings, acute impression, and clinical flags'}
-              </p>
-            </div>
-          )}
-
-          {/* Error Banner */}
-          {analysisError && (
-            <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300 text-xs space-y-1.5">
-              <div className="flex items-center gap-2 font-bold">
-                <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
-                <span>{lang === 'ar' ? 'تنبيه أثناء معالجة الصورة:' : 'Scan Processing Notice:'}</span>
-              </div>
-              <p className="leading-relaxed pl-6">{analysisError}</p>
-            </div>
-          )}
-
-          {/* Scanned & Extracted Result Card */}
-          {scannedResult && (
-            <div className="space-y-4 animate-in fade-in duration-300">
-              
-              {/* Critical Alert Banner if flagged */}
-              {scannedResult.hasCriticalFinding && (
-                <div className="p-3.5 rounded-xl bg-rose-100 dark:bg-rose-950/60 border-2 border-rose-500 text-rose-900 dark:text-rose-200 text-xs flex items-start gap-3 shadow-lg shadow-rose-950/20 dark:shadow-rose-950/50 animate-pulse">
-                  <ShieldAlert className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
-                  <div>
-                    <strong className="font-bold text-rose-900 dark:text-rose-300 text-sm block">
-                      {lang === 'ar' ? '⚠️ تنبيه سريري حرج تم رصده في التقرير:' : '⚠️ Critical Finding Detected in Report:'}
-                    </strong>
-                    <p className="mt-0.5 text-xs text-rose-800 dark:text-rose-100 font-medium">
-                      {scannedResult.criticalFindingText || scannedResult.summaryAr}
-                    </p>
-                  </div>
-                </div>
               )}
 
-              {/* Clinical AI Summary Box */}
-              <div className="p-4 rounded-xl bg-teal-50/80 dark:bg-gradient-to-r dark:from-teal-950/40 dark:via-slate-900/60 dark:to-slate-900/60 border border-teal-200 dark:border-teal-500/30 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-teal-800 dark:text-teal-400 flex items-center gap-1.5">
-                    <Sparkles className="w-4 h-4" />
-                    <span>{lang === 'ar' ? 'الملخص السريري الذكي (AI Clinical Summary):' : 'AI Clinical Summary:'}</span>
-                  </span>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-teal-100 text-teal-900 border border-teal-300 dark:bg-teal-500/20 dark:text-teal-300 dark:border-teal-500/30 font-bold">
-                    Confidence: {Math.round(scannedResult.confidence * 100)}%
-                  </span>
-                </div>
-                <p className="text-xs text-slate-800 dark:text-slate-200 font-sans leading-relaxed">
-                  {lang === 'ar' ? scannedResult.summaryAr : scannedResult.summaryEn}
-                </p>
-              </div>
+              {/* Handover SBAR Sign Button */}
+               {/* Handover SBAR Sign Button */}
+               {!readOnly && (
+                 <button
+                   onClick={onOpenSbarSign}
+                   className="flex-1 min-w-[130px] flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-slate-950 text-xs font-black transition-all shadow-md shadow-teal-500/20 active:scale-98 cursor-pointer"
+                   title={lang === 'ar' ? 'تسليم SBAR السريري' : 'SBAR Handover Sign'}
+                 >
+                   <ShieldCheck className="w-4 h-4 stroke-[2.5] shrink-0" />
+                   <span>{lang === 'ar' ? 'تسليم SBAR' : 'SBAR Sign'}</span>
+                   <span className="px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[10px] font-black font-mono shadow-sm">
+                     {sbarList.length}
+                   </span>
+                 </button>
+               )}
+            </div>
+          );
+        })()}
 
-              {/* Editable Form for Verified Recording */}
-              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 space-y-4">
-                <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800 text-xs">
-                  <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                    <CheckCircle2 className="w-4 h-4 text-teal-600 dark:text-teal-400" />
-                    <span>{lang === 'ar' ? 'مراجعة وتأكيد بيانات التقرير قبل الحفظ:' : 'Review & Confirm Extracted Findings:'}</span>
-                  </span>
-                  <span className="text-slate-500 dark:text-slate-400 text-[11px]">
-                    {lang === 'ar' ? 'يمكنك تعديل أي حقل مباشرة' : 'All fields are editable'}
-                  </span>
-                </div>
+        {/* Expandable Details: Action Buttons (Hidden when collapsed) */}
+        {!isPatientCardCollapsed && (
+          <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-800/80 animate-in fade-in duration-200">
+            {/* Action Buttons: Transfer, Swap, Isolation - Unified Row */}
+            <div className="flex items-center justify-end gap-1.5 flex-wrap w-full">
+              {settings.features.enableBedTransferAndSwap !== false && (
+                <>
+                  <button
+                    onClick={() => setIsTransferModalOpen(true)}
+                    className="flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-xl bg-blue-500/15 hover:bg-blue-500/25 text-blue-700 dark:text-blue-300 border border-blue-500/30 text-[10px] xs:text-[11px] sm:text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer text-center min-w-0"
+                    title={lang === 'ar' ? 'نقل المريض لسرير شاغر' : 'Transfer patient to vacant bed'}
+                  >
+                    <ArrowRightLeft className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+                    <span className="truncate">{lang === 'ar' ? 'نقل المريض' : 'Transfer'}</span>
+                  </button>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {/* Modality & Abbreviation */}
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      {lang === 'ar' ? 'مختصر ونوع الأشعة (Modality & Code)' : 'Modality & Abbreviation'}
-                    </label>
-                    <select
-                      value={editModality}
-                      onChange={(e) => setEditModality(e.target.value)}
-                      className="w-full px-3 py-2 text-xs rounded-xl bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500 cursor-pointer font-medium"
-                    >
-                      <option value="Chest X-Ray">[CXR] Chest X-Ray (أشعة الصدر)</option>
-                      <option value="CT">[CT] CT Scan (الأشعة المقطعية)</option>
-                      <option value="MRI">[MRI] MRI Scan (الرنين المغناطيسي)</option>
-                      <option value="Ultrasound">[US/POCUS] Ultrasound (الموجات الصوتية / سونار)</option>
-                      <option value="ECG">[ECG] 12-Lead ECG (تخطيط القلب)</option>
-                      <option value="Echo">[ECHO] Echocardiography (السونار القلبي)</option>
-                      <option value="Other">[OTHER] Other Diagnostic Study (فحوصات أخرى)</option>
-                    </select>
+                  <button
+                    onClick={() => setIsSwapModalOpen(true)}
+                    className="flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 text-purple-700 dark:text-purple-300 border border-purple-500/30 text-[10px] xs:text-[11px] sm:text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer text-center min-w-0"
+                    title={lang === 'ar' ? 'تبديل سريرين ومشغولين' : 'Swap beds'}
+                  >
+                    <Layers className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400 shrink-0" />
+                    <span className="truncate">{lang === 'ar' ? 'تبديل سريرين' : 'Swap Beds'}</span>
+                  </button>
+                </>
+              )}
+
+              {settings.features.enableBedIsolationControls !== false && (() => {
+                const isCurrentlyIsolated = !!(
+                  (bed && (bed.status === BedStatus.ISOLATION || bed.status === 'ISOLATION' || bed.isolation?.isIsolated)) ||
+                  (patient?.isolationPrecautions &&
+                    patient.isolationPrecautions.length > 0 &&
+                    !patient.isolationPrecautions.some(p => p.toLowerCase().includes('standard') || p === 'None' || p === 'لا يوجد عزل' || p === 'NONE'))
+                );
+
+                return (
+                  <button
+                    onClick={() => setIsIsolationModalOpen(true)}
+                    className={`flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-[10px] xs:text-[11px] sm:text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer text-center min-w-0 ${
+                      isCurrentlyIsolated
+                        ? 'bg-teal-500/15 hover:bg-teal-500/25 text-teal-700 dark:text-teal-300 border-teal-500/40 shadow-teal-500/10'
+                        : 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-700 dark:text-amber-300 border-amber-500/30'
+                    }`}
+                    title={
+                      isCurrentlyIsolated
+                        ? (lang === 'ar' ? 'إنهاء تدابير العزل والعودة للوضع الاعتيادي' : 'End Isolation Precautions')
+                        : (lang === 'ar' ? 'تفعيل تدابير العزل للمريض' : 'Activate Isolation Precautions')
+                    }
+                  >
+                    {isCurrentlyIsolated ? (
+                      <CheckCircle2 className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
+                    ) : (
+                      <ShieldAlert className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                    )}
+                    <span className="truncate whitespace-nowrap">
+                      {isCurrentlyIsolated
+                        ? (lang === 'ar' ? 'إنهاء العزل' : 'End Isolation')
+                        : (lang === 'ar' ? 'عزل' : 'Isolation')}
+                    </span>
+                  </button>
+                );
+              })()}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="bg-white dark:bg-[#0b1224] border border-slate-200 dark:border-slate-700/80 rounded-2xl p-4 shadow-sm dark:shadow-xl">
+        {/* Tab Navigation Controls */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs font-semibold">
+          {[
+            { 
+              id: 'all', 
+              label: lang === 'ar' ? 'الكل (جميع البطاقات)' : 'ALL (Combined Flowsheets)', 
+              icon: Layers, 
+              enabled: true 
+            },
+            { 
+              id: 'paperFlowsheet', 
+              label: lang === 'ar' ? 'الورقة الطبية الموحدة (Paper Chart)' : 'Paper Flowsheet', 
+              icon: FileText, 
+              enabled: true 
+            },
+            { 
+              id: 'labs', 
+              label: lang === 'ar' ? `التحاليل والجدول اليومي (${labResults.length})` : `Daily Lab Flowsheet (${labResults.length})`, 
+              icon: FlaskConical, 
+              enabled: settings.features.enableLabFlowsheet !== false 
+            },
+            { 
+              id: 'antibiotics', 
+              label: lang === 'ar' ? `المضادات الحيوية (${antibioticsList.filter(a => a.status === 'ACTIVE').length})` : `Antibiotics & Regimens (${antibioticsList.filter(a => a.status === 'ACTIVE').length})`, 
+              icon: Pill, 
+              enabled: settings.features.enableAntibioticsCard !== false 
+            },
+            { 
+              id: 'investigations', 
+              label: lang === 'ar' ? `الفحوصات والأشعات (${investigations.length})` : `Radiology & Investigations (${investigations.length})`, 
+              icon: Microscope, 
+              enabled: settings.features.enableInvestigations !== false 
+            },
+            { 
+              id: 'pumps', 
+              label: lang === 'ar' ? 'مضخات المحاليل (Infusion Pumps)' : 'Infusion Pumps', 
+              icon: Droplet, 
+              enabled: settings.features.enableInfusionPumps !== false 
+            },
+            { 
+              id: 'vitals', 
+              label: lang === 'ar' ? 'العلامات الحيوية (Vitals)' : 'Vitals & Telemetry', 
+              icon: Activity, 
+              enabled: settings.features.enableTelemetryVitals !== false 
+            },
+            { 
+              id: 'vent', 
+              label: lang === 'ar' ? 'التنفس الصناعي (Vent & ABG)' : 'Ventilator & ABG', 
+              icon: Wind, 
+              enabled: settings.features.enableVentilatorParameters !== false 
+            },
+            { 
+              id: 'fluids', 
+              label: lang === 'ar' ? 'ميزان السوائل ونقل الدم (Fluids & MTP)' : '24h Fluid Balance & MTP', 
+              icon: Scale, 
+              enabled: settings.features.enableFluidBalance !== false 
+            },
+            { 
+              id: 'sbar', 
+              label: lang === 'ar' ? `تسليم المناوبة SBAR (${sbarList.length})` : `SBAR Handovers (${sbarList.length})`, 
+              icon: ShieldCheck, 
+              enabled: settings.features.enableSbarHandover !== false 
+            },
+            { 
+              id: 'notes', 
+              label: lang === 'ar' ? `الملاحظات المشفرة (${notesList.length})` : `Clinical Notes (${notesList.length})`, 
+              icon: FileText, 
+              enabled: settings.features.enableClinicalNotes !== false 
+            },
+            { 
+              id: 'disposition', 
+              label: lang === 'ar' ? 'إنهاء الإقامة / النقل (Disposition)' : 'ICU Disposition & Discharge', 
+              icon: ExternalLink, 
+              enabled: true 
+            },
+          ].filter(t => t.enabled).map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => {
+                  const tabId = tab.id;
+                  setActiveTab(tabId as any);
+                  if (patient?.id) {
+                    if (tabId === 'vitals') fetchFullCategoryFromCloud(patient.id, 'vitals');
+                    else if (tabId === 'sbar') fetchFullCategoryFromCloud(patient.id, 'sbar');
+                    else if (tabId === 'fluids') fetchFullCategoryFromCloud(patient.id, 'fluids');
+                    else if (tabId === 'notes') fetchFullCategoryFromCloud(patient.id, 'notes');
+                    else if (tabId === 'vent') fetchFullCategoryFromCloud(patient.id, 'vent');
+                    else if (tabId === 'pumps') fetchFullCategoryFromCloud(patient.id, 'pumps');
+                    else if (tabId === 'labs' || tabId === 'antibiotics') fetchFullCategoryFromCloud(patient.id, 'labs');
+                    else if (tabId === 'investigations') fetchFullCategoryFromCloud(patient.id, 'investigations');
+                  }
+                }}
+                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl whitespace-nowrap transition-all font-semibold ${
+                  isActive
+                    ? 'bg-teal-500/15 text-teal-800 dark:text-teal-300 border border-teal-500/40 shadow-sm font-bold'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800/60'
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Tab 0: Paper Flowsheet Chart (الورقة الطبية الإلكترونية) */}
+      {(activeTab === 'paperFlowsheet' || activeTab === 'all') && (
+        <div className="space-y-4 animate-in fade-in duration-300">
+          {/* Top Row: Patient Data Grid (Demographics first, then Clinical History/Diagnosis) */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {/* Demographics / Pt Data Box */}
+            <div 
+              data-expanded={!isDemographicsCardCollapsed ? "true" : "false"}
+              className="icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl flex flex-col justify-between lg:col-span-1 border transition-all"
+            >
+              <div 
+                onClick={() => setIsDemographicsCardCollapsed(!isDemographicsCardCollapsed)}
+                className="icu-card-header-toggle border-b border-slate-200 dark:border-slate-800/80 pb-3 flex flex-col gap-2.5 cursor-pointer p-2 rounded-xl transition-all"
+              >
+                {/* Header Row: Title & Action Controls */}
+                <div className="flex items-center justify-between w-full">
+                  <div className="flex items-center gap-2">
+                    <User className="w-5 h-5 text-indigo-400 shrink-0" />
+                    <h3 className="text-base font-bold text-white">
+                      {lang === 'ar' ? 'بيانات المريض الأساسية' : 'Patient Demographics'}
+                    </h3>
                   </div>
 
-                  {/* Test Name */}
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-[11px] text-teal-400 bg-teal-950/80 px-2 py-0.5 rounded border border-teal-800 font-bold">
+                      {bed.bedNumber}
+                    </span>
+
+                    {/* Edit Button - ONLY visible when expanded */}
+                    {!isDemographicsCardCollapsed && !readOnly && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIsEditPatientModalOpen(true);
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 border border-teal-500/40 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 active:scale-95 shadow-sm"
+                        title={lang === 'ar' ? 'تعديل كافة بيانات المريض' : 'Edit Demographics'}
+                      >
+                        <Edit3 className="w-3.5 h-3.5 text-teal-400" />
+                        <span>{lang === 'ar' ? 'تعديل' : 'Edit'}</span>
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsDemographicsCardCollapsed(!isDemographicsCardCollapsed);
+                      }}
+                      className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all cursor-pointer"
+                      title={isDemographicsCardCollapsed ? (lang === 'ar' ? 'فتح البطاقة' : 'Expand') : (lang === 'ar' ? 'طي البطاقة' : 'Collapse')}
+                    >
+                      {isDemographicsCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Sub-row: Risk Level & Admission Pathway - ALWAYS VISIBLE EVEN WHEN COLLAPSED ON A SINGLE ROW */}
+                <div className="grid grid-cols-2 gap-1.5 w-full pt-0.5">
+                  <span className={`px-2 py-1.5 rounded-lg font-bold border shadow-sm flex items-center justify-center gap-1 text-[9px] xs:text-[10px] sm:text-[11px] truncate ${getAcuityStyle(patient.acuityLevel)}`}>
+                    <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate">{lang === 'ar' ? `${getAcuityArLabel(patient.acuityLevel)}` : `${patient.acuityLevel}`}</span>
+                  </span>
+
+                  <span className="px-2 py-1.5 rounded-lg font-bold border shadow-sm flex items-center justify-center gap-1 text-[9px] xs:text-[10px] sm:text-[11px] bg-slate-900 text-cyan-300 border-cyan-800/80 truncate">
+                    <ArrowRightLeft className="w-3.5 h-3.5 shrink-0 text-cyan-400" />
+                    <span className="truncate">{lang === 'ar' ? `${getPathwayArLabel(patient.intakePathway)}` : `${patient.intakePathway}`}</span>
+                  </span>
+                </div>
+              </div>
+
+              {!isDemographicsCardCollapsed && (
+                <>
+                  <div className="grid grid-cols-2 gap-3 my-4 text-xs font-mono">
+                    {/* Full Name */}
+                    <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800 col-span-2">
+                      <div className="text-[10px] text-slate-500">{lang === 'ar' ? 'الاسم كاملاً' : 'Full Name'}</div>
+                      <div className="text-white font-bold mt-0.5 text-xs truncate">
+                        {patient.fullNameAr || patient.fullNameEn}
+                      </div>
+                    </div>
+
+                    {/* Medical Record Number (MRN) */}
+                    <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
+                      <div className="text-[10px] text-slate-500">{lang === 'ar' ? 'رقم الملف الطبي (MRN)' : 'MRN / File No.'}</div>
+                      <div className="text-teal-400 font-bold mt-0.5 font-mono text-xs">
+                        {patient.mrn || '—'}
+                      </div>
+                    </div>
+
+                    {/* Card ID / National ID */}
+                    <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
+                      <div className="text-[10px] text-slate-500">{lang === 'ar' ? 'رقم البطاقة (الهوية)' : 'Card ID / National ID'}</div>
+                      <div className="text-cyan-300 font-bold mt-0.5 font-mono text-xs">
+                        {patient.nationalId || '—'}
+                      </div>
+                    </div>
+
+                    {/* Age & Gender */}
+                    <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
+                      <div className="text-[10px] text-slate-500">{lang === 'ar' ? 'السن والجنس' : 'Age & Gender'}</div>
+                      <div className="text-white font-bold mt-0.5">
+                        {patient.age} {lang === 'ar' ? 'سنة' : 'yo'} / {patient.gender === 'MALE' ? (lang === 'ar' ? 'ذكر' : 'Male') : patient.gender === 'FEMALE' ? (lang === 'ar' ? 'أنثى' : 'Female') : patient.gender}
+                      </div>
+                    </div>
+
+                    {/* Blood Group */}
+                    <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
+                      <div className="text-[10px] text-slate-500">{lang === 'ar' ? 'فصيلة الدم' : 'Blood Group'}</div>
+                      <div className="text-amber-400 font-bold mt-0.5">
+                        {patient.bloodType || (lang === 'ar' ? 'غير محدد' : 'N/A')}
+                      </div>
+                    </div>
+
+                    {/* Height & Weight (without Ideal Weight) */}
+                    <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
+                      <div className="text-[10px] text-slate-500">{lang === 'ar' ? 'الطول والوزن' : 'Height & Weight'}</div>
+                      <div className="text-white font-bold mt-1 flex items-center justify-between gap-2 text-xs">
+                        <div className="flex items-center gap-1">
+                          <span className="text-slate-400">{lang === 'ar' ? 'الطول:' : 'H:'}</span>
+                          <span className="text-cyan-300 font-mono">{patient.heightCm ? `${patient.heightCm}cm` : '170cm'}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span className="text-slate-400">{lang === 'ar' ? 'الوزن:' : 'W:'}</span>
+                          <span className="text-amber-300 font-mono">{patient.weightKg}kg</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* ICU Admission Date - side-by-side with H&W, numeric-formatted */}
+                    <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800">
+                      <div className="text-[10px] text-slate-500">{lang === 'ar' ? 'تاريخ دخول العناية' : 'ICU Admission Date'}</div>
+                      <div className="text-teal-400 font-bold mt-1 text-xs">
+                        {formatNumericDate(patient.admissionDate)}
+                      </div>
+                    </div>
+
+                    {/* Attending Physician */}
+                    <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800 col-span-2 sm:col-span-1">
+                      <div className="text-[10px] text-slate-500">{lang === 'ar' ? 'الطبيب المعالج / الاستشاري' : 'Attending Physician'}</div>
+                      <div className="text-indigo-400 font-bold mt-1 text-xs truncate" title={patient.attendingPhysician?.name && patient.attendingPhysician.name !== 'غير محدد' && patient.attendingPhysician.name !== 'Unassigned' ? patient.attendingPhysician.name : (lang === 'ar' ? 'غير محدد' : 'Unassigned')}>
+                        {patient.attendingPhysician?.name && patient.attendingPhysician.name !== 'غير محدد' && patient.attendingPhysician.name !== 'Unassigned' ? patient.attendingPhysician.name : (lang === 'ar' ? 'غير محدد' : 'Unassigned')}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Removed the synchronization warning alert block as requested */}
+                </>
+              )}
+            </div>
+
+            {/* History & Presenting Complaints Box (Diagnosis / Shakwa) */}
+            <div 
+              data-expanded={!isHistoryCardCollapsed ? "true" : "false"}
+              className="lg:col-span-2 icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-3 border transition-all"
+            >
+              <div 
+                onClick={() => setIsHistoryCardCollapsed(!isHistoryCardCollapsed)}
+                className="icu-card-header-toggle flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2.5 cursor-pointer p-2 rounded-xl transition-all"
+              >
+                <div className="flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-teal-400" />
+                  <h3 className="text-base font-bold text-white">
+                    {lang === 'ar' ? 'التاريخ الطبي والشكوى الحالية' : 'Clinical History & Complaints'}
+                  </h3>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsHistoryCardCollapsed(!isHistoryCardCollapsed);
+                    }}
+                    className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all cursor-pointer"
+                    title={isHistoryCardCollapsed ? (lang === 'ar' ? 'فتح البطاقة' : 'Expand') : (lang === 'ar' ? 'طي البطاقة' : 'Collapse')}
+                  >
+                    {isHistoryCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {!isHistoryCardCollapsed && (
+                <>
+                  {!isHistoryEditing && !readOnly && (
+                    <div className="flex justify-end pb-1">
+                      <button
+                        type="button"
+                        onClick={() => setIsHistoryEditing(true)}
+                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-teal-300 text-xs font-bold transition-all cursor-pointer flex items-center gap-1 border border-slate-700"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                        <span>{lang === 'ar' ? 'تعديل البيانات' : 'Edit Info'}</span>
+                      </button>
+                    </div>
+                  )}
+                  {isHistoryEditing ? (
+                <div className="space-y-4 text-xs">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-slate-400 font-semibold mb-1">
+                        {lang === 'ar' ? 'الشكوى الحالية والأعراض (C/O)' : 'Presenting Complaints (C/O)'}
+                      </label>
+                      <textarea
+                        rows={3}
+                        value={presentingComplaintInput}
+                        onChange={(e) => setPresentingComplaintInput(e.target.value)}
+                        placeholder="e.g. c/o acute hepatitis, RUQ pain, jaundice..."
+                        className="w-full bg-[#070c18] border border-slate-800 rounded-xl p-3 text-white placeholder-slate-600 focus:border-teal-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-400 font-semibold mb-1">
+                        {lang === 'ar' ? 'التاريخ المرضي السابق (Past Hx)' : 'Past Medical History (Past Hx)'}
+                      </label>
+                      <textarea
+                        rows={3}
+                        value={historyInput}
+                        onChange={(e) => setHistoryInput(e.target.value)}
+                        placeholder="e.g. Past Hx: IDA, Menses 2 months ago..."
+                        className="w-full bg-[#070c18] border border-slate-800 rounded-xl p-3 text-white placeholder-slate-600 focus:border-teal-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      {lang === 'ar' ? 'اسم الأشعة والفحص (Radiology Study Name)' : 'Radiology Study Name'}
+                    <label className="block text-slate-400 font-semibold mb-1">
+                      {lang === 'ar' ? 'الأمراض المزمنة والمصاحبة' : 'Chronic Illnesses & Comorbidities'}
                     </label>
                     <input
                       type="text"
-                      value={editTestName}
-                      onChange={(e) => setEditTestName(e.target.value)}
-                      className="w-full px-3 py-2 text-xs rounded-xl bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500 font-semibold"
-                      required
+                      value={chronicDiseasesInput}
+                      onChange={(e) => setChronicDiseasesInput(e.target.value)}
+                      placeholder="e.g. Diabetes, Hypertension, CAD..."
+                      className="w-full bg-[#070c18] border border-slate-800 rounded-xl px-3 py-2.5 text-white placeholder-slate-600 focus:border-teal-500 focus:outline-none"
                     />
                   </div>
-                </div>
 
-                {/* Live Preview Strip for Mobile & Desktop */}
-                <div className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-[11px] flex items-center justify-between gap-2 text-slate-700 dark:text-slate-300">
-                  <span className="flex items-center gap-1 text-teal-700 dark:text-teal-300 font-mono font-bold shrink-0">
-                    <Tag className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
-                    <span>
-                      {editModality === 'Chest X-Ray' ? '[CXR]' :
-                       editModality === 'CT' ? '[CT]' :
-                       editModality === 'MRI' ? '[MRI]' :
-                       editModality === 'Ultrasound' ? '[US/POCUS]' :
-                       editModality === 'ECG' ? '[ECG]' :
-                       editModality === 'Echo' ? '[ECHO]' : '[RAD]'}
-                    </span>
-                  </span>
-                  <span className="truncate font-semibold text-slate-900 dark:text-white">
-                    {editTestName || (lang === 'ar' ? 'اسم الأشعة غير محدد' : 'Study name not set')}
-                  </span>
-                </div>
+                  <div className="pt-2 border-t border-slate-800/80">
+                    <div>
+                      <label className="block text-slate-400 font-semibold mb-1">
+                        {lang === 'ar' ? 'التشخيص الطبي الأساسي (Primary Diagnosis ICD-10)' : 'Primary Admitting Diagnosis (ICD-10)'}
+                      </label>
+                      <input
+                        type="text"
+                        value={primaryDiagnosisEnInput}
+                        onChange={(e) => {
+                          setPrimaryDiagnosisEnInput(e.target.value);
+                          setPrimaryDiagnosisArInput(e.target.value);
+                        }}
+                        placeholder="e.g. Acute Respiratory Failure"
+                        className="w-full bg-[#070c18] border border-slate-800 rounded-xl px-3 py-2 text-white focus:border-teal-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {/* Status */}
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      {lang === 'ar' ? 'حالة التقرير' : 'Status'}
-                    </label>
-                    <select
-                      value={editStatus}
-                      onChange={(e) => setEditStatus(e.target.value as any)}
-                      className="w-full px-3 py-2 text-xs rounded-xl bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500 cursor-pointer"
+                  <div className="flex justify-end gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsHistoryEditing(false)}
+                      className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 font-bold"
                     >
-                      <option value="REPORTED">{lang === 'ar' ? 'تقرير معتمد (Reported)' : 'Reported'}</option>
-                      <option value="RESULTED">{lang === 'ar' ? 'نتيجة أولية (Resulted)' : 'Resulted'}</option>
-                      <option value="ORDERED">{lang === 'ar' ? 'طلب معلق (Ordered)' : 'Ordered'}</option>
-                    </select>
-                  </div>
-
-                  {/* Timestamp */}
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      {lang === 'ar' ? 'تاريخ ووقت الفحص' : 'Exam Date & Time'}
-                    </label>
-                    <input
-                      type="datetime-local"
-                      value={editTimestamp}
-                      onChange={(e) => setEditTimestamp(e.target.value)}
-                      className="w-full px-3 py-1.5 text-xs rounded-xl bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500"
-                      required
-                    />
+                      {lang === 'ar' ? 'إلغاء' : 'Cancel'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSavePatientHistory}
+                      className="px-5 py-2 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold flex items-center gap-1.5 shadow-md shadow-teal-500/15"
+                    >
+                      <Save className="w-4 h-4" />
+                      <span>{lang === 'ar' ? 'حفظ ومزامنة' : 'Save & Sync'}</span>
+                    </button>
                   </div>
                 </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-sm">
+                  {/* Complaints Column */}
+                  <div className="bg-[#070c18] p-4 rounded-xl border border-slate-800 space-y-2">
+                    <span className="text-[10px] uppercase tracking-wider font-bold text-teal-400 font-mono block">
+                      {lang === 'ar' ? 'الشكوى الحالية والتحليل الأعراضي (C/O)' : 'Presenting Complaint (C/O)'}
+                    </span>
+                    <p className="text-slate-200 leading-relaxed font-mono whitespace-pre-wrap">
+                      {patient.presentingComplaint || (lang === 'ar' ? 'لم تسجل شكوى حالية بعد.' : 'No presenting complaints registered.')}
+                    </p>
+                  </div>
 
-                {/* Report Findings & Impression */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    {lang === 'ar' ? 'نص التقرير والنتائج الطبية (Findings & Impression)' : 'Report Findings & Clinical Impression'}
-                  </label>
-                  <textarea
-                    value={editReport}
-                    onChange={(e) => setEditReport(e.target.value)}
-                    rows={6}
-                    className="w-full px-3 py-2 text-xs rounded-xl bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-teal-500 font-sans leading-relaxed whitespace-pre-wrap"
-                    placeholder="Enter full findings and radiological impression..."
-                  />
+                  {/* Past Hx & Chronic diseases */}
+                  <div className="space-y-3">
+                    <div className="bg-[#070c18] p-4 rounded-xl border border-slate-800 space-y-1.5">
+                      <span className="text-[10px] uppercase tracking-wider font-bold text-cyan-400 font-mono block">
+                        {lang === 'ar' ? 'التاريخ الطبي السابق (Past Hx)' : 'Past Medical History (Past Hx)'}
+                      </span>
+                      <p className="text-slate-200 font-mono whitespace-pre-wrap">
+                        {patient.history || (lang === 'ar' ? 'لا يوجد تاريخ مرضي مسجل.' : 'No past history recorded.')}
+                      </p>
+                    </div>
+
+                    <div className="bg-[#070c18] p-4 rounded-xl border border-slate-800 space-y-1.5">
+                      <span className="text-[10px] uppercase tracking-wider font-bold text-amber-400 block font-mono">
+                        {lang === 'ar' ? 'الأمراض المزمنة (Chronic Diseases)' : 'Chronic Diseases & Comorbidities'}
+                      </span>
+                      <p className="text-slate-200 font-mono font-bold">
+                        {patient.chronicDiseases || (lang === 'ar' ? 'لا توجد أمراض مزمنة مصاحبة.' : 'None reported.')}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tab 1: Continuous Vitals & Telemetry (Top Section after Patient Data) */}
+      {(activeTab === 'vitals' || (activeTab === 'all' && settings.features.enableTelemetryVitals !== false) || activeTab === 'paperFlowsheet') && (
+        <div 
+          data-expanded={!isPaperVitalsCardCollapsed ? "true" : "false"}
+          className="icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-4 border transition-all"
+        >
+          <div 
+            onClick={() => setIsPaperVitalsCardCollapsed(!isPaperVitalsCardCollapsed)}
+            className="icu-card-header-toggle flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2.5 cursor-pointer p-2 rounded-xl transition-all"
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-teal-500/10 border border-teal-500/30 text-teal-400">
+                <Activity className="w-5 h-5" />
+              </div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold text-white">
+                  {lang === 'ar' ? 'العلامات الحيوية' : 'Vital Signs'}
+                </h3>
+                <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/30">
+                  {vitalsHistory.length}
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsPaperVitalsCardCollapsed(!isPaperVitalsCardCollapsed);
+                }}
+                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all cursor-pointer flex items-center gap-1 text-xs"
+                title={isPaperVitalsCardCollapsed ? (lang === 'ar' ? 'فتح البطاقة' : 'Expand') : (lang === 'ar' ? 'طي البطاقة' : 'Collapse')}
+              >
+                <span className="text-[11px] text-slate-400 hidden sm:inline">
+                  {isPaperVitalsCardCollapsed ? (lang === 'ar' ? 'عرض السجل' : 'Expand') : (lang === 'ar' ? 'طي' : 'Collapse')}
+                </span>
+                {isPaperVitalsCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          {!isPaperVitalsCardCollapsed && (
+            <div className="space-y-4 animate-in fade-in duration-300">
+              {latestVitals && (
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+                  {/* Blood Pressure (BP) replacing MAP */}
+                  <div className="bg-[#070c18] px-3 py-2 rounded-xl border border-slate-800/80 flex items-center justify-between hover:border-slate-700 transition-colors">
+                    <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">BP</span>
+                    <span className={`text-sm font-extrabold font-mono ${
+                      latestVitals.meanArterialPressureMmHg < 65 ? 'text-red-400 animate-pulse font-black' : 'text-cyan-300'
+                    }`}>
+                      {latestVitals.systolicBpMmHg}/{latestVitals.diastolicBpMmHg}
+                    </span>
+                  </div>
+
+                  {/* Heart Rate (HR) */}
+                  <div className="bg-[#070c18] px-3 py-2 rounded-xl border border-slate-800/80 flex items-center justify-between hover:border-slate-700 transition-colors">
+                    <div className="flex items-center gap-1">
+                      <Heart className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                      <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">HR</span>
+                    </div>
+                    <span className="text-sm font-extrabold text-emerald-400 font-mono">
+                      {latestVitals.heartRateBpm} <span className="text-[10px] text-slate-500 font-bold">bpm</span>
+                    </span>
+                  </div>
+
+                  {/* SpO2 */}
+                  <div className="bg-[#070c18] px-3 py-2 rounded-xl border border-slate-800/80 flex items-center justify-between hover:border-slate-700 transition-colors">
+                    <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">SpO₂</span>
+                    <span className="text-sm font-extrabold text-teal-300 font-mono flex items-center gap-1">
+                      <span>{latestVitals.spo2Percent}%</span>
+                      <span className="text-[10px] text-slate-500 font-normal">({latestVitals.fio2SuppliedPercent}% Fi)</span>
+                    </span>
+                  </div>
+
+                  {/* Core Temp */}
+                  <div className="bg-[#070c18] px-3 py-2 rounded-xl border border-slate-800/80 flex items-center justify-between hover:border-slate-700 transition-colors">
+                    <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Temp</span>
+                    <span className="text-sm font-extrabold text-amber-300 font-mono flex items-center gap-1">
+                      <span>{latestVitals.coreTemperatureCelsius}°C</span>
+                      <span className="text-[10px] text-slate-500 font-normal">({latestVitals.temperatureSite})</span>
+                    </span>
+                  </div>
+
+                  {/* GCS & RASS */}
+                  <div className="bg-[#070c18] px-3 py-2 rounded-xl border border-slate-800/80 flex items-center justify-between hover:border-slate-700 transition-colors">
+                    <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">GCS</span>
+                    <span className="text-sm font-extrabold text-indigo-300 font-mono flex items-center gap-1">
+                      <span>{latestVitals.gcsTotalScore}/15</span>
+                      <span className="text-[10px] text-slate-500 font-normal">({latestVitals.sedationRassScore ?? 'N/A'} R)</span>
+                    </span>
+                  </div>
+
+                  {/* CVP & Glucose */}
+                  <div className="bg-[#070c18] px-3 py-2 rounded-xl border border-slate-800/80 flex items-center justify-between hover:border-slate-700 transition-colors animate-in fade-in">
+                    <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">CVP</span>
+                    <span className="text-sm font-extrabold text-blue-400 font-mono flex items-center gap-1">
+                      <span>{latestVitals.cvpMmHg !== undefined && latestVitals.cvpMmHg !== null ? `${latestVitals.cvpMmHg} mmHg` : '—'}</span>
+                      <span className="text-[10px] text-slate-500 font-normal">({latestVitals.bloodGlucoseMgDl ?? '—'} G)</span>
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Historical Feed Table (Flattened - No nested cards) */}
+              <div className="pt-4 border-t border-slate-800/60 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-teal-400" />
+                    <span>{lang === 'ar' ? 'سجل العلامات الحيوية التاريخية (Telemetry Trajectory)' : 'Telemetry History Trajectory'}</span>
+                  </h3>
+                  {!readOnly && (
+                    <button
+                      onClick={onOpenAddVitals}
+                      className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-teal-500/20 text-teal-300 text-xs font-bold cursor-pointer hover:bg-teal-500/30 transition-all"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>{lang === 'ar' ? 'إضافة قراءة جديدة' : 'Add Reading'}</span>
+                    </button>
+                  )}
                 </div>
 
-                {/* Notes */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    {lang === 'ar' ? 'ملاحظات وتوجيهات سريرية' : 'Clinical Notes'}
-                  </label>
-                  <input
-                    type="text"
-                    value={editNotes}
-                    onChange={(e) => setEditNotes(e.target.value)}
-                    placeholder={lang === 'ar' ? 'مثال: تم إبلاغ طبيب العناية، فحص متنقل للسرير...' : 'e.g. Bedside study, ICU team alerted...'}
-                    className="w-full px-3 py-2 text-xs rounded-xl bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-teal-500"
-                  />
+                <div className="overflow-x-auto">
+                  <table className={`w-full text-xs ${isRTL ? 'text-right' : 'text-left'}`}>
+                    <thead>
+                      <tr className="border-b border-slate-800 text-slate-400 font-mono">
+                        <th className="py-2 px-3">Date & Time</th>
+                        <th className="py-2 px-3">BP</th>
+                        <th className="py-2 px-3">HR</th>
+                        <th className="py-2 px-3">SpO₂</th>
+                        <th className="py-2 px-3">RR</th>
+                        <th className="py-2 px-3">CVP</th>
+                        <th className="py-2 px-3">BG</th>
+                        <th className="py-2 px-3">Staff / Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60 font-mono">
+                      {(showAllVitals ? vitalsHistory : vitalsHistory.slice(0, 4)).map((v) => {
+                        const d = new Date(v.timestamp);
+                        const dateStr = formatNumericDate(d);
+                        const timeStr = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+                        return (
+                          <tr key={v.id} className="hover:bg-slate-800/30">
+                            <td className="py-2.5 px-3">
+                              <div className="flex flex-col">
+                                <span className="font-bold text-slate-200">{dateStr}</span>
+                                <span className="text-[10px] text-slate-400 font-mono">{timeStr}</span>
+                              </div>
+                            </td>
+                            <td className={`py-2.5 px-3 text-white font-bold ${v.meanArterialPressureMmHg < 65 ? 'text-red-400 animate-pulse font-black' : ''}`}>
+                              {v.systolicBpMmHg}/{v.diastolicBpMmHg} {v.isArterialLine ? '(Art)' : '(Cuff)'}
+                            </td>
+                            <td className="py-2.5 px-3 text-emerald-400">
+                              {v.heartRateBpm}
+                            </td>
+                            <td className="py-2.5 px-3 text-teal-300">
+                              {v.spo2Percent}% ({v.fio2SuppliedPercent}% Fi)
+                            </td>
+                            <td className="py-2.5 px-3 text-slate-300">
+                              {v.respiratoryRateCpm}
+                            </td>
+                            <td className="py-2.5 px-3 text-blue-400">
+                              {v.cvpMmHg !== undefined && v.cvpMmHg !== null ? `${v.cvpMmHg} mmHg` : '—'}
+                            </td>
+                            <td className="py-2.5 px-3 text-amber-300">
+                              {v.bloodGlucoseMgDl !== undefined && v.bloodGlucoseMgDl !== null ? `${v.bloodGlucoseMgDl}` : '—'}
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-slate-400 text-[11px] font-sans truncate max-w-[110px]">
+                                  {v.recordedBy?.name || (lang === 'ar' ? 'الكادر الطبي' : 'Staff')}
+                                </span>
+                                {!readOnly && (currentUser?.uid === v.recordedBy?.staffId || currentUser?.badgeId === v.recordedBy?.staffId || currentUser?.role === StaffRole.ADMIN || currentUser?.role === 'ADMIN' || currentUser?.isSuperAdmin === true) && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedVitalForEdit(v);
+                                      setIsEditVitalsModalOpen(true);
+                                    }}
+                                    className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-teal-500/10 hover:bg-teal-500/20 text-teal-300 border border-teal-500/30 text-[10px] font-bold transition-all cursor-pointer shadow-xs active:scale-95 whitespace-nowrap"
+                                    title={lang === 'ar' ? 'تعديل القراءة الحيوية' : 'Edit vital reading'}
+                                  >
+                                    <Edit3 className="w-3 h-3" />
+                                    <span>{lang === 'ar' ? 'تعديل' : 'Edit'}</span>
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
+
+                {vitalsHistory.length >= 4 && (
+                  <div className="flex justify-center pt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!showAllVitals && patient?.id) {
+                          fetchFullCategoryFromCloud(patient.id, 'vitals');
+                        }
+                        setShowAllVitals(!showAllVitals);
+                      }}
+                      className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-teal-300 font-bold text-xs border border-slate-700 transition-all cursor-pointer shadow-sm active:scale-95"
+                    >
+                      <span>
+                        {showAllVitals 
+                          ? (lang === 'ar' ? 'عرض أقل' : 'Show Less') 
+                          : (lang === 'ar' ? `عرض المزيد (${vitalsHistory.length > 4 ? vitalsHistory.length - 4 : '+'} سجلات إضافية)` : `Show More (${vitalsHistory.length > 4 ? vitalsHistory.length - 4 : '+'} more records)`)}
+                      </span>
+                      {showAllVitals ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           )}
+        </div>
+      )}
 
-          {/* Success Banner */}
-          {saveSuccess && (
-            <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-500 text-emerald-900 dark:text-emerald-200 text-xs flex items-center gap-3 animate-in fade-in">
-              <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+      {activeTab === 'paperFlowsheet' && (
+        <div className="space-y-4 animate-in fade-in duration-300">
+          {/* Interactive Labs Grid Table (التحاليل الطبية المتسلسلة التراكمية) */}
+          <div 
+            data-expanded={!isPaperLabsCardCollapsed ? "true" : "false"}
+            className="icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-3 border transition-all"
+          >
+            <div 
+              onClick={() => setIsPaperLabsCardCollapsed(!isPaperLabsCardCollapsed)}
+              className="icu-card-header-toggle flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-2.5 cursor-pointer p-2 rounded-xl transition-all"
+            >
+              <div className="flex items-center gap-2">
+                <Activity className="w-5 h-5 text-emerald-400" />
+                <div>
+                  <h3 className="text-base font-bold text-white">
+                    {lang === 'ar' ? 'جدول التحاليل المتسلسلة التراكمية' : 'Sequential Laboratories Grid'}
+                  </h3>
+                  <p className="text-[10px] text-slate-400 mt-0.5">
+                    {lang === 'ar'
+                      ? 'عرض التحاليل متسلسلة زمنياً مع حظر التعديل التبادلي وحماية المصداقية.'
+                      : 'Labs ordered chronologically with doctor-lock protection.'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsPaperLabsCardCollapsed(!isPaperLabsCardCollapsed);
+                  }}
+                  className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all cursor-pointer"
+                  title={isPaperLabsCardCollapsed ? (lang === 'ar' ? 'فتح البطاقة' : 'Expand') : (lang === 'ar' ? 'طي البطاقة' : 'Collapse')}
+                >
+                  {isPaperLabsCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            {!isPaperLabsCardCollapsed && (
+              <>
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 pb-2 border-b border-slate-800/80">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-400 font-mono">
+                      {labsList.length} {lang === 'ar' ? 'أعمدة مسجلة' : 'Recorded Columns'}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-wrap justify-end">
+                    {settings.features.enableAiLabScanner && (
+                      <div className="flex items-center gap-1 bg-slate-900/90 p-1 rounded-xl border border-slate-800">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAiScannerPreset('ALL');
+                            setIsAiLabScannerOpen(true);
+                          }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-fuchsia-600 to-indigo-600 hover:from-fuchsia-500 hover:to-indigo-500 text-white text-xs font-bold transition-all shadow-md active:scale-95 flex-shrink-0 cursor-pointer"
+                        >
+                          <Camera className="w-4 h-4" />
+                          <span className="hidden sm:inline">{lang === 'ar' ? 'تصوير تحليل' : 'AI Scan'}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAiScannerPreset('ABG');
+                            setIsAiLabScannerOpen(true);
+                          }}
+                          className="px-2 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 text-[11px] font-bold transition-all border border-emerald-500/30 cursor-pointer"
+                        >
+                          🫁 {lang === 'ar' ? 'غازات ABG' : 'ABG'}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAiScannerPreset('CBC');
+                            setIsAiLabScannerOpen(true);
+                          }}
+                          className="px-2 py-1 rounded-lg bg-teal-500/15 hover:bg-teal-500/25 text-teal-300 text-[11px] font-bold transition-all border border-teal-500/30 cursor-pointer"
+                        >
+                          🩸 {lang === 'ar' ? 'صورة CBC' : 'CBC'}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAiScannerPreset('CHEMISTRY');
+                            setIsAiLabScannerOpen(true);
+                          }}
+                          className="px-2 py-1 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 text-[11px] font-bold transition-all border border-cyan-500/30 cursor-pointer"
+                        >
+                          🧪 {lang === 'ar' ? 'كيمياء وأملاح' : 'Chemistry'}
+                        </button>
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={handleOpenAddLabColumn}
+                      className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition-all shadow-md active:scale-95 flex-shrink-0 cursor-pointer"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>{lang === 'ar' ? 'إضافة عمود تحاليل' : 'Add Column'}</span>
+                    </button>
+                  </div>
+                </div>
+
+            {labsList.length === 0 ? (
+              <div className="bg-[#070c18] border border-dashed border-slate-800 rounded-xl p-8 text-center text-slate-400 space-y-3">
+                <div className="text-sm font-semibold">{lang === 'ar' ? 'لا توجد قراءات تحاليل مسجلة لهذا المريض بعد.' : 'No lab columns recorded for this patient yet.'}</div>
+                <button
+                  onClick={handleOpenAddLabColumn}
+                  className="px-4 py-2 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-bold transition-all"
+                >
+                  {lang === 'ar' ? 'سجل أول قراءة للتحاليل الآن' : 'Record First Lab Column Now'}
+                </button>
+              </div>
+            ) : (
+              <div className="overflow-x-auto border border-slate-800 rounded-xl bg-[#070c18]">
+                <table className="w-full text-xs font-mono border-collapse select-text">
+                  <thead>
+                    <tr className="bg-slate-950/80 border-b border-slate-800">
+                      <th className={`p-3 text-left font-bold text-slate-400 border-r border-slate-800 sticky left-0 bg-slate-950 z-10 w-44 ${isRTL ? 'text-right' : 'text-left'}`}>
+                        {lang === 'ar' ? 'التحاليل الطبية / التاريخ' : 'Lab Parameter / Date'}
+                      </th>
+                      {labsList.map((lab) => {
+                        const doctorName = currentUser?.nameEn || currentUser?.nameAr || currentUser?.email || 'Dr. Guest';
+                        const isAuthor = lab.reviewedByDoctorName === doctorName || currentUser?.role === 'ADMIN' || currentUser?.role === 'SUPER_ADMIN';
+                        return (
+                          <th key={lab.id} className="p-2 border-r border-slate-800 text-center min-w-[140px] relative group bg-[#090f1d]">
+                            <div className="text-teal-400 font-bold">
+                              {new Date(lab.timestamp).toLocaleDateString('en-US', { day: '2-digit', month: '2-digit' })}
+                            </div>
+                            <div className="text-[10px] text-slate-400 mt-0.5">
+                              {new Date(lab.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}
+                            </div>
+                            <div className="text-[9px] text-slate-500 font-sans mt-0.5 flex items-center justify-center gap-1">
+                              <User className="w-2.5 h-2.5 text-indigo-400" />
+                              <span className="truncate max-w-[100px]" title={lab.reviewedByDoctorName}>{lab.reviewedByDoctorName}</span>
+                            </div>
+
+                            {/* Hover Actions: Lock / Edit / Delete */}
+                            <div className="flex items-center justify-center gap-1.5 mt-2 pt-1 border-t border-slate-800/80">
+                              {isAuthor && !readOnly ? (
+                                <>
+                                  <button
+                                    onClick={() => handleStartEditLabColumn(lab)}
+                                    className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-teal-400 transition-all"
+                                    title={lang === 'ar' ? 'تعديل هذا العمود' : 'Edit Column'}
+                                  >
+                                    <Edit3 className="w-3 h-3" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteLabColumn(lab.id, lab.reviewedByDoctorName || 'Dr. Guest')}
+                                    className="p-1 rounded bg-slate-800 hover:bg-red-950/60 text-red-400 transition-all"
+                                    title={lang === 'ar' ? 'حذف العمود' : 'Delete Column'}
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+                                </>
+                              ) : (
+                                <span 
+                                  className="p-1 text-slate-500 flex items-center gap-1 bg-slate-900/60 rounded px-2 cursor-not-allowed text-[8px] font-sans"
+                                  title={lang === 'ar' ? `مغلق بواسطة ${lab.reviewedByDoctorName}` : `Locked by ${lab.reviewedByDoctorName}`}
+                                  onClick={() => alert(lang === 'ar' 
+                                    ? `⚠️ سجل طبي محمي: هذا العمود تم تسجيله بواسطة [${lab.reviewedByDoctorName}]. لا يمكن تعديله أو التلاعب به لضمان الدقة والنزاهة السريرية.` 
+                                    : `⚠️ Protected Clinical Record: This column was recorded by [${lab.reviewedByDoctorName}]. Overwriting or editing another doctor's entry is strictly forbidden.`)}
+                                >
+                                  <Lock className="w-2.5 h-2.5 text-slate-600" />
+                                  <span>{lang === 'ar' ? 'مغلق' : 'Locked'}</span>
+                                </span>
+                              )}
+                            </div>
+                          </th>
+                        );
+                      })}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {/* Panel 1: CBC */}
+                    <tr className="bg-slate-900/50 border-b border-slate-800 font-bold"><td colSpan={labsList.length + 1} className="p-2 text-teal-300 border-r border-slate-800 sticky left-0 bg-[#0e172a]">{lang === 'ar' ? 'صورة الدم كاملة (CBC)' : 'Complete Blood Count (CBC)'}</td></tr>
+                    <tr className="border-b border-slate-800/80 hover:bg-slate-900/40">
+                      <td className="p-2.5 border-r border-slate-800 sticky left-0 bg-[#070c18] font-bold text-slate-300">{lang === 'ar' ? 'كريات الدم البيضاء (WBCs)' : 'WBCs (k/uL)'}</td>
+                      {labsList.map(l => <td key={l.id} className="p-2.5 text-center border-r border-slate-800 text-white">{l.cbc.wbcCountKPerUl || '—'}</td>)}
+                    </tr>
+                    <tr className="border-b border-slate-800/80 hover:bg-slate-900/40">
+                      <td className="p-2.5 border-r border-slate-800 sticky left-0 bg-[#070c18] font-bold text-slate-300">{lang === 'ar' ? 'الهيموجلوبين (Hb)' : 'Hb (g/dL)'}</td>
+                      {labsList.map(l => <td key={l.id} className="p-2.5 text-center border-r border-slate-800 text-teal-300 font-bold">{l.cbc.hemoglobinGPerDl || '—'}</td>)}
+                    </tr>
+                    <tr className="border-b border-slate-800/80 hover:bg-slate-900/40">
+                      <td className="p-2.5 border-r border-slate-800 sticky left-0 bg-[#070c18] font-bold text-slate-300">{lang === 'ar' ? 'الصفائح الدموية (PLT)' : 'PLT (k/uL)'}</td>
+                      {labsList.map(l => <td key={l.id} className="p-2.5 text-center border-r border-slate-800 text-white">{l.cbc.plateletCountKPerUl || '—'}</td>)}
+                    </tr>
+                    <tr className="border-b border-slate-800/80 hover:bg-slate-900/40">
+                      <td className="p-2.5 border-r border-slate-800 sticky left-0 bg-[#070c18] font-bold text-slate-300">{lang === 'ar' ? 'العد التفريقي (Differential)' : 'WBC Differential'}</td>
+                      {labsList.map(l => <td key={l.id} className="p-2.5 text-center border-r border-slate-800 text-slate-300 truncate max-w-[120px]" title={l.cbc.differential}>{l.cbc.differential || '—'}</td>)}
+                    </tr>
+                    <tr className="border-b border-slate-800 hover:bg-slate-900/40">
+                      <td className="p-2.5 border-r border-slate-800 sticky left-0 bg-[#070c18] font-bold text-slate-300">{lang === 'ar' ? 'نوع الأنيميا (Type anemia)' : 'Type of Anemia'}</td>
+                      {labsList.map(l => <td key={l.id} className="p-2.5 text-center border-r border-slate-800 text-slate-300 truncate max-w-[120px]" title={l.cbc.typeAnemia}>{l.cbc.typeAnemia || '—'}</td>)}
+                    </tr>
+
+                    {/* Panel 2: Coagulation */}
+                    <tr className="bg-slate-900/50 border-b border-slate-800 font-bold"><td colSpan={labsList.length + 1} className="p-2 text-cyan-300 border-r border-slate-800 sticky left-0 bg-[#0e172a]">{lang === 'ar' ? 'تخثر الدم والسيولة (Coagulation)' : 'Coagulation Panel'}</td></tr>
+                    <tr className="border-b border-slate-800/80 hover:bg-slate-900/40">
+                      <td className="p-2.5 border-r border-slate-800 sticky left-0 bg-[#070c18] font-bold text-slate-300">INR</td>
+                      {labsList.map(l => <td key={l.id} className="p-2.5 text-center border-r border-slate-800 text-amber-300 font-bold">{l.coagulation.inr || '—'}</td>)}
+                    </tr>
+                    <tr className="border-b border-slate-800/80 hover:bg-slate-900/40">
+                      <td className="p-2.5 border-r border-slate-800 sticky left-0 bg-[#070c18] font-bold text-slate-300">{lang === 'ar' ? 'وقت البروثرومبين PT' : 'PT (sec)'}</td>
+                      {labsList.map(l => <td key={l.id} className="p-2.5 text-center border-r border-slate-800 text-slate-300">{l.coagulation.ptSeconds || '—'}</td>)}
+                    </tr>
+                    <tr className="border-b border-slate-800/80 hover:bg-slate-900/40">
+                      <td className="p-2.5 border-r border-slate-800 sticky left-0 bg-[#070c18] font-bold text-slate-300">{lang === 'ar' ? 'وقت الثرومبوبلاستين الجزئي PTT' : 'PTT (sec)'}</td>
+                      {labsList.map(l => <td key={l.id} className="p-2.5 text-center border-r border-slate-800 text-slate-300">{l.coagulation.pttSeconds || '—'}</td>)}
+                    </tr>
+                    <tr className="border-b border-slate-800 hover:bg-slate-900/40">
+                      <td className="p-2.5 border-r border-slate-800 sticky left-0 bg-[#070c18] font-bold text-slate-300">{lang === 'ar' ? 'الفيبرينوجين' : 'Fibrinogen (mg/dL)'}</td>
+                      {labsList.map(l => <td key={l.id} className="p-2.5 text-center border-r border-slate-800 text-slate-300">{l.coagulation.fibrinogenMgPerDl || '—'}</td>)}
+                    </tr>
+
+                    {/* Panel 3: KFTs */}
+                    <tr className="bg-slate-900/50 border-b border-slate-800 font-bold"><td colSpan={labsList.length + 1} className="p-2 text-indigo-300 border-r border-slate-800 sticky left-0 bg-[#0e172a]">{lang === 'ar' ? 'وظائف الكلى (KFTs)' : 'Kidney Function Tests (KFTs)'}</td></tr>
+                    <tr className="border-b border-slate-800/80 hover:bg-slate-900/40">
+                      <td className="p-2.5 border-r border-slate-800 sticky left-0 bg-[#070c18] font-bold text-slate-300">{lang === 'ar' ? 'اليوريا (Urea)' : 'Urea (mg/dL)'}</td>
+                      {labsList.map(l => <td key={l.id} className="p-2.5 text-center border-r border-slate-800 text-white">{l.biochemistry.ureaMgPerDl || '—'}</td>)}
+                    </tr>
+                    <tr className="border-b border-slate-800/80 hover:bg-slate-900/40">
+                      <td className="p-2.5 border-r border-slate-800 sticky left-0 bg-[#070c18] font-bold text-slate-300">{lang === 'ar' ? 'الكرياتينين (Creat)' : 'Creatinine (mg/dL)'}</td>
+                      {labsList.map(l => <td key={l.id} className="p-2.5 text-center border-r border-slate-800 text-orange-300 font-bold">{l.biochemistry.creatinineMgPerDl || '—'}</td>)}
+                    </tr>
+                    <tr className="border-b border-slate-800 hover:bg-slate-900/40">
+                      <td className="p-2.5 border-r border-slate-800 sticky left-0 bg-[#070c18] font-bold text-slate-300">{lang === 'ar' ? 'حمض اليوريك (UA)' : 'Uric Acid (UA)'}</td>
+                      {labsList.map(l => <td key={l.id} className="p-2.5 text-center border-r border-slate-800 text-slate-300">{l.biochemistry.uricAcidMgPerDl || '—'}</td>)}
+                    </tr>
+
+                    {/* Panel 4: Electrolytes */}
+                    <tr className="bg-slate-900/50 border-b border-slate-800 font-bold"><td colSpan={labsList.length + 1} className="p-2 text-pink-300 border-r border-slate-800 sticky left-0 bg-[#0e172a]">{lang === 'ar' ? 'الأملاح والأيونات (Electrolytes)' : 'Serum Electrolytes'}</td></tr>
+                    <tr className="border-b border-slate-800/80 hover:bg-slate-900/40">
+                      <td className="p-2.5 border-r border-slate-800 sticky left-0 bg-[#070c18] font-bold text-slate-300">{lang === 'ar' ? 'الصوديوم (Na)' : 'Sodium (Na)'}</td>
+                      {labsList.map(l => <td key={l.id} className="p-2.5 text-center border-r border-slate-800 text-teal-300">{l.biochemistry.sodiumMeqPerL || '—'}</td>)}
+                    </tr>
+                    <tr className="border-b border-slate-800/80 hover:bg-slate-900/40">
+                      <td className="p-2.5 border-r border-slate-800 sticky left-0 bg-[#070c18] font-bold text-slate-300">{lang === 'ar' ? 'البوتاسيوم (K)' : 'Potassium (K)'}</td>
+                      {labsList.map(l => <td key={l.id} className="p-2.5 text-center border-r border-slate-800 text-emerald-300 font-bold">{l.biochemistry.potassiumMeqPerL || '—'}</td>)}
+                    </tr>
+                    <tr className="border-b border-slate-800/80 hover:bg-slate-900/40">
+                      <td className="p-2.5 border-r border-slate-800 sticky left-0 bg-[#070c18] font-bold text-slate-300">{lang === 'ar' ? 'الكالسيوم (Ca)' : 'Calcium (Ca)'}</td>
+                      {labsList.map(l => <td key={l.id} className="p-2.5 text-center border-r border-slate-800 text-slate-300">{l.biochemistry.calciumMeqPerL || '—'}</td>)}
+                    </tr>
+                    <tr className="border-b border-slate-800/80 hover:bg-slate-900/40">
+                      <td className="p-2.5 border-r border-slate-800 sticky left-0 bg-[#070c18] font-bold text-slate-300">{lang === 'ar' ? 'الفوسفور (Phos)' : 'Phosphorus (Phos)'}</td>
+                      {labsList.map(l => <td key={l.id} className="p-2.5 text-center border-r border-slate-800 text-slate-300">{l.biochemistry.phosphorusMeqPerL || '—'}</td>)}
+                    </tr>
+                    <tr className="border-b border-slate-800 hover:bg-slate-900/40">
+                      <td className="p-2.5 border-r border-slate-800 sticky left-0 bg-[#070c18] font-bold text-slate-300">{lang === 'ar' ? 'المغنيسيوم (Mg)' : 'Magnesium (Mg)'}</td>
+                      {labsList.map(l => <td key={l.id} className="p-2.5 text-center border-r border-slate-800 text-slate-300">{l.biochemistry.magnesiumMeqPerL || '—'}</td>)}
+                    </tr>
+
+                    {/* Panel 5: LFTs */}
+                    <tr className="bg-slate-900/50 border-b border-slate-800 font-bold"><td colSpan={labsList.length + 1} className="p-2 text-yellow-400 border-r border-slate-800 sticky left-0 bg-[#0e172a]">{lang === 'ar' ? 'وظائف الكبد والأنزيمات (LFTs)' : 'Liver Function Tests (LFTs)'}</td></tr>
+                    <tr className="border-b border-slate-800/80 hover:bg-slate-900/40">
+                      <td className="p-2.5 border-r border-slate-800 sticky left-0 bg-[#070c18] font-bold text-slate-300">{lang === 'ar' ? 'الصفراء الكلية (Bili)' : 'Total Bilirubin'}</td>
+                      {labsList.map(l => <td key={l.id} className="p-2.5 text-center border-r border-slate-800 text-amber-300">{l.biochemistry.totalBilirubinMgPerDl || '—'}</td>)}
+                    </tr>
+                    <tr className="border-b border-slate-800/80 hover:bg-slate-900/40">
+                      <td className="p-2.5 border-r border-slate-800 sticky left-0 bg-[#070c18] font-bold text-slate-300">{lang === 'ar' ? 'الألبومين (Alb)' : 'Albumin (g/dL)'}</td>
+                      {labsList.map(l => <td key={l.id} className="p-2.5 text-center border-r border-slate-800 text-slate-300">{l.biochemistry.albuminGPerDl || '—'}</td>)}
+                    </tr>
+                    <tr className="border-b border-slate-800/80 hover:bg-slate-900/40">
+                      <td className="p-2.5 border-r border-slate-800 sticky left-0 bg-[#070c18] font-bold text-slate-300">ALT</td>
+                      {labsList.map(l => <td key={l.id} className="p-2.5 text-center border-r border-slate-800 text-white">{l.biochemistry.altUPerL || '—'}</td>)}
+                    </tr>
+                    <tr className="border-b border-slate-800/80 hover:bg-slate-900/40">
+                      <td className="p-2.5 border-r border-slate-800 sticky left-0 bg-[#070c18] font-bold text-slate-300">AST</td>
+                      {labsList.map(l => <td key={l.id} className="p-2.5 text-center border-r border-slate-800 text-white">{l.biochemistry.astUPerL || '—'}</td>)}
+                    </tr>
+                    <tr className="border-b border-slate-800/80 hover:bg-slate-900/40">
+                      <td className="p-2.5 border-r border-slate-800 sticky left-0 bg-[#070c18] font-bold text-slate-300">ALP</td>
+                      {labsList.map(l => <td key={l.id} className="p-2.5 text-center border-r border-slate-800 text-slate-300">{l.biochemistry.alpUPerL || '—'}</td>)}
+                    </tr>
+                    <tr className="border-b border-slate-800/80 hover:bg-slate-900/40">
+                      <td className="p-2.5 border-r border-slate-800 sticky left-0 bg-[#070c18] font-bold text-slate-300">GGT</td>
+                      {labsList.map(l => <td key={l.id} className="p-2.5 text-center border-r border-slate-800 text-slate-300">{l.biochemistry.ggtUPerL || '—'}</td>)}
+                    </tr>
+                    <tr className="border-b border-slate-800/80 hover:bg-slate-900/40">
+                      <td className="p-2.5 border-r border-slate-800 sticky left-0 bg-[#070c18] font-bold text-slate-300">CK (الكرياتين كايناز)</td>
+                      {labsList.map(l => <td key={l.id} className="p-2.5 text-center border-r border-slate-800 text-slate-300">{l.biochemistry.ckUPerL || '—'}</td>)}
+                    </tr>
+                    <tr className="border-b border-slate-800 hover:bg-slate-900/40">
+                      <td className="p-2.5 border-r border-slate-800 sticky left-0 bg-[#070c18] font-bold text-slate-300">CK-MB</td>
+                      {labsList.map(l => <td key={l.id} className="p-2.5 text-center border-r border-slate-800 text-slate-300">{l.biochemistry.ckMbUPerL || '—'}</td>)}
+                    </tr>
+
+                    {/* Panel 6: Pancreatic / Cardiac / Inflammatory */}
+                    <tr className="bg-slate-900/50 border-b border-slate-800 font-bold"><td colSpan={labsList.length + 1} className="p-2 text-rose-300 border-r border-slate-800 sticky left-0 bg-[#0e172a]">{lang === 'ar' ? 'أنزيمات البنكرياس والقلب والالتهاب' : 'Pancreatic, Cardiac & Inflammatory Biomarkers'}</td></tr>
+                    <tr className="border-b border-slate-800/80 hover:bg-slate-900/40">
+                      <td className="p-2.5 border-r border-slate-800 sticky left-0 bg-[#070c18] font-bold text-slate-300">Amylase</td>
+                      {labsList.map(l => <td key={l.id} className="p-2.5 text-center border-r border-slate-800 text-slate-300">{l.biochemistry.amylaseUPerL || '—'}</td>)}
+                    </tr>
+                    <tr className="border-b border-slate-800/80 hover:bg-slate-900/40">
+                      <td className="p-2.5 border-r border-slate-800 sticky left-0 bg-[#070c18] font-bold text-slate-300">Lipase</td>
+                      {labsList.map(l => <td key={l.id} className="p-2.5 text-center border-r border-slate-800 text-slate-300">{l.biochemistry.lipaseUPerL || '—'}</td>)}
+                    </tr>
+                    <tr className="border-b border-slate-800/80 hover:bg-slate-900/40">
+                      <td className="p-2.5 border-r border-slate-800 sticky left-0 bg-[#070c18] font-bold text-slate-300">Troponin</td>
+                      {labsList.map(l => <td key={l.id} className="p-2.5 text-center border-r border-slate-800 text-red-400 font-bold">{l.biochemistry.troponinNgPerMl || '—'}</td>)}
+                    </tr>
+                    <tr className="border-b border-slate-800/80 hover:bg-slate-900/40">
+                      <td className="p-2.5 border-r border-slate-800 sticky left-0 bg-[#070c18] font-bold text-slate-300">CRP (البروتين التفاعلي)</td>
+                      {labsList.map(l => <td key={l.id} className="p-2.5 text-center border-r border-slate-800 text-slate-300">{l.biochemistry.crpMgPerL || '—'}</td>)}
+                    </tr>
+                    <tr className="border-b border-slate-800 hover:bg-slate-900/40">
+                      <td className="p-2.5 border-r border-slate-800 sticky left-0 bg-[#070c18] font-bold text-slate-300">ESR</td>
+                      {labsList.map(l => <td key={l.id} className="p-2.5 text-center border-r border-slate-800 text-slate-300">{l.biochemistry.esrMmHr || '—'}</td>)}
+                    </tr>
+
+                    {/* Panel 7: ABG */}
+                    <tr className="bg-slate-900/50 border-b border-slate-800 font-bold"><td colSpan={labsList.length + 1} className="p-2 text-violet-300 border-r border-slate-800 sticky left-0 bg-[#0e172a]">{lang === 'ar' ? 'غازات الدم الشرياني (ABG)' : 'Arterial Blood Gas (ABG) Panel'}</td></tr>
+                    <tr className="border-b border-slate-800/80 hover:bg-slate-900/40">
+                      <td className="p-2.5 border-r border-slate-800 sticky left-0 bg-[#070c18] font-bold text-slate-300">pH (الحموضة)</td>
+                      {labsList.map(l => <td key={l.id} className="p-2.5 text-center border-r border-slate-800 text-cyan-300 font-bold">{l.abg.ph || '—'}</td>)}
+                    </tr>
+                    <tr className="border-b border-slate-800/80 hover:bg-slate-900/40">
+                      <td className="p-2.5 border-r border-slate-800 sticky left-0 bg-[#070c18] font-bold text-slate-300">pO₂ (الأكسجين)</td>
+                      {labsList.map(l => <td key={l.id} className="p-2.5 text-center border-r border-slate-800 text-white">{l.abg.po2MmHg || '—'}</td>)}
+                    </tr>
+                    <tr className="border-b border-slate-800/80 hover:bg-slate-900/40">
+                      <td className="p-2.5 border-r border-slate-800 sticky left-0 bg-[#070c18] font-bold text-slate-300">pCO₂ (ثاني أكسيد الكربون)</td>
+                      {labsList.map(l => <td key={l.id} className="p-2.5 text-center border-r border-slate-800 text-white">{l.abg.pco2MmHg || '—'}</td>)}
+                    </tr>
+                    <tr className="border-b border-slate-800/80 hover:bg-slate-900/40">
+                      <td className="p-2.5 border-r border-slate-800 sticky left-0 bg-[#070c18] font-bold text-slate-300">HCO₃ (البيكربونات)</td>
+                      {labsList.map(l => <td key={l.id} className="p-2.5 text-center border-r border-slate-800 text-white">{l.abg.hco3MmolPerL || '—'}</td>)}
+                    </tr>
+                    <tr className="border-b border-slate-800/80 hover:bg-slate-900/40">
+                      <td className="p-2.5 border-r border-slate-800 sticky left-0 bg-[#070c18] font-bold text-slate-300">Base Excess (BE)</td>
+                      {labsList.map(l => <td key={l.id} className="p-2.5 text-center border-r border-slate-800 text-slate-300">{l.abg.baseExcessMmolPerL || '—'}</td>)}
+                    </tr>
+                    <tr className="border-b border-slate-800/80 hover:bg-slate-900/40">
+                      <td className="p-2.5 border-r border-slate-800 sticky left-0 bg-[#070c18] font-bold text-slate-300">{lang === 'ar' ? 'اللاكتات (Lactate)' : 'Lactate (mmol/L)'}</td>
+                      {labsList.map(l => <td key={l.id} className="p-2.5 text-center border-r border-slate-800 text-orange-400 font-bold">{l.abg.lactateMmolPerL || '—'}</td>)}
+                    </tr>
+                    <tr className="border-b border-slate-800 hover:bg-slate-900/40">
+                      <td className="p-2.5 border-r border-slate-800 sticky left-0 bg-[#070c18] font-bold text-slate-300">P/F Ratio</td>
+                      {labsList.map(l => <td key={l.id} className="p-2.5 text-center border-r border-slate-800 text-emerald-400 font-bold">{l.abg.pao2Fio2Ratio || '—'}</td>)}
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
+              </>
+            )}
+          </div>
+
+          {/* Connected Support Equipment & Bedside Systems (الأجهزة الموصلة والمضخات وميزان السوائل) */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {/* Ventilator connectivity status */}
+            {cardsConfig.showVentilatorCard && (
+              <div 
+                data-expanded={!isPaperVentCardCollapsed ? "true" : "false"}
+                className="icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-3 flex flex-col justify-between border transition-all"
+              >
+                <div>
+                  <div 
+                    onClick={() => setIsPaperVentCardCollapsed(!isPaperVentCardCollapsed)}
+                    className="icu-card-header-toggle flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2.5 cursor-pointer p-2 rounded-xl transition-all"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Wind className="w-5 h-5 text-cyan-400" />
+                      <div>
+                        <h3 className="text-sm font-bold text-slate-900 dark:text-white">{lang === 'ar' ? 'إعدادات دعم التنفس والأكسجين' : 'Respiratory & Oxygen Support'}</h3>
+                        {isPaperVentCardCollapsed && ventilator && (
+                          <div className="text-[10px] text-cyan-400 font-bold font-mono mt-0.5">
+                            {lang === 'ar' ? `النمط: ${ventilator.mode}` : `Mode: ${ventilator.mode}`}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                      {ventilator && (
+                        <span className={`px-2 py-0.5 rounded border font-mono text-[10px] font-bold ${
+                          ventilator.supportCategory === 'OXYGEN_THERAPY'
+                            ? 'bg-emerald-500/10 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border-emerald-500/40'
+                            : ventilator.supportCategory === 'NON_INVASIVE_NIV'
+                            ? 'bg-amber-500/10 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 border-amber-500/40'
+                            : 'bg-cyan-500/10 dark:bg-cyan-950/80 text-cyan-700 dark:text-cyan-300 border-cyan-500/40'
+                        }`}>
+                          {ventilator.mode}
+                          {ventilator.oxygenFlowLpm ? ` (${ventilator.oxygenFlowLpm} L/min)` : ''}
+                        </span>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIsPaperVentCardCollapsed(!isPaperVentCardCollapsed);
+                        }}
+                        className="p-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-400 dark:hover:text-white transition-all cursor-pointer"
+                        title={isPaperVentCardCollapsed ? (lang === 'ar' ? 'فتح البطاقة' : 'Expand') : (lang === 'ar' ? 'طي البطاقة' : 'Collapse')}
+                      >
+                        {isPaperVentCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {!isPaperVentCardCollapsed && (
+                    <>
+                      {ventilator ? (
+                        <div className="mt-3 space-y-2.5">
+                          <div className="flex justify-between items-center">
+                            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                              {ventilator.supportCategory === 'OXYGEN_THERAPY'
+                                ? (lang === 'ar' ? 'العلاج بالأكسجين الجاري' : 'Active Oxygen Therapy')
+                                : (lang === 'ar' ? 'إعدادات التنفس الحالية' : 'Current Vent Settings')}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setIsVentilatorModalOpen(true)}
+                              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-700 dark:text-cyan-300 border border-cyan-500/40 text-xs font-bold transition-all cursor-pointer"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                              <span>{lang === 'ar' ? 'تعديل / تبديل' : 'Edit / Switch'}</span>
+                            </button>
+                          </div>
+                          
+                          {/* Compact High-Contrast Parameter Boxes */}
+                          <div 
+                            onClick={() => setIsVentilatorModalOpen(true)}
+                            className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 font-mono cursor-pointer hover:opacity-90 transition-opacity"
+                          >
+                            {ventilator.supportCategory === 'OXYGEN_THERAPY' ? (
+                              <>
+                                <div className="bg-slate-50 dark:bg-[#070c18] px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                                  <span className="text-[10px] text-slate-500 font-bold">O₂ Flow</span>
+                                  <span className="text-xs text-emerald-600 dark:text-emerald-400 font-bold">{ventilator.oxygenFlowLpm ?? '--'} L/min</span>
+                                </div>
+                                <div className="bg-slate-50 dark:bg-[#070c18] px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                                  <span className="text-[10px] text-slate-500 font-bold">FiO₂ Est.</span>
+                                  <span className="text-xs text-teal-600 dark:text-teal-300 font-bold">{ventilator.fio2Percent}%</span>
+                                </div>
+                                <div className="bg-slate-50 dark:bg-[#070c18] px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                                  <span className="text-[10px] text-slate-500 font-bold">Device</span>
+                                  <span className="text-[11px] text-slate-800 dark:text-slate-200 font-bold truncate max-w-[70px]">{ventilator.mode}</span>
+                                </div>
+                                <div className="bg-slate-50 dark:bg-[#070c18] px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                                  <span className="text-[10px] text-slate-500 font-bold">Status</span>
+                                  <span className="text-xs text-emerald-600 dark:text-emerald-400 font-bold">{lang === 'ar' ? 'نشط' : 'Active'}</span>
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <div className="bg-slate-50 dark:bg-[#070c18] px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                                  <span className="text-[10px] text-slate-500 font-bold">FiO₂</span>
+                                  <span className="text-xs text-teal-600 dark:text-teal-300 font-bold">{ventilator.fio2Percent}%</span>
+                                </div>
+                                <div className="bg-slate-50 dark:bg-[#070c18] px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                                  <span className="text-[10px] text-slate-500 font-bold">PEEP</span>
+                                  <span className="text-xs text-cyan-600 dark:text-cyan-300 font-bold">{ventilator.peepCmH2O}</span>
+                                </div>
+                                <div className="bg-slate-50 dark:bg-[#070c18] px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                                  <span className="text-[10px] text-slate-500 font-bold">(VT)</span>
+                                  <span className="text-xs text-slate-800 dark:text-white font-bold">{ventilator.tidalVolumeMl || ventilator.setTidalVolumeMl}</span>
+                                </div>
+                                <div className="bg-slate-50 dark:bg-[#070c18] px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                                  <span className="text-[10px] text-slate-500 font-bold">(RR)</span>
+                                  <span className="text-xs text-slate-700 dark:text-slate-200 font-bold">{ventilator.setRespiratoryRateCpm}</span>
+                                </div>
+                              </>
+                            )}
+                          </div>
+
+                          {/* Ventilator Modification Log (سجل تعديلات جهاز التنفس والأكسجين) */}
+                          <div className="mt-3 border-t border-slate-200 dark:border-slate-800/80 pt-2.5">
+                            <div className="flex items-center justify-between text-[10px] text-slate-500 font-bold mb-1.5">
+                              <span>{lang === 'ar' ? 'سجل التعديلات والأجهزة السابقة (أحدث 4 سجلات)' : 'Support History (Latest 4 Records)'}</span>
+                              <span className="text-[9px] bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-cyan-600 dark:text-cyan-400 font-bold">
+                                {ventilator.history ? ventilator.history.length : 1} {lang === 'ar' ? 'سجلات' : 'records'}
+                              </span>
+                            </div>
+
+                            <div className="space-y-1 font-mono text-[10px]">
+                              {ventilator.history && ventilator.history.length > 0 ? (
+                                ventilator.history
+                                  .slice()
+                                  .reverse()
+                                  .slice(0, isVentHistoryExpanded ? undefined : 4)
+                                  .map((entry, idx) => (
+                                    <div 
+                                      key={entry.id || idx}
+                                      className="flex items-center justify-between gap-1.5 py-1 px-2 rounded bg-slate-50 dark:bg-[#070c18] border border-slate-200 dark:border-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors"
+                                    >
+                                      <div className="flex items-center gap-1.5 truncate">
+                                        <span className={`font-bold px-1 rounded text-[9px] ${
+                                          entry.supportCategory === 'OXYGEN_THERAPY'
+                                            ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+                                            : 'bg-cyan-500/10 text-cyan-700 dark:text-cyan-400'
+                                        }`}>
+                                          {entry.mode}
+                                        </span>
+                                        <span className="text-slate-500 dark:text-slate-400 truncate max-w-[80px]" title={entry.recordedByStaffName}>
+                                          {entry.recordedByStaffName}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center gap-1 shrink-0 text-slate-500 text-[9px]">
+                                        {entry.oxygenFlowLpm ? (
+                                          <span className="text-emerald-600 dark:text-emerald-400 font-bold">{entry.oxygenFlowLpm}L/m</span>
+                                        ) : null}
+                                        <span>FiO₂:{entry.fio2Percent}%</span>
+                                        {entry.peepCmH2O ? <span>PEEP:{entry.peepCmH2O}</span> : null}
+                                        <span>{new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}</span>
+                                      </div>
+                                    </div>
+                                  ))
+                              ) : (
+                                <div className="flex items-center justify-between gap-1.5 py-1 px-2 rounded bg-slate-50 dark:bg-[#070c18] border border-slate-200 dark:border-slate-800/60">
+                                  <div className="flex items-center gap-1.5 truncate">
+                                    <span className="text-cyan-600 dark:text-cyan-400 font-bold bg-cyan-500/10 dark:bg-cyan-950/40 px-1 rounded">
+                                      {ventilator.mode}
+                                    </span>
+                                    <span className="text-slate-500 dark:text-slate-400 truncate max-w-[80px]">
+                                      {ventilator.recordedByStaffName}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-1 shrink-0 text-slate-500 text-[9px]">
+                                    {ventilator.oxygenFlowLpm ? (
+                                      <span className="text-emerald-600 dark:text-emerald-400 font-bold">{ventilator.oxygenFlowLpm}L/m</span>
+                                    ) : null}
+                                    <span>FiO₂:{ventilator.fio2Percent}%</span>
+                                    {ventilator.peepCmH2O ? <span>PEEP:{ventilator.peepCmH2O}</span> : null}
+                                    <span>{new Date(ventilator.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}</span>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+
+                            {ventilator.history && ventilator.history.length > 4 && (
+                              <button
+                                type="button"
+                                onClick={() => setIsVentHistoryExpanded(!isVentHistoryExpanded)}
+                                className="mt-2 w-full text-center py-1 rounded bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 text-[9px] text-slate-600 dark:text-slate-400 font-bold hover:text-slate-900 dark:hover:text-white transition-all cursor-pointer border border-slate-200 dark:border-slate-800"
+                              >
+                                {isVentHistoryExpanded 
+                                  ? (lang === 'ar' ? 'إظهار أقل (4 سجلات فقط)' : 'Show Less (4 logs only)') 
+                                  : (lang === 'ar' ? `إظهار المزيد من السجلات (${ventilator.history.length})` : `Show All Logs (${ventilator.history.length})`)}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="p-6 text-center text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-[#070c18] rounded-xl border border-slate-200 dark:border-slate-800/80 mt-3 space-y-2">
+                          <p>{lang === 'ar' ? 'المريض يتنفس هواء الغرفة تلقائياً (Room Air).' : 'Patient breathing spontaneously (Room Air).'}</p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsVentilatorModalOpen(true);
+                              setIsPaperVentCardCollapsed(false);
+                            }}
+                            className="px-3 py-1.5 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-700 dark:text-cyan-300 border border-cyan-500/40 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>{lang === 'ar' ? 'توصيل أكسجين / جهاز تنفس' : 'Add Oxygen / Mechanical Vent'}</span>
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Infusion lines connectivity status */}
+            {cardsConfig.showInfusionPumpsCard && (
+              <div 
+                data-expanded={!isPaperPumpsCardCollapsed ? "true" : "false"}
+                className="icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-3 flex flex-col justify-between border transition-all"
+              >
+                <div>
+                  <div 
+                    onClick={() => setIsPaperPumpsCardCollapsed(!isPaperPumpsCardCollapsed)}
+                    className="icu-card-header-toggle flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2.5 cursor-pointer p-2 rounded-xl transition-all"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Droplet className="w-5 h-5 text-amber-400" />
+                      <h3 className="text-sm font-bold text-white">{lang === 'ar' ? 'مضخات ومحاليل وريدية' : 'Infusion Pumps'}</h3>
+                    </div>
+                    <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                      <span className="text-[10px] font-mono text-slate-400 bg-slate-900/60 px-2 py-0.5 rounded border border-slate-800 font-bold">
+                        {pumps.length} {lang === 'ar' ? 'نشط' : 'active'}
+                      </span>
+
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIsPaperPumpsCardCollapsed(!isPaperPumpsCardCollapsed);
+                        }}
+                        className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all cursor-pointer"
+                        title={isPaperPumpsCardCollapsed ? (lang === 'ar' ? 'فتح البطاقة' : 'Expand') : (lang === 'ar' ? 'طي البطاقة' : 'Collapse')}
+                      >
+                        {isPaperPumpsCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {!isPaperPumpsCardCollapsed && (
+                    <>
+                      <div className="flex items-center justify-between mt-2.5 mb-2 pb-1 border-b border-slate-800/60">
+                        <span className="text-[11px] text-slate-400 font-mono">
+                          {pumps.length} {lang === 'ar' ? 'مضخات مضافة' : 'Infusion lines'}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedPumpForEdit(null);
+                            setIsPumpModalOpen(true);
+                          }}
+                          className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer"
+                          title={lang === 'ar' ? 'إضافة مضخة أو خط تنقيط وريدي جديد' : 'Add Infusion Pump Line'}
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>{lang === 'ar' ? 'إضافة مضخة' : 'Add Pump'}</span>
+                        </button>
+                      </div>
+
+                      {pumps.length > 0 ? (
+                        <div className="space-y-2.5 max-h-[220px] overflow-y-auto">
+                          {pumps.map(p => (
+                            <div 
+                              key={p.id} 
+                              className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800 space-y-2 hover:border-amber-500/40 transition-colors"
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="font-bold text-white text-xs font-mono truncate">{p.drugNameEn}</span>
+                                  </div>
+                                  <div className="text-[9px] text-slate-400 mt-0.5">
+                                    {p.diluentFluid || p.solutionCarrier} {p.concentrationMgPerMl ? `(${p.concentrationMgPerMl}mg/mL)` : ''}
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleTogglePumpStatus(p)}
+                                    className={`p-1 rounded text-xs transition-colors cursor-pointer ${
+                                      p.status === PumpStatus.RUNNING 
+                                        ? 'text-emerald-400 bg-emerald-950/60 hover:bg-emerald-900/60' 
+                                        : 'text-amber-400 bg-amber-950/60 hover:bg-amber-900/60'
+                                    }`}
+                                    title={p.status === PumpStatus.RUNNING ? (lang === 'ar' ? 'إيقاف مؤقت' : 'Pause') : (lang === 'ar' ? 'استئناف' : 'Resume')}
+                                  >
+                                    {p.status === PumpStatus.RUNNING ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedPumpForEdit(p);
+                                      setIsPumpModalOpen(true);
+                                    }}
+                                    className="p-1 rounded text-slate-400 hover:text-cyan-300 hover:bg-slate-800 transition-colors cursor-pointer"
+                                    title={lang === 'ar' ? 'تعديل كامل البيانات' : 'Edit Details'}
+                                  >
+                                    <Edit3 className="w-3 h-3" />
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeletePumpLine(p)}
+                                    className="p-1 rounded text-slate-500 hover:text-red-400 hover:bg-red-950/40 transition-colors cursor-pointer"
+                                    title={lang === 'ar' ? 'إيقاف وحذف المحلول' : 'Discontinue & Delete'}
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Rate titration row */}
+                              <div className="bg-[#0a101f] p-2 rounded-lg flex items-center justify-between font-mono text-xs">
+                                <div className="flex items-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleTitratePump(p, 'DOWN')}
+                                    className="p-1 rounded bg-slate-800 hover:bg-red-950 text-slate-300 hover:text-red-300 border border-slate-700 cursor-pointer active:scale-95"
+                                    title={lang === 'ar' ? 'إنقاص الجرعة' : 'Decrease rate'}
+                                  >
+                                    <Minus className="w-3 h-3" />
+                                  </button>
+
+                                  <div className="text-center min-w-[65px]">
+                                    <span className="text-amber-300 font-black text-sm">{p.currentRate}</span>
+                                    <span className="text-[9px] text-slate-400 ml-1">{p.rateUnit}</span>
+                                  </div>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleTitratePump(p, 'UP')}
+                                    className="p-1 rounded bg-slate-800 hover:bg-emerald-950 text-slate-300 hover:text-emerald-300 border border-slate-700 cursor-pointer active:scale-95"
+                                    title={lang === 'ar' ? 'زيادة الجرعة' : 'Increase rate'}
+                                  >
+                                    <Plus className="w-3 h-3" />
+                                  </button>
+                                </div>
+
+                                <div className="text-right text-[10px] text-slate-400">
+                                  <span>{p.flowRateMlPerHour} mL/h</span>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="p-6 text-center text-xs text-slate-400 bg-[#070c18] rounded-xl border border-slate-800/80 mt-3 space-y-2">
+                          <p>{lang === 'ar' ? 'لا توجد قنوات حقن وريدي مسجلة حالياً.' : 'No active infusion pumps registered.'}</p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedPumpForEdit(null);
+                              setIsPumpModalOpen(true);
+                              setIsPaperPumpsCardCollapsed(false);
+                            }}
+                            className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>{lang === 'ar' ? 'إضافة مضخة وريدية' : 'Add Infusion Pump'}</span>
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Daily Fluid balances */}
+            {cardsConfig.showFluidBalanceCard && (
+              <div 
+                data-expanded={!isPaperFluidsCardCollapsed ? "true" : "false"}
+                className="icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-3 flex flex-col justify-between border transition-all"
+              >
+                <div>
+                  <div 
+                    onClick={() => setIsPaperFluidsCardCollapsed(!isPaperFluidsCardCollapsed)}
+                    className="icu-card-header-toggle flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2.5 cursor-pointer p-2 rounded-xl transition-all"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Scale className="w-5 h-5 text-teal-400" />
+                      <h3 className="text-sm font-bold text-white">{lang === 'ar' ? 'ميزان السوائل 24 ساعة' : 'Fluid Balance'}</h3>
+                    </div>
+                    <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                      {fluidBalance && (() => {
+                        const netVal = fluidBalance.netCumulativeBalanceMl ?? (fluidBalance as any).netBalance24HMl ?? 0;
+                        return (
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${netVal >= 0 ? 'bg-amber-950 text-amber-300' : 'bg-teal-950 text-teal-300'}`}>
+                            Net: {netVal > 0 ? `+${netVal}` : netVal} mL
+                          </span>
+                        );
+                      })()}
+
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIsPaperFluidsCardCollapsed(!isPaperFluidsCardCollapsed);
+                        }}
+                        className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all cursor-pointer"
+                        title={isPaperFluidsCardCollapsed ? (lang === 'ar' ? 'فتح البطاقة' : 'Expand') : (lang === 'ar' ? 'طي البطاقة' : 'Collapse')}
+                      >
+                        {isPaperFluidsCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {!isPaperFluidsCardCollapsed && (
+                    <>
+                      {fluidBalance ? (() => {
+                        const netVal = fluidBalance.netCumulativeBalanceMl ?? (fluidBalance as any).netBalance24HMl ?? 0;
+                        const totalIntake = fluidBalance.intakeBreakdown?.totalIntakeMl ?? (fluidBalance as any).totalIntakeMl ?? 0;
+                        const totalOutput = fluidBalance.outputBreakdown?.totalOutputMl ?? (fluidBalance as any).totalOutputMl ?? 0;
+                        const urineVal = fluidBalance.outputBreakdown?.urineOutputMl ?? (fluidBalance as any).outputBreakdown?.urineMl ?? 0;
+                        return (
+                          <div className="mt-3 space-y-2.5">
+                            <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedFluidBalanceForEdit(fluidBalance);
+                                  setIsFluidModalOpen(true);
+                                }}
+                                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-teal-300 border border-teal-500/30 text-xs font-bold transition-all cursor-pointer"
+                                title={lang === 'ar' ? 'تعديل ميزان السوائل الحالي' : 'Edit Current 24H Balance'}
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                                <span>{lang === 'ar' ? 'تعديل ميزان السوائل' : 'Edit Balance'}</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedFluidBalanceForEdit(null);
+                                  setIsFluidModalOpen(true);
+                                }}
+                                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-teal-500 hover:bg-teal-400 text-slate-950 text-xs font-bold transition-all cursor-pointer shadow-sm"
+                                title={lang === 'ar' ? 'إضافة ميزان سوائل ليوم جديد أو لاحق' : 'Add Fluid Balance for Next / New Day'}
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                                <span>{lang === 'ar' ? 'إضافة يوم' : 'Add Day'}</span>
+                              </button>
+                            </div>
+                            
+                            <div className="grid grid-cols-3 gap-1.5 text-xs font-mono">
+                              <div className="bg-[#070c18] p-2 rounded-xl border border-slate-800 flex flex-col justify-between">
+                                <div className="text-[9px] text-cyan-400 font-bold truncate">{lang === 'ar' ? 'الوارد (IN)' : 'Intake (IN)'}</div>
+                                <div className="text-cyan-300 font-bold mt-0.5 truncate">{totalIntake} <span className="text-[8px] text-slate-400">mL</span></div>
+                              </div>
+                              <div className="bg-[#070c18] p-2 rounded-xl border border-slate-800 flex flex-col justify-between">
+                                <div className="text-[9px] text-amber-400 font-bold truncate">{lang === 'ar' ? 'الصادر (OUT)' : 'Output (OUT)'}</div>
+                                <div className="text-amber-400 font-bold mt-0.5 truncate">{totalOutput} <span className="text-[8px] text-slate-400">mL</span></div>
+                              </div>
+                              <div className="bg-[#070c18] p-2 rounded-xl border border-slate-800 flex flex-col justify-between">
+                                <div className="text-[9px] text-indigo-400 font-bold truncate">{lang === 'ar' ? 'الصافي (NET)' : 'Net (NET)'}</div>
+                                <div className={`font-bold mt-0.5 truncate ${netVal >= 0 ? 'text-indigo-300' : 'text-emerald-300'}`}>
+                                  {netVal > 0 ? `+${netVal}` : netVal} <span className="text-[8px] text-slate-400">mL</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })() : (
+                        <div className="p-6 text-center text-xs text-slate-400 bg-[#070c18] rounded-xl border border-slate-800/80 mt-3 space-y-2">
+                          <p>{lang === 'ar' ? 'لم يسجل ميزان السوائل لليوم.' : 'No fluid balance records for today.'}</p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedFluidBalanceForEdit(null);
+                              setIsFluidModalOpen(true);
+                              setIsPaperFluidsCardCollapsed(false);
+                            }}
+                            className="px-3 py-1.5 rounded-lg bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 border border-teal-500/40 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>{lang === 'ar' ? 'تسجيل ميزان اليوم' : 'Log Today Balance'}</span>
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Gorgeous Modal for Adding/Editing Lab Columns */}
+          {isAddLabModalOpen && (
+            <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto animate-in fade-in duration-200">
+              <div className="bg-[#0b1224] border border-slate-700/80 rounded-2xl w-full max-w-4xl p-6 shadow-2xl space-y-4 my-8">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <h3 className="text-base font-bold text-white flex items-center gap-2">
+                    <Activity className="w-5 h-5 text-emerald-400" />
+                    <span>
+                      {editingLabId 
+                        ? (lang === 'ar' ? 'تعديل عمود التحاليل الطبي' : 'Edit Lab Column Details')
+                        : (lang === 'ar' ? 'تسجيل عمود تحاليل متسلسلة جديد' : 'Record New Lab Column')}
+                    </span>
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    {settings.features.enableAiLabScanner && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAiScannerPreset('ALL');
+                          setIsAiLabScannerOpen(true);
+                        }}
+                        className="px-3 py-1.5 rounded-xl bg-fuchsia-500/20 hover:bg-fuchsia-500/30 text-fuchsia-300 border border-fuchsia-500/40 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                      >
+                        <Camera className="w-4 h-4 text-fuchsia-400" />
+                        <span>{lang === 'ar' ? 'تصوير شريط التحليل (AI Scanner)' : 'Scan Lab Strip (AI)'}</span>
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsAddLabModalOpen(false);
+                        setEditingLabId(null);
+                      }}
+                      className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition-all text-sm font-black"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+
+                <form onSubmit={handleSaveLabColumn} className="space-y-4 text-xs">
+                  {/* Timestamp picker */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-slate-400 font-semibold mb-1">
+                        {lang === 'ar' ? 'التاريخ والوقت' : 'Date & Time of Sample Extraction'}
+                      </label>
+                      <input
+                        type="datetime-local"
+                        value={labForm.timestamp}
+                        onChange={(e) => setLabForm({ ...labForm, timestamp: e.target.value })}
+                        required
+                        className="w-full bg-[#070c18] border border-slate-800 rounded-xl px-3 py-2 text-white focus:border-emerald-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-400 font-semibold mb-1">
+                        {lang === 'ar' ? 'اسم الطبيب المسؤول (تلقائي)' : 'Recording Physician Name (Auto)'}
+                      </label>
+                      <input
+                        type="text"
+                        disabled
+                        value={editingLabId ? (labsList.find(l => l.id === editingLabId)?.reviewedByDoctorName || 'Dr. Guest') : (currentUser?.nameEn || currentUser?.nameAr || currentUser?.email || 'Dr. Guest')}
+                        className="w-full bg-slate-900/60 border border-slate-800/80 rounded-xl px-3 py-2 text-slate-400 cursor-not-allowed font-bold"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Panel Selection Filter Tabs */}
+                  <div className="flex items-center justify-between gap-2 flex-wrap pb-1">
+                    <div className="flex items-center gap-1.5 overflow-x-auto max-w-full pb-1 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedModalCatId('all')}
+                        className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition-all ${
+                          selectedModalCatId === 'all'
+                            ? 'bg-teal-500 text-slate-950 shadow-md'
+                            : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                        }`}
+                      >
+                        {lang === 'ar' ? 'الكل (جميع الصناديق)' : 'All Panels'}
+                      </button>
+                      {settings.labCategories?.map((cat: any) => (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          onClick={() => setSelectedModalCatId(cat.id)}
+                          className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition-all ${
+                            selectedModalCatId === cat.id
+                              ? 'bg-teal-500 text-slate-950 shadow-md'
+                              : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                          }`}
+                        >
+                          {lang === 'ar' ? cat.nameAr : cat.nameEn}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className={`grid gap-4 overflow-y-auto max-h-[420px] pr-2 ${
+                    selectedModalCatId === 'all' ? 'grid-cols-1 md:grid-cols-3' : 'grid-cols-1 md:grid-cols-2'
+                  }`}>
+                    {settings.labCategories
+                      ?.filter((cat: any) => selectedModalCatId === 'all' || cat.id === selectedModalCatId)
+                      ?.map((cat: any) => (
+                      <div key={cat.id} className="bg-[#070c18] p-4 rounded-xl border border-slate-800 space-y-3 shadow-md">
+                        <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                          <div className="text-xs font-extrabold text-teal-400 uppercase font-mono flex items-center gap-1.5">
+                            <FlaskConical className="w-3.5 h-3.5 text-teal-400" />
+                            <span>{lang === 'ar' ? cat.nameAr : cat.nameEn}</span>
+                            <span className="text-[10px] text-slate-400 font-normal">
+                              ({lang === 'ar' ? cat.nameEn : cat.nameAr})
+                            </span>
+                          </div>
+                          {settings.features.enableAiLabScanner && (cat.id === 'cbc' || cat.id === 'abg') && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAiScannerPreset(cat.id === 'cbc' ? 'CBC' : 'ABG');
+                                setIsAiLabScannerOpen(true);
+                              }}
+                              className="px-2 py-0.5 rounded-md bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all"
+                            >
+                              <Camera className="w-3 h-3 text-teal-400" />
+                              <span>{lang === 'ar' ? `تصوير ${cat.id.toUpperCase()}` : `Scan ${cat.id.toUpperCase()}`}</span>
+                            </button>
+                          )}
+                        </div>
+                        <div className="space-y-2.5">
+                          {cat.parameters?.map((p: any) => {
+                            const isText = p.id === 'diff' || p.id === 'typeanemia' || p.id.includes('type') || p.id.includes('diff');
+                            return (
+                              <div key={p.id}>
+                                <label className="text-slate-400 mb-1 block font-semibold flex justify-between items-center text-[10px] sm:text-[11px]">
+                                  <span>{p.name} {p.unit ? `(${p.unit})` : ''}</span>
+                                  <span className="text-[9px] text-slate-500 font-mono font-normal">Normal: {p.normalRange}</span>
+                                </label>
+                                <input
+                                  type="text"
+                                  inputMode={isText ? undefined : "decimal"}
+                                  value={(labForm as any)[p.id] || ''}
+                                  onChange={e => setLabForm({ ...labForm, [p.id]: e.target.value })}
+                                  className="w-full bg-[#0b1224] border border-slate-800 rounded-lg p-2 text-white text-xs font-mono focus:border-teal-500 focus:outline-none"
+                                />
+                              </div>
+                            );
+                          })}
+                          {cat.parameters?.length === 0 && (
+                            <div className="text-center py-4 text-slate-500 text-xs italic">
+                              {lang === 'ar' ? 'لا توجد تحاليل مضافة في هذا الصندوق.' : 'No tests added to this panel.'}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-4 border-t border-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsAddLabModalOpen(false);
+                        setEditingLabId(null);
+                      }}
+                      className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold"
+                    >
+                      {lang === 'ar' ? 'إلغاء' : 'Cancel'}
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-6 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold flex items-center gap-1.5 shadow-lg shadow-emerald-500/25"
+                    >
+                      <Check className="w-4 h-4" />
+                      <span>{editingLabId ? (lang === 'ar' ? 'حفظ التعديلات' : 'Save Changes') : (lang === 'ar' ? 'تسجيل القراءة' : 'Record Column')}</span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tab: Daily Lab Flowsheet with Interactive Trend History (HG 5 > 7 > 8.5 > 8) */}
+      {(activeTab === 'labs' || (activeTab === 'all' && settings.features.enableLabFlowsheet !== false)) && (
+        <div 
+          data-expanded={!isPaperLabsCardCollapsed ? "true" : "false"}
+          className="icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-4 border transition-all"
+        >
+          <div 
+            onClick={() => setIsPaperLabsCardCollapsed(!isPaperLabsCardCollapsed)}
+            className="icu-card-header-toggle flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2.5 cursor-pointer p-2 rounded-xl transition-all"
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-teal-500/10 border border-teal-500/30 text-teal-400">
+                <FlaskConical className="w-5 h-5" />
+              </div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold text-white">
+                  {lang === 'ar' ? 'سجل التحاليل' : 'Labs Record'}
+                </h3>
+                <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/30">
+                  {new Set(labResults.map(l => (l.testName || '').trim().toLowerCase())).size}
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsPaperLabsCardCollapsed(!isPaperLabsCardCollapsed);
+                }}
+                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all cursor-pointer flex items-center gap-1 text-xs"
+                title={isPaperLabsCardCollapsed ? (lang === 'ar' ? 'فتح البطاقة' : 'Expand') : (lang === 'ar' ? 'طي البطاقة' : 'Collapse')}
+              >
+                <span className="text-[11px] text-slate-400 hidden sm:inline">
+                  {isPaperLabsCardCollapsed ? (lang === 'ar' ? 'عرض السجل' : 'Expand') : (lang === 'ar' ? 'طي' : 'Collapse')}
+                </span>
+                {isPaperLabsCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          {!isPaperLabsCardCollapsed && (
+            <div className="space-y-4 animate-in fade-in duration-300">
+              <LabFlowsheetSection
+                patientId={patient.id}
+                bedNumber={bed.bedNumber}
+                labResults={labResults}
+                onLabAdded={() => {
+                  loadBedsideData();
+                  onDataUpdated();
+                }}
+                readOnly={readOnly}
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tab: Patient Antibiotics & Antimicrobial Therapy (Rendered right after Labs card) */}
+      {(activeTab === 'antibiotics' || activeTab === 'all') && (cardsConfig.showAntibioticsCard !== false) && (settings.features.enableAntibioticsCard !== false) && (
+        <AntibioticsSection
+          patient={patient}
+          bed={bed}
+          settings={settings}
+          antibiotics={antibioticsList}
+          labResults={labResults}
+          currentUser={currentUser}
+          onDataUpdated={() => {
+            loadBedsideData();
+            onDataUpdated();
+          }}
+          readOnly={readOnly}
+        />
+      )}
+
+      {/* Tab: Investigations, Radiology & POCUS Studies */}
+      {(activeTab === 'investigations' || (activeTab === 'all' && settings.features.enableInvestigations !== false)) && (
+        <div 
+          id="patient-investigations-card" 
+          data-expanded={!isPaperInvestigationsCardCollapsed ? "true" : "false"}
+          className="icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-4 border transition-all"
+        >
+          <div 
+            onClick={() => setIsPaperInvestigationsCardCollapsed(!isPaperInvestigationsCardCollapsed)}
+            className="icu-card-header-toggle flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2.5 cursor-pointer p-2 rounded-xl transition-all"
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-teal-500/10 border border-teal-500/30 text-teal-400">
+                <Scan className="w-5 h-5" />
+              </div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold text-white">
+                  {lang === 'ar' ? 'الفحوصات والأشعة' : 'Investigations & Radiology'}
+                </h3>
+                <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/30">
+                  {investigations.filter(i => i.patientId === patient.id).length}
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="hidden sm:inline-flex items-center gap-1 text-[11px] px-2.5 py-0.5 rounded-lg bg-teal-500/10 text-teal-300 border border-teal-500/20 font-medium">
+                <Sparkles className="w-3 h-3 text-teal-400" />
+                <span>{lang === 'ar' ? 'مسح ذكي متاح' : 'AI Scan Ready'}</span>
+              </span>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsPaperInvestigationsCardCollapsed(!isPaperInvestigationsCardCollapsed);
+                }}
+                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all cursor-pointer flex items-center gap-1 text-xs"
+                title={isPaperInvestigationsCardCollapsed ? (lang === 'ar' ? 'فتح البطاقة' : 'Expand') : (lang === 'ar' ? 'طي البطاقة' : 'Collapse')}
+              >
+                <span className="text-[11px] text-slate-400 hidden sm:inline">
+                  {isPaperInvestigationsCardCollapsed ? (lang === 'ar' ? 'عرض السجل' : 'Expand') : (lang === 'ar' ? 'طي' : 'Collapse')}
+                </span>
+                {isPaperInvestigationsCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          {!isPaperInvestigationsCardCollapsed && (
+            <div className="space-y-4 animate-in fade-in duration-300">
+              <InvestigationsSection
+                patientId={patient.id}
+                patientName={patient.fullNameAr || patient.fullNameEn}
+                bedNumber={bed.bedNumber}
+                investigations={investigations}
+                onInvestigationAdded={() => {
+                  loadBedsideData();
+                  onDataUpdated();
+                }}
+                readOnly={readOnly}
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tab 3: Infusion Pumps */}
+      {(activeTab === 'pumps' || (activeTab === 'all' && settings.features.enableInfusionPumps !== false)) && (
+        <div 
+          data-expanded={!isPaperPumpsCardCollapsed ? "true" : "false"}
+          className="icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-4 border transition-all"
+        >
+          <div 
+            onClick={() => setIsPaperPumpsCardCollapsed(!isPaperPumpsCardCollapsed)}
+            className="icu-card-header-toggle flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2.5 cursor-pointer p-2 rounded-xl transition-all"
+          >
+            <div className="flex items-center gap-2">
+              <Droplet className="w-5 h-5 text-amber-400" />
+              <h3 className="text-base font-bold text-white">
+                {lang === 'ar' ? 'مضخات الحقن الوريدي المتواصل (Alaris Smart Pumps)' : 'Vasoactive Continuous Infusion Lines'}
+              </h3>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-400 font-mono hidden sm:inline">
+                {pumps.length} {lang === 'ar' ? 'قنوات نشطة' : 'Active Channels'}
+              </span>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsPaperPumpsCardCollapsed(!isPaperPumpsCardCollapsed);
+                }}
+                className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all cursor-pointer"
+                title={isPaperPumpsCardCollapsed ? (lang === 'ar' ? 'فتح البطاقة' : 'Expand') : (lang === 'ar' ? 'طي البطاقة' : 'Collapse')}
+              >
+                {isPaperPumpsCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          {!isPaperPumpsCardCollapsed && (
+            <div className="space-y-3 animate-in fade-in duration-300">
+              {/* Top Action Toolbar inside expanded card */}
+              <div className="flex items-center justify-between bg-[#070c18] p-2.5 rounded-xl border border-slate-800/80">
+                <span className="text-xs text-slate-300 font-mono">
+                  {pumps.length} {lang === 'ar' ? 'مضخات مسجلة' : 'Registered Infusion Pump Lines'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedPumpForEdit(null);
+                    setIsPumpModalOpen(true);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-md active:scale-95 cursor-pointer"
+                  title={lang === 'ar' ? 'إضافة مضخة أو خط تنقيط وريدي جديد' : 'Add Infusion Pump Line'}
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>{lang === 'ar' ? 'إضافة مضخة وريدية جديدة' : 'Add Infusion Pump Channel'}</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {pumps.length > 0 ? pumps.map((pump) => (
+                  <div 
+                    key={pump.id}
+                    className="bg-[#070c18] border border-slate-800 p-4 rounded-xl space-y-3 hover:border-amber-500/40 transition-colors"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h4 className="text-sm font-bold text-white mt-1">
+                          {pump.drugNameEn}
+                        </h4>
+                        <p className="text-xs text-slate-400">
+                          {lang === 'ar' 
+                            ? `التركيز: ${pump.concentrationMgPerMl} mg/mL • المحلول: ${pump.diluentFluid || pump.solutionCarrier}` 
+                            : `Concentration: ${pump.concentrationMgPerMl} mg/mL • Diluent: ${pump.diluentFluid || pump.solutionCarrier}`}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Rate & Volume display */}
+                    <div className="bg-[#0a101f] p-3 rounded-lg flex items-center justify-between font-mono">
+                      <div>
+                        <div className="text-[10px] text-slate-400">{lang === 'ar' ? 'معدل التدفق (Current Rate)' : 'Current Rate'}</div>
+                        <div className="text-lg font-black text-amber-300">
+                          {pump.currentRate} <span className="text-xs text-slate-400">{pump.rateUnit}</span>
+                        </div>
+                      </div>
+
+                      <div className={isRTL ? 'text-right' : 'text-left'}>
+                        <div className="text-[10px] text-slate-400">{lang === 'ar' ? 'معدل الضخ (Flow Rate)' : 'Flow Rate'}</div>
+                        <div className="text-sm font-bold text-slate-200">
+                          {pump.flowRateMlPerHour} mL/h
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Rate Titration Controls: Increase / Decrease */}
+                    <div className="flex items-center justify-between bg-slate-900/60 p-2 rounded-lg border border-slate-800">
+                      <div className="text-[11px] font-semibold text-slate-300">
+                        {lang === 'ar' ? 'معايرة الجرعة السريعة:' : 'Quick Titration:'}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleTitratePump(pump, 'DOWN')}
+                          className="flex items-center gap-1 px-2.5 py-1 rounded bg-slate-800 hover:bg-red-950 text-slate-200 hover:text-red-300 border border-slate-700 text-xs font-bold transition-all cursor-pointer active:scale-95"
+                          title={lang === 'ar' ? 'إنقاص معدل الضخ' : 'Titrate Down'}
+                        >
+                          <Minus className="w-3.5 h-3.5" />
+                          <span>{lang === 'ar' ? 'إنقاص' : 'Down'}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleTitratePump(pump, 'UP')}
+                          className="flex items-center gap-1 px-2.5 py-1 rounded bg-slate-800 hover:bg-emerald-950 text-slate-200 hover:text-emerald-300 border border-slate-700 text-xs font-bold transition-all cursor-pointer active:scale-95"
+                          title={lang === 'ar' ? 'زيادة معدل الضخ' : 'Titrate Up'}
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>{lang === 'ar' ? 'رفع الجرعة' : 'Up'}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Target Parameter */}
+                    <div className="text-[11px] text-slate-400">
+                      <span className="font-semibold text-slate-300">{lang === 'ar' ? 'هدف المعايرة:' : 'Titration Target:'}</span> {pump.targetParameter || 'Maintain MAP ≥ 65 mmHg'}
+                    </div>
+
+                    {/* Action Bar for Pump: Pause/Resume, Full Edit, Discontinue & Delete */}
+                    <div className="pt-2 border-t border-slate-800 flex items-center justify-between gap-2 flex-wrap">
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleTogglePumpStatus(pump)}
+                          className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                            pump.status === PumpStatus.RUNNING 
+                              ? 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40' 
+                              : 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40'
+                          }`}
+                        >
+                          {pump.status === PumpStatus.RUNNING ? (
+                            <>
+                              <Pause className="w-3 h-3" />
+                              <span>{lang === 'ar' ? 'إيقاف مؤقت' : 'Pause'}</span>
+                            </>
+                          ) : (
+                            <>
+                              <Play className="w-3 h-3" />
+                              <span>{lang === 'ar' ? 'استئناف' : 'Resume'}</span>
+                            </>
+                          )}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedPumpForEdit(pump);
+                            setIsPumpModalOpen(true);
+                          }}
+                          className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 text-xs font-bold transition-colors cursor-pointer"
+                        >
+                          <Edit3 className="w-3 h-3" />
+                          <span>{lang === 'ar' ? 'تعديل المعايير' : 'Edit Rate'}</span>
+                        </button>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDeletePumpLine(pump)}
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-bold transition-colors cursor-pointer"
+                        title={lang === 'ar' ? 'إيقاف وحذف المحلول الوريدي' : 'Discontinue and remove line'}
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span>{lang === 'ar' ? 'إيقاف واستغناء' : 'Discontinue'}</span>
+                      </button>
+                    </div>
+                  </div>
+                )) : (
+                  <div className="col-span-2 p-6 text-center text-slate-400 bg-slate-950/40 rounded-xl border border-slate-800 space-y-3">
+                    <div>{lang === 'ar' ? 'لا توجد قنوات حقن وريدي نشطة حالياً.' : 'No active continuous infusion channels currently.'}</div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedPumpForEdit(null);
+                        setIsPumpModalOpen(true);
+                        setIsPaperPumpsCardCollapsed(false);
+                      }}
+                      className="px-4 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>{lang === 'ar' ? 'إضافة مضخة وريدية جديدة' : 'Add New Infusion Pump Channel'}</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tab 2: Ventilator & ABG */}
+      {(activeTab === 'vent' || (activeTab === 'all' && settings.features.enableVentilatorParameters !== false)) && (
+        <div 
+          data-expanded={!isPaperVentCardCollapsed ? "true" : "false"}
+          className="icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-4 border transition-all"
+        >
+          <div 
+            onClick={() => setIsPaperVentCardCollapsed(!isPaperVentCardCollapsed)}
+            className="icu-card-header-toggle flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2.5 cursor-pointer p-2 rounded-xl transition-all"
+          >
+            <div className="flex items-center gap-2">
+              <Wind className="w-5 h-5 text-cyan-400" />
               <div>
-                <strong className="font-bold text-emerald-900 dark:text-emerald-300 block text-sm">
-                  {lang === 'ar' ? 'تم حفظ التقرير في ملف المريض بنجاح!' : 'Investigation successfully recorded into patient record!'}
-                </strong>
-                <p className="text-[11px] text-emerald-800 dark:text-emerald-100 mt-0.5">
-                  {lang === 'ar' ? 'تم توثيق النتائج وتحديث بطاقة الفحوصات والأشعة.' : 'Documented and synced to investigations flowsheet.'}
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  {lang === 'ar' ? 'إعدادات دعم التنفس والأكسجين والغازات (Respiratory, Vent & ABG)' : 'Respiratory, Oxygen & ABG Settings'}
+                </h3>
+                {ventilator && (
+                  <div className="text-xs text-cyan-400 font-bold font-mono mt-0.5">
+                    {lang === 'ar' ? `النمط الحالي: ${ventilator.mode}` : `Current Mode: ${ventilator.mode}`}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsPaperVentCardCollapsed(!isPaperVentCardCollapsed);
+                }}
+                className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all cursor-pointer"
+                title={isPaperVentCardCollapsed ? (lang === 'ar' ? 'فتح البطاقة' : 'Expand') : (lang === 'ar' ? 'طي البطاقة' : 'Collapse')}
+              >
+                {isPaperVentCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          {!isPaperVentCardCollapsed && (
+            <div className="space-y-4 animate-in fade-in duration-300">
+              {ventilator ? (
+                <div className="space-y-4">
+                  {/* Action Toolbar inside expanded card */}
+                  <div className="flex items-center justify-between bg-slate-50 dark:bg-[#070c18] p-3 rounded-xl border border-slate-200 dark:border-slate-800/80">
+                    <div className="flex items-center gap-2">
+                      <span className={`px-2.5 py-1 rounded-lg text-xs font-mono font-black border ${
+                        ventilator.supportCategory === 'OXYGEN_THERAPY'
+                          ? 'bg-emerald-500/10 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border-emerald-500/40'
+                          : ventilator.supportCategory === 'NON_INVASIVE_NIV'
+                          ? 'bg-amber-500/10 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 border-amber-500/40'
+                          : 'bg-cyan-500/10 dark:bg-cyan-950/80 text-cyan-700 dark:text-cyan-300 border-cyan-500/40'
+                      }`}>
+                        {ventilator.supportCategory === 'OXYGEN_THERAPY' ? 'OXYGEN THERAPY' : 'VENTILATOR'}: {ventilator.mode}
+                        {ventilator.oxygenFlowLpm ? ` (${ventilator.oxygenFlowLpm} L/min)` : ''}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsVentilatorModalOpen(true)}
+                      className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs shadow-md active:scale-95 cursor-pointer"
+                      title={lang === 'ar' ? 'تعديل أو ضبط إعدادات دعم التنفس والأكسجين' : 'Adjust Respiratory & Oxygen Support Settings'}
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                      <span>{lang === 'ar' ? 'تعديل الإعدادات' : 'Edit Settings'}</span>
+                    </button>
+                  </div>
+
+                  {/* Compact High-Contrast Parameter Boxes */}
+                  {ventilator.supportCategory === 'OXYGEN_THERAPY' ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono">
+                      <div className="bg-slate-50 dark:bg-[#070c18] px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800/80 flex items-center justify-between">
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">O₂ Flow Rate</span>
+                        <span className="text-base font-extrabold text-emerald-600 dark:text-emerald-400">
+                          {ventilator.oxygenFlowLpm ?? '--'} <span className="text-xs text-slate-400">L/min</span>
+                        </span>
+                      </div>
+
+                      <div className="bg-slate-50 dark:bg-[#070c18] px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800/80 flex items-center justify-between">
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Est. FiO₂</span>
+                        <span className="text-base font-extrabold text-teal-600 dark:text-teal-300">{ventilator.fio2Percent}%</span>
+                      </div>
+
+                      <div className="bg-slate-50 dark:bg-[#070c18] px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800/80 flex items-center justify-between">
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Device Type</span>
+                        <span className="text-xs font-extrabold text-slate-800 dark:text-slate-200 truncate max-w-[110px]">{ventilator.mode}</span>
+                      </div>
+
+                      <div className="bg-slate-50 dark:bg-[#070c18] px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800/80 flex items-center justify-between">
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Target SpO₂</span>
+                        <span className="text-xs font-extrabold text-emerald-600 dark:text-emerald-400">92% - 96%</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono">
+                      <div className="bg-slate-50 dark:bg-[#070c18] px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800/80 flex items-center justify-between hover:border-slate-400 dark:hover:border-slate-700 transition-colors">
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">FiO₂</span>
+                        <span className="text-sm font-extrabold text-teal-600 dark:text-teal-300">{ventilator.fio2Percent}%</span>
+                      </div>
+
+                      <div className="bg-slate-50 dark:bg-[#070c18] px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800/80 flex items-center justify-between hover:border-slate-400 dark:hover:border-slate-700 transition-colors">
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">PEEP</span>
+                        <span className="text-sm font-extrabold text-cyan-600 dark:text-cyan-300">
+                          {ventilator.peepCmH2O} <span className="text-[10px] text-slate-400 font-bold">cmH₂O</span>
+                        </span>
+                      </div>
+
+                      <div className="bg-slate-50 dark:bg-[#070c18] px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800/80 flex items-center justify-between hover:border-slate-400 dark:hover:border-slate-700 transition-colors">
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">(VT)</span>
+                        <span className="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-1">
+                          <span>{ventilator.tidalVolumeMl || ventilator.setTidalVolumeMl}</span>
+                          <span className="text-[10px] text-slate-400 font-bold">mL</span>
+                          <span className="text-[10px] text-teal-600 dark:text-teal-400 font-sans font-bold">
+                            ({Math.round((ventilator.setTidalVolumeMl || ventilator.tidalVolumeMl || 420) / (patient.idealBodyWeightKg || (patient.gender === 'MALE' ? 70 : 60) || 70))}/kg)
+                          </span>
+                        </span>
+                      </div>
+
+                      <div className="bg-slate-50 dark:bg-[#070c18] px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800/80 flex items-center justify-between hover:border-slate-400 dark:hover:border-slate-700 transition-colors">
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">(RR)</span>
+                        <span className="text-sm font-extrabold text-slate-800 dark:text-slate-200">
+                          {ventilator.setRespiratoryRateCpm} <span className="text-[10px] text-slate-400 font-bold">bpm</span>
+                        </span>
+                      </div>
+
+                      <div className="bg-slate-50 dark:bg-[#070c18] px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800/80 flex items-center justify-between hover:border-slate-400 dark:hover:border-slate-700 transition-colors">
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">(PIP)</span>
+                        <span className="text-sm font-extrabold text-amber-600 dark:text-amber-300">
+                          {ventilator.peakInspiratoryPressureCmH2O ?? '—'} <span className="text-[10px] text-slate-400 font-bold">cmH₂O</span>
+                        </span>
+                      </div>
+
+                      <div className="bg-slate-50 dark:bg-[#070c18] px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800/80 flex items-center justify-between hover:border-slate-400 dark:hover:border-slate-700 transition-colors">
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">(Pplat)</span>
+                        <span className="text-sm font-extrabold text-indigo-600 dark:text-indigo-300">
+                          {ventilator.plateauPressureCmH2O ?? '—'} <span className="text-[10px] text-slate-400 font-bold">cmH₂O</span>
+                        </span>
+                      </div>
+
+                      <div className="bg-slate-50 dark:bg-[#070c18] px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800/80 flex items-center justify-between hover:border-slate-400 dark:hover:border-slate-700 transition-colors">
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">(DP)</span>
+                        <span className={`text-sm font-extrabold ${
+                          drivingPressure && drivingPressure > 14 ? 'text-red-500 dark:text-red-400 font-black' : 'text-emerald-600 dark:text-emerald-400'
+                        }`}>
+                          {drivingPressure ?? '—'} <span className="text-[10px] text-slate-400 font-bold">cmH₂O</span>
+                        </span>
+                      </div>
+
+                      <div className="bg-slate-50 dark:bg-[#070c18] px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800/80 flex items-center justify-between hover:border-slate-400 dark:hover:border-slate-700 transition-colors">
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">(P/F)</span>
+                        <span className={`text-sm font-extrabold ${
+                          ventilator.pao2Fio2Ratio && ventilator.pao2Fio2Ratio < 200 ? 'text-red-500 dark:text-red-400 font-black' : 'text-emerald-600 dark:text-emerald-400'
+                        }`}>
+                          {ventilator.pao2Fio2Ratio ?? '—'}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Ventilator Modification Log (سجل تعديلات جهاز التنفس) */}
+                  <div className="mt-4 border-t border-slate-200 dark:border-slate-800/80 pt-3">
+                    <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400 font-bold mb-2">
+                      <span>{lang === 'ar' ? 'سجل تعديلات جهاز التنفس ومودات الأكسجين (أحدث 4 سجلات)' : 'Respiratory Modifications & Devices Log (Latest 4 records)'}</span>
+                      <span className="text-[10px] bg-slate-100 dark:bg-slate-900 px-2 py-0.5 rounded text-cyan-700 dark:text-cyan-400 font-bold border border-slate-200 dark:border-slate-800">
+                        {ventilator.history ? ventilator.history.length : 1} {lang === 'ar' ? 'سجلات' : 'records'}
+                      </span>
+                    </div>
+
+                    <div className="space-y-1.5 font-mono text-xs">
+                      {ventilator.history && ventilator.history.length > 0 ? (
+                        ventilator.history
+                          .slice()
+                          .reverse()
+                          .slice(0, isVentHistoryExpanded ? undefined : 4)
+                          .map((entry, idx) => (
+                            <div 
+                              key={entry.id || idx}
+                              className="flex items-center justify-between gap-2 py-2 px-3 rounded-xl bg-slate-50 dark:bg-[#070c18] border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors text-[11px]"
+                            >
+                              <div className="flex items-center gap-2 truncate">
+                                <span className={`font-bold px-1.5 py-0.5 rounded text-[10px] ${
+                                  entry.supportCategory === 'OXYGEN_THERAPY'
+                                    ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30'
+                                    : entry.supportCategory === 'NON_INVASIVE_NIV'
+                                    ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30'
+                                    : 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-400 border border-cyan-500/30'
+                                }`}>
+                                  {entry.mode}
+                                </span>
+                                <span className="text-slate-600 dark:text-slate-300 truncate max-w-[130px]" title={entry.recordedByStaffName}>
+                                  {entry.recordedByStaffName}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2.5 shrink-0 text-slate-500 text-[10px]">
+                                {entry.oxygenFlowLpm ? (
+                                  <span className="text-emerald-600 dark:text-emerald-400 font-bold">{entry.oxygenFlowLpm} L/min</span>
+                                ) : null}
+                                <span className="text-teal-600 dark:text-teal-300 font-bold">FiO₂ {entry.fio2Percent}%</span>
+                                {entry.peepCmH2O ? <span className="text-cyan-600 dark:text-cyan-300">PEEP {entry.peepCmH2O}</span> : null}
+                                {entry.tidalVolumeMl ? <span className="text-slate-700 dark:text-white">(VT) {entry.tidalVolumeMl}</span> : null}
+                                <span className="text-slate-400 font-sans">{new Date(entry.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}</span>
+                              </div>
+                            </div>
+                          ))
+                      ) : (
+                        <div className="flex items-center justify-between gap-2 py-2 px-3 rounded-xl bg-slate-50 dark:bg-[#070c18] border border-slate-200 dark:border-slate-800 text-[11px]">
+                          <div className="flex items-center gap-2 truncate">
+                            <span className="text-cyan-700 dark:text-cyan-400 font-bold bg-cyan-500/15 px-1.5 py-0.5 rounded text-[10px]">
+                              {ventilator.mode}
+                            </span>
+                            <span className="text-slate-600 dark:text-slate-300 truncate max-w-[130px]">
+                              {ventilator.recordedByStaffName}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2.5 shrink-0 text-slate-500 text-[10px]">
+                            {ventilator.oxygenFlowLpm ? (
+                              <span className="text-emerald-600 dark:text-emerald-400 font-bold">{ventilator.oxygenFlowLpm} L/min</span>
+                            ) : null}
+                            <span className="text-teal-600 dark:text-teal-300 font-bold">FiO₂ {ventilator.fio2Percent}%</span>
+                            {ventilator.peepCmH2O ? <span className="text-cyan-600 dark:text-cyan-300">PEEP {ventilator.peepCmH2O}</span> : null}
+                            {ventilator.tidalVolumeMl ? <span className="text-slate-700 dark:text-white">(VT) {ventilator.tidalVolumeMl || ventilator.setTidalVolumeMl}</span> : null}
+                            <span className="text-slate-400 font-sans">{new Date(ventilator.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {ventilator.history && ventilator.history.length > 4 && (
+                      <button
+                        type="button"
+                        onClick={() => setIsVentHistoryExpanded(!isVentHistoryExpanded)}
+                        className="mt-3 w-full text-center py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 text-xs text-slate-700 dark:text-slate-300 font-bold hover:text-slate-900 dark:hover:text-white transition-all cursor-pointer border border-slate-200 dark:border-slate-800"
+                      >
+                        {isVentHistoryExpanded 
+                          ? (lang === 'ar' ? 'إظهار أقل (4 سجلات فقط)' : 'Show Less (4 logs only)') 
+                          : (lang === 'ar' ? `إظهار كامل سجلات التنفس والأكسجين (${ventilator.history.length})` : `Show All Logs (${ventilator.history.length})`)}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="p-6 text-center text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-950/40 rounded-xl border border-slate-200 dark:border-slate-800 space-y-3">
+                  <div>
+                    {lang === 'ar' 
+                      ? 'المريض يتنفس هواء الغرفة تلقائياً بدون أجهزة مساعدة (Room Air).'
+                      : 'Patient is spontaneously breathing (Room Air / Spontaneous).'}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsVentilatorModalOpen(true);
+                      setIsPaperVentCardCollapsed(false);
+                    }}
+                    className="px-4 py-2 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-700 dark:text-cyan-300 border border-cyan-500/40 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>{lang === 'ar' ? 'ربط أكسجين أو جهاز تنفس صناعي' : 'Connect Oxygen / Mechanical Vent'}</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tab 4: Fluids & MTP */}
+      {(activeTab === 'fluids' || (activeTab === 'all' && settings.features.enableFluidBalance !== false)) && (
+        <div 
+          data-expanded={!isPaperFluidsCardCollapsed ? "true" : "false"}
+          className="icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-4 border transition-all"
+        >
+          <div 
+            onClick={() => setIsPaperFluidsCardCollapsed(!isPaperFluidsCardCollapsed)}
+            className="icu-card-header-toggle flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2.5 cursor-pointer p-2 rounded-xl transition-all"
+          >
+            <div className="flex items-center gap-2">
+              <Scale className="w-5 h-5 text-teal-400" />
+              <h3 className="text-base font-bold text-white">
+                {lang === 'ar' 
+                  ? 'ميزان السوائل 12 ساعة ونقل مشتقات الدم (Fluid Balance & MTP)' 
+                  : '12-Hour Fluid Balance & Massive Transfusion (MTP)'}
+              </h3>
+            </div>
+            <div className="flex items-center gap-2">
+              {fluidBalance && (
+                (() => {
+                  const netVal = fluidBalance.netCumulativeBalanceMl ?? (fluidBalance as any).netBalance24HMl ?? 0;
+                  return (
+                    <span className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold hidden sm:inline ${
+                      netVal >= 0 
+                        ? 'bg-amber-950 text-amber-300 border border-amber-700' 
+                        : 'bg-teal-950 text-teal-300 border border-teal-700'
+                    }`}>
+                      NET 12H: {netVal > 0 ? `+${netVal}` : netVal} mL
+                    </span>
+                  );
+                })()
+              )}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsPaperFluidsCardCollapsed(!isPaperFluidsCardCollapsed);
+                }}
+                className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all cursor-pointer"
+                title={isPaperFluidsCardCollapsed ? (lang === 'ar' ? 'فتح البطاقة' : 'Expand') : (lang === 'ar' ? 'طي البطاقة' : 'Collapse')}
+              >
+                {isPaperFluidsCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          {!isPaperFluidsCardCollapsed && (
+            <div className="space-y-3 animate-in fade-in duration-300">
+              {/* Action Toolbar inside expanded card */}
+              <div className="flex items-center justify-between bg-[#070c18] p-2.5 rounded-xl border border-slate-800/80 gap-2 flex-wrap">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs text-teal-300 font-mono">
+                    {fluidBalance ? (lang === 'ar' ? 'ميزان السوائل 12 ساعة مسجل' : '12H Fluid Balance Logged') : (lang === 'ar' ? 'لا يوجد ميزان مسجل للنوبتجية الحالية' : 'No balance logged for shift')}
+                  </span>
+                  {allFluidBalances.length > 1 && (
+                    <div className="flex items-center gap-1 overflow-x-auto max-w-[300px] sm:max-w-xs scrollbar-none">
+                      {(showMoreBedsideFluids ? allFluidBalances : allFluidBalances.slice(0, 4)).map((fRec, idx) => {
+                        const recDateStr = fRec.periodEndTimestamp ? fRec.periodEndTimestamp.split('T')[0] : (fRec as any).date;
+                        const isSelected = fluidBalance?.id === fRec.id;
+                        const sLabel = fRec.shiftType === 'NIGHT' ? (lang === 'ar' ? 'ليل' : 'N') : (lang === 'ar' ? 'صباح' : 'D');
+                        return (
+                          <button
+                            key={fRec.id || idx}
+                            type="button"
+                            onClick={() => setFluidBalance(fRec)}
+                            className={`px-2 py-0.5 rounded text-[10px] font-mono border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-1 ${
+                              isSelected
+                                ? 'bg-teal-950 text-teal-300 border-teal-600 font-bold shadow'
+                                : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white'
+                            }`}
+                          >
+                            <span>{recDateStr || `Record ${idx + 1}`}</span>
+                            <span className="text-[9px] opacity-75">({sLabel})</span>
+                          </button>
+                        );
+                      })}
+
+                      {allFluidBalances.length > 4 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!showMoreBedsideFluids && patient?.id) {
+                              fetchFullCategoryFromCloud(patient.id, 'fluids');
+                            }
+                            setShowMoreBedsideFluids(!showMoreBedsideFluids);
+                          }}
+                          className="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 hover:bg-slate-700 text-teal-300 border border-teal-500/30 whitespace-nowrap shrink-0 transition-all cursor-pointer"
+                        >
+                          {showMoreBedsideFluids 
+                            ? (lang === 'ar' ? 'عرض أقل' : 'Less') 
+                            : (lang === 'ar' ? `إظهار المزيد (+${allFluidBalances.length - 4})` : `More (+${allFluidBalances.length - 4})`)}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  {fluidBalance && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedFluidBalanceForEdit(fluidBalance);
+                        setIsFluidModalOpen(true);
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-teal-300 border border-teal-500/30 font-bold text-xs shadow-md active:scale-95 cursor-pointer transition-colors"
+                      title={lang === 'ar' ? 'تعديل ميزان السوائل الحالي' : 'Edit Current 12H Balance'}
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                      <span>{lang === 'ar' ? 'تعديل ميزان السوائل' : 'Edit Balance'}</span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedFluidBalanceForEdit(null);
+                      setIsFluidModalOpen(true);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shadow-md active:scale-95 cursor-pointer transition-colors"
+                    title={lang === 'ar' ? 'إضافة ميزان 12 ساعة للنوبتجية الحالية' : 'Add 12-Hour Fluid Balance'}
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>{lang === 'ar' ? 'إضافة ميزان 12 ساعة' : 'Add 12H Balance'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {fluidBalance ? (() => {
+                const netVal = fluidBalance.netCumulativeBalanceMl ?? (fluidBalance as any).netBalance24HMl ?? 0;
+                const totalIntake = fluidBalance.intakeBreakdown?.totalIntakeMl ?? (fluidBalance as any).totalIntakeMl ?? 0;
+                const totalOutput = fluidBalance.outputBreakdown?.totalOutputMl ?? (fluidBalance as any).totalOutputMl ?? 0;
+                const ivMaint = fluidBalance.intakeBreakdown?.ivMaintenanceFluidMl ?? (fluidBalance as any).intakeBreakdown?.crystalloidMl ?? 0;
+                const ivMeds = fluidBalance.intakeBreakdown?.ivMedicationInfusionsMl ?? (fluidBalance as any).intakeBreakdown?.infusionsMl ?? 0;
+                const urineVal = fluidBalance.outputBreakdown?.urineOutputMl ?? (fluidBalance as any).outputBreakdown?.urineMl ?? 0;
+                const uopRate = fluidBalance.outputBreakdown?.hourlyUrineAverageMlPerHour ?? (fluidBalance as any).outputBreakdown?.hourlyUrineRateMlPerHr ?? 0;
+                
+                const bloodMl = fluidBalance.intakeBreakdown?.bloodProductsMl ?? 0;
+                const prbcUnits = (fluidBalance as any).transfusionProductsGiven?.prbcUnits ?? (bloodMl > 0 ? Math.ceil(bloodMl / 250) : 0);
+                const ffpUnits = (fluidBalance as any).transfusionProductsGiven?.ffpUnits ?? 0;
+                const plateletsUnits = (fluidBalance as any).transfusionProductsGiven?.plateletsUnits ?? 0;
+
+                return (
+                  <div className="space-y-2.5 font-mono">
+                    {/* Compact 3-Column Row: Intake (IN), Output (OUT), Net (NET) side-by-side on mobile */}
+                    <div className="grid grid-cols-3 gap-1.5 sm:gap-3">
+                      {/* 1. Total Intake */}
+                      <div className="bg-[#070c18] p-2.5 sm:p-3 rounded-xl border border-slate-800 flex flex-col justify-between">
+                        <div className="text-[9px] sm:text-[11px] font-bold text-cyan-400 truncate">
+                          {lang === 'ar' ? 'الوارد الكلي (IN)' : 'Total Intake (IN)'}
+                        </div>
+                        <div className="text-sm sm:text-base md:text-lg font-black text-cyan-300 mt-1 truncate">
+                          {totalIntake} <span className="text-[8px] sm:text-[10px] font-normal text-slate-400">mL</span>
+                        </div>
+                        <div className="text-[8px] sm:text-[10px] text-slate-400 mt-1 truncate">
+                          {lang === 'ar'
+                            ? `محاليل: ${ivMaint} | مضخات: ${ivMeds}`
+                            : `IV: ${ivMaint} | Pumps: ${ivMeds}`}
+                        </div>
+                      </div>
+
+                      {/* 2. Total Output */}
+                      <div className="bg-[#070c18] p-2.5 sm:p-3 rounded-xl border border-slate-800 flex flex-col justify-between">
+                        <div className="text-[9px] sm:text-[11px] font-bold text-amber-400 truncate">
+                          {lang === 'ar' ? 'الصادر الكلي (OUT)' : 'Total Output (OUT)'}
+                        </div>
+                        <div className="text-sm sm:text-base md:text-lg font-black text-amber-300 mt-1 truncate">
+                          {totalOutput} <span className="text-[8px] sm:text-[10px] font-normal text-slate-400">mL</span>
+                        </div>
+                        <div className="text-[8px] sm:text-[10px] text-slate-400 mt-1 truncate">
+                          {lang === 'ar'
+                            ? `بول: ${urineVal} mL`
+                            : `Urine: ${urineVal} mL`}
+                        </div>
+                      </div>
+
+                      {/* 3. Net Balance */}
+                      <div className="bg-[#070c18] p-2.5 sm:p-3 rounded-xl border border-slate-800 flex flex-col justify-between">
+                        <div className="text-[9px] sm:text-[11px] font-bold text-indigo-400 truncate">
+                          {lang === 'ar' ? 'صافي الميزان (NET)' : 'Net Balance (NET)'}
+                        </div>
+                        <div className={`text-sm sm:text-base md:text-lg font-black mt-1 truncate ${
+                          netVal >= 0 ? 'text-indigo-300' : 'text-emerald-300'
+                        }`}>
+                          {netVal > 0 ? `+${netVal}` : netVal} <span className="text-[8px] sm:text-[10px] font-normal text-slate-400">mL</span>
+                        </div>
+                        <div className="text-[8px] sm:text-[10px] text-slate-400 mt-1 truncate">
+                          {lang === 'ar' ? 'ميزان 24 ساعة' : '24h Balance'}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Secondary Row: MTP & Urine Hourly Rate */}
+                    <div className="bg-[#070c18] p-2.5 rounded-xl border border-slate-800 flex items-center justify-between text-[10px] sm:text-xs text-slate-300 flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-red-400 font-bold">{lang === 'ar' ? 'نقل الدم (MTP):' : 'MTP Blood:'}</span>
+                        <span className="text-red-300 font-mono font-bold">PRBC: {prbcUnits} {lang === 'ar' ? 'أكياس' : 'U'}</span>
+                        <span className="text-slate-600">•</span>
+                        <span className="text-slate-400 font-mono">FFP: {ffpUnits}</span>
+                        <span className="text-slate-600">•</span>
+                        <span className="text-slate-400 font-mono">PLT: {plateletsUnits}</span>
+                      </div>
+
+                      <div className="text-slate-400 font-mono">
+                        <span className="text-amber-400 font-semibold">{lang === 'ar' ? 'معدل البول (UOP):' : 'UOP Rate:'} </span>
+                        <span className="text-slate-200 font-bold">{uopRate} mL/hr</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })() : (
+                <div className="p-6 text-center text-slate-400 bg-slate-950/40 rounded-xl border border-slate-800 space-y-3">
+                  <div>{lang === 'ar' ? 'لا توجد بيانات مسجلة لميزان السوائل اليوم.' : 'No fluid balance logs recorded for today.'}</div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedFluidBalanceForEdit(null);
+                      setIsFluidModalOpen(true);
+                      setIsPaperFluidsCardCollapsed(false);
+                    }}
+                    className="px-4 py-2 rounded-xl bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 border border-teal-500/40 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>{lang === 'ar' ? 'تسجيل ميزان سوائل اليوم' : 'Log Today Fluid Balance'}</span>
+                  </button>
+                </div>
+              )}
+
+              {/* 📜 Previous Fluid Records Archive at the bottom of the card */}
+              {allFluidBalances.length > 0 && (
+                <div className="p-3 rounded-xl bg-[#060d1d] border border-slate-800 space-y-2 mt-3 font-mono">
+                  <div className="flex items-center justify-between text-xs font-bold text-slate-300">
+                    <div className="flex items-center gap-1.5 text-teal-400">
+                      <History className="w-4 h-4" />
+                      <span>{lang === 'ar' ? 'سجلات ميزان السوائل السابقة:' : 'Previous Fluid Records Archive:'}</span>
+                    </div>
+                    <span className="text-[10px] text-slate-500">
+                      ({allFluidBalances.length} {lang === 'ar' ? 'سجلات' : 'records'})
+                    </span>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    {(showMoreBedsideFluids ? allFluidBalances : allFluidBalances.slice(0, 4)).map((rec, idx) => {
+                      const recDateStr = rec.periodEndTimestamp ? rec.periodEndTimestamp.split('T')[0] : (rec as any).date || `Record ${idx + 1}`;
+                      const isCurrent = fluidBalance?.id === rec.id;
+                      const netVal = rec.netCumulativeBalanceMl ?? (rec as any).netBalance24HMl ?? 0;
+                      const totalIn = rec.intakeBreakdown?.totalIntakeMl ?? (rec as any).totalIntakeMl ?? 0;
+                      const totalOut = rec.outputBreakdown?.totalOutputMl ?? (rec as any).outputBreakdown?.totalOutputMl ?? 0;
+                      const shiftLabel = rec.shiftType === 'NIGHT' 
+                        ? (lang === 'ar' ? 'مناوبة ليلية' : 'NIGHT') 
+                        : (lang === 'ar' ? 'مناوبة صباحية' : 'DAY');
+
+                      return (
+                        <button
+                          key={rec.id || idx}
+                          type="button"
+                          onClick={() => setFluidBalance(rec)}
+                          className={`w-full p-2.5 rounded-xl text-xs transition-all cursor-pointer border flex items-center justify-between gap-2.5 flex-wrap sm:flex-nowrap ${
+                            isCurrent
+                              ? 'bg-teal-950/90 text-teal-200 border-teal-500 font-bold shadow-md shadow-teal-500/10'
+                              : 'bg-[#050a17] text-slate-300 border-slate-800 hover:bg-slate-800/80'
+                          }`}
+                        >
+                          {/* Date & Shift */}
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-white text-[11px] sm:text-xs">{recDateStr}</span>
+                            <span className={`text-[10px] px-2 py-0.5 rounded font-semibold ${
+                              rec.shiftType === 'NIGHT' 
+                                ? 'bg-indigo-950 text-indigo-300 border border-indigo-800' 
+                                : 'bg-amber-950 text-amber-300 border border-amber-800'
+                            }`}>
+                              {shiftLabel}
+                            </span>
+                          </div>
+
+                          {/* Intake and Output */}
+                          <div className="flex items-center gap-3 text-[11px]">
+                            <span className="text-cyan-400 font-semibold">IN: {totalIn} mL</span>
+                            <span className="text-amber-400 font-semibold">OUT: {totalOut} mL</span>
+                          </div>
+
+                          {/* Net Balance Badge */}
+                          <div className={`px-2 py-0.5 rounded text-[11px] font-bold font-mono ${
+                            netVal >= 0 ? 'bg-amber-950/80 text-amber-300 border border-amber-800/80' : 'bg-teal-950/80 text-teal-300 border border-teal-800/80'
+                          }`}>
+                            NET: {netVal > 0 ? `+${netVal}` : netVal} mL
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {allFluidBalances.length > 4 && (
+                    <div className="pt-1 text-center">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!showMoreBedsideFluids && patient?.id) {
+                            fetchFullCategoryFromCloud(patient.id, 'fluids');
+                          }
+                          setShowMoreBedsideFluids(!showMoreBedsideFluids);
+                        }}
+                        className="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-teal-300 border border-teal-500/30 text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                      >
+                        {showMoreBedsideFluids
+                          ? (lang === 'ar' ? 'عرض أقل' : 'Show Less')
+                          : (lang === 'ar' ? `إظهار المزيد (+${allFluidBalances.length - 4} سجلات أخرى)` : `Show More (+${allFluidBalances.length - 4} more)`)}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tab 5: SBAR Handovers */}
+      {(activeTab === 'sbar' || (activeTab === 'all' && settings.features.enableSbarHandover !== false)) && (
+        <div 
+          data-expanded={!isPaperSbarCardCollapsed ? "true" : "false"}
+          className="icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-4 border transition-all"
+        >
+          <div 
+            onClick={() => setIsPaperSbarCardCollapsed(!isPaperSbarCardCollapsed)}
+            className="icu-card-header-toggle flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2.5 cursor-pointer p-2 rounded-xl transition-all"
+          >
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="w-5 h-5 text-teal-400" />
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-bold text-white">
+                    {lang === 'ar' ? 'سجلات تسليم واستلام المناوبات السريرية (SBAR Shift Handover)' : 'SBAR Shift Handover Reports'}
+                  </h3>
+                  <span className="px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 font-black text-xs font-mono shadow-md">
+                    {sbarList.length}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsPaperSbarCardCollapsed(!isPaperSbarCardCollapsed);
+                }}
+                className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all cursor-pointer"
+                title={isPaperSbarCardCollapsed ? (lang === 'ar' ? 'فتح البطاقة' : 'Expand') : (lang === 'ar' ? 'طي البطاقة' : 'Collapse')}
+              >
+                {isPaperSbarCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          {!isPaperSbarCardCollapsed && (
+            <div className="space-y-3 animate-in fade-in duration-300">
+              {/* Action Toolbar inside expanded card: New Handover + Quick status */}
+              <div className="flex items-center justify-between bg-[#070c18] p-3 rounded-xl border border-slate-800/80 flex-wrap gap-3">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="px-2.5 py-1 rounded-xl bg-amber-400/20 text-amber-300 border border-amber-400/40 text-xs font-black font-mono shadow flex items-center gap-1.5">
+                    <span>{sbarList.length}</span>
+                    <span>{lang === 'ar' ? 'تقارير تسليم مسجلة' : 'Logged SBAR Reports'}</span>
+                  </span>
+                  {sbarList.length > 0 && (
+                    <span className="text-[11px] text-slate-400 font-mono">
+                      • {lang === 'ar' ? `آخر تسليم: ${sbarList[0].shiftDate} (${sbarList[0].outgoingDoctor.name})` : `Latest: ${sbarList[0].shiftDate} (${sbarList[0].outgoingDoctor.name})`}
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+                  {(() => {
+                    const latestSbar = sbarList && sbarList.length > 0 ? sbarList[0] : null;
+                    const pendingSbar = (latestSbar && !latestSbar.incomingDoctor?.signedAt) ? latestSbar : null;
+                    return (
+                      <>
+                        {pendingSbar && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedTemplateSbar(pendingSbar);
+                              setIsBedsideSbarModalOpen(true);
+                            }}
+                            className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/20 active:scale-95 cursor-pointer transition-all animate-pulse border border-amber-300"
+                          >
+                            <CheckCircle2 className="w-4 h-4 text-slate-950 shrink-0" />
+                            <span>
+                              {lang === 'ar' 
+                                ? `استلام مناوبة ${pendingSbar.shiftType === 'NIGHT' ? 'ليلية' : 'صباحية'}` 
+                                : `Receive ${pendingSbar.shiftType === 'NIGHT' ? 'Night' : 'Day'} Shift`}
+                            </span>
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedTemplateSbar(null);
+                            setIsBedsideSbarModalOpen(true);
+                          }}
+                          className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-slate-950 font-black text-xs shadow-md shadow-teal-500/20 active:scale-95 cursor-pointer transition-all"
+                        >
+                          <Plus className="w-4 h-4 text-slate-950 shrink-0" />
+                          <span>{lang === 'ar' ? 'تسليم مناوبة جديد SBAR' : 'New SBAR Handover'}</span>
+                        </button>
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              {/* Handover Cards Display */}
+              {sbarList.length > 0 ? (
+                <>
+                  {(showMoreSbars ? sbarList : sbarList.slice(0, 4)).map((sbar) => (
+                  <div 
+                    key={sbar.id}
+                    className="bg-slate-50 border border-slate-200 text-slate-900 dark:bg-[#070c18] dark:border-slate-800 dark:text-white p-4 rounded-xl space-y-3 shadow-sm"
+                  >
+                    <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800/80 pb-2.5 flex-wrap gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`font-mono text-xs font-bold px-2 py-0.5 rounded border ${
+                          sbar.shiftType === 'NIGHT' 
+                            ? 'bg-indigo-100 text-indigo-900 border-indigo-300 dark:bg-indigo-950 dark:text-indigo-300 dark:border-indigo-800' 
+                            : 'bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800'
+                        }`}>
+                          {sbar.shiftType} SHIFT
+                        </span>
+                        <span className="text-xs text-slate-700 dark:text-slate-300 font-mono font-bold">
+                          {sbar.shiftDate} ({sbar.shiftStartTime} - {sbar.shiftEndTime})
+                        </span>
+                        <span className="text-slate-400 dark:text-slate-600">•</span>
+                        <span className="text-xs text-teal-700 dark:text-teal-300 font-medium">
+                          {lang === 'ar' ? 'المُسلِّم: ' : 'Outgoing: '}
+                          <strong className="text-slate-900 dark:text-white font-black">{sbar.outgoingDoctor.name}</strong> ({sbar.outgoingDoctor.role})
+                        </span>
+                        {sbar.incomingDoctor && (
+                          <span className="text-xs text-slate-600 dark:text-slate-400">
+                            → {lang === 'ar' ? 'المُستلِم: ' : 'Incoming: '}
+                            <strong className="text-slate-900 dark:text-slate-200 font-bold">{sbar.incomingDoctor.name}</strong>
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {/* Clone/Template Action */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedTemplateSbar(sbar);
+                            setIsBedsideSbarModalOpen(true);
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-teal-950 hover:bg-teal-900 border border-teal-700/80 text-teal-300 text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer active:scale-95"
+                          title={lang === 'ar' ? 'استخدام هذا التقرير كمسوّدة لتسليم جديد' : 'Use this report as a template for new handover'}
+                        >
+                          <Sparkles className="w-3 h-3 text-teal-400" />
+                          <span>{lang === 'ar' ? 'استخدام كقالب لمناوبة جديدة' : 'Use as Template'}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                      {/* S - Situation */}
+                      <div className="bg-[#0a101f] p-3 rounded-lg border border-teal-900/40">
+                        <div className="flex items-center gap-1.5 text-teal-400 font-bold font-mono">
+                          <span className="w-4 h-4 rounded-full bg-teal-500/20 flex items-center justify-center text-[10px]">S</span>
+                          <span>Situation (الموقف الحالي):</span>
+                        </div>
+                        <p className="text-slate-200 mt-1.5 leading-relaxed">{sbar.situation}</p>
+                      </div>
+
+                      {/* B - Background */}
+                      <div className="bg-[#0a101f] p-3 rounded-lg border border-cyan-900/40">
+                        <div className="flex items-center gap-1.5 text-cyan-400 font-bold font-mono">
+                          <span className="w-4 h-4 rounded-full bg-cyan-500/20 flex items-center justify-center text-[10px]">B</span>
+                          <span>Background (الخلفية المرضية):</span>
+                        </div>
+                        <p className="text-slate-200 mt-1.5 leading-relaxed">{sbar.background}</p>
+                      </div>
+
+                      {/* A - Assessment */}
+                      <div className="bg-[#0a101f] p-3 rounded-lg border border-amber-900/40">
+                        <div className="flex items-center gap-1.5 text-amber-400 font-bold font-mono">
+                          <span className="w-4 h-4 rounded-full bg-amber-500/20 flex items-center justify-center text-[10px]">A</span>
+                          <span>Assessment (التقييم السريري):</span>
+                        </div>
+                        <div className="text-slate-200 mt-1.5 space-y-1">
+                          <div className="text-[11px]"><strong className="text-red-300">• الدورة والضغط:</strong> {sbar.assessment?.hemodynamics || '—'}</div>
+                          <div className="text-[11px]"><strong className="text-cyan-300">• الرئة والتنفس:</strong> {sbar.assessment?.pulmonaryAndAirway || '—'}</div>
+                          <div className="text-[11px]"><strong className="text-amber-300">• الكلى والسوائل:</strong> {sbar.assessment?.metabolicAndRenal || '—'}</div>
+                          {sbar.assessment?.neurologyAndSedation && (
+                            <div className="text-[11px]"><strong className="text-indigo-300">• الأعصاب والمهدئات:</strong> {sbar.assessment.neurologyAndSedation}</div>
+                          )}
+                          {sbar.assessment?.infectiousDiseaseAndAntibiotics && (
+                            <div className="text-[11px]"><strong className="text-emerald-300">• الحرارة والمضادات:</strong> {sbar.assessment.infectiousDiseaseAndAntibiotics}</div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* R - Recommendation */}
+                      <div className="bg-[#0a101f] p-3 rounded-lg border border-emerald-900/40">
+                        <div className="flex items-center gap-1.5 text-emerald-400 font-bold font-mono">
+                          <span className="w-4 h-4 rounded-full bg-emerald-500/20 flex items-center justify-center text-[10px]">R</span>
+                          <span>Recommendation (الخطة والأوامر):</span>
+                        </div>
+                        <ul className="text-slate-200 mt-1.5 space-y-1">
+                          {(sbar.recommendationAndOrders || []).map((rec, idx) => (
+                            <li key={idx} className="text-[11px] flex items-start gap-1.5">
+                              <span className="text-emerald-400 font-bold">•</span>
+                              <span>{rec}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                  ))}
+
+                  {/* Show More Button after 4th record */}
+                  {sbarList.length >= 4 && (
+                    <div className="pt-2 text-center">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!showMoreSbars && patient?.id) {
+                            fetchFullCategoryFromCloud(patient.id, 'sbar');
+                          }
+                          setShowMoreSbars(!showMoreSbars);
+                        }}
+                        className="px-5 py-2 rounded-xl bg-teal-500/20 hover:bg-teal-500/30 border border-teal-500/40 text-teal-300 font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-2 mx-auto active:scale-95 shadow-md"
+                      >
+                        <span>
+                          {showMoreSbars
+                            ? (lang === 'ar' ? 'عرض أقل' : 'Show Less')
+                            : (lang === 'ar' ? `إظهار المزيد (${sbarList.length > 4 ? sbarList.length - 4 : '+'} تقارير متبقية)` : `Show More (${sbarList.length > 4 ? sbarList.length - 4 : '+'} remaining)`)}
+                        </span>
+                        {showMoreSbars ? <ChevronUp className="w-4 h-4 text-teal-400" /> : <ChevronDown className="w-4 h-4 text-teal-400" />}
+                      </button>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="p-6 text-center text-slate-400 bg-slate-950/40 rounded-xl border border-slate-800 space-y-3">
+                  <div>{lang === 'ar' ? 'لا توجد تقارير تسليم مناوبة مسجلة لهذا المريض بعد.' : 'No shift handover reports recorded yet for this patient.'}</div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedTemplateSbar(null);
+                      setIsBedsideSbarModalOpen(true);
+                    }}
+                    className="px-4 py-2 rounded-xl bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 border border-teal-500/40 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>{lang === 'ar' ? 'تسليم مناوبة جديد وتوثيق SBAR' : 'Create First SBAR Handover'}</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tab 6: Clinical Notes & SHA-256 Addendums */}
+      {(activeTab === 'notes' || (activeTab === 'all' && settings.features.enableClinicalNotes !== false)) && (
+        <div 
+          data-expanded={!isPaperNotesCardCollapsed ? "true" : "false"}
+          className="icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-4 border transition-all"
+        >
+          <div 
+            onClick={() => setIsPaperNotesCardCollapsed(!isPaperNotesCardCollapsed)}
+            className="icu-card-header-toggle flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2.5 cursor-pointer p-2 rounded-xl transition-all"
+          >
+            <div className="flex items-center gap-2">
+              <FileText className="w-5 h-5 text-teal-400" />
+              <div>
+                <h3 className="text-base font-bold text-white">
+                  {lang === 'ar' ? 'الملاحظات الطبية وملحقاتها' : 'Clinical Progress Notes & Addendums'}
+                </h3>
+                <p className="text-[10px] text-slate-400 hidden sm:block">
+                  {lang === 'ar' 
+                    ? 'سجل الملاحظات السريرية، العروضات الطبية، والملحقات التوضيحية.'
+                    : 'Clinical progress notes, specialty consultation referrals & addendums.'}
                 </p>
               </div>
             </div>
-          )}
-        </div>
-
-        {/* Footer Actions */}
-        <div className="flex items-center justify-between p-4 sm:p-5 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
-          >
-            {lang === 'ar' ? 'إلغاء' : 'Close'}
-          </button>
-
-          {scannedResult && (
             <div className="flex items-center gap-2">
-              {onApplyToForm && (
+              {onOpenAddClinicalNote && !isPaperNotesCardCollapsed && !readOnly && (
                 <button
                   type="button"
-                  onClick={handleApplyToForm}
-                  className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-teal-700 dark:text-teal-300 border border-slate-300 dark:border-slate-700 text-xs font-bold transition-all cursor-pointer active:scale-95"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenAddClinicalNote();
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shadow-md active:scale-95 cursor-pointer"
                 >
-                  {lang === 'ar' ? 'تعبئة في نموذج الإدخال' : 'Fill Form'}
+                  <Plus className="w-4 h-4" />
+                  <span>{lang === 'ar' ? 'توقيع ملاحظة جديدة' : 'Sign New Note'}</span>
                 </button>
               )}
-
               <button
                 type="button"
-                onClick={handleDirectSave}
-                disabled={isSaving || saveSuccess || !editTestName.trim()}
-                className="flex items-center gap-2 px-5 py-2 rounded-xl bg-teal-400 hover:bg-teal-300 text-slate-950 text-xs font-bold transition-all shadow-md shadow-teal-400/20 cursor-pointer active:scale-95 disabled:opacity-50"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsPaperNotesCardCollapsed(!isPaperNotesCardCollapsed);
+                }}
+                className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all cursor-pointer"
+                title={isPaperNotesCardCollapsed ? (lang === 'ar' ? 'فتح البطاقة' : 'Expand') : (lang === 'ar' ? 'طي البطاقة' : 'Collapse')}
               >
-                {isSaving ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>{lang === 'ar' ? 'جارِ الحفظ والتوثيق...' : 'Saving...'}</span>
-                  </>
-                ) : (
-                  <>
-                    <Check className="w-4 h-4" />
-                    <span>{lang === 'ar' ? 'تسجيل الفحص في الملف الطبي' : 'Save & Record into Patient File'}</span>
-                  </>
-                )}
+                {isPaperNotesCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
               </button>
+            </div>
+          </div>
+
+          {!isPaperNotesCardCollapsed && (
+            <div className="space-y-4 animate-in fade-in duration-300">
+              {notesList.length > 0 ? (
+                <>
+                  {(showMoreNotes ? notesList : notesList.slice(0, 4)).map((note) => {
+                    const isConsultation = note.noteType === 'CONSULTATION_NOTE';
+                    const hasReply = note.consultationStatus === 'REPLIED' || (note.addendums && note.addendums.some(a => a.reasonForAddendum === 'CONSULTANT_COUNTERSIGN'));
+                    const isNoteExpanded = !!expandedBedsideNotes[note.id];
+                    const canDelete = canDeleteClinicalNote(currentUser, note);
+
+                    const handleDeleteBedsideNote = async (e: React.MouseEvent, targetNote: ClinicalNote = note) => {
+                      e.stopPropagation();
+                      if (!canDeleteClinicalNote(currentUser, targetNote)) {
+                        alert(
+                          lang === 'ar'
+                            ? 'عفواً، حذف الملاحظة السريرية متاح فقط لمدير النظام (Admin)، أو من لديه صلاحية الحذف من الإدارة، أو صاحب الملاحظة فقط.'
+                            : 'Unauthorized: Clinical note deletion is restricted to Admins, users granted delete permission, or the note author only.'
+                        );
+                        return;
+                      }
+                      if (!window.confirm(lang === 'ar' ? `هل أنت متأكد من حذف الملاحظة السريرية "${targetNote.title}"؟\nسيتم حذفها نهائياً من قاعدة البيانات والمزامنة السحابية.` : `Delete note "${targetNote.title}"?`)) return;
+                      
+                      try {
+                        await db.clinicalNotes.delete(targetNote.id);
+                        await db.addendums.where('noteId').equals(targetNote.id).delete().catch(() => {});
+                        await deleteClinicalNoteFromCloud(targetNote.id);
+                        setNotesList(prev => prev.filter(n => n.id !== targetNote.id));
+                        onDataUpdated();
+                      } catch (err) {
+                        console.error('Error deleting bedside note:', err);
+                        alert(lang === 'ar' ? 'حدث خطأ أثناء الحذف.' : 'Delete error.');
+                      }
+                    };
+
+                    return (
+                      <div 
+                         key={note.id}
+                         className={`border rounded-xl transition-all overflow-hidden ${
+                           isConsultation
+                             ? hasReply
+                               ? 'border-emerald-300 bg-emerald-50/70 shadow-sm dark:border-emerald-500/30 dark:bg-[#061514] dark:shadow-emerald-950/20'
+                               : 'border-amber-300 bg-amber-50/80 shadow-sm dark:border-amber-500/30 dark:bg-[#121111] dark:shadow-amber-950/20'
+                             : 'bg-white border-slate-200 shadow-sm dark:bg-[#070c18] dark:border-slate-800'
+                         }`}
+                      >
+                        <div 
+                          onClick={() => setExpandedBedsideNotes(prev => ({ ...prev, [note.id]: !prev[note.id] }))}
+                          className={`flex flex-col sm:flex-row sm:items-center justify-between p-3 gap-2 cursor-pointer transition-colors ${
+                            isNoteExpanded 
+                              ? 'border-b border-slate-200 bg-slate-50 dark:border-slate-800/80 dark:bg-slate-900/30' 
+                              : 'hover:bg-slate-50 dark:hover:bg-slate-900/20'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 flex-wrap min-w-0">
+                            <button 
+                              type="button" 
+                              className="p-0.5 rounded bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                            >
+                              {isNoteExpanded ? <ChevronUp className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" /> : <ChevronDown className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />}
+                            </button>
+                            <span className="font-bold text-slate-900 dark:text-white text-sm truncate">{note.title}</span>
+                            <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
+                              {isConsultation ? (lang === 'ar' ? '📋 طلب عرض / استشارة' : 'Consultation Referral') : note.noteType} • {new Date(note.timestamp).toLocaleString('en-US')}
+                            </span>
+                            {isConsultation && (
+                              <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
+                                hasReply 
+                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20' 
+                                  : 'bg-amber-100 text-amber-900 border border-amber-300 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20'
+                              }`}>
+                                {hasReply ? (lang === 'ar' ? 'تم الرد' : 'Replied') : (lang === 'ar' ? 'قيد الانتظار' : 'Pending')}
+                              </span>
+                            )}
+                            <span className="text-[11px] text-slate-500 dark:text-slate-400 hidden md:inline">
+                              • {note.authorName} ({note.authorRole})
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            {!readOnly && (
+                              isConsultation && !hasReply ? (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onOpenAddAddendum(note.id, note.authorName, 'CONSULTANT_COUNTERSIGN');
+                                  }}
+                                  className="px-2.5 py-1 rounded-lg bg-teal-500 hover:bg-teal-400 text-slate-950 text-xs font-bold transition-all cursor-pointer shadow active:scale-95"
+                                >
+                                  <span>{lang === 'ar' ? '✍️ تسجيل الرد' : 'Reply'}</span>
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onOpenAddAddendum(note.id, note.authorName, 'CLINICAL_UPDATE');
+                                  }}
+                                  className="px-2.5 py-1 rounded-lg bg-purple-100 hover:bg-purple-200 text-purple-900 border border-purple-300 dark:bg-purple-500/20 dark:hover:bg-purple-500/30 dark:text-purple-300 dark:border-purple-500/40 text-xs font-bold transition-all"
+                                >
+                                  + {lang === 'ar' ? 'إلحاق ملحق' : 'Add Addendum'}
+                                </button>
+                              )
+                            )}
+
+                            {!readOnly && (
+                              <button
+                                type="button"
+                                onClick={(e) => handleDeleteBedsideNote(e, note)}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 active:scale-95 border ${
+                                  canDelete 
+                                    ? 'bg-rose-50 hover:bg-rose-100 border-rose-300 text-rose-700 dark:bg-rose-500/10 dark:hover:bg-rose-500/25 dark:border-rose-500/30 dark:text-rose-400 dark:hover:text-rose-300' 
+                                    : 'bg-slate-100 hover:bg-rose-50 border-slate-300 text-slate-600 hover:text-rose-700 dark:bg-slate-800/80 dark:hover:bg-rose-950/40 dark:border-slate-700 dark:text-slate-400 dark:hover:text-rose-400'
+                                }`}
+                                title={lang === 'ar' ? 'حذف الملاحظة (المدير أو صاحب الصلاحية أو كاتب الملاحظة فقط)' : 'Delete Note (Admin, authorized user, or author only)'}
+                              >
+                                <Trash2 className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400" />
+                                <span className="font-medium">{lang === 'ar' ? 'حذف' : 'Delete'}</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Collapsible Content */}
+                        {isNoteExpanded && (
+                          <div className="p-4 space-y-3 animate-in fade-in duration-200">
+                            <p className="text-xs text-slate-800 dark:text-slate-200 leading-relaxed whitespace-pre-line bg-slate-50 dark:bg-slate-950/40 p-3 rounded-lg border border-slate-200 dark:border-slate-800/30">
+                              {note.content}
+                            </p>
+
+                            <div className="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-slate-800/80 mt-2 text-xs">
+                              <div className="text-[11px] text-slate-600 dark:text-slate-400 font-sans">
+                                {lang === 'ar' ? 'الكاتب:' : 'Author:'} <strong className="text-slate-900 dark:text-slate-200">{note.authorName}</strong> ({note.authorRole})
+                              </div>
+                              {!readOnly && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleDeleteBedsideNote(e, note)}
+                                  className="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 border border-rose-300 text-rose-700 dark:bg-rose-500/10 dark:hover:bg-rose-500/20 dark:border-rose-500/30 dark:text-rose-400 dark:hover:text-rose-300 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+                                  title={lang === 'ar' ? 'حذف الملاحظة السريرية' : 'Delete Clinical Note'}
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <span>{lang === 'ar' ? 'حذف الملاحظة' : 'Delete Note'}</span>
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Chained Addendums */}
+                            {note.addendums && note.addendums.length > 0 && (
+                              <div className="bg-purple-50/70 dark:bg-[#0a101f] border border-purple-200 dark:border-slate-800 border-l-4 sm:border-r-4 border-purple-500 p-3 rounded-lg space-y-2 mt-2">
+                                <div className="text-[11px] font-bold text-purple-900 dark:text-purple-300 flex items-center gap-1">
+                                  <Lock className="w-3.5 h-3.5" />
+                                  <span>{lang === 'ar' ? `الملحقات التوضيحية (${note.addendums.length}):` : `Addendums & Updates (${note.addendums.length}):`}</span>
+                                </div>
+
+                                {note.addendums.map((addendum) => (
+                                  <div key={addendum.id} className="text-xs space-y-1 bg-white dark:bg-[#070c17] p-2.5 rounded-lg border border-purple-200 dark:border-purple-900/30 text-slate-800 dark:text-slate-200">
+                                    <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 font-mono">
+                                      <span>{new Date(addendum.timestamp).toLocaleString('en-US')}</span>
+                                    </div>
+                                    <p className="text-slate-800 dark:text-slate-200">{addendum.content}</p>
+                                    <div className="text-[10px] text-purple-800 dark:text-purple-300">
+                                      {lang === 'ar' 
+                                        ? `السبب: ${addendum.reasonForAddendum} • الطبيب: ${addendum.authorName}` 
+                                        : `Reason: ${addendum.reasonForAddendum} • Physician: ${addendum.authorName}`}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+
+              {/* Show More Button for Clinical Notes */}
+              {notesList.length >= 4 && (
+                <div className="pt-2 text-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!showMoreNotes && patient?.id) {
+                        fetchFullCategoryFromCloud(patient.id, 'notes');
+                      }
+                      setShowMoreNotes(!showMoreNotes);
+                    }}
+                    className="px-5 py-2 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/40 text-purple-300 font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-2 mx-auto active:scale-95 shadow-md"
+                  >
+                    <span>
+                      {showMoreNotes
+                        ? (lang === 'ar' ? 'عرض أقل' : 'Show Less')
+                        : (lang === 'ar' ? `إظهار المزيد (${notesList.length > 4 ? notesList.length - 4 : '+'} ملاحظات إضافية)` : `Show More (${notesList.length > 4 ? notesList.length - 4 : '+'} more notes)`)}
+                    </span>
+                    {showMoreNotes ? <ChevronUp className="w-4 h-4 text-purple-400" /> : <ChevronDown className="w-4 h-4 text-purple-400" />}
+                  </button>
+                </div>
+              )}
+              </>
+              ) : (
+                <div className="p-6 text-center text-slate-400 bg-slate-950/40 rounded-xl border border-slate-800">
+                  {lang === 'ar' ? 'لا توجد ملاحظات سريرية مسجلة اليوم.' : 'No clinical progress notes recorded today.'}
+                </div>
+              )}
             </div>
           )}
         </div>
+      )}
 
-      </div>
+      {/* Tab 7: Disposition */}
+      {(activeTab === 'disposition' || activeTab === 'all') && !readOnly && (
+        <div 
+          data-expanded={!isPaperDispCardCollapsed ? "true" : "false"}
+          className="icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-4 border transition-all"
+        >
+          <div 
+            onClick={() => setIsPaperDispCardCollapsed(!isPaperDispCardCollapsed)}
+            className="icu-card-header-toggle flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2.5 cursor-pointer p-2 rounded-xl transition-all"
+          >
+            <div className="flex items-center gap-2">
+              <ExternalLink className="w-5 h-5 text-amber-400" />
+              <div>
+                <h3 className="text-base font-bold text-white">
+                  {lang === 'ar' ? 'إنهاء الاقامة' : 'ICU Disposition & Discharge'}
+                </h3>
+                <p className="text-[10px] text-slate-400 hidden sm:block">
+                  {lang === 'ar' 
+                    ? 'تحويل المريض للأقسام الداخلية، الخروج للمنزل، أو تسجيل الوفاة القانونية.'
+                    : 'Discharge home, inpatient ward transfer, or mortality registration.'}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsPaperDispCardCollapsed(!isPaperDispCardCollapsed);
+                }}
+                className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all cursor-pointer"
+                title={isPaperDispCardCollapsed ? (lang === 'ar' ? 'فتح البطاقة' : 'Expand') : (lang === 'ar' ? 'طي البطاقة' : 'Collapse')}
+              >
+                {isPaperDispCardCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          {!isPaperDispCardCollapsed && (
+            <div className="bg-[#070c18] p-4 rounded-xl border border-slate-800 space-y-4 text-xs animate-in fade-in duration-300">
+              <div>
+                <label className="text-[11px] text-slate-300 font-semibold block mb-2">
+                  {lang === 'ar' ? 'اختر الإجراء المطلوبة (Select Disposition Type)' : 'Select Disposition Type'}
+                </label>
+                <div className="grid grid-cols-3 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDispType(DispositionType.TRANSFER_GENERAL_WARD);
+                      setDispSummary(lang === 'ar' ? 'تم تحويل المريض لجناح الباطنة / الرعاية المتوسطة بعد استقرار حالته.' : 'Patient stabilized and transferred to general ward.');
+                    }}
+                    className={`p-3 rounded-xl border font-bold text-xs text-center transition-all cursor-pointer ${
+                      dispType === DispositionType.TRANSFER_GENERAL_WARD
+                        ? 'bg-teal-500/20 text-teal-300 border-teal-500/50 shadow-md'
+                        : 'bg-[#0b1224] border-slate-800 text-slate-400 hover:border-slate-700'
+                    }`}
+                  >
+                    <span className="block text-sm mb-0.5">🔄</span>
+                    <span>{lang === 'ar' ? 'تحويل' : 'Transfer'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDispType(DispositionType.DISCHARGE_HOME);
+                      setDispSummary(lang === 'ar' ? 'خروج المريض للمنزل بحالة مستقرة مع التوصية بالمتابعة في العيادة.' : 'Patient fully recovered and discharged home.');
+                    }}
+                    className={`p-3 rounded-xl border font-bold text-xs text-center transition-all cursor-pointer ${
+                      dispType === DispositionType.DISCHARGE_HOME
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-md'
+                        : 'bg-[#0b1224] border-slate-800 text-slate-400 hover:border-slate-700'
+                    }`}
+                  >
+                    <span className="block text-sm mb-0.5">🏠</span>
+                    <span>{lang === 'ar' ? 'خروج' : 'Discharge'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDispType(DispositionType.CLINICAL_MORTALITY);
+                      setDispSummary(lang === 'ar' ? 'تم إعلان الوفاة السريرية بعد توقف القلب والتنفس وفشل محاولات الإنعاش.' : 'Clinical mortality declared after cardiopulmonary arrest.');
+                    }}
+                    className={`p-3 rounded-xl border font-bold text-xs text-center transition-all cursor-pointer ${
+                      dispType === DispositionType.CLINICAL_MORTALITY
+                        ? 'bg-red-950/50 text-red-300 border-red-500/50 shadow-md'
+                        : 'bg-[#0b1224] border-slate-800 text-slate-400 hover:border-slate-700'
+                    }`}
+                  >
+                    <span className="block text-sm mb-0.5">🕯️</span>
+                    <span>{lang === 'ar' ? 'وفاة' : 'Mortality'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {dispType !== null && (
+                <div className="space-y-4 pt-1 animate-in slide-in-from-top-2 duration-300">
+                  <div>
+                    <label className="text-[11px] text-slate-300 font-semibold block mb-1">
+                      {dispType === DispositionType.TRANSFER_GENERAL_WARD
+                        ? (lang === 'ar' ? 'ملخص التحويل' : 'Transfer Summary')
+                        : dispType === DispositionType.DISCHARGE_HOME
+                        ? (lang === 'ar' ? 'ملخص الخروج' : 'Discharge Summary')
+                        : (lang === 'ar' ? 'ملخص الوفاة' : 'Mortality Summary')}
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={dispSummary}
+                      onChange={(e) => setDispSummary(e.target.value)}
+                      placeholder={lang === 'ar' ? 'اكتب الملخص الطبي السريري والتشخيص النهائي هنا...' : 'Enter clinical summary...'}
+                      className="w-full bg-[#0f172a] border border-slate-700 rounded-lg p-2.5 text-white focus:border-teal-500 focus:outline-none"
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[11px] text-slate-300 font-semibold block">
+                      {lang === 'ar' ? 'الطبيب الاستشاري المعتمد' : 'Attending Consultant Signature'}
+                    </label>
+                    <div className="flex flex-col sm:flex-row gap-2 bg-[#090f1d] p-3 rounded-xl border border-slate-800/80">
+                      <label className="flex items-center gap-2 cursor-pointer text-slate-200 select-none flex-1">
+                        <input
+                          type="radio"
+                          name="consultantType"
+                          checked={!useOtherConsultant}
+                          onChange={() => setUseOtherConsultant(false)}
+                          className="accent-teal-500 text-teal-500 focus:ring-0 focus:ring-offset-0"
+                        />
+                        <span className="text-xs">
+                          {lang === 'ar' 
+                            ? `الاستشاري المسجل الحالي: ${currentUser ? (currentUser.nameAr || currentUser.nameEn) : 'Dr. Hesham Talaat'}` 
+                            : `Current Attending: ${currentUser ? (currentUser.nameEn || currentUser.nameAr) : 'Dr. Hesham Talaat'}`}
+                        </span>
+                      </label>
+                      
+                      <label className="flex items-center gap-2 cursor-pointer text-slate-200 select-none flex-1">
+                        <input
+                          type="radio"
+                          name="consultantType"
+                          checked={useOtherConsultant}
+                          onChange={() => setUseOtherConsultant(true)}
+                          className="accent-teal-500 text-teal-500 focus:ring-0 focus:ring-offset-0"
+                        />
+                        <span className="text-xs">
+                          {lang === 'ar' ? 'تسجيل استشاري آخر' : 'Sign as Another Consultant'}
+                        </span>
+                      </label>
+                    </div>
+
+                    {useOtherConsultant && (
+                      <input
+                        type="text"
+                        value={otherConsultantName}
+                        onChange={(e) => setOtherConsultantName(e.target.value)}
+                        placeholder={lang === 'ar' ? 'أدخل اسم الاستشاري المعتمد...' : 'Enter attending consultant name...'}
+                        className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-teal-500 focus:outline-none animate-in fade-in duration-200"
+                        required
+                      />
+                    )}
+                  </div>
+
+                  <div className="pt-2 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={handleExecuteDisposition}
+                      className={`px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg transition-all active:scale-95 cursor-pointer ${
+                        dispType === DispositionType.CLINICAL_MORTALITY
+                          ? 'bg-red-600 hover:bg-red-500 text-white'
+                          : 'bg-teal-500 hover:bg-teal-400 text-slate-950'
+                      }`}
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>
+                        {lang === 'ar' 
+                          ? `تأكيد الإجراء وإخلاء السرير ${bed.bedNumber}` 
+                          : `Confirm & Vacate Bed ${bed.bedNumber}`}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Patient Transfer to Vacant Bed Modal */}
+      <PatientTransferModal
+        isOpen={isTransferModalOpen}
+        onClose={() => setIsTransferModalOpen(false)}
+        currentBed={bed}
+        patient={patient}
+        allBeds={allBeds}
+        onTransferSuccess={() => {
+          setIsTransferModalOpen(false);
+          loadBedsideData();
+          onDataUpdated();
+          onBack();
+        }}
+      />
+
+      {/* Atomic Two-Patient Bed Swap Modal */}
+      <BedSwapModal
+        isOpen={isSwapModalOpen}
+        onClose={() => setIsSwapModalOpen(false)}
+        sourceBed={bed}
+        sourcePatient={patient}
+        allBeds={allBeds}
+        allPatients={allPatients}
+        onSwapSuccess={() => {
+          setIsSwapModalOpen(false);
+          loadBedsideData();
+          onDataUpdated();
+          onBack();
+        }}
+      />
+
+      {/* Bed Isolation & Availability Status Modal */}
+      <BedIsolationModal
+        isOpen={isIsolationModalOpen}
+        onClose={() => setIsIsolationModalOpen(false)}
+        bed={bed}
+        patient={patient}
+        onUpdated={() => {
+          setIsIsolationModalOpen(false);
+          loadBedsideData();
+          onDataUpdated();
+        }}
+      />
+
+      {/* AI Lab OCR Optical Scanner Modal */}
+      {settings.features.enableAiLabScanner && (
+        <AiLabScannerModal
+          isOpen={isAiLabScannerOpen}
+          onClose={() => setIsAiLabScannerOpen(false)}
+          patientId={patient.id}
+          patientName={patient.fullNameAr || patient.fullNameEn}
+          bedNumber={bed.bedNumber}
+          targetPreset={aiScannerPreset}
+          onApplyToForm={handleApplyScannedToForm}
+          onDirectSave={handleDirectSaveScannedLab}
+        />
+      )}
+
+      {/* Ventilator Settings & Parameters Modal */}
+      <VentilatorModal
+        isOpen={isVentilatorModalOpen}
+        onClose={() => setIsVentilatorModalOpen(false)}
+        bedNumber={bed.bedNumber}
+        patient={patient}
+        initialVentilator={ventilator}
+        onSaved={() => {
+          setIsVentilatorModalOpen(false);
+          loadBedsideData();
+          onDataUpdated();
+        }}
+      />
+
+      {/* Infusion Pump Line Modal (Add & Edit) */}
+      <InfusionPumpModal
+        isOpen={isPumpModalOpen}
+        onClose={() => {
+          setIsPumpModalOpen(false);
+          setSelectedPumpForEdit(null);
+        }}
+        bedNumber={bed.bedNumber}
+        patient={patient}
+        editingPump={selectedPumpForEdit}
+        onSaved={() => {
+          setIsPumpModalOpen(false);
+          setSelectedPumpForEdit(null);
+          loadBedsideData();
+          onDataUpdated();
+        }}
+      />
+
+      {/* Fluid Balance 24h Tracker Modal */}
+      <FluidBalanceModal
+        isOpen={isFluidModalOpen}
+        onClose={() => {
+          setIsFluidModalOpen(false);
+          setSelectedFluidBalanceForEdit(null);
+        }}
+        bedNumber={bed.bedNumber}
+        patient={patient}
+        initialFluidBalance={selectedFluidBalanceForEdit}
+        allFluidBalances={allFluidBalances}
+        onSaved={() => {
+          setIsFluidModalOpen(false);
+          setSelectedFluidBalanceForEdit(null);
+          loadBedsideData();
+          onDataUpdated();
+        }}
+      />
+
+      {/* Bedside Cards Visibility & Customization Modal */}
+      <BedsideCardsConfigModal
+        isOpen={isCardsConfigModalOpen}
+        onClose={() => setIsCardsConfigModalOpen(false)}
+        bedNumber={bed.bedNumber}
+        patientName={patient.fullNameAr || patient.fullNameEn}
+        currentConfig={cardsConfig}
+        onSaveConfig={handleSaveCardsConfig}
+        onOpenAddVent={() => {
+          setIsCardsConfigModalOpen(false);
+          setIsVentilatorModalOpen(true);
+        }}
+        onOpenAddPump={() => {
+          setIsCardsConfigModalOpen(false);
+          setSelectedPumpForEdit(null);
+          setIsPumpModalOpen(true);
+        }}
+        onOpenAddFluid={() => {
+          setIsCardsConfigModalOpen(false);
+          setIsFluidModalOpen(true);
+        }}
+        onOpenAddVitals={() => {
+          setIsCardsConfigModalOpen(false);
+          onOpenAddVitals();
+        }}
+        onOpenAddSbar={() => {
+          setIsCardsConfigModalOpen(false);
+          setSelectedTemplateSbar(null);
+          setIsBedsideSbarModalOpen(true);
+        }}
+        onOpenAddLab={() => {
+          setIsCardsConfigModalOpen(false);
+          setIsAddLabModalOpen(true);
+        }}
+      />
+
+      {/* SBAR Shift Handover Modal for Bedside */}
+      {isBedsideSbarModalOpen && (
+        <SbarSignModal
+          isOpen={isBedsideSbarModalOpen}
+          onClose={() => {
+            setIsBedsideSbarModalOpen(false);
+            setSelectedTemplateSbar(null);
+          }}
+          bedNumber={bed.bedNumber}
+          patientId={patient.id}
+          patientName={patient.fullNameAr || patient.fullNameEn}
+          primaryDiagnosis={patient.primaryDiagnosisAr || patient.primaryDiagnosisEn}
+          codeStatus={patient.codeStatus}
+          patient={patient}
+          currentVitals={vitalsHistory[0] || null}
+          currentVentilator={ventilator}
+          currentPumps={pumps}
+          currentFluidBalance={fluidBalance}
+          currentLabs={labsList}
+          previousHandovers={sbarList}
+          templateSbar={selectedTemplateSbar}
+          onHandoverSigned={() => {
+            loadBedsideData();
+            onDataUpdated();
+            setIsBedsideSbarModalOpen(false);
+            setSelectedTemplateSbar(null);
+          }}
+        />
+      )}
+
+      {/* Edit Vitals Reading Modal */}
+      <AddVitalsModal
+        isOpen={isEditVitalsModalOpen}
+        onClose={() => {
+          setIsEditVitalsModalOpen(false);
+          setSelectedVitalForEdit(null);
+        }}
+        bedNumber={bed.bedNumber}
+        patientId={patient.id}
+        patientName={patient.fullNameAr || patient.fullNameEn}
+        vitalsToEdit={selectedVitalForEdit}
+        onVitalsAdded={() => {
+          setIsEditVitalsModalOpen(false);
+          setSelectedVitalForEdit(null);
+          loadBedsideData();
+          onDataUpdated();
+        }}
+      />
+
+      {/* Full Patient Demographics & Admission Edit Modal */}
+      {isEditPatientModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md overflow-y-auto p-4 md:p-6 flex flex-col justify-start">
+          <div className="max-w-5xl mx-auto w-full space-y-4 my-auto">
+            <div className="flex items-center justify-between bg-[#0b1224] p-4 rounded-2xl border border-slate-700/80 shadow-2xl">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-teal-500/20 text-teal-400 border border-teal-500/30">
+                  <User className="w-6 h-6" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-black text-white">
+                    {lang === 'ar' ? 'تعديل كافة بيانات الملف الطبي والمريض' : 'Edit Full Patient Demographics & Profile'}
+                  </h2>
+                  <p className="text-xs text-slate-400">
+                    {lang === 'ar' ? `السرير ${bed.bedNumber} - الملف: ${patient.mrn || patient.nationalId}` : `Bed ${bed.bedNumber} - MRN: ${patient.mrn}`}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditPatientModalOpen(false)}
+                className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-bold transition-all cursor-pointer border border-slate-700 active:scale-95"
+              >
+                {lang === 'ar' ? 'إغلاق (X)' : 'Close (X)'}
+              </button>
+            </div>
+
+            <FullPageAdmission
+              bedNumber={bed.bedNumber}
+              allBeds={allBeds}
+              allPatients={allPatients}
+              initialPatient={patient}
+              onCancel={() => setIsEditPatientModalOpen(false)}
+              onAdmissionSuccess={() => {
+                setIsEditPatientModalOpen(false);
+                loadBedsideData();
+                onDataUpdated();
+              }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };

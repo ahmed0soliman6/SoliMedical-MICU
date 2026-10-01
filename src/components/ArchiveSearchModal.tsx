@@ -5,7 +5,7 @@ import {
   Trash2,
   Loader2
 } from 'lucide-react';
-import { collection, getDocs, query, limit, startAfter, DocumentSnapshot } from 'firebase/firestore';
+import { collection, getDocs } from 'firebase/firestore';
 import { PatientDossier, BedNumber } from '../types/schema.ts';
 import { db } from '../db/icuSyncDb.ts';
 import { firestore } from '../services/firebase.ts';
@@ -52,9 +52,6 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [filterType, setFilterType] = useState<'ALL' | 'ACTIVE_ICU' | 'DISCHARGED' | 'TRANSFERRED' | 'EXPIRED_MORTALITY' | 'ARCHIVED'>(initialFilterType);
   const [deletingPatientId, setDeletingPatientId] = useState<string | null>(null);
-  const [lastArchiveSnapDoc, setLastArchiveSnapDoc] = useState<DocumentSnapshot | null>(null);
-  const [hasMoreArchive, setHasMoreArchive] = useState<boolean>(false);
-  const [isLoadingMore, setIsLoadingMore] = useState<boolean>(false);
 
   const effectiveUser = currentUser || user;
   const isAdmin = canDeleteMortalityRecord(effectiveUser);
@@ -62,27 +59,24 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
   const loadPatients = useCallback(async () => {
     setIsLoading(true);
 
-    // 1. Load initial cache from Dexie IndexedDB for instant UI responsiveness (first 20)
+    // 1. Load initial cache from Dexie IndexedDB for instant UI responsiveness
     try {
       const localList = await db.patients.toArray();
       if (localList && localList.length > 0) {
-        setAllPatients(localList.slice(0, 20));
+        setAllPatients(localList);
       }
     } catch (localErr) {
       console.warn('Dexie cache read notice:', localErr);
     }
 
-    // 2. Fetch strictly 20 records max from Firestore for archivedPatients and patients to minimize reads
+    // 2. Fetch directly from Firestore collections 'patients' and 'archivedPatients' as Primary Source of Truth
     try {
-      const activeQuery = query(collection(firestore, 'patients'), limit(20));
-      const archiveQuery = query(collection(firestore, 'archivedPatients'), limit(20));
-
       const [activeSnap, archiveSnap] = await Promise.all([
-        getDocs(activeQuery).catch((e) => {
+        getDocs(collection(firestore, 'patients')).catch((e) => {
           console.warn('Firestore active patients fetch error:', e);
           return null;
         }),
-        getDocs(archiveQuery).catch((e) => {
+        getDocs(collection(firestore, 'archivedPatients')).catch((e) => {
           console.warn('Firestore archived patients fetch error:', e);
           return null;
         }),
@@ -117,16 +111,11 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
             });
           }
         });
-
-        setLastArchiveSnapDoc(archiveSnap.docs[archiveSnap.docs.length - 1] || null);
-        setHasMoreArchive(archiveSnap.docs.length === 20);
-      } else {
-        setHasMoreArchive(false);
       }
 
-      // If online data was fetched, update state with combined deduplicated records (capped at 20)
+      // If online data was fetched, update state with combined deduplicated records
       if (patientMap.size > 0) {
-        const combined = Array.from(patientMap.values()).slice(0, 20);
+        const combined = Array.from(patientMap.values());
         setAllPatients(combined);
 
         // Update local Dexie cache asynchronously
@@ -140,53 +129,6 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
       setIsLoading(false);
     }
   }, []);
-
-  const handleLoadMoreArchive = async () => {
-    if (!lastArchiveSnapDoc || isLoadingMore) return;
-    setIsLoadingMore(true);
-
-    try {
-      const nextArchiveQuery = query(
-        collection(firestore, 'archivedPatients'),
-        startAfter(lastArchiveSnapDoc),
-        limit(20)
-      );
-      const snap = await getDocs(nextArchiveQuery);
-
-      if (snap && !snap.empty) {
-        const newPatients: PatientDossier[] = [];
-        snap.docs.forEach((d) => {
-          const data = d.data() as PatientDossier;
-          const patientId = data.id || (data as any).patientId || d.id;
-          if (patientId) {
-            newPatients.push({
-              ...data,
-              id: patientId,
-              archiveStatus: data.archiveStatus || 'ARCHIVED',
-            });
-          }
-        });
-
-        setAllPatients((prev) => {
-          const map = new Map<string, PatientDossier>();
-          prev.forEach((p) => map.set(p.id, p));
-          newPatients.forEach((p) => {
-            if (!map.has(p.id)) map.set(p.id, p);
-          });
-          return Array.from(map.values());
-        });
-
-        setLastArchiveSnapDoc(snap.docs[snap.docs.length - 1] || null);
-        setHasMoreArchive(snap.docs.length === 20);
-      } else {
-        setHasMoreArchive(false);
-      }
-    } catch (err) {
-      console.warn('Error loading more archived patients:', err);
-    } finally {
-      setIsLoadingMore(false);
-    }
-  };
 
   useEffect(() => {
     if (isOpen) {
@@ -507,21 +449,6 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
                 </div>
               );
             })
-          )}
-
-          {/* Load More 20 Records Button */}
-          {hasMoreArchive && (
-            <div className="pt-3 text-center">
-              <button
-                type="button"
-                onClick={handleLoadMoreArchive}
-                disabled={isLoadingMore}
-                className="px-4 py-2 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-800 dark:bg-teal-500/20 dark:hover:bg-teal-500/30 dark:text-teal-300 dark:border dark:border-teal-500/40 text-xs font-bold transition-all shadow-sm cursor-pointer flex items-center gap-2 mx-auto disabled:opacity-50"
-              >
-                {isLoadingMore && <Loader2 className="w-3.5 h-3.5 animate-spin text-teal-600 dark:text-teal-400" />}
-                <span>{lang === 'ar' ? 'تحميل المزيد من الأرشيف (20 سجلاً إضافياً)' : 'Load 20 More Archived Records'}</span>
-              </button>
-            </div>
           )}
         </div>
       </div>

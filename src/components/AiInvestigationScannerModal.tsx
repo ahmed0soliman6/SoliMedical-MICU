@@ -1,3 +1,31 @@
+import React, { useState, useRef, useEffect } from 'react';
+import { 
+  Camera, 
+  Upload, 
+  Sparkles, 
+  X, 
+  Check, 
+  AlertCircle, 
+  RefreshCw, 
+  FileText, 
+  CheckCircle2, 
+  Activity,
+  Layers,
+  Eye,
+  Scan,
+  ShieldAlert,
+  Clock,
+  User,
+  ArrowRight,
+  Maximize2,
+  Tag
+} from 'lucide-react';
+import { useTranslation } from '../services/i18n.ts';
+import { compressImageForOcr } from '../services/imageCompression.ts';
+import { 
+  scanInvestigationImage, 
+  ScannedInvestigationResponse
+} from '../services/aiInvestigationService.ts';
 import { InvestigationItem } from '../types/schema.ts';
 
 interface AiInvestigationScannerModalProps {
@@ -615,4 +643,4 @@ export const AiInvestigationScannerModal: React.FC<AiInvestigationScannerModalPr
       </div>
     </div>
   );
-e-wrap bQ8
+};

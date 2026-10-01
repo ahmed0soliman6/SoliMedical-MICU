@@ -336,4 +336,5 @@ export function generateSampleChemistryImage(): string {
 
     <text x="300" y="740" text-anchor="middle" font-size="13" fill="#64748b">CONSULTANT BIOCHEMIST: Dr. S. Al-Dossari | VERIFIED</text>
   </svg>`;
-  return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)@p
+  return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
+}

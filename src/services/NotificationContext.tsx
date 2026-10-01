@@ -1,3 +1,98 @@
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
+import { 
+  collection, 
+  doc, 
+  setDoc as fsetDoc, 
+  deleteDoc, 
+  onSnapshot, 
+  query, 
+  orderBy, 
+  limit 
+} from 'firebase/firestore';
+import { AppNotification, NotificationType, AppNotificationTarget } from '../types/notification.ts';
+import { useSystemSettings } from './SettingsContext.tsx';
+import { useAuth } from './AuthContext.tsx';
+import { playGentleNotificationTone, isAudioGloballyMuted } from './NotificationAudio.ts';
+import { firestore, sanitizeForFirestore, handleFirestoreError, OperationType } from './firebase.ts';
+import { 
+  checkIsFcmSupported, 
+  requestFcmToken, 
+  subscribeToForegroundFcmMessages, 
+  broadcastFcmPush 
+} from './fcmService.ts';
+
+const NOTIFICATIONS_STORAGE_KEY = 'soli_icu_notifications_queue_v2';
+const MAX_NOTIFICATIONS = 25;
+
+export const ALLOWED_NOTIFICATION_TYPES: NotificationType[] = [
+  'ADMISSION',
+  'DISCHARGE',
+  'SBAR_HANDOVER',
+  'SBAR_RECEIVED',
+  'ISOLATION_CHANGE',
+  'CRITICAL_VITAL_ALERT',
+];
+
+function isWhitelistedType(type: any): type is NotificationType {
+  return typeof type === 'string' && ALLOWED_NOTIFICATION_TYPES.includes(type as NotificationType);
+}
+
+interface TriggerNotificationParams {
+  type: NotificationType;
+  titleEn: string;
+  titleAr: string;
+  messageEn: string;
+  messageAr: string;
+  target?: AppNotificationTarget;
+  forceVisual?: boolean;
+  forceAudio?: boolean;
+}
+
+interface NotificationContextType {
+  notifications: AppNotification[];
+  unreadCount: number;
+  activeBanner: AppNotification | null;
+  isPushSupported: boolean;
+  isPushEnabled: boolean;
+  requestPushPermission: () => Promise<boolean>;
+  triggerNotification: (params: TriggerNotificationParams) => void;
+  markAsRead: (id: string) => void;
+  markAllAsRead: () => void;
+  deleteNotification: (id: string) => void;
+  clearAllNotifications: () => void;
+  dismissBanner: () => void;
+  handleNotificationClick: (notif: AppNotification) => void;
+  setNavigationHandler: (handler: (target: AppNotificationTarget) => void) => void;
+}
+
+const NotificationContext = createContext<NotificationContextType | null>(null);
+
+function loadSavedNotifications(): AppNotification[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(NOTIFICATIONS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return parsed
+        .filter((item: any) => item && isWhitelistedType(item.type))
+        .slice(0, MAX_NOTIFICATIONS);
+    }
+  } catch (err) {
+    console.error('Failed to load notifications from storage:', err);
+  }
+  return [];
+}
+
+function saveNotificationsToStorage(list: AppNotification[]) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(list.slice(0, MAX_NOTIFICATIONS)));
+  } catch (err) {
+    console.error('Failed to save notifications to storage:', err);
+  }
+}
+
 export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const { settings } = useSystemSettings();
   const { currentUser } = useAuth();
