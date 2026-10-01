@@ -293,3 +293,5 @@ Ensure strict medical terminology and zero hallucination. If text is partially b
       success: false,
       error: error?.message || 'Internal server error processing investigation image',
     });
+  }
+}
