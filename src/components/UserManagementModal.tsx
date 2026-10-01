@@ -1,40 +1,30 @@
 import React, { useState, useEffect } from 'react';
 import { 
   X, 
-  Users, 
-  UserPlus, 
-  ShieldCheck, 
-  CheckCircle2, 
-  XCircle, 
-  Edit, 
-  Lock, 
-  KeyRound, 
-  Stethoscope, 
+  Check, 
+  AlertCircle, 
   Activity, 
-  BadgeCheck,
-  Building,
-  Sparkles,
-  Sliders,
-  Search,
-  Filter,
-  Eye,
-  EyeOff,
-  Trash2,
-  AlertTriangle,
+  Trash2, 
+  Sliders, 
+  Sparkles, 
+  ShieldCheck, 
+  User, 
+  Pencil, 
+  Loader2, 
+  Plus, 
+  Lock, 
+  Search, 
+  Key, 
+  UserPlus, 
+  Power, 
   UserX,
-  Loader2,
-  Clock,
-  Calendar,
-  History
+  ShieldAlert,
+  Shield
 } from 'lucide-react';
 import { useAuth } from '../services/AuthContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
-import { StaffRole, IcuUser, UserPermissions } from '../types/schema.ts';
-import { getDefaultPermissionsForRole, auth, firestore } from '../services/firebase.ts';
-import { doc, setDoc } from 'firebase/firestore';
-import { API_BASE_URL } from '../config/api.ts';
+import { StaffRole } from '../types/schema.ts';
 import { AuditLogsSection } from './AuditLogsSection.tsx';
-import { formatRelativeTime, formatDetailedTimestamp } from '../services/auditService.ts';
 
 interface UserManagementModalProps {
   isOpen: boolean;
@@ -42,1142 +32,554 @@ interface UserManagementModalProps {
 }
 
 export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClose }) => {
-  const { allUsers, currentUser, createUser, updateUser, changeUserPassword, toggleUserStatus, deleteUser, hasPermission, refreshUsers } = useAuth();
-  
+  const { 
+    allUsers, 
+    currentUser, 
+    createUser, 
+    updateUser, 
+    changeUserPassword, 
+    toggleUserStatus, 
+    deleteUser, 
+    refreshUsers 
+  } = useAuth();
+
   const { lang, isRTL } = useTranslation();
+
+  const [activeSubTab, setActiveSubTab] = useState<'users' | 'audit'>('users');
+  const [searchTerm, setSearchQuery] = useState('');
+  const [roleFilter, setRoleFilter] = useState<string>('ALL');
+
+  // Form states
+  const [showAddEditForm, setShowAddEditForm] = useState(false);
+  const [editingUser, setEditingUser] = useState<any | null>(null);
+  const [emailInput, setEmailInput] = useState('');
+  const [nameInput, setNameInput] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
+  const [roleInput, setRoleInput] = useState<StaffRole>(StaffRole.BEDSIDE_RN);
+  
+  // Password Reset modal states
+  const [resettingUser, setResetingUser] = useState<any | null>(null);
+  const [newPasswordInput, setNewPasswordInput] = useState('');
+
+  // Status & loading messages
+  const [loading, setLoading] = useState(false);
+  const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [togglingUid, setTogglingUid] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen && refreshUsers) {
       refreshUsers();
     }
-  }, [isOpen, refreshUsers]);
-
-  const [searchQuery, setSearchQuery] = useState('');
-  const [roleFilter, setRoleFilter] = useState<string>('ALL');
-  const [activeTab, setActiveTab] = useState<'users' | 'audit'>('users');
-  const [isAddMode, setIsAddMode] = useState(false);
-  const [editingUser, setEditingUser] = useState<IcuUser | null>(null);
-  const [showFormPassword, setShowFormPassword] = useState(false);
-  const [userToDelete, setUserToDelete] = useState<IcuUser | null>(null);
-
-  // Change Password state
-  const [userToChangePassword, setUserToChangePassword] = useState<IcuUser | null>(null);
-  const [newPasswordInput, setNewPasswordInput] = useState('');
-  const [confirmPasswordInput, setConfirmPasswordInput] = useState('');
-  const [showNewPassword, setShowNewPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [changePassStatus, setChangePassStatus] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-
-  // Recovery Token state
-  const [showRecoveryModal, setShowRecoveryModal] = useState(false);
-  const [recoveryCodeInput, setRecoveryCodeInput] = useState('');
-  const [recoveryStatus, setRecoveryStatus] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [recoveryLoading, setRecoveryLoading] = useState(false);
-
-  const handleSaveRecoveryCode = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleanCode = recoveryCodeInput.trim();
-    if (!cleanCode || cleanCode.length < 6) {
-      setRecoveryStatus({ type: 'error', text: 'رمز التشفير يجب ألا يقل عن 6 خانات.' });
-      return;
-    }
-    setRecoveryLoading(true);
-    setRecoveryStatus(null);
-    let serverSuccess = false;
-
-    try {
-      const idToken = await auth.currentUser?.getIdToken().catch(() => null);
-      const authHeader = idToken ? `Bearer ${idToken}` : '';
-      const response = await fetch(`${API_BASE_URL}/api/admin/recovery/set`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': authHeader
-        },
-        body: JSON.stringify({ recoveryCode: cleanCode })
-      });
-
-      const contentType = response.headers.get('content-type') || '';
-      if (contentType.includes('application/json')) {
-        const data = await response.json();
-        if (data.success) {
-          serverSuccess = true;
-          setRecoveryStatus({ type: 'success', text: data.message || 'تم تحديث رمز التشفير بنجاح.' });
-        } else {
-          setRecoveryStatus({ type: 'error', text: data.message || 'فشل تحديث رمز التشفير.' });
-        }
-      }
-    } catch (err: any) {
-      console.warn('[RecoveryToken] Server sync notice:', err);
-    }
-
-    // Client-side Firestore and local storage backup
-    try {
-      localStorage.setItem('soli_admin_recovery_token', cleanCode);
-      if (firestore && auth.currentUser) {
-        await setDoc(doc(firestore, 'system_settings', 'recovery'), {
-          hasCustomRecoveryCode: true,
-          updatedAt: new Date().toISOString(),
-          updatedByUid: auth.currentUser.uid
-        }, { merge: true });
-      }
-      if (!serverSuccess) {
-        setRecoveryStatus({ type: 'success', text: 'تم حفظ وتحديث رمز الاستعادة بنجاح في قاعدة البيانات المحلية والسحابية.' });
-      }
-    } catch {
-      if (!serverSuccess && !recoveryStatus) {
-        setRecoveryStatus({ type: 'error', text: 'تعذر الاتصال بخادم النظام، يرجى المحاولة بعد قليل.' });
-      }
-    } finally {
-      setRecoveryLoading(false);
-    }
-  };
-
-  // Form states for creating/editing user
-  const [formUsername, setFormUsername] = useState('');
-  const [formDisplayName, setFormDisplayName] = useState('');
-  const [formPassword, setFormPassword] = useState('');
-  const [formRole, setFormRole] = useState<StaffRole>(StaffRole.BEDSIDE_RN);
-  const [formPermissions, setFormPermissions] = useState<UserPermissions>(
-    getDefaultPermissionsForRole(StaffRole.BEDSIDE_RN)
-  );
-  const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [togglingUid, setTogglingUid] = useState<string | null>(null);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
-  const handleRoleChange = (role: StaffRole) => {
-    setFormRole(role);
-    setFormPermissions(getDefaultPermissionsForRole(role));
-  };
-
-  const handleOpenAdd = () => {
+  const handleOpenAddForm = () => {
     setEditingUser(null);
-    setFormUsername('');
-    setFormDisplayName('');
-    setFormPassword('');
-    setShowFormPassword(false);
-    setFormRole(StaffRole.BEDSIDE_RN);
-    setFormPermissions(getDefaultPermissionsForRole(StaffRole.BEDSIDE_RN));
-    setIsAddMode(true);
+    setEmailInput('');
+    setNameInput('');
+    setPasswordInput('');
+    setRoleInput(StaffRole.BEDSIDE_RN);
     setStatusMsg(null);
+    setShowAddEditForm(true);
   };
 
-  const handleOpenEdit = (user: IcuUser) => {
+  const handleOpenEditForm = (user: any) => {
     setEditingUser(user);
-    const uname = user.email.includes('@solimedical-micu.org') 
-      ? user.email.replace('@solimedical-micu.org', '') 
-      : (user.email.split('@')[0] || user.badgeId);
-    setFormUsername(uname);
-    setFormDisplayName(user.nameAr || user.nameEn);
-    setFormPassword('');
-    setShowFormPassword(false);
-    setFormRole(user.role as StaffRole);
-    setFormPermissions(user.permissions || getDefaultPermissionsForRole(user.role as StaffRole));
-    setIsAddMode(true);
+    // Extract username/prefix before email
+    setEmailInput(user.email ? user.email.split('@')[0] : user.badgeId);
+    setNameInput(user.nameAr || user.nameEn || '');
+    setPasswordInput('');
+    setRoleInput(user.role || StaffRole.BEDSIDE_RN);
     setStatusMsg(null);
+    setShowAddEditForm(true);
   };
 
-  const handleOpenChangePassword = (user: IcuUser) => {
-    setUserToChangePassword(user);
-    setNewPasswordInput('');
-    setConfirmPasswordInput('');
-    setShowNewPassword(false);
-    setShowConfirmPassword(false);
-    setChangePassStatus(null);
+  // Helper function to map default permissions for roles
+  const getDefaultPermissionsForRole = (role: StaffRole) => {
+    switch (role) {
+      case StaffRole.ADMIN:
+        return { 'clinicalNotes.delete': true, 'patients.delete': true, 'users.manage': true };
+      case StaffRole.CONSULTANT:
+        return { 'clinicalNotes.delete': false, 'patients.delete': false, 'sbar.sign': true };
+      default:
+        return { 'clinicalNotes.delete': false, 'patients.delete': false };
+    }
   };
 
-  const handleSaveNewPassword = async (e: React.FormEvent) => {
+  const handleSubmitForm = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!userToChangePassword) return;
-
-    if (!newPasswordInput.trim() || newPasswordInput.trim().length < 6) {
-      setChangePassStatus({
+    if (!emailInput.trim() || (!editingUser && !passwordInput.trim())) {
+      setStatusMsg({
         type: 'error',
-        text: lang === 'ar' ? 'كلمة المرور يجب ألا تقل عن 6 أحرف أو أرقام (auth/weak-password).' : 'Password must be at least 6 characters (auth/weak-password).'
+        text: lang === 'ar' ? 'يرجى ملء كافة الحقول المطلوبة.' : 'Please fill out all required fields.'
       });
       return;
     }
 
-    if (newPasswordInput.trim() !== confirmPasswordInput.trim()) {
-      setChangePassStatus({
-        type: 'error',
-        text: lang === 'ar' ? 'كلمتا المرور غير متطابقتين.' : 'Passwords do not match.'
-      });
-      return;
-    }
-
-    const res = await changeUserPassword(userToChangePassword.uid, newPasswordInput.trim(), confirmPasswordInput.trim());
-    if (res.success) {
-      setChangePassStatus({
-        type: 'success',
-        text: res.message || (lang === 'ar' ? 'تم تغيير كلمة المرور بنجاح في Firebase Authentication.' : 'Password updated successfully')
-      });
-      setTimeout(() => {
-        setUserToChangePassword(null);
-      }, 1200);
-    } else {
-      setChangePassStatus({
-        type: 'error',
-        text: res.message || (lang === 'ar' ? 'فشل تحديث كلمة المرور في Firebase.' : 'Error changing password')
-      });
-    }
-  };
-
-  const handleConfirmDelete = async () => {
-    if (!userToDelete) return;
+    setLoading(true);
     setStatusMsg(null);
-    const res = await deleteUser(userToDelete.uid);
-    if (res.success) {
-      setStatusMsg({ type: 'success', text: res.message || (lang === 'ar' ? 'تم حذف الحساب بنجاح' : 'User deleted successfully') });
-    } else {
-      setStatusMsg({ type: 'error', text: res.message || (lang === 'ar' ? 'خطأ أثناء حذف الحساب' : 'Error deleting user') });
-    }
-    setUserToDelete(null);
-  };
 
-  const handleToggleUserStatus = async (targetUser: IcuUser) => {
-    if (togglingUid) return;
-    setTogglingUid(targetUser.uid);
-    setStatusMsg(null);
     try {
-      const res = await toggleUserStatus(targetUser.uid);
-      if (res?.success) {
-        setStatusMsg({
-          type: 'success',
-          text: res.message || (targetUser.isActive 
-            ? (lang === 'ar' ? 'تم تعطيل الحساب وإبطال جلساته بنجاح.' : 'Account disabled successfully.')
-            : (lang === 'ar' ? 'تم إعادة تفعيل الحساب بنجاح.' : 'Account activated successfully.'))
+      if (editingUser) {
+        // Update user
+        const res = await updateUser(editingUser.uid, {
+          nameAr: nameInput.trim(),
+          nameEn: nameInput.trim(),
+          role: roleInput
         });
+
+        if (res.success) {
+          setStatusMsg({
+            type: 'success',
+            text: lang === 'ar' ? 'تم تحديث بيانات المستخدم بنجاح.' : 'User updated successfully.'
+          });
+          setTimeout(() => setShowAddEditForm(false), 1200);
+        } else {
+          setStatusMsg({
+            type: 'error',
+            text: res.message || (lang === 'ar' ? 'فشل تحديث بيانات المستخدم.' : 'Failed to update user.')
+          });
+        }
       } else {
-        setStatusMsg({
-          type: 'error',
-          text: res?.message || (lang === 'ar' ? 'فشل تعديل حالة الحساب.' : 'Failed to update user status.')
+        // Create user
+        const res = await createUser({
+          username: emailInput.trim(),
+          password: passwordInput.trim(),
+          displayName: nameInput.trim(),
+          role: roleInput,
+          permissions: getDefaultPermissionsForRole(roleInput)
         });
+
+        if (res.success) {
+          setStatusMsg({
+            type: 'success',
+            text: lang === 'ar' ? 'تم إنشاء حساب المستخدم بنجاح.' : 'User account created successfully.'
+          });
+          setTimeout(() => setShowAddEditForm(false), 1200);
+        } else {
+          setStatusMsg({
+            type: 'error',
+            text: res.message || (lang === 'ar' ? 'فشل إنشاء حساب المستخدم.' : 'Failed to create user.')
+          });
+        }
       }
     } catch (err: any) {
       setStatusMsg({
         type: 'error',
-        text: err?.message || (lang === 'ar' ? 'حدث خطأ أثناء الاتصال بالخادم.' : 'Error contacting server.')
+        text: err?.message || (lang === 'ar' ? 'حدث خطأ غير متوقع.' : 'Unexpected operation error.')
       });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleToggleStatus = async (user: any) => {
+    setTogglingUid(user.uid);
+    try {
+      const currentActive = user.isActive !== false && user.active !== false;
+      await toggleUserStatus(user.uid, !currentActive);
+    } catch (err) {
+      console.warn('Toggle user status exception:', err);
     } finally {
       setTogglingUid(null);
     }
   };
 
-  const handleSaveUser = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setStatusMsg(null);
-
-    const cleanUsername = formUsername.trim().toLowerCase().replace(/\s+/g, '');
-    const userEmail = cleanUsername.includes('@') ? cleanUsername : `${cleanUsername}@solimedical-micu.org`;
-    const cleanDisplayName = formDisplayName.trim() || cleanUsername;
-    
-    if (!editingUser && formPassword.length < 6) {
-      setStatusMsg({ type: 'error', text: lang === 'ar' ? 'كلمة المرور يجب ألا تقل عن 6 أحرف أو أرقام (auth/weak-password).' : 'Password must be at least 6 characters (auth/weak-password).' });
+  const handleDeleteUser = async (user: any) => {
+    if (user.uid === currentUser?.uid) {
+      alert(lang === 'ar' ? 'لا يمكنك حذف حسابك الخاص الذي تسجل الدخول به حالياً.' : 'You cannot delete your own active session account.');
       return;
     }
-    const cleanPassword = formPassword;
 
-    if (editingUser) {
-      // Update
-      const updated: IcuUser = {
-        ...editingUser,
-        nameAr: cleanDisplayName,
-        nameEn: cleanDisplayName,
-        email: userEmail,
-        role: formRole,
-        permissions: formPermissions,
-      };
-      delete (updated as any).pinCode;
-      delete (updated as any).password;
-      const res = await updateUser(updated);
-      if (res.success) {
-        setStatusMsg({ type: 'success', text: lang === 'ar' ? 'تم تحديث بيانات المستخدم بنجاح' : 'User updated successfully' });
-        setTimeout(() => setIsAddMode(false), 1000);
-      } else {
-        setStatusMsg({ type: 'error', text: res.message || 'Error updating user' });
-      }
-    } else {
-      // Create
-      const res = await createUser({
-        nameAr: cleanDisplayName,
-        nameEn: cleanDisplayName,
-        email: userEmail,
-        role: formRole,
-        licenseNumber: `LIC-${Math.floor(100000 + Math.random() * 900000)}`,
-        department: 'Medical Intensive Care Unit',
-        badgeId: cleanUsername,
-        pinCode: cleanPassword,
-        permissions: formPermissions,
-      });
-      if (res.success) {
-        setStatusMsg({ type: 'success', text: lang === 'ar' ? 'تمت إضافة المستخدم وتفعيل الصلاحيات بنجاح' : 'User created successfully' });
-        setTimeout(() => setIsAddMode(false), 1000);
-      } else {
-        setStatusMsg({ type: 'error', text: res.message || 'Error creating user' });
+    if (confirm(lang === 'ar' ? `هل أنت متأكد من حذف حساب "${user.nameAr || user.nameEn}" نهائياً؟` : `Delete clinical staff account "${user.nameEn || user.nameAr}" permanently?`)) {
+      try {
+        await deleteUser(user.uid);
+      } catch (err) {
+        console.warn('Delete user exception:', err);
       }
     }
   };
 
-  const filteredUsers = (allUsers || []).filter(u => {
-    if (!u) return false;
-    const q = (searchQuery || '').toLowerCase();
-    const nameAr = (u.nameAr || '').toLowerCase();
-    const nameEn = (u.nameEn || '').toLowerCase();
-    const displayName = ((u as any).displayName || '').toLowerCase();
-    const username = ((u as any).username || '').toLowerCase();
-    const email = (u.email || '').toLowerCase();
-    const badgeId = (u.badgeId || '').toLowerCase();
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resettingUser || !newPasswordInput.trim()) return;
 
-    const matchesSearch = 
-      nameAr.includes(q) ||
-      nameEn.includes(q) ||
-      displayName.includes(q) ||
-      username.includes(q) ||
-      email.includes(q) ||
-      badgeId.includes(q);
-    const matchesRole = roleFilter === 'ALL' || u.role === roleFilter;
-    return matchesSearch && matchesRole;
+    setLoading(true);
+    try {
+      const res = await changeUserPassword(resettingUser.uid, newPasswordInput.trim());
+      if (res.success) {
+        alert(lang === 'ar' ? 'تم تغيير كلمة المرور/الرمز بنجاح.' : 'Password reset successfully.');
+        setResetingUser(null);
+        setNewPasswordInput('');
+      } else {
+        alert(res.message || 'Operation failed');
+      }
+    } catch (err: any) {
+      alert(err?.message || 'Error occurred');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Filter users
+  const filteredUsers = (allUsers || []).filter(user => {
+    const query = searchTerm.toLowerCase().trim();
+    const matchSearch = !query || 
+      (user.nameAr || '').toLowerCase().includes(query) ||
+      (user.nameEn || '').toLowerCase().includes(query) ||
+      (user.email || '').toLowerCase().includes(query) ||
+      (user.badgeId || '').toLowerCase().includes(query);
+
+    const matchRole = roleFilter === 'ALL' || user.role === roleFilter;
+    return matchSearch && matchRole;
   });
 
-interface PermissionCategory {
-  title: { ar: string; en: string };
-  permissions: Array<{
-    key: keyof UserPermissions;
-    label: { ar: string; en: string };
-  }>;
-}
-
-const PERMISSION_GROUPS: PermissionCategory[] = [
-  {
-    title: { ar: 'الأسرّة وتدفق المرضى (Beds & Patient Flow)', en: 'Beds & Patient Flow' },
-    permissions: [
-      { key: 'beds.view', label: { ar: 'استعراض الأسرّة', en: 'View Beds (beds.view)' } },
-      { key: 'patients.view', label: { ar: 'استعراض ملفات المرضى', en: 'View Patients (patients.view)' } },
-      { key: 'patients.create', label: { ar: 'إدخال وتنويم مريض جديد', en: 'Admit Patient (patients.create)' } },
-      { key: 'patients.update', label: { ar: 'تعديل وتحديث ملف المريض', en: 'Update Patient (patients.update)' } },
-      { key: 'archive.view', label: { ar: 'استعراض الأرشيف وسجلات التخريج', en: 'View Archive (archive.view)' } },
-      { key: 'transfer.create', label: { ar: 'نقل مريض لسرير آخر', en: 'Transfer Patient (transfer.create)' } },
-      { key: 'bedSwap.create', label: { ar: 'تبديل أسرّة بين مريضين', en: 'Swap Beds (bedSwap.create)' } },
-      { key: 'discharge.create', label: { ar: 'تخريج المريض من العناية', en: 'Discharge Patient (discharge.create)' } },
-    ]
-  },
-  {
-    title: { ar: 'العلامات الحيوية والتوثيق الطبي (Telemetry & Clinical)', en: 'Telemetry & Clinical Records' },
-    permissions: [
-      { key: 'vitals.view', label: { ar: 'استعراض العلامات الحيوية والمضخات', en: 'View Vitals (vitals.view)' } },
-      { key: 'vitals.create', label: { ar: 'توثيق قراءات حيوية ومضخات جديدة', en: 'Record Vitals (vitals.create)' } },
-      { key: 'vitals.update', label: { ar: 'تعديل العلامات الحيوية والمضخات', en: 'Update Vitals (vitals.update)' } },
-      { key: 'labs.view', label: { ar: 'استعراض نتائج التحاليل المخبرية', en: 'View Labs (labs.view)' } },
-      { key: 'labs.create', label: { ar: 'توثيق وتسجيل نتائج تحاليل', en: 'Record Labs (labs.create)' } },
-      { key: 'labs.update', label: { ar: 'تعديل نتائج التحاليل', en: 'Update Labs (labs.update)' } },
-      { key: 'investigations.view', label: { ar: 'استعراض الأشعة والفحوصات', en: 'View Investigations (investigations.view)' } },
-      { key: 'investigations.create', label: { ar: 'توثيق أشعة وفحوصات', en: 'Record Investigations (investigations.create)' } },
-      { key: 'investigations.update', label: { ar: 'تعديل الأشعة والفحوصات', en: 'Update Investigations (investigations.update)' } },
-      { key: 'clinicalNotes.view', label: { ar: 'استعراض الملاحظات السريرية', en: 'View Clinical Notes (clinicalNotes.view)' } },
-      { key: 'clinicalNotes.create', label: { ar: 'كتابة وتوثيق ملاحظات طبية', en: 'Sign Clinical Notes (clinicalNotes.create)' } },
-      { key: 'clinicalNotes.update', label: { ar: 'إضافة ملاحق غير قابلة للحذف', en: 'Add Note Addendum (clinicalNotes.update)' } },
-      { key: 'clinicalNotes.delete', label: { ar: 'حذف الملاحظات الطبية والعروضات', en: 'Delete Clinical Notes (clinicalNotes.delete)' } },
-      { key: 'sbar.view', label: { ar: 'استعراض تقارير التسليم SBAR', en: 'View SBAR Handover (sbar.view)' } },
-      { key: 'sbar.create', label: { ar: 'إنشاء تقرير تسليم مناوبة SBAR', en: 'Create SBAR Handover (sbar.create)' } },
-      { key: 'sbar.update', label: { ar: 'اعتماد وتوقيع تقرير SBAR', en: 'Sign SBAR Handover (sbar.update)' } },
-    ]
-  },
-  {
-    title: { ar: 'إدارة المنظومة والصلاحيات والرقابة (Governance & Security)', en: 'Governance & Security' },
-    permissions: [
-      { key: 'chat.view', label: { ar: 'استعراض محادثات القسم', en: 'View Chat (chat.view)' } },
-      { key: 'chat.create', label: { ar: 'إرسال رسائل محادثة', en: 'Send Chat Messages (chat.create)' } },
-      { key: 'chat.delete', label: { ar: 'حذف رسائل المحادثة', en: 'Delete Chat Messages (chat.delete)' } },
-      { key: 'settings.view', label: { ar: 'استعراض إعدادات المنظومة', en: 'View Settings (settings.view)' } },
-      { key: 'settings.update', label: { ar: 'تعديل إعدادات المنظومة', en: 'Update Settings (settings.update)' } },
-      { key: 'sections.manage', label: { ar: 'إدارة وتخصيص أقسام النظام', en: 'Manage Sections (sections.manage)' } },
-      { key: 'cards.manage', label: { ar: 'إدارة وتخصيص بطاقات النظام', en: 'Manage Cards (cards.manage)' } },
-      { key: 'users.view', label: { ar: 'استعراض قائمة المستخدمين', en: 'View Users (users.view)' } },
-      { key: 'users.create', label: { ar: 'إضافة كوادر طبية جديدة', en: 'Create User (users.create)' } },
-      { key: 'users.update', label: { ar: 'تعديل بيانات وصلاحيات الكوادر', en: 'Update User (users.update)' } },
-      { key: 'users.disable', label: { ar: 'إيقاف وتعطيل حسابات الكوادر', en: 'Disable User (users.disable)' } },
-      { key: 'users.delete', label: { ar: 'حذف حسابات الكوادر نهائياً', en: 'Delete User (users.delete)' } },
-      { key: 'audit.view', label: { ar: 'الاطلاع على سجلات الرقابة CBAHI/JCI', en: 'View Audit Logs (audit.view)' } },
-      { key: 'medicalRecords.delete', label: { ar: 'حذف السجلات الطبية (الملاحظات الطبية، العروضات، المضادات، الفحوصات، المضخات، جهاز التنفس، السوائل، التحاليل)', en: 'Delete Medical Records (medicalRecords.delete)' } },
-    ]
-  }
-];
-
-  const canCreateUsers = hasPermission('users.create');
-  const canUpdateUsers = hasPermission('users.update');
-  const canDisableUsers = hasPermission('users.disable');
-  const canDeleteUsers = hasPermission('users.delete');
-
   return (
-    <div className="w-full space-y-4 animate-in fade-in duration-300" dir={isRTL ? 'rtl' : 'ltr'}>
-      <div className="relative w-full max-w-6xl mx-auto bg-[#0a1224] border border-slate-800 rounded-3xl shadow-xl p-5 sm:p-7 text-slate-100 flex flex-col">
-        
-        {/* Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-slate-800/80">
+    <div
+      className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto font-sans"
+      dir={isRTL ? 'rtl' : 'ltr'}
+    >
+      <div className="w-full max-w-5xl bg-white dark:bg-[#0b1324] border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+        {/* Header Section */}
+        <div className="px-6 py-4 bg-slate-50 dark:bg-[#080f1e] border-b border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-teal-500 to-cyan-400 p-0.5 shadow-md shadow-teal-500/20">
-              <div className="w-full h-full bg-[#070d1a] rounded-[10px] flex items-center justify-center text-teal-400">
-                <Users className="w-5 h-5" />
-              </div>
+            <div className="w-10 h-10 rounded-2xl bg-teal-50 dark:bg-teal-500/10 border border-teal-200 dark:border-teal-500/30 text-teal-600 dark:text-teal-400 flex items-center justify-center">
+              <User className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
-                <span>{lang === 'ar' ? 'إدارة المستخدمين والكوادر الطبية (RBAC)' : 'Clinical Staff & Access Control (RBAC)'}</span>
-                <span className="px-2 py-0.5 rounded-full bg-teal-950 border border-teal-800 text-[10px] font-mono text-teal-300">
-                  {allUsers.length} {lang === 'ar' ? 'مستخدم' : 'Users'}
-                </span>
-              </h2>
-              <p className="text-xs text-slate-400">
-                {lang === 'ar' ? 'تحديد الصلاحيات السريرية وإدارة حسابات مناوبات العناية المركزة' : 'Role-Based Access Control and Shift Staff Management'}
+              <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
+                {lang === 'ar' ? 'إدارة الكادر الطبي وسجلات الأمان' : 'User Accounts & Security Audit'}
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {lang === 'ar' ? 'إدارة صلاحيات الكادر الطبي وسجلات التدقيق الموثقة بالسحابة' : 'Manage ICU staff permissions and cloud security logs'}
               </p>
             </div>
           </div>
-
-          <div className="flex items-center gap-2">
-            {!isAddMode && activeTab === 'users' && (
-              <>
-                <button
-                  onClick={() => {
-                    setRecoveryCodeInput('');
-                    setRecoveryStatus(null);
-                    setShowRecoveryModal(true);
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-teal-300 text-xs font-bold transition-all cursor-pointer"
-                  title="إدارة وتوليد رمز استعادة كلمة سر المدير"
-                >
-                  <KeyRound className="w-3.5 h-3.5" />
-                  <span>{lang === 'ar' ? 'رمز استعادة المدير' : 'Recovery Token'}</span>
-                </button>
-
-                {canCreateUsers && (
-                  <button
-                    onClick={handleOpenAdd}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-teal-600 to-teal-500 hover:from-teal-500 hover:to-teal-400 text-slate-950 text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
-                  >
-                    <UserPlus className="w-3.5 h-3.5" />
-                    <span>{lang === 'ar' ? 'إضافة كادر طبي' : 'Add Staff'}</span>
-                  </button>
-                )}
-              </>
-            )}
-            <button
-              onClick={onClose}
-              className="w-8 h-8 rounded-lg bg-slate-800/60 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-all cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
 
-        {/* Navigation Tabs */}
-        {!isAddMode && (
-          <div className="flex items-center gap-2 border-b border-slate-800/80 pt-3 pb-2">
+        {/* Sub-tab Navigation */}
+        <div className="px-6 pt-3 bg-slate-50/60 dark:bg-[#080f1e]/60 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-4 flex-wrap shrink-0">
+          <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setActiveTab('users')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-                activeTab === 'users'
-                  ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent'
+              onClick={() => setActiveSubTab('users')}
+              className={`px-4 py-2 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center gap-2 ${
+                activeSubTab === 'users'
+                  ? 'bg-teal-500 text-slate-950 shadow-md shadow-teal-500/20'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
               }`}
             >
-              <Users className="w-4 h-4" />
-              <span>{lang === 'ar' ? 'دليل المستخدمين والكوادر' : 'Staff & Users Directory'}</span>
-              <span className="px-1.5 py-0.2 rounded-full bg-black/40 text-[10px] font-mono">
-                {allUsers.length}
-              </span>
+              <User className="w-4 h-4" />
+              <span>{lang === 'ar' ? 'الكادر الطبي والمستخدمين' : 'Clinical Staff Directory'}</span>
             </button>
-
             <button
               type="button"
-              onClick={() => setActiveTab('audit')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-                activeTab === 'audit'
-                  ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent'
+              onClick={() => setActiveSubTab('audit')}
+              className={`px-4 py-2 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center gap-2 ${
+                activeSubTab === 'audit'
+                  ? 'bg-teal-500 text-slate-950 shadow-md shadow-teal-500/20'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
               }`}
             >
-              <History className="w-4 h-4" />
-              <span>{lang === 'ar' ? 'سجلات الأمان والتدقيق (Audit Logs)' : 'Security & Audit Logs'}</span>
+              <Activity className="w-4 h-4" />
+              <span>{lang === 'ar' ? 'سجلات الأمان والتدقيق' : 'Security Audit Trail'}</span>
             </button>
           </div>
-        )}
 
-        {/* Content Body */}
-        <div className="flex-1 overflow-y-auto py-4 space-y-4">
-          
-          {activeTab === 'audit' ? (
+          {activeSubTab === 'users' && (
+            <button
+              type="button"
+              onClick={handleOpenAddForm}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs transition-all shadow-md cursor-pointer mb-3"
+            >
+              <Plus className="w-4 h-4" />
+              <span>{lang === 'ar' ? 'إضافة مستخدم جديد' : 'Add New Staff'}</span>
+            </button>
+          )}
+        </div>
+
+        {/* Modal Body Container */}
+        <div className="p-6 overflow-y-auto flex-1">
+          {activeSubTab === 'audit' ? (
             <AuditLogsSection />
           ) : (
-            <>
-              {statusMsg && (
-                <div className={`p-3 rounded-xl text-xs flex items-center gap-2 ${
-                  statusMsg.type === 'success' ? 'bg-teal-950/60 border border-teal-500/50 text-teal-200' : 'bg-red-950/60 border border-red-500/50 text-red-200'
-                }`}>
-                  {statusMsg.type === 'success' ? <CheckCircle2 className="w-4 h-4 text-teal-400" /> : <XCircle className="w-4 h-4 text-red-400" />}
-                  <span>{statusMsg.text}</span>
-                </div>
-              )}
-
-          {isAddMode ? (
-            /* Add / Edit Form */
-            <form onSubmit={handleSaveUser} className="space-y-4 bg-[#080f1e] p-4 sm:p-5 rounded-2xl border border-slate-800">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-                <h3 className="text-sm font-bold text-teal-300 flex items-center gap-2">
-                  <UserPlus className="w-4 h-4 text-teal-400" />
-                  <span>{editingUser ? (lang === 'ar' ? 'تعديل بيانات المستخدم' : 'Edit User Profile') : (lang === 'ar' ? 'إضافة مستخدم جديد إلى المنظومة:' : 'Add New User to System:')}</span>
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => setIsAddMode(false)}
-                  className="text-xs text-slate-400 hover:text-white px-2.5 py-1 rounded-lg bg-slate-800/60 transition-colors"
-                >
-                  {lang === 'ar' ? 'إلغاء' : 'Cancel'}
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                <div>
-                  <label className="block text-[11px] font-semibold text-teal-300 mb-1">
-                    {lang === 'ar' ? 'اسم المستخدم (Username) *' : 'Username *'}
-                  </label>
+            <div className="space-y-4">
+              {/* Search & Filter Header */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-slate-50 dark:bg-[#080f1e] border border-slate-200 dark:border-slate-800 rounded-2xl">
+                <div className="relative flex-1 max-w-md">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 rtl:left-auto rtl:right-3" />
                   <input
                     type="text"
-                    value={formUsername}
-                    onChange={(e) => setFormUsername(e.target.value)}
-                    required
-                    className="w-full bg-[#0a1224] border border-slate-700 focus:border-teal-400 rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-mono"
-                    placeholder="admin"
+                    value={searchTerm}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder={lang === 'ar' ? 'بحث بالاسم، الكود، أو البريد...' : 'Search by name, badge ID, or email...'}
+                    className="w-full bg-white dark:bg-[#0c1529] border border-slate-300 dark:border-slate-700 rounded-xl pl-9 pr-3 rtl:pl-3 rtl:pr-9 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none"
                   />
                 </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-teal-300 mb-1">
-                    {lang === 'ar' ? 'الاسم الظاهر (Display Name) *' : 'Display Name *'}
-                  </label>
-                  <input
-                    type="text"
-                    value={formDisplayName}
-                    onChange={(e) => setFormDisplayName(e.target.value)}
-                    required
-                    className="w-full bg-[#0a1224] border border-slate-700 focus:border-teal-400 rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
-                    placeholder="د. أحمد سليمان"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                    {lang === 'ar' ? 'كلمة المرور (6 أحرف فأكثر) *' : 'Password (6+ chars) *'}
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={showFormPassword ? 'text' : 'password'}
-                      value={formPassword}
-                      onChange={(e) => setFormPassword(e.target.value)}
-                      required={!editingUser}
-                      minLength={6}
-                      className="w-full bg-[#0a1224] border border-slate-700 focus:border-teal-400 rounded-xl pl-3 pr-9 py-2 text-xs text-white focus:outline-none font-mono"
-                      placeholder={editingUser ? (lang === 'ar' ? 'اتركه فارغاً للإبقاء' : 'Leave empty to keep') : '••••••••'}
-                    />
+
+                <div className="flex items-center gap-1.5 text-xs flex-wrap">
+                  {['ALL', StaffRole.ADMIN, StaffRole.CONSULTANT, StaffRole.RESIDENT, StaffRole.BEDSIDE_RN].map((role) => (
                     <button
+                      key={role}
                       type="button"
-                      onClick={() => setShowFormPassword(!showFormPassword)}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-teal-300 p-1 rounded-md transition-colors cursor-pointer"
-                      title={showFormPassword ? (lang === 'ar' ? 'إخفاء كلمة المرور' : 'Hide password') : (lang === 'ar' ? 'إظهار كلمة المرور' : 'Show password')}
+                      onClick={() => setRoleFilter(role)}
+                      className={`px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
+                        roleFilter === role
+                          ? 'bg-teal-100 dark:bg-teal-500/20 text-teal-900 dark:text-teal-300 border border-teal-300 dark:border-teal-500/40 font-bold'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                      }`}
                     >
-                      {showFormPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      {role === 'ALL' ? (lang === 'ar' ? 'الكل' : 'All') : role}
                     </button>
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                    {lang === 'ar' ? 'الدور والصلاحية (Role) *' : 'Role & Permissions *'}
-                  </label>
-                  <select
-                    value={formRole}
-                    onChange={(e) => handleRoleChange(e.target.value as StaffRole)}
-                    className="w-full bg-[#0a1224] border border-slate-700 focus:border-teal-400 rounded-xl px-3 py-2 text-xs text-teal-300 focus:outline-none"
-                  >
-                    <option value={StaffRole.ADMIN}>مدير النظام (Admin)</option>
-                    <option value={StaffRole.CONSULTANT}>استشاري عناية (Consultant)</option>
-                    <option value={StaffRole.SPECIALIST}>أخصائي عناية (Specialist)</option>
-                    <option value={StaffRole.RESIDENT}>طبيب مقيم (Resident)</option>
-                    <option value={StaffRole.LEAD_RN}>مسؤول تمريض (Charge Nurse)</option>
-                    <option value={StaffRole.BEDSIDE_RN}>تمريض سريري (Bedside RN)</option>
-                    <option value={StaffRole.CLINICAL_PHARMACIST}>صيدلي إكلينيكي (Pharmacist)</option>
-                    <option value={StaffRole.RESPIRATORY_THERAPIST}>علاج تنفسي (RT)</option>
-                    <option value={StaffRole.AUDITOR}>سكرتير (استقبال وحجوزات)</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* System Pages Permission Matrix Grouped by Canonical Scope */}
-              <div className="mt-4 pt-3 border-t border-slate-800 space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-teal-300 flex items-center gap-1.5">
-                    <Sliders className="w-3.5 h-3.5" />
-                    <span>
-                      {lang === 'ar' 
-                        ? `مصفوفة الصلاحيات الموحدة (PAGE.ACTION) - (${Object.values(formPermissions).filter(Boolean).length} صلاحية مفعّلة)`
-                        : `Canonical Permission Matrix (PAGE.ACTION) - (${Object.values(formPermissions).filter(Boolean).length} granted)`
-                      }
-                    </span>
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setFormPermissions(getDefaultPermissionsForRole(formRole))}
-                    className="text-[10px] text-teal-400 hover:underline cursor-pointer"
-                  >
-                    {lang === 'ar' ? 'استعادة الافتراضي للدور' : 'Reset to Role Default'}
-                  </button>
-                </div>
-
-                <div className="space-y-3">
-                  {PERMISSION_GROUPS.map((group, gIdx) => (
-                    <div key={gIdx} className="bg-[#0a1224] p-3 rounded-2xl border border-slate-800/80 space-y-2">
-                      <div className="text-xs font-bold text-slate-300 flex items-center justify-between">
-                        <span>{lang === 'ar' ? group.title.ar : group.title.en}</span>
-                        <span className="text-[10px] font-mono text-teal-400">
-                          {group.permissions.filter(p => !!formPermissions[p.key]).length} / {group.permissions.length}
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                        {group.permissions.map((p) => {
-                          const isChecked = !!formPermissions[p.key];
-                          return (
-                            <label
-                              key={p.key}
-                              className={`p-2 rounded-xl border flex items-center justify-between cursor-pointer transition-colors text-[11px] ${
-                                isChecked 
-                                  ? 'bg-teal-950/40 border-teal-800/60 text-teal-200' 
-                                  : 'bg-[#070d1a] border-slate-800/80 text-slate-400 hover:border-slate-700'
-                              }`}
-                            >
-                              <span className="truncate pr-2 font-medium">
-                                {lang === 'ar' ? p.label.ar : p.label.en}
-                              </span>
-                              <input
-                                type="checkbox"
-                                checked={isChecked}
-                                onChange={(e) => setFormPermissions({ ...formPermissions, [p.key]: e.target.checked })}
-                                className="w-4 h-4 rounded text-teal-500 focus:ring-teal-400 bg-slate-900 border-slate-700"
-                              />
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </div>
                   ))}
                 </div>
               </div>
 
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsAddMode(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300"
-                >
-                  {lang === 'ar' ? 'إلغاء' : 'Cancel'}
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-slate-950 font-bold text-xs shadow-md"
-                >
-                  {editingUser 
-                    ? (lang === 'ar' ? 'حفظ التعديلات' : 'Save Changes')
-                    : (lang === 'ar' ? '+ إنشاء المستخدم' : '+ Create User')
-                  }
-                </button>
-              </div>
-            </form>
-          ) : (
-            /* Staff List View */
-            <div className="space-y-3">
-              
-              {/* Filter & Search Bar */}
-              <div className="flex flex-col sm:flex-row items-center gap-2">
-                <div className="relative flex-1 w-full">
-                  <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder={lang === 'ar' ? 'بحث بالاسم، البريد أو معرف البطاقة...' : 'Search staff by name, email or badge...'}
-                    className="w-full bg-[#080f1e] border border-slate-800 focus:border-teal-400 rounded-xl pl-9 pr-3 py-2 text-xs text-white focus:outline-none"
-                  />
-                </div>
-
-                <div className="flex items-center gap-1.5 w-full sm:w-auto">
-                  <Filter className="w-3.5 h-3.5 text-slate-500" />
-                  <select
-                    value={roleFilter}
-                    onChange={(e) => setRoleFilter(e.target.value)}
-                    className="bg-[#080f1e] border border-slate-800 focus:border-teal-400 rounded-xl px-2.5 py-2 text-xs text-slate-300 focus:outline-none"
-                  >
-                    <option value="ALL">{lang === 'ar' ? 'جميع الأدوار' : 'All Roles'}</option>
-                    <option value={StaffRole.ADMIN}>👑 Admin</option>
-                    <option value={StaffRole.CONSULTANT}>🩺 Consultant</option>
-                    <option value={StaffRole.SPECIALIST}>👨‍⚕️ Specialist</option>
-                    <option value={StaffRole.RESIDENT}>👨‍⚕️ Resident</option>
-                    <option value={StaffRole.LEAD_RN}>👩‍⚕️ Charge Nurse</option>
-                    <option value={StaffRole.BEDSIDE_RN}>💉 Bedside RN</option>
-                    <option value={StaffRole.CLINICAL_PHARMACIST}>💊 Pharmacist</option>
-                    <option value={StaffRole.RESPIRATORY_THERAPIST}>🫁 RT</option>
-                    <option value={StaffRole.AUDITOR}>📋 Auditor</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Users Cards Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Users Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {filteredUsers.map((user) => {
-                  const isCurrent = currentUser?.uid === user.uid;
+                  const isActive = user.isActive !== false && user.active !== false;
                   return (
-                    <div
-                      key={user.uid}
-                      className={`p-3.5 rounded-2xl border transition-all ${
-                        user.isActive 
-                          ? isCurrent 
-                            ? 'bg-[#0e1b30] border-teal-500/70 shadow-md shadow-teal-500/10' 
-                            : 'bg-[#080f1e] border-slate-800/80 hover:border-slate-700' 
-                          : 'bg-slate-900/40 border-red-900/30 opacity-60'
-                      }`}
+                    <div 
+                      key={user.uid} 
+                      className="p-4 bg-white dark:bg-[#080f1e] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm flex items-center justify-between gap-3 text-xs"
                     >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-2.5">
-                          <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs ${
-                            user.role === StaffRole.ADMIN 
-                              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' 
-                              : user.role === StaffRole.CONSULTANT || user.role === StaffRole.SPECIALIST
-                              ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40'
-                              : 'bg-blue-500/20 text-blue-300 border border-blue-500/40'
-                          }`}>
-                            {(
-                              user.nameEn ||
-                              user.nameAr ||
-                              user.displayName ||
-                              user.username ||
-                              user.email ||
-                              'U'
-                            ).slice(0, 2).toUpperCase()}
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-xs font-bold text-white">
-                                {lang === 'ar'
-                                  ? (user.nameAr || user.nameEn || user.displayName || user.username || user.email)
-                                  : (user.nameEn || user.nameAr || user.displayName || user.username || user.email)}
-                              </span>
-                              {user.isSuperAdmin && (
-                                <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[9px] font-bold">
-                                  ADMIN
-                                </span>
-                              )}
-                              {isCurrent && (
-                                <span className="px-1.5 py-0.2 rounded bg-teal-500/20 text-teal-300 border border-teal-500/40 text-[9px] font-bold">
-                                  {lang === 'ar' ? 'أنت' : 'You'}
-                                </span>
-                              )}
-                            </div>
-                            <span className="text-[10px] text-slate-400">{user.email}</span>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          {canUpdateUsers && (
-                            <button
-                              type="button"
-                              onClick={() => handleOpenEdit(user)}
-                              className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-teal-300 text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer border border-slate-700/60"
-                              title={lang === 'ar' ? 'تعديل البيانات والصلاحيات' : 'Edit profile & permissions'}
-                            >
-                              <Edit className="w-3.5 h-3.5 text-teal-400" />
-                              <span>{lang === 'ar' ? 'تعديل' : 'Edit'}</span>
-                            </button>
-                          )}
-
-                          {canUpdateUsers && (
-                            <button
-                              type="button"
-                              onClick={() => handleOpenChangePassword(user)}
-                              className="px-2.5 py-1 rounded-lg bg-[#0d2a2a] hover:bg-teal-900/60 text-teal-300 hover:text-teal-200 text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer border border-teal-800/40"
-                              title={lang === 'ar' ? 'تغيير كلمة السر' : 'Change Password'}
-                            >
-                              <KeyRound className="w-3.5 h-3.5 text-teal-400" />
-                              <span>{lang === 'ar' ? 'كلمة السر' : 'Password'}</span>
-                            </button>
-                          )}
-
-                          {!isCurrent && canDisableUsers && (
-                            <button
-                              type="button"
-                              disabled={togglingUid === user.uid}
-                              onClick={() => handleToggleUserStatus(user)}
-                              className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer border disabled:opacity-50 disabled:cursor-not-allowed ${
-                                user.isActive 
-                                  ? 'bg-amber-950/50 hover:bg-amber-900/70 text-amber-300 border-amber-800/50' 
-                                  : 'bg-emerald-950/50 hover:bg-emerald-900/70 text-emerald-300 border-emerald-800/50'
-                              }`}
-                              title={user.isActive ? (lang === 'ar' ? 'إيقاف الحساب مؤقتاً' : 'Deactivate') : (lang === 'ar' ? 'إعادة تفعيل الحساب' : 'Activate')}
-                            >
-                              {togglingUid === user.uid ? (
-                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              ) : user.isActive ? (
-                                <>
-                                  <UserX className="w-3.5 h-3.5 text-amber-400" />
-                                  <span>{lang === 'ar' ? 'تعطيل' : 'Disable'}</span>
-                                </>
-                              ) : (
-                                <>
-                                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                                  <span>{lang === 'ar' ? 'تفعيل' : 'Activate'}</span>
-                                </>
-                              )}
-                            </button>
-                          )}
-
-                          {!isCurrent && canDeleteUsers && (
-                            <button
-                              type="button"
-                              onClick={() => setUserToDelete(user)}
-                              className="px-2.5 py-1 rounded-lg bg-red-950/60 hover:bg-red-900/80 text-red-300 border border-red-800/60 text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer shadow-sm"
-                              title={lang === 'ar' ? 'حذف الحساب نهائياً' : 'Delete Account'}
-                            >
-                              <Trash2 className="w-3.5 h-3.5 text-red-400" />
-                              <span>{lang === 'ar' ? 'حذف' : 'Delete'}</span>
-                            </button>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Meta Tags & Status */}
-                      <div className="mt-3 pt-2.5 border-t border-slate-800/60 flex flex-wrap items-center justify-between gap-2 text-[10px] text-slate-400 font-mono">
-                        <div className="flex items-center gap-2">
-                          <span className="text-teal-400 font-bold">{user.role}</span>
-                          <span>•</span>
-                          <span>{user.badgeId}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
-                            user.isActive ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-800/40' : 'bg-red-950/80 text-red-300 border border-red-800/40'
-                          }`}>
-                            {user.isActive ? (lang === 'ar' ? 'نشط' : 'Active') : (lang === 'ar' ? 'موقوف' : 'Deactivated')}
+                      <div className="space-y-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-extrabold text-slate-950 dark:text-white truncate text-sm">
+                            {user.nameAr || user.nameEn || user.email}
                           </span>
-                        </div>
-                      </div>
-
-                      {/* Last Login & Session Timestamp */}
-                      <div className="mt-2 pt-2 border-t border-slate-800/40 flex items-center justify-between text-[10px] text-slate-400">
-                        <div className="flex items-center gap-1.5 text-slate-300 flex-wrap">
-                          <Clock className="w-3.5 h-3.5 text-teal-400 flex-shrink-0" />
-                          <span>{lang === 'ar' ? 'آخر تسجيل دخول:' : 'Last Login:'}</span>
-                          {user.lastLoginAt ? (
-                            <div className="flex items-center gap-1.5 font-mono">
-                              <span className="font-semibold text-teal-300 bg-teal-950/60 border border-teal-800/40 px-1.5 py-0.2 rounded text-[10px]">
-                                {formatRelativeTime(user.lastLoginAt, lang)}
-                              </span>
-                              <span className="text-[9px] text-slate-400" title={formatDetailedTimestamp(user.lastLoginAt, lang)}>
-                                ({formatDetailedTimestamp(user.lastLoginAt, lang)})
-                              </span>
-                            </div>
-                          ) : (
-                            <span className="font-mono text-slate-500 italic">
-                              {lang === 'ar' ? 'لم يسجل دخول بعد' : 'Never logged in'}
+                          <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-teal-600 dark:text-teal-300">
+                            {user.role}
+                          </span>
+                          {!isActive && (
+                            <span className="px-1.5 py-0.5 rounded-full text-[9px] font-extrabold bg-red-150 text-red-700 dark:bg-red-500/10 dark:text-red-400">
+                              {lang === 'ar' ? 'معطل' : 'INACTIVE'}
                             </span>
                           )}
                         </div>
+                        <p className="text-slate-500 dark:text-slate-400 font-mono text-[10px] truncate">
+                          {user.email || 'No email'} • Badge: {user.badgeId || '—'}
+                        </p>
                       </div>
 
-                      {/* Key Canonical Permissions Badges */}
-                      <div className="mt-2 flex flex-wrap gap-1">
-                        {user.permissions?.['patients.create'] && (
-                          <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[9px]">Admission</span>
-                        )}
-                        {user.permissions?.['clinicalNotes.create'] && (
-                          <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[9px]">Clinical Notes</span>
-                        )}
-                        {user.permissions?.['sbar.create'] && (
-                          <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[9px]">SBAR</span>
-                        )}
-                        {user.permissions?.['vitals.create'] && (
-                          <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[9px]">Vitals</span>
-                        )}
-                        {user.permissions?.['labs.create'] && (
-                          <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[9px]">Labs</span>
-                        )}
-                        {user.permissions?.['users.view'] && (
-                          <span className="px-1.5 py-0.5 rounded bg-amber-950/60 border border-amber-800/40 text-amber-300 text-[9px]">RBAC</span>
-                        )}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditForm(user)}
+                          className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 cursor-pointer transition-colors"
+                          title={lang === 'ar' ? 'تعديل الدور' : 'Edit Role'}
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setResetingUser(user);
+                            setNewPasswordInput('');
+                          }}
+                          className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 cursor-pointer transition-colors"
+                          title={lang === 'ar' ? 'تغيير كلمة المرور' : 'Reset Password'}
+                        >
+                          <Key className="w-3.5 h-3.5" />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleToggleStatus(user)}
+                          disabled={togglingUid === user.uid}
+                          className={`p-1.5 rounded-lg cursor-pointer transition-colors ${
+                            isActive 
+                              ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-600 dark:bg-emerald-950/20 dark:hover:bg-emerald-950/30' 
+                              : 'bg-red-50 hover:bg-red-100 text-red-600 dark:bg-red-950/20 dark:hover:bg-red-950/30'
+                          }`}
+                          title={isActive ? (lang === 'ar' ? 'تعطيل الحساب' : 'Deactivate') : (lang === 'ar' ? 'تفعيل الحساب' : 'Activate')}
+                        >
+                          {togglingUid === user.uid ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Power className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteUser(user)}
+                          className="p-1.5 rounded-lg bg-slate-100 hover:bg-red-100 dark:bg-slate-900 dark:hover:bg-red-950/40 text-slate-500 hover:text-red-500 dark:text-slate-400 cursor-pointer transition-colors"
+                          title={lang === 'ar' ? 'حذف الحساب نهائياً' : 'Delete Account'}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     </div>
                   );
                 })}
               </div>
-
             </div>
           )}
-          </>
-          )}
-
         </div>
-
-        {/* Footer */}
-        <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
-          <div className="flex items-center gap-1.5 font-mono text-[11px]">
-            <ShieldCheck className="w-3.5 h-3.5 text-teal-400" />
-            <span>Active Policy: Zero-Trust Clinical RBAC</span>
-          </div>
-          <button
-            onClick={onClose}
-            className="px-4 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300"
-          >
-            {lang === 'ar' ? 'إغلاق' : 'Close'}
-          </button>
-        </div>
-
       </div>
 
-      {/* Delete User Confirmation Modal */}
-      {userToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
-          <div className="w-full max-w-md bg-[#0a1224] border border-red-900/60 rounded-3xl p-6 text-slate-100 shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
-            <div className="flex items-start gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-red-950/80 border border-red-500/50 flex items-center justify-center text-red-400 shrink-0">
-                <AlertTriangle className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-white">
-                  {lang === 'ar'
-                    ? `تأكيد حذف حساب المستخدم: ${userToDelete.nameAr || userToDelete.nameEn || userToDelete.displayName || userToDelete.username || userToDelete.email}`
-                    : `Confirm Deleting User: ${userToDelete.nameEn || userToDelete.nameAr || userToDelete.displayName || userToDelete.username || userToDelete.email}`}
-                </h3>
-                <p className="text-xs text-slate-400 mt-1">
-                  {userToDelete.email} • {userToDelete.role}
-                </p>
-              </div>
-            </div>
-
-            <div className="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 text-xs text-slate-300 space-y-2">
-              <div className="flex items-center gap-2 text-amber-300 font-bold">
-                <ShieldCheck className="w-4 h-4 text-amber-400" />
-                <span>{lang === 'ar' ? 'حماية الأرشيف السريري وسجلات المرضى' : 'Clinical Record Integrity Guarantee'}</span>
-              </div>
-              <p className="text-[11px] leading-relaxed text-slate-300">
-                {lang === 'ar'
-                  ? 'عند حذف هذا الحساب، لن يتمكن الكادر من تسجيل الدخول مجدداً. ومراعاةً للمعايير الطبية الدولية (CBAHI / JCI)، تظل جميع السجلات الطبية والملاحظات والتقارير (SBAR) المكتوبة مسبقاً باسمه محفوظة بأسماء أصحابها التاريخية في ملفات المرضى.'
-                  : 'Upon deletion, this staff member will no longer be able to log in. In compliance with CBAHI/JCI regulations, all historic clinical notes, SBAR reports, and vital sign logs recorded by this user will remain fully preserved under their original name in patient files.'}
-              </p>
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-2">
+      {/* Add / Edit Staff Modal Form */}
+      {showAddEditForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md bg-[#0a1122] border border-slate-800 rounded-3xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="text-sm font-bold text-white">
+                {editingUser ? (lang === 'ar' ? 'تعديل صلاحيات المستخدم' : 'Edit Staff Role') : (lang === 'ar' ? 'إضافة مستخدم سريري جديد' : 'Add New Clinical Staff')}
+              </h3>
               <button
                 type="button"
-                onClick={() => setUserToDelete(null)}
-                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 cursor-pointer"
+                onClick={() => setShowAddEditForm(false)}
+                className="text-slate-400 hover:text-white text-xs font-semibold cursor-pointer"
               >
-                {lang === 'ar' ? 'إلغاء الأمر' : 'Cancel'}
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmDelete}
-                className="px-4 py-2 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-bold text-xs shadow-md shadow-red-950/50 flex items-center gap-1.5 cursor-pointer"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>{lang === 'ar' ? 'حذف الحساب نهائياً' : 'Delete Account'}</span>
+                {lang === 'ar' ? 'إغلاق' : 'Cancel'}
               </button>
             </div>
-          </div>
-        </div>
-      )}
 
-      {/* Change Password Modal */}
-      {userToChangePassword && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-md bg-[#0a1224] border border-teal-500/40 rounded-3xl p-6 text-slate-100 shadow-2xl space-y-4 animate-in zoom-in-95 duration-200">
-            <div className="flex items-center gap-3 border-b border-slate-800 pb-3">
-              <div className="w-9 h-9 rounded-xl bg-teal-500/10 border border-teal-500/30 flex items-center justify-center text-teal-400">
-                <KeyRound className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-white">
-                  {lang === 'ar' ? `تغيير كلمة السر للمستخدم:` : 'Change Password for User:'}
-                </h3>
-                <p className="text-xs text-teal-300 font-bold font-mono mt-0.5">
-                  {lang === 'ar'
-                    ? (userToChangePassword.nameAr || userToChangePassword.nameEn || userToChangePassword.displayName || userToChangePassword.username || userToChangePassword.email)
-                    : (userToChangePassword.nameEn || userToChangePassword.nameAr || userToChangePassword.displayName || userToChangePassword.username || userToChangePassword.email)}{' '}
-                  ({userToChangePassword.badgeId})
-                </p>
-              </div>
-            </div>
-
-            {changePassStatus && (
-              <div className={`p-3 rounded-xl text-xs flex items-center gap-2 ${
-                changePassStatus.type === 'success' 
-                  ? 'bg-teal-950/60 border border-teal-500/50 text-teal-200' 
-                  : 'bg-red-950/60 border border-red-500/50 text-red-200'
-              }`}>
-                {changePassStatus.type === 'success' ? (
-                  <CheckCircle2 className="w-4 h-4 text-teal-400" />
-                ) : (
-                  <XCircle className="w-4 h-4 text-red-400" />
-                )}
-                <span>{changePassStatus.text}</span>
+            {statusMsg && (
+              <div className={`p-3 rounded-xl text-xs font-semibold ${statusMsg.type === 'success' ? 'bg-emerald-950/40 text-emerald-300 border border-emerald-500/20' : 'bg-red-950/40 text-red-300 border border-red-500/20'}`}>
+                {statusMsg.text}
               </div>
             )}
 
-            <form onSubmit={handleSaveNewPassword} className="space-y-4">
+            <form onSubmit={handleSubmitForm} className="space-y-4">
               <div>
-                <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                  {lang === 'ar' ? 'كلمة المرور الجديدة (6 أحرف على الأقل) *' : 'New Password (min 6 chars) *'}
+                <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                  {lang === 'ar' ? 'الاسم الكامل المعتمد بالمستشفى *' : 'Full Professional Display Name *'}
                 </label>
-                <div className="relative">
-                  <input
-                    type={showNewPassword ? 'text' : 'password'}
-                    value={newPasswordInput}
-                    onChange={(e) => setNewPasswordInput(e.target.value)}
-                    required
-                    minLength={6}
-                    className="w-full bg-[#070d1a] border border-slate-700 focus:border-teal-400 rounded-xl pl-3 pr-9 py-2.5 text-xs text-white focus:outline-none font-mono"
-                    placeholder={lang === 'ar' ? 'أدخل كلمة المرور الجديدة' : 'Enter new password'}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowNewPassword(!showNewPassword)}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-teal-300 p-1 rounded-md transition-colors cursor-pointer"
-                  >
-                    {showNewPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                  </button>
-                </div>
+                <input
+                  type="text"
+                  value={nameInput}
+                  onChange={(e) => setNameInput(e.target.value)}
+                  required
+                  placeholder="e.g. Dr. Ahmed Al-Mansoori"
+                  className="w-full bg-slate-950 border border-slate-800 focus:border-teal-400 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none"
+                />
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                  {lang === 'ar' ? 'تأكيد كلمة المرور الجديدة *' : 'Confirm New Password *'}
+                <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                  {lang === 'ar' ? 'رقم الشارة أو اسم المستخدم (Username) *' : 'Badge ID / Username *'}
                 </label>
-                <div className="relative">
-                  <input
-                    type={showConfirmPassword ? 'text' : 'password'}
-                    value={confirmPasswordInput}
-                    onChange={(e) => setConfirmPasswordInput(e.target.value)}
-                    required
-                    minLength={6}
-                    className="w-full bg-[#070d1a] border border-slate-700 focus:border-teal-400 rounded-xl pl-3 pr-9 py-2.5 text-xs text-white focus:outline-none font-mono"
-                    placeholder={lang === 'ar' ? 'أعد إدخال كلمة المرور للتأكيد' : 'Confirm new password'}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-teal-300 p-1 rounded-md transition-colors cursor-pointer"
-                  >
-                    {showConfirmPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                  </button>
-                </div>
-                <p className="text-[10px] text-slate-400 mt-1">
-                  {lang === 'ar' ? 'يجب أن تتطابق كلمة المرور وتكون 6 أحرف أو أرقام على الأقل.' : 'Passwords must match and be at least 6 characters.'}
-                </p>
+                <input
+                  type="text"
+                  value={emailInput}
+                  onChange={(e) => setEmailInput(e.target.value)}
+                  disabled={!!editingUser}
+                  required
+                  placeholder="e.g. badge-777 or dr.ahmed"
+                  className="w-full bg-slate-950 border border-slate-800 focus:border-teal-400 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none disabled:opacity-50"
+                />
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setUserToChangePassword(null)}
-                  className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 cursor-pointer"
+              {!editingUser && (
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                    {lang === 'ar' ? 'كلمة المرور أو رمز PIN الأولي (أدنى حد 6 أحرف) *' : 'Initial Password or PIN Code (min 6) *'}
+                  </label>
+                  <input
+                    type="password"
+                    value={passwordInput}
+                    onChange={(e) => setPasswordInput(e.target.value)}
+                    required
+                    minLength={6}
+                    className="w-full bg-slate-950 border border-slate-800 focus:border-teal-400 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                  {lang === 'ar' ? 'الدور الوظيفي والصلاحيات الطبية (Role) *' : 'Clinical ICU Role / Role Permissions *'}
+                </label>
+                <select
+                  value={roleInput}
+                  onChange={(e) => setRoleInput(e.target.value as StaffRole)}
+                  className="w-full bg-slate-950 border border-slate-800 focus:border-teal-400 rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
                 >
-                  {lang === 'ar' ? 'إلغاء' : 'Cancel'}
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shadow-lg shadow-teal-500/20 transition-all flex items-center gap-1.5 cursor-pointer"
-                >
-                  <KeyRound className="w-3.5 h-3.5" />
-                  <span>{lang === 'ar' ? 'تحديث كلمة المرور' : 'Update Password'}</span>
-                </button>
+                  <option value={StaffRole.BEDSIDE_RN}>{lang === 'ar' ? 'ممرض مناوب (Bedside RN)' : 'Bedside RN'}</option>
+                  <option value={StaffRole.LEAD_RN}>{lang === 'ar' ? 'رئيس التمريض (Lead RN)' : 'Lead RN'}</option>
+                  <option value={StaffRole.RESIDENT}>{lang === 'ar' ? 'طبيب مقيم (Resident MD)' : 'Resident MD'}</option>
+                  <option value={StaffRole.SPECIALIST}>{lang === 'ar' ? 'أخصائي العناية (Specialist MD)' : 'Specialist MD'}</option>
+                  <option value={StaffRole.CONSULTANT}>{lang === 'ar' ? 'استشاري العناية (Consultant MD)' : 'Consultant MD'}</option>
+                  <option value={StaffRole.CLINICAL_PHARMACIST}>{lang === 'ar' ? 'صيدلي سريري' : 'Clinical Pharmacist'}</option>
+                  <option value={StaffRole.RESPIRATORY_THERAPIST}>{lang === 'ar' ? 'أخصائي تنفسية' : 'Respiratory Therapist'}</option>
+                  <option value={StaffRole.ADMIN}>{lang === 'ar' ? 'مدير النظام (ADMIN)' : 'System Admin'}</option>
+                  <option value={StaffRole.AUDITOR}>{lang === 'ar' ? 'مدقق تدقيق الجودة' : 'Quality Auditor'}</option>
+                </select>
               </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-2 bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {loading && <Loader2 className="w-4 h-4 animate-spin text-slate-950" />}
+                <span>{editingUser ? (lang === 'ar' ? 'حفظ التعديلات' : 'Update User') : (lang === 'ar' ? 'إنشاء حساب الموظف' : 'Create Staff Account')}</span>
+              </button>
             </form>
           </div>
         </div>
       )}
 
-      {/* Recovery Token Management Modal */}
-      {showRecoveryModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-md bg-[#0a1224] border border-teal-500/40 rounded-3xl p-6 text-slate-100 shadow-2xl space-y-4 animate-in zoom-in-95 duration-200">
+      {/* Reset Password Modal Form */}
+      {resettingUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="w-full max-w-sm bg-[#0a1122] border border-slate-800 rounded-3xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-teal-500/10 border border-teal-500/30 flex items-center justify-center text-teal-400">
-                  <KeyRound className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-white">
-                    {lang === 'ar' ? 'إدارة رمز استعادة المدير (Recovery Token)' : 'Admin Recovery Token Management'}
-                  </h3>
-                  <p className="text-xs text-slate-400">
-                    {lang === 'ar' ? 'توليد أو تعديل رمز التشفير السري الخاص باستعادة حساب المدير عند النسيان' : 'Set or update the encryption recovery code for admin'}
-                  </p>
-                </div>
-              </div>
+              <h3 className="text-sm font-bold text-white">
+                {lang === 'ar' ? 'إعادة تعيين كلمة المرور' : 'Reset Staff Password'}
+              </h3>
               <button
                 type="button"
-                onClick={() => setShowRecoveryModal(false)}
-                className="w-8 h-8 rounded-lg bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                onClick={() => setResetingUser(null)}
+                className="text-slate-400 hover:text-white text-xs font-semibold cursor-pointer"
               >
-                <X className="w-4 h-4" />
+                {lang === 'ar' ? 'إغلاق' : 'Cancel'}
               </button>
             </div>
 
-            {recoveryStatus && (
-              <div className={`p-3 rounded-xl text-xs flex items-center gap-2 ${
-                recoveryStatus.type === 'success' ? 'bg-teal-950/60 border border-teal-500/50 text-teal-200' : 'bg-red-950/60 border border-red-500/50 text-red-200'
-              }`}>
-                {recoveryStatus.type === 'success' ? <CheckCircle2 className="w-4 h-4 text-teal-400 shrink-0" /> : <XCircle className="w-4 h-4 text-red-400 shrink-0" />}
-                <span>{recoveryStatus.text}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleSaveRecoveryCode} className="space-y-4">
+            <form onSubmit={handleResetPassword} className="space-y-4">
               <div>
-                <label className="block text-right text-xs font-semibold text-slate-300 mb-1.5">
-                  {lang === 'ar' ? 'رمز التشفير / كود الاستعادة السري *' : 'Secret Recovery Code *'}
-                </label>
-                <input
-                  type="text"
-                  value={recoveryCodeInput}
-                  onChange={(e) => setRecoveryCodeInput(e.target.value)}
-                  required
-                  minLength={6}
-                  autoComplete="off"
-                  className="w-full bg-[#070d1a] border border-slate-700 focus:border-teal-400 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none font-mono tracking-wider"
-                  placeholder=""
-                />
-                <p className="text-[10px] text-slate-400 mt-1">
-                  {lang === 'ar' ? 'احتفظ بهذا الرمز في مكان آمن. سيحتاجه المدير في شاشة تسجيل الدخول عبر رابط "نسيت كلمة المرور؟".' : 'Keep this token secure. Admin will need it on the login screen if password is forgotten.'}
+                <p className="text-xs text-slate-400 leading-normal">
+                  {lang === 'ar' 
+                    ? `إدخال كلمة المرور أو الرمز الجديد للمستخدم: ${resettingUser.nameAr || resettingUser.nameEn}`
+                    : `Enter the new password or PIN code for: ${resettingUser.nameEn || resettingUser.nameAr}`}
                 </p>
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setShowRecoveryModal(false)}
-                  className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 cursor-pointer"
-                >
-                  {lang === 'ar' ? 'إغلاق' : 'Cancel'}
-                </button>
-                <button
-                  type="submit"
-                  disabled={recoveryLoading}
-                  className="px-4 py-2 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shadow-lg shadow-teal-500/20 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                >
-                  {recoveryLoading ? (
-                    <div className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <>
-                      <KeyRound className="w-3.5 h-3.5" />
-                      <span>{lang === 'ar' ? 'حفظ رمز الاستعادة' : 'Save Recovery Token'}</span>
-                    </>
-                  )}
-                </button>
+              <div>
+                <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                  {lang === 'ar' ? 'الرمز الجديد (أدنى حد 6 أحرف) *' : 'New Password / PIN Code (min 6) *'}
+                </label>
+                <input
+                  type="password"
+                  value={newPasswordInput}
+                  onChange={(e) => setNewPasswordInput(e.target.value)}
+                  required
+                  minLength={6}
+                  className="w-full bg-slate-950 border border-slate-800 focus:border-teal-400 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none"
+                />
               </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-2 bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {loading && <Loader2 className="w-4 h-4 animate-spin text-slate-950" />}
+                <span>{lang === 'ar' ? 'تأكيد الحفظ وإعادة التعيين' : 'Save & Reset PIN'}</span>
+              </button>
             </form>
           </div>
         </div>

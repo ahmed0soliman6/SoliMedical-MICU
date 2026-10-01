@@ -1,5 +1,12 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { API_BASE_URL } from '../config/api.ts';
+import React, { 
+  createContext, 
+  useContext, 
+  useState, 
+  useEffect, 
+  useCallback, 
+  useMemo, 
+  ReactNode 
+} from 'react';
 import { 
   IcuUser, 
   StaffRole, 
@@ -36,7 +43,7 @@ import {
 } from 'firebase/auth';
 import { collection, onSnapshot, doc, getDoc, getDocs, query, where, Unsubscribe } from 'firebase/firestore';
 import { db } from '../db/icuSyncDb.ts';
-import { recordAuditLog } from './auditService.ts';
+import { recordAuditLog } from './operations.ts';
 
 interface AuthContextType {
   currentUser: IcuUser | null;

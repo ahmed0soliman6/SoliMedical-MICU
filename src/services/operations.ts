@@ -1,890 +1,361 @@
-import { 
-  runTransaction, 
-  doc, 
-  serverTimestamp, 
-  collection, 
-  query, 
-  where, 
-  getDocs,
-  limit 
-} from 'firebase/firestore';
 import { firestore } from './firebase.ts';
 import { 
-  COLLECTIONS, 
-  PatientContract, 
-  BedContract, 
-  TransferContract, 
-  OperationContract,
-  EpisodeContract 
-} from '../types/contracts.ts';
-import { db, ensureBedPatientSync } from '../db/icuSyncDb.ts';
-import { BedStatus, BedNumber, PatientDossier } from '../types/schema.ts';
-import { normalizeArabicName, extractLast4, computeSha256Hash } from './patientSearchUtils.ts';
-import { toEnglishDigits } from './numberUtils.ts';
+  collection, 
+  doc, 
+  setDoc, 
+  getDocs, 
+  query, 
+  orderBy, 
+  limit, 
+  startAfter, 
+  DocumentSnapshot 
+} from 'firebase/firestore';
+import { db } from '../db/icuSyncDb.ts';
 
-const generateId = () => crypto.randomUUID();
+export type AuditActionType =
+  | 'USER_LOGIN'
+  | 'USER_LOGOUT'
+  | 'USER_CREATED'
+  | 'USER_UPDATED'
+  | 'USER_DELETED'
+  | 'PASSWORD_RESET'
+  | 'ROLE_CHANGED'
+  | 'STATUS_CHANGED'
+  | 'PERMISSIONS_CHANGED'
+  | 'RECOVERY_CODE_UPDATED'
+  | 'SETTINGS_UPDATED'
+  | 'NOTE_CREATED'
+  | 'ADDENDUM_ADDED'
+  | 'SYSTEM_EVENT';
 
-export interface AdmissionPayload {
-  existingPatientId?: string; // If readmitting an existing patient
-  mrn: string;
-  nationalId?: string;
-  fullNameAr: string;
-  fullNameEn?: string;
-  age?: number;
-  gender?: string;
-  bloodType?: string;
-  weightKg?: number;
-  heightCm?: number;
-  codeStatus?: string;
-  acuityLevel?: string;
-  primaryDiagnosisAr?: string;
-  primaryDiagnosisEn?: string;
-  allergies?: string[];
-  chronicDiseases?: string[];
-  history?: string;
-  presentingComplaint?: string;
-}
-
-export interface PatientCandidateMatch {
-  patientId: string;
-  mrn: string;
-  fullNameAr: string;
-  fullNameEn?: string;
-  nationalIdLast4: string;
-  gender?: string;
-  age?: number;
-  bloodType?: string;
-  lastAdmissionDate?: string | number;
-  lastDiagnosis?: string;
-  allergies?: string[];
-  chronicDiseases?: string[];
-  matchType: 'MRN_EXACT' | 'NAME_AND_NATIONAL_ID_EXACT' | 'NAME_PARTIAL';
+export interface AuditLogEntry {
+  id: string;
+  timestamp: string; // ISO 8601 string
+  action: AuditActionType;
+  actorUid: string;
+  actorName: string;
+  actorRole?: string;
+  actorEmail?: string;
+  targetUid?: string;
+  targetName?: string;
+  targetEmail?: string;
+  targetRole?: string;
+  details?: string;
+  status: 'SUCCESS' | 'FAILURE' | 'WARNING';
 }
 
 /**
- * Searches for existing registered patients by MRN or (Normalized Name + Last 4 digits of National ID).
- * Never performs destructive or automatic merges; returns candidates for clinician confirmation.
+ * Normalizes any raw log document (including legacy database schemas)
+ * into a complete, clean, typed AuditLogEntry.
  */
-export async function searchExistingPatients(
-  inputName: string,
-  inputNationalId: string,
-  inputMrn?: string
-): Promise<PatientCandidateMatch[]> {
-  const matches: PatientCandidateMatch[] = [];
-  const cleanMrn = inputMrn ? toEnglishDigits(inputMrn).trim() : '';
-  const last4 = extractLast4(inputNationalId);
-  const normalizedName = normalizeArabicName(inputName);
+export function normalizeAuditLog(raw: any, docId?: string): AuditLogEntry {
+  const id = raw?.id || docId || `audit_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+  const timestamp = raw?.timestamp || raw?.createdAt || new Date().toISOString();
 
-  const queryAndAdd = async (collName: string, qField: string, qValue: any, matchType: 'MRN_EXACT' | 'NAME_AND_NATIONAL_ID_EXACT', compoundCheck?: { field: string; value: any }) => {
-    try {
-      let q;
-      if (compoundCheck) {
-        q = query(
-          collection(firestore, collName),
-          where(qField, '==', qValue),
-          where(compoundCheck.field, '==', compoundCheck.value),
-          limit(5)
-        );
-      } else {
-        q = query(
-          collection(firestore, collName),
-          where(qField, '==', qValue),
-          limit(5)
-        );
-      }
-      const snap = await getDocs(q);
-      snap.forEach((d) => {
-        const data = d.data() as any;
-        const pId = data.patientId || data.id || d.id;
-        if (!matches.some((m) => m.patientId === pId)) {
-          matches.push({
-            patientId: pId,
-            mrn: data.mrn,
-            fullNameAr: data.fullNameAr || data.fullName,
-            fullNameEn: data.fullNameEn,
-            nationalIdLast4: data.nationalIdLast4 || '',
-            gender: data.gender,
-            bloodType: data.bloodGroup || data.bloodType,
-            allergies: data.allergiesSummary || (data.allergies && Array.isArray(data.allergies) ? data.allergies.map((a: any) => typeof a === 'string' ? a : a.allergen) : []),
-            chronicDiseases: data.chronicConditionsSummary || (data.chronicDiseases && (typeof data.chronicDiseases === 'string' ? [data.chronicDiseases] : data.chronicDiseases)) || [],
-            matchType,
-          });
-        }
-      });
-    } catch (e) {
-      console.warn(`Firestore search on ${collName} failed:`, e);
+  // 1. Resolve Action
+  let action: AuditActionType = raw?.action || raw?.eventType || 'USER_LOGIN';
+  if (action === ('NOTE_CREATED' as any)) action = 'SETTINGS_UPDATED';
+
+  // 2. Resolve Actor
+  const actorUid = raw?.actorUid || raw?.performedBy?.staffId || raw?.userId || raw?.authorId || raw?.uid || '';
+  let actorName = raw?.actorName || raw?.performedBy?.name || raw?.userName || raw?.authorName || raw?.staffName || '';
+  if (!actorName && actorUid) {
+    actorName = `Staff (${actorUid.slice(0, 8)})`;
+  } else if (!actorName) {
+    actorName = 'مستخدم المنظومة / ICU Staff';
+  }
+
+  const actorRole = raw?.actorRole || raw?.performedBy?.role || raw?.userRole || raw?.role || undefined;
+  const actorEmail = raw?.actorEmail || raw?.email || undefined;
+
+  // 3. Resolve Target
+  const targetUid = raw?.targetUid || raw?.patientId || undefined;
+  const targetName = raw?.targetName || raw?.patientName || undefined;
+  const targetEmail = raw?.targetEmail || undefined;
+  const targetRole = raw?.targetRole || undefined;
+
+  // 4. Resolve Details
+  let details = raw?.details || raw?.description || raw?.message || '';
+  if (!details) {
+    if (action === 'USER_LOGIN') {
+      details = `تسجيل دخول ناجح للمستخدم ${actorName}`;
+    } else if (action === 'USER_LOGOUT') {
+      details = `تسجيل خروج للمستخدم ${actorName}`;
+    } else {
+      details = `تم تنفيذ عملية ${action} بنجاح في النظام`;
     }
+  }
+
+  const status = raw?.status || 'SUCCESS';
+
+  return {
+    id,
+    timestamp,
+    action,
+    actorUid,
+    actorName,
+    actorRole,
+    actorEmail,
+    targetUid,
+    targetName,
+    targetEmail,
+    targetRole,
+    details,
+    status,
+  };
+}
+
+/**
+ * Records a new audit log entry with minimal payload (~300 bytes).
+ * Asynchronously writes to Firestore and local IndexedDB cache.
+ */
+export async function recordAuditLog(
+  entry: Omit<AuditLogEntry, 'id' | 'timestamp'>
+): Promise<string> {
+  const timestamp = new Date().toISOString();
+  const id = `audit_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+
+  const logData: AuditLogEntry = {
+    ...entry,
+    id,
+    timestamp,
   };
 
-  // 1. Exact MRN Search (Highest Priority)
-  if (cleanMrn) {
-    await queryAndAdd(COLLECTIONS.PATIENTS, 'mrn', cleanMrn, 'MRN_EXACT');
-    await queryAndAdd('archivedPatients', 'mrn', cleanMrn, 'MRN_EXACT');
-  }
-
-  // 2. Strict Compound Match (Normalized Full Name + Last 4 digits ID)
-  if (normalizedName && last4 && last4.length === 4) {
-    await queryAndAdd(COLLECTIONS.PATIENTS, 'normalizedFullName', normalizedName, 'NAME_AND_NATIONAL_ID_EXACT', { field: 'nationalIdLast4', value: last4 });
-    await queryAndAdd('archivedPatients', 'normalizedFullName', normalizedName, 'NAME_AND_NATIONAL_ID_EXACT', { field: 'nationalIdLast4', value: last4 });
-  }
-
-  // 3. Fallback search on local Dexie cache if online search returned no hits or was offline
-  if (matches.length === 0) {
-    try {
-      const localPatients = await db.patients.toArray();
-      for (const p of localPatients) {
-        const pNorm = normalizeArabicName(p.fullNameAr || p.fullNameEn);
-        const pLast4 = extractLast4(p.nationalId);
-        const pMrn = toEnglishDigits(p.mrn).trim();
-
-        if (cleanMrn && pMrn === cleanMrn) {
-          matches.push({
-            patientId: p.id,
-            mrn: p.mrn,
-            fullNameAr: p.fullNameAr || p.fullNameEn,
-            fullNameEn: p.fullNameEn,
-            nationalIdLast4: pLast4,
-            gender: p.gender,
-            age: p.age,
-            bloodType: p.bloodType,
-            lastAdmissionDate: p.admissionDate,
-            lastDiagnosis: p.primaryDiagnosisAr || p.primaryDiagnosisEn,
-            allergies: p.allergies?.map((a) => a.allergen),
-            matchType: 'MRN_EXACT',
-          });
-        } else if (normalizedName && last4 && pNorm === normalizedName && pLast4 === last4) {
-          matches.push({
-            patientId: p.id,
-            mrn: p.mrn,
-            fullNameAr: p.fullNameAr || p.fullNameEn,
-            fullNameEn: p.fullNameEn,
-            nationalIdLast4: pLast4,
-            gender: p.gender,
-            age: p.age,
-            bloodType: p.bloodType,
-            lastAdmissionDate: p.admissionDate,
-            lastDiagnosis: p.primaryDiagnosisAr || p.primaryDiagnosisEn,
-            allergies: p.allergies?.map((a) => a.allergen),
-            matchType: 'NAME_AND_NATIONAL_ID_EXACT',
-          });
-        }
-      }
-    } catch (err) {
-      console.warn('Local Dexie candidate search warning:', err);
-    }
-  }
-
-  return matches;
-}
-
-/**
- * ATOMIC ADMISSION TRANSACTION
- * Supports brand new admissions and readmissions of existing patients.
- * Syncs patients.currentBedId and beds.activePatientId atomically.
- */
-export async function executeAdmission(
-  payload: AdmissionPayload,
-  bedId: string,
-  doctorId: string,
-  doctorName: string,
-  unitId: string
-): Promise<{ patientId: string; episodeId: string; transferId: string }> {
-  const patientId = payload.existingPatientId || generateId();
-  const episodeId = generateId();
-  const operationId = generateId();
-  const transferId = generateId();
-
-  const isReadmission = !!payload.existingPatientId;
-  const nowMs = Date.now();
-  const last4 = extractLast4(payload.nationalId);
-  const normalizedName = normalizeArabicName(payload.fullNameAr || payload.fullNameEn);
-  const idHash = payload.nationalId ? await computeSha256Hash(payload.nationalId) : '';
-
-  await runTransaction(firestore, async (transaction) => {
-    const bedRef = doc(firestore, COLLECTIONS.BEDS, bedId);
-    const bedSnap = await transaction.get(bedRef);
-
-    if (!bedSnap.exists()) {
-      throw new Error('السرير غير مسجل في النظام.');
-    }
-
-    const bedData = bedSnap.data() as BedContract;
-    if (bedData.activePatientId) {
-      throw new Error('السرير المختار مشغول حالياً بمريض آخر.');
-    }
-
-    const patientRef = doc(firestore, COLLECTIONS.PATIENTS, patientId);
-    const episodeRef = doc(firestore, COLLECTIONS.EPISODES, episodeId);
-    const operationRef = doc(firestore, COLLECTIONS.OPERATIONS, operationId);
-    const transferRef = doc(firestore, COLLECTIONS.TRANSFERS, transferId);
-
-    const patientDoc: PatientContract = {
-      patientId,
-      unitId,
-      mrn: toEnglishDigits(payload.mrn).trim(),
-      fullName: payload.fullNameAr || payload.fullNameEn || '',
-      fullNameAr: payload.fullNameAr,
-      fullNameEn: payload.fullNameEn || payload.fullNameAr,
-      normalizedFullName: normalizedName,
-      nationalIdLast4: last4,
-      nationalIdHash: idHash,
-      dateOfBirth: '',
-      gender: (payload.gender as any) || 'OTHER',
-      bloodGroup: payload.bloodType,
-      idealBodyWeightKg: payload.weightKg,
-      allergiesSummary: payload.allergies || [],
-      chronicConditionsSummary: payload.chronicDiseases || [],
-      currentStatus: 'ACTIVE_ICU',
-      status: 'ACTIVE_ICU',
-      currentBedId: bedId,
-      currentEpisodeId: episodeId,
-      codeStatus: payload.codeStatus || 'FULL_CODE',
-      acuityLevel: payload.acuityLevel || 'CRITICAL_STAT',
-      archiveStatus: 'HOT',
-      archiveDate: null,
-      archiveStoragePath: null,
-      archiveId: null,
-      createdAt: isReadmission ? (undefined as any) : (serverTimestamp() as unknown as number),
-      createdBy: doctorId,
-      createdByUid: doctorId,
-      updatedAt: serverTimestamp() as unknown as number,
-      updatedByUid: doctorId,
-    };
-
-    const newEpisode: EpisodeContract = {
-      episodeId,
-      patientId,
-      bedId,
-      unitId,
-      admissionDate: nowMs,
-      dischargeDate: null,
-      admittingDoctorUid: doctorId,
-      admittingDoctorName: doctorName || doctorId,
-      primaryDiagnosis: payload.primaryDiagnosisEn || payload.primaryDiagnosisAr || '',
-      primaryDiagnosisAr: payload.primaryDiagnosisAr,
-      primaryDiagnosisEn: payload.primaryDiagnosisEn,
-      acuityLevel: payload.acuityLevel,
-      codeStatus: payload.codeStatus,
-      status: 'ACTIVE',
-      createdAt: nowMs,
-      updatedAt: nowMs,
-    };
-
-    const newOperation: OperationContract = {
-      operationId,
-      operationType: isReadmission ? 'READMISSION' : 'ADMISSION',
-      initiatedBy: doctorId,
-      initiatedAt: serverTimestamp() as unknown as number,
-    };
-
-    const newTransfer: TransferContract = {
-      transferId,
-      unitId,
-      patientId,
-      transferType: isReadmission ? 'READMISSION' : 'ADMISSION',
-      operationId,
-      fromBedId: null,
-      toBedId: bedId,
-      transferredBy: doctorName || doctorId,
-      transferredAt: serverTimestamp() as unknown as number,
-      reason: isReadmission ? 'Patient Readmission' : 'Initial Direct Admission',
-    };
-
-    if (isReadmission) {
-      transaction.set(patientRef, patientDoc, { merge: true });
-      const archivedRef = doc(firestore, 'archivedPatients', patientId);
-      transaction.delete(archivedRef);
-    } else {
-      transaction.set(patientRef, patientDoc);
-    }
-
-    transaction.set(episodeRef, newEpisode);
-    transaction.set(operationRef, newOperation);
-    transaction.set(transferRef, newTransfer);
-
-    transaction.update(bedRef, {
-      activePatientId: patientId,
-      currentPatientId: patientId,
-      status: 'OCCUPIED',
-      lastTransferId: transferId,
-    });
-  });
-
-  return { patientId, episodeId, transferId };
-}
-
-/**
- * ATOMIC TRANSFER TRANSACTION
- * Moves patient from one bed to another empty bed atomically.
- * Updates both fromBed, toBed, and patients.currentBedId in a single transaction.
- */
-export async function executeTransfer(
-  patientId: string,
-  fromBedId: string,
-  toBedId: string,
-  doctorId: string,
-  unitId: string,
-  reason: string,
-  doctorName?: string
-): Promise<string> {
-  if (typeof navigator !== 'undefined' && !navigator.onLine) {
-    throw new Error('لا يمكن تنفيذ عملية النقل أثناء انقطاع الاتصال (Offline). يرجى التأكد من اتصال الإنترنت.');
-  }
-
-  const transferResult = await runTransaction(firestore, async (transaction) => {
-    const fromBedRef = doc(firestore, COLLECTIONS.BEDS, fromBedId);
-    const toBedRef = doc(firestore, COLLECTIONS.BEDS, toBedId);
-    const patientRef = doc(firestore, COLLECTIONS.PATIENTS, patientId);
-
-    const fromBedSnap = await transaction.get(fromBedRef);
-    const toBedSnap = await transaction.get(toBedRef);
-    const patientSnap = await transaction.get(patientRef);
-
-    if (!fromBedSnap.exists() || !toBedSnap.exists() || !patientSnap.exists()) {
-      throw new Error('بيانات السرير أو المريض غير موجودة في النظام.');
-    }
-
-    const fromBed = fromBedSnap.data() as any;
-    const toBed = toBedSnap.data() as any;
-    const patientData = patientSnap.data() as any;
-
-    const sourcePatientId = fromBed.activePatientId || fromBed.currentPatientId;
-    if (sourcePatientId !== patientId) {
-      throw new Error('المريض غير متواجد بالسرير المصدر.');
-    }
-    const destPatientId = toBed.activePatientId || toBed.currentPatientId;
-    if (destPatientId) {
-      throw new Error('السرير المستهدف مشغول بالفعل.');
-    }
-    if (toBed.status === 'UNAVAILABLE') {
-      throw new Error('السرير المستهدف غير متاح للخدمة حالياً.');
-    }
-
-    const isPatientIsolated = !!(
-      patientData.isolationPrecautions &&
-      patientData.isolationPrecautions.length > 0 &&
-      !patientData.isolationPrecautions.some((p: string) => 
-        p.toLowerCase().includes('standard') || 
-        p === 'None' || 
-        p === 'لا يوجد عزل' || 
-        p === 'NONE'
-      )
-    );
-
-    const isolationPayload = isPatientIsolated
-      ? {
-          isIsolated: true,
-          type: patientData.isolationPrecautions[0] || 'Airborne',
-          reason: 'Clinical Isolation',
-          startDate: new Date().toISOString(),
-          precautions: patientData.isolationPrecautions,
-        }
-      : { isIsolated: false, precautions: [] };
-
-    const operationId = generateId();
-    const transferId = generateId();
-
-    const operationRef = doc(firestore, COLLECTIONS.OPERATIONS, operationId);
-    const transferRef = doc(firestore, COLLECTIONS.TRANSFERS, transferId);
-
-    const newOperation = {
-      operationId,
-      operationType: 'TRANSFER',
-      patientId,
-      fromBedId,
-      toBedId,
-      doctorId,
-      doctorName: doctorName || doctorId,
-      createdAt: Date.now(),
-      initiatedBy: doctorId,
-      initiatedAt: serverTimestamp(),
-      reason,
-    };
-
-    const newTransfer: TransferContract = {
-      transferId,
-      unitId,
-      patientId,
-      transferType: 'TRANSFER',
-      operationId,
-      fromBedId,
-      toBedId,
-      transferredBy: doctorName || doctorId,
-      transferredAt: serverTimestamp() as unknown as number,
-      reason,
-    };
-
-    transaction.set(operationRef, newOperation);
-    transaction.set(transferRef, newTransfer);
-
-    // 1. Release source bed completely in Firestore
-    transaction.update(fromBedRef, {
-      activePatientId: null,
-      currentPatientId: null,
-      status: 'VACANT',
-      isolation: { isIsolated: false, precautions: [] },
-      updatedAt: Date.now(),
-    });
-
-    // 2. Assign target bed in Firestore
-    transaction.update(toBedRef, {
-      activePatientId: patientId,
-      currentPatientId: patientId,
-      status: isPatientIsolated ? 'ISOLATION' : 'OCCUPIED',
-      isolation: isPatientIsolated ? isolationPayload : { isIsolated: false, precautions: [] },
-      lastTransferId: transferId,
-      updatedAt: Date.now(),
-    });
-
-    // 3. Update patient's current bed in Firestore
-    transaction.update(patientRef, {
-      currentBedId: toBedId,
-      isolationPrecautions: isPatientIsolated ? (isolationPayload.precautions && isolationPayload.precautions.length > 0 ? isolationPayload.precautions : ['Contact Precautions']) : [],
-      updatedAt: serverTimestamp(),
-      updatedByUid: doctorId,
-    });
-
-    return transferId;
-  });
-
-  // Local cache update
   try {
-    const pat = await db.patients.get(patientId);
-    const isIsolated = !!(
-      pat?.isolationPrecautions &&
-      pat.isolationPrecautions.length > 0 &&
-      !pat.isolationPrecautions.some((p: string) => 
-        p.toLowerCase().includes('standard') || 
-        p === 'None' || 
-        p === 'لا يوجد عزل' || 
-        p === 'NONE'
-      )
-    );
-    const isolationPayload = isIsolated
-      ? {
-          isIsolated: true,
-          type: pat?.isolationPrecautions?.[0] || 'Airborne',
-          reason: 'Clinical Isolation',
-          startDate: new Date().toISOString(),
-          precautions: pat?.isolationPrecautions || [],
-        }
-      : { isIsolated: false, precautions: [] };
+    // 1. Save to local Dexie for instant UI response and offline storage
+    await db.auditLogs.put({
+      ...logData,
+      id: logData.id,
+      timestamp: logData.timestamp,
+      eventType: 'NOTE_CREATED' as any,
+      performedBy: {
+        staffId: logData.actorUid || 'system',
+        name: logData.actorName || 'System',
+        role: (logData.actorRole as any) || 'ADMIN',
+      },
+      description: logData.details || `${logData.action} executed`,
+      immutableHash: id,
+    } as any).catch(() => {});
 
-    await db.beds.update(fromBedId, {
-      status: BedStatus.VACANT,
-      currentPatientId: null,
-      activePatientId: null,
-      isolation: { isIsolated: false, precautions: [] },
-    });
-    await db.beds.update(toBedId, {
-      status: isIsolated ? BedStatus.ISOLATION : BedStatus.OCCUPIED,
-      currentPatientId: patientId,
-      activePatientId: patientId,
-      isolation: isIsolated ? isolationPayload : { isIsolated: false, precautions: [] },
-    });
-    await db.patients.update(patientId, {
-      currentBedId: toBedId as BedNumber,
-      isolationPrecautions: isIsolated ? (pat?.isolationPrecautions || []) : [],
-      updatedAt: new Date().toISOString(),
-    });
-    await ensureBedPatientSync();
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new Event('icu-data-updated'));
-    }
+    // 2. Asynchronously sync to Cloud Firestore
+    const logDocRef = doc(firestore, 'auditLogs', id);
+    await setDoc(logDocRef, logData);
   } catch (err) {
-    console.warn('Local Dexie update following transfer:', err);
+    console.warn('[AuditService] Non-fatal log recording notice:', err);
   }
 
-  return transferResult;
+  return id;
+}
+
+export interface FetchAuditLogsResult {
+  logs: AuditLogEntry[];
+  lastVisibleDoc: DocumentSnapshot | null;
+  hasMore: boolean;
+  source: 'cloud' | 'cache';
 }
 
 /**
- * ATOMIC BED SWAP TRANSACTION
- * Swaps two occupied beds atomically in a single Firestore Transaction.
- * Updates bedA, bedB, patientA, patientB together.
+ * Fetches audit logs strictly with pagination (default 25 records)
+ * to ensure absolute minimal Firestore read operations.
  */
-export async function executeBedSwap(
-  bedAId: string,
-  bedBId: string,
-  doctorId: string,
-  doctorName: string,
-  unitId: string,
-  reason: string
-): Promise<string> {
-  if (typeof navigator !== 'undefined' && !navigator.onLine) {
-    throw new Error('لا يمكن تنفيذ عملية تبديل الأسرة أثناء انقطاع الاتصال (Offline). يرجى التأكد من اتصال الإنترنت.');
-  }
-
-  if (bedAId === bedBId) {
-    throw new Error('لا يمكن تبديل السرير مع نفسه.');
-  }
-
-  const swapResult = await runTransaction(firestore, async (transaction) => {
-    const bedARef = doc(firestore, COLLECTIONS.BEDS, bedAId);
-    const bedBRef = doc(firestore, COLLECTIONS.BEDS, bedBId);
-
-    const bedASnap = await transaction.get(bedARef);
-    const bedBSnap = await transaction.get(bedBRef);
-
-    if (!bedASnap.exists() || !bedBSnap.exists()) {
-      throw new Error('أحد السريرين غير موجود.');
-    }
-
-    const bedAData = bedASnap.data() as any;
-    const bedBData = bedBSnap.data() as any;
-
-    const patientAId = bedAData.activePatientId || bedAData.currentPatientId;
-    const patientBId = bedBData.activePatientId || bedBData.currentPatientId;
-
-    if (!patientAId || !patientBId) {
-      throw new Error('كلا السريرين يجب أن يكونا مشغولين لتنفيذ عملية التبديل.');
-    }
-
-    if (bedAData.status === 'UNAVAILABLE' || bedBData.status === 'UNAVAILABLE') {
-      throw new Error('أحد السريرين غير متاح للخدمة.');
-    }
-
-    const patientARef = doc(firestore, COLLECTIONS.PATIENTS, patientAId);
-    const patientBRef = doc(firestore, COLLECTIONS.PATIENTS, patientBId);
-
-    const patientASnap = await transaction.get(patientARef);
-    const patientBSnap = await transaction.get(patientBRef);
-
-    const patientAData = patientASnap.exists() ? (patientASnap.data() as any) : {};
-    const patientBData = patientBSnap.exists() ? (patientBSnap.data() as any) : {};
-
-    const isPatientAIsolated = !!(
-      patientAData.isolationPrecautions &&
-      patientAData.isolationPrecautions.length > 0 &&
-      !patientAData.isolationPrecautions.some((p: string) => 
-        p.toLowerCase().includes('standard') || 
-        p === 'None' || 
-        p === 'لا يوجد عزل' || 
-        p === 'NONE'
-      )
-    );
-    const isPatientBIsolated = !!(
-      patientBData.isolationPrecautions &&
-      patientBData.isolationPrecautions.length > 0 &&
-      !patientBData.isolationPrecautions.some((p: string) => 
-        p.toLowerCase().includes('standard') || 
-        p === 'None' || 
-        p === 'لا يوجد عزل' || 
-        p === 'NONE'
-      )
-    );
-
-    const isolationA = isPatientAIsolated
-      ? {
-          isIsolated: true,
-          type: patientAData.isolationPrecautions[0] || 'Airborne',
-          reason: 'Clinical Isolation',
-          startDate: new Date().toISOString(),
-          precautions: patientAData.isolationPrecautions,
-        }
-      : { isIsolated: false, precautions: [] };
-
-    const isolationB = isPatientBIsolated
-      ? {
-          isIsolated: true,
-          type: patientBData.isolationPrecautions[0] || 'Airborne',
-          reason: 'Clinical Isolation',
-          startDate: new Date().toISOString(),
-          precautions: patientBData.isolationPrecautions,
-        }
-      : { isIsolated: false, precautions: [] };
-
-    const operationId = generateId();
-    const transferAId = generateId();
-    const transferBId = generateId();
-
-    const operationRef = doc(firestore, COLLECTIONS.OPERATIONS, operationId);
-    const transferARef = doc(firestore, COLLECTIONS.TRANSFERS, transferAId);
-    const transferBRef = doc(firestore, COLLECTIONS.TRANSFERS, transferBId);
-
-    const newOperation = {
-      operationId,
-      operationType: 'BED_SWAP',
-      bedAId,
-      bedBId,
-      patientAId,
-      patientBId,
-      reason,
-      performedBy: doctorName || doctorId,
-      doctorId,
-      doctorName,
-      createdAt: Date.now(),
-      initiatedBy: doctorId,
-      initiatedAt: serverTimestamp(),
-    };
-
-    const transferA = {
-      transferId: transferAId,
-      unitId,
-      patientId: patientAId,
-      transferType: 'BED_SWAP',
-      operationId,
-      fromBedId: bedAId,
-      toBedId: bedBId,
-      transferredBy: doctorName || doctorId,
-      transferredAt: serverTimestamp(),
-      reason,
-    };
-
-    const transferB = {
-      transferId: transferBId,
-      unitId,
-      patientId: patientBId,
-      transferType: 'BED_SWAP',
-      operationId,
-      fromBedId: bedBId,
-      toBedId: bedAId,
-      transferredBy: doctorName || doctorId,
-      transferredAt: serverTimestamp(),
-      reason,
-    };
-
-    transaction.set(operationRef, newOperation);
-    transaction.set(transferARef, transferA);
-    transaction.set(transferBRef, transferB);
-
-    // Bed A now receives Patient B -> takes on Patient B's isolation status
-    transaction.update(bedARef, {
-      activePatientId: patientBId,
-      currentPatientId: patientBId,
-      status: isPatientBIsolated ? 'ISOLATION' : 'OCCUPIED',
-      isolation: isPatientBIsolated ? isolationB : { isIsolated: false, precautions: [] },
-      lastTransferId: transferBId,
-      updatedAt: Date.now(),
-    });
-
-    // Bed B now receives Patient A -> takes on Patient A's isolation status
-    transaction.update(bedBRef, {
-      activePatientId: patientAId,
-      currentPatientId: patientAId,
-      status: isPatientAIsolated ? 'ISOLATION' : 'OCCUPIED',
-      isolation: isPatientAIsolated ? isolationA : { isIsolated: false, precautions: [] },
-      lastTransferId: transferAId,
-      updatedAt: Date.now(),
-    });
-
-    transaction.update(patientARef, {
-      currentBedId: bedBId,
-      isolationPrecautions: isPatientAIsolated ? (isolationA.precautions && isolationA.precautions.length > 0 ? isolationA.precautions : ['Contact Precautions']) : [],
-      updatedAt: serverTimestamp(),
-      updatedByUid: doctorId,
-    });
-
-    transaction.update(patientBRef, {
-      currentBedId: bedAId,
-      isolationPrecautions: isPatientBIsolated ? patientBData.isolationPrecautions : [],
-      updatedAt: serverTimestamp(),
-      updatedByUid: doctorId,
-    });
-
-    return operationId;
-  });
-
-  // Local state update
-  try {
-    const bedA = await db.beds.get(bedAId);
-    const bedB = await db.beds.get(bedBId);
-    const patientAId = bedA?.currentPatientId || bedA?.activePatientId;
-    const patientBId = bedB?.currentPatientId || bedB?.activePatientId;
-
-    if (patientAId && patientBId) {
-      const patA = await db.patients.get(patientAId);
-      const patB = await db.patients.get(patientBId);
-
-      const isPatientAIsolated = !!(
-        patA?.isolationPrecautions &&
-        patA.isolationPrecautions.length > 0 &&
-        !patA.isolationPrecautions.some((p: string) => 
-          p.toLowerCase().includes('standard') || 
-          p === 'None' || 
-          p === 'لا يوجد عزل' || 
-          p === 'NONE'
-        )
-      );
-      const isPatientBIsolated = !!(
-        patB?.isolationPrecautions &&
-        patB.isolationPrecautions.length > 0 &&
-        !patB.isolationPrecautions.some((p: string) => 
-          p.toLowerCase().includes('standard') || 
-          p === 'None' || 
-          p === 'لا يوجد عزل' || 
-          p === 'NONE'
-        )
-      );
-
-      const isolationA = isPatientAIsolated
-        ? {
-            isIsolated: true,
-            type: patA?.isolationPrecautions?.[0] || 'Airborne',
-            reason: 'Clinical Isolation',
-            startDate: new Date().toISOString(),
-            precautions: patA?.isolationPrecautions || [],
-          }
-        : { isIsolated: false, precautions: [] };
-
-      const isolationB = isPatientBIsolated
-        ? {
-            isIsolated: true,
-            type: patB?.isolationPrecautions?.[0] || 'Airborne',
-            reason: 'Clinical Isolation',
-            startDate: new Date().toISOString(),
-            precautions: patB?.isolationPrecautions || [],
-          }
-        : { isIsolated: false, precautions: [] };
-
-      await db.beds.update(bedAId, {
-        status: isPatientBIsolated ? BedStatus.ISOLATION : BedStatus.OCCUPIED,
-        currentPatientId: patientBId,
-        activePatientId: patientBId,
-        isolation: isPatientBIsolated ? isolationB : { isIsolated: false, precautions: [] },
-      });
-      await db.beds.update(bedBId, {
-        status: isPatientAIsolated ? BedStatus.ISOLATION : BedStatus.OCCUPIED,
-        currentPatientId: patientAId,
-        activePatientId: patientAId,
-        isolation: isPatientAIsolated ? isolationA : { isIsolated: false, precautions: [] },
-      });
-      await db.patients.update(patientAId, {
-        currentBedId: bedBId as BedNumber,
-        isolationPrecautions: isPatientAIsolated ? (patA?.isolationPrecautions || []) : [],
-        updatedAt: new Date().toISOString(),
-      });
-      await db.patients.update(patientBId, {
-        currentBedId: bedAId as BedNumber,
-        isolationPrecautions: isPatientBIsolated ? (patB?.isolationPrecautions || []) : [],
-        updatedAt: new Date().toISOString(),
-      });
-      await ensureBedPatientSync();
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new Event('icu-data-updated'));
-      }
-    }
-  } catch (err) {
-    console.warn('Local Dexie update following bed swap:', err);
-  }
-
-  return swapResult;
-}
-
-/**
- * ATOMIC DISCHARGE TRANSACTION
- * Frees the bed and updates patient status to DISCHARGED atomically.
- * Medical records remain permanently untouched.
- */
-export async function executeDischarge(
-  patientId: string,
-  fromBedId: string,
-  doctorId: string,
-  unitId: string,
-  reason: string,
-  outcome: string = 'DISCHARGED_STEPDOWN'
-): Promise<string> {
-  const dischargeResult = await runTransaction(firestore, async (transaction) => {
-    const bedRef = doc(firestore, COLLECTIONS.BEDS, fromBedId);
-    const patientRef = doc(firestore, COLLECTIONS.PATIENTS, patientId);
-
-    const bedSnap = await transaction.get(bedRef);
-    const patientSnap = await transaction.get(patientRef);
-
-    if (!bedSnap.exists() || !patientSnap.exists()) {
-      throw new Error('Records do not exist');
-    }
-
-    const bed = bedSnap.data() as any;
-    const activePatId = bed.activePatientId || bed.currentPatientId;
-    if (activePatId !== patientId) {
-      throw new Error('المريض غير متواجد بالسرير المحدد.');
-    }
-
-    const patientData = patientSnap.data() as PatientContract;
-    const currentEpisodeId = patientData.currentEpisodeId;
-
-    const operationId = generateId();
-    const transferId = generateId();
-
-    const operationRef = doc(firestore, COLLECTIONS.OPERATIONS, operationId);
-    const transferRef = doc(firestore, COLLECTIONS.TRANSFERS, transferId);
-
-    const newOperation: OperationContract = {
-      operationId,
-      operationType: 'DISCHARGE',
-      initiatedBy: doctorId,
-      initiatedAt: serverTimestamp() as unknown as number,
-    };
-
-    const newTransfer: TransferContract = {
-      transferId,
-      unitId,
-      patientId,
-      transferType: 'DISCHARGE',
-      operationId,
-      fromBedId,
-      toBedId: null,
-      transferredBy: doctorId,
-      transferredAt: serverTimestamp() as unknown as number,
-      reason,
-    };
-
-    transaction.set(operationRef, newOperation);
-    transaction.set(transferRef, newTransfer);
-
-    transaction.update(bedRef, {
-      activePatientId: null,
-      currentPatientId: null,
-      status: 'VACANT',
-      isolation: { isIsolated: false, precautions: [] },
-      updatedAt: Date.now(),
-    });
-
-    transaction.update(patientRef, {
-      currentStatus: 'DISCHARGED',
-      patientStatus: outcome,
-      status: 'DISCHARGED',
-      currentBedId: null,
-      isArchived: true,
-      dischargeDate: new Date().toISOString(),
-      updatedAt: serverTimestamp(),
-      updatedByUid: doctorId,
-    });
-
-    if (currentEpisodeId) {
-      const episodeRef = doc(firestore, COLLECTIONS.EPISODES, currentEpisodeId);
-      transaction.update(episodeRef, {
-        dischargeDate: Date.now(),
-        status: 'DISCHARGED',
-        outcome,
-        updatedAt: Date.now(),
-      });
-    }
-
-    return transferId;
-  });
+export async function fetchAuditLogs(options?: {
+  limitCount?: number;
+  lastDoc?: DocumentSnapshot | null;
+}): Promise<FetchAuditLogsResult> {
+  const pageSize = options?.limitCount || 25;
 
   try {
-    await db.beds.update(fromBedId, {
-      status: BedStatus.VACANT,
-      currentPatientId: null,
-      activePatientId: null,
-      isolation: { isIsolated: false, precautions: [] },
-    });
-    await db.patients.update(patientId, {
-      patientStatus: outcome as any,
-      currentBedId: null as any,
-      archiveStatus: 'ARCHIVED',
-      updatedAt: new Date().toISOString(),
-    });
-    await ensureBedPatientSync();
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new Event('icu-data-updated'));
+    const auditCol = collection(firestore, 'auditLogs');
+    let q = query(auditCol, orderBy('timestamp', 'desc'), limit(pageSize));
+
+    if (options?.lastDoc) {
+      q = query(auditCol, orderBy('timestamp', 'desc'), startAfter(options.lastDoc), limit(pageSize));
     }
-  } catch (err) {
-    console.warn('Local Dexie update following discharge:', err);
+
+    const snap = await getDocs(q);
+    const logs: AuditLogEntry[] = [];
+
+    snap.forEach((docSnap) => {
+      logs.push(normalizeAuditLog(docSnap.data(), docSnap.id));
+    });
+
+    const lastVisibleDoc = snap.docs[snap.docs.length - 1] || null;
+    const hasMore = snap.docs.length === pageSize;
+
+    // Cache fetched logs into Dexie in background
+    if (logs.length > 0) {
+      logs.forEach(log => {
+        db.auditLogs.put({
+          ...log,
+          id: log.id,
+          timestamp: log.timestamp,
+          eventType: 'NOTE_CREATED' as any,
+          performedBy: {
+            staffId: log.actorUid || 'system',
+            name: log.actorName || 'System',
+            role: (log.actorRole as any) || 'ADMIN',
+          },
+          description: log.details || `${log.action} recorded`,
+          immutableHash: log.id,
+        } as any).catch(() => {});
+      });
+    }
+
+    return {
+      logs,
+      lastVisibleDoc,
+      hasMore,
+      source: 'cloud',
+    };
+  } catch (cloudErr) {
+    console.warn('[AuditService] Cloud fetch failed, falling back to local cache:', cloudErr);
+    
+    // Offline local fallback from Dexie
+    const localLogs = await getLocalAuditLogs(pageSize);
+    return {
+      logs: localLogs,
+      lastVisibleDoc: null,
+      hasMore: false,
+      source: 'cache',
+    };
+  }
+}
+
+/**
+ * Retrieves cached audit logs from local Dexie database
+ */
+export async function getLocalAuditLogs(limitCount: number = 25): Promise<AuditLogEntry[]> {
+  try {
+    const all = await db.auditLogs.reverse().sortBy('timestamp');
+    return all.slice(0, limitCount).map((item: any) => normalizeAuditLog(item, item.id));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Formats a timestamp into human-readable relative time (e.g., '5 minutes ago' / 'منذ 5 دقائق')
+ * with high clinical clarity and bilingual support.
+ */
+export function formatRelativeTime(dateInput?: string | number | Date | null, lang: 'ar' | 'en' = 'en'): string {
+  if (!dateInput) {
+    return lang === 'ar' ? 'لم يسجل بعد' : 'Never';
   }
 
-  return dischargeResult;
+  const date = new Date(dateInput);
+  if (isNaN(date.getTime())) {
+    return String(dateInput);
+  }
+
+  const now = new Date();
+  const diffInMs = now.getTime() - date.getTime();
+  const diffInSec = Math.floor(diffInMs / 1000);
+
+  // Future or very recent safety check
+  if (diffInSec < 10) {
+    return lang === 'ar' ? 'الآن' : 'Just now';
+  }
+
+  if (diffInSec < 60) {
+    return lang === 'ar' ? `منذ ${diffInSec} ثانية` : `${diffInSec} seconds ago`;
+  }
+
+  const diffInMin = Math.floor(diffInSec / 60);
+  if (diffInMin === 1) {
+    return lang === 'ar' ? 'منذ دقيقة' : '1 minute ago';
+  }
+  if (diffInMin === 2) {
+    return lang === 'ar' ? 'منذ دقيقتين' : '2 minutes ago';
+  }
+  if (diffInMin < 60) {
+    if (lang === 'ar') {
+      if (diffInMin >= 3 && diffInMin <= 10) return `منذ ${diffInMin} دقائق`;
+      return `منذ ${diffInMin} دقيقة`;
+    }
+    return `${diffInMin} minutes ago`;
+  }
+
+  const diffInHours = Math.floor(diffInMin / 60);
+  if (diffInHours === 1) {
+    return lang === 'ar' ? 'منذ ساعة' : '1 hour ago';
+  }
+  if (diffInHours === 2) {
+    return lang === 'ar' ? 'منذ ساعتين' : '2 hours ago';
+  }
+  if (diffInHours < 24) {
+    if (lang === 'ar') {
+      if (diffInHours >= 3 && diffInHours <= 10) return `منذ ${diffInHours} ساعات`;
+      return `منذ ${diffInHours} ساعة`;
+    }
+    return `${diffInHours} hours ago`;
+  }
+
+  const diffInDays = Math.floor(diffInHours / 24);
+  if (diffInDays === 1) {
+    return lang === 'ar' ? 'أمس' : 'Yesterday';
+  }
+  if (diffInDays === 2) {
+    return lang === 'ar' ? 'منذ يومين' : '2 days ago';
+  }
+  if (diffInDays < 7) {
+    if (lang === 'ar') {
+      if (diffInDays >= 3 && diffInDays <= 10) return `منذ ${diffInDays} أيام`;
+      return `منذ ${diffInDays} يوم`;
+    }
+    return `${diffInDays} days ago`;
+  }
+
+  const diffInWeeks = Math.floor(diffInDays / 7);
+  if (diffInWeeks === 1) {
+    return lang === 'ar' ? 'منذ أسبوع' : '1 week ago';
+  }
+  if (diffInWeeks === 2) {
+    return lang === 'ar' ? 'منذ أسبوعين' : '2 weeks ago';
+  }
+  if (diffInWeeks < 4) {
+    if (lang === 'ar') {
+      return `منذ ${diffInWeeks} أسابيع`;
+    }
+    return `${diffInWeeks} weeks ago`;
+  }
+
+  const diffInMonths = Math.floor(diffInDays / 30);
+  if (diffInMonths === 1) {
+    return lang === 'ar' ? 'منذ شهر' : '1 month ago';
+  }
+  if (diffInMonths === 2) {
+    return lang === 'ar' ? 'منذ شهرين' : '2 months ago';
+  }
+  if (diffInMonths < 12) {
+    if (lang === 'ar') {
+      return `منذ ${diffInMonths} أشهر`;
+    }
+    return `${diffInMonths} months ago`;
+  }
+
+  return date.toLocaleDateString(lang === 'ar' ? 'ar-SA' : 'en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
 }
+
+/**
+ * Formats a timestamp into an exact, localized date and time string.
+ */
+export function formatDetailedTimestamp(dateInput?: string | number | Date | null, lang: 'ar' | 'en' = 'en'): string {
+  if (!dateInput) return '';
+  const date = new Date(dateInput);
+  if (isNaN(date.getTime())) return String(dateInput);
+
+  return date.toLocaleString(lang === 'ar' ? 'ar-SA' : 'en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
+  });
+}
+

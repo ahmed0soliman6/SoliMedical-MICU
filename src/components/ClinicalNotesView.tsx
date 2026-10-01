@@ -1,10 +1,4 @@
-import React, { useState, useEffect } from 'react';
-import { FileText, Lock, Clock, HelpCircle, CheckCircle2, ChevronDown, ChevronUp, Trash2, Plus } from 'lucide-react';
-import { ClinicalNote, PatientDossier, BedRecord, NoteType, StaffRole } from '../types/schema.ts';
-import { db } from '../db/icuSyncDb.ts';
-import { useTranslation } from '../services/i18n.ts';
-import { useAuth } from '../services/AuthContext.tsx';
-import { canDeleteRecord, canDeleteClinicalNote } from '../services/medicalRecordPermissions.ts';
+import React, { useState, useEffect, FC } from 'react';
 import { deleteClinicalNoteFromCloud } from '../services/firebase.ts';
 
 interface ClinicalNotesViewProps {

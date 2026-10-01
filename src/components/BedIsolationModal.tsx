@@ -1,18 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { 
-  ShieldAlert, 
-  X, 
-  AlertCircle, 
-  CheckCircle2, 
-  Loader2,
-  Calendar,
-  Lock,
-  Check
-} from 'lucide-react';
-import { BedRecord, BedStatus, BedIsolationInfo, PatientDossier } from '../types/schema.ts';
-import { db, ensureBedPatientSync } from '../db/icuSyncDb.ts';
-import { syncBedToCloud, syncPatientToCloud } from '../services/firebase.ts';
-import { useTranslation } from '../services/i18n.ts';
+import React, { useState, useEffect, useRef, FC } from 'react';
 import { useAppNotifications } from '../services/NotificationContext.tsx';
 
 interface BedIsolationModalProps {

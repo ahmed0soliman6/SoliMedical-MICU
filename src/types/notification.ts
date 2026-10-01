@@ -1,23 +1,14 @@
-import { BedNumber } from './schema.ts';
-
-export type NotificationType = 
-  | 'ADMISSION' 
-  | 'DISCHARGE' 
-  | 'SBAR_HANDOVER' 
-  | 'SBAR_RECEIVED' 
+export type NotificationType =
+  | 'ADMISSION'
+  | 'DISCHARGE'
+  | 'SBAR_HANDOVER'
+  | 'SBAR_SIGNED'
+  | 'CRITICAL_ALERT'
+  | 'CHAT_MESSAGE'
   | 'ISOLATION_CHANGE'
-  | 'CRITICAL_VITAL_ALERT'
-  | 'CLINICAL_NOTE';
+  | 'PATIENT_TRANSFER';
 
-export interface AppNotificationTarget {
-  action: 'OPEN_ARCHIVE' | 'OPEN_SBAR' | 'OPEN_BED' | 'OPEN_ISOLATION';
-  patientId?: string;
-  patientMrn?: string;
-  patientName?: string;
-  patientNameAr?: string;
-  patientNameEn?: string;
-  bedNumber?: BedNumber | null;
-}
+export type AppNotificationTarget = 'all' | 'doctors' | 'nurses' | string;
 
 export interface AppNotification {
   id: string;
@@ -26,7 +17,14 @@ export interface AppNotification {
   titleAr: string;
   messageEn: string;
   messageAr: string;
-  timestamp: string;
-  read: boolean;
-  target?: AppNotificationTarget;
+  timestamp: string | any;
+  readBy?: string[];
+  targetRole?: AppNotificationTarget;
+  patientId?: string;
+  patientName?: string;
+  bedNumber?: string;
+  priority?: 'low' | 'normal' | 'high' | 'urgent';
+  data?: Record<string, any>;
+  target?: any;
+  read?: boolean;
 }

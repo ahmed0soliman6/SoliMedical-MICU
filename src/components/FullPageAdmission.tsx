@@ -13,7 +13,7 @@ import {
   PatientDossier
 } from '../types/schema.ts';
 import { admitPatient, calculateIdealBodyWeight, toggleBedOperationalStatus } from '../services/dataModel.ts';
-import { searchExistingPatients, PatientCandidateMatch } from '../services/operations.ts';
+import { searchExistingPatients, PatientCandidateMatch } from '../services/firestoreQueries.ts';
 import { useTranslation } from '../services/i18n.ts';
 import { db, ensureBedPatientSync } from '../db/icuSyncDb.ts';
 import { toEnglishDigits, parseEnglishFloat, parseEnglishInt } from '../services/numberUtils.ts';

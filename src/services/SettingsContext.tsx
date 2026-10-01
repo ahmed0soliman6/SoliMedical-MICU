@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { SystemSettings, DEFAULT_SYSTEM_SETTINGS, DEFAULT_NOTIFICATION_SETTINGS, NotificationSettings } from '../types/settings.ts';
 import { subscribeToSystemSettings, syncSystemSettingsToCloud, firestore } from './firebase.ts';
 import { doc, setDoc } from 'firebase/firestore';

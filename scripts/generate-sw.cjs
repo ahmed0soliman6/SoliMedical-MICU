@@ -1,52 +1,41 @@
 const fs = require('fs');
 const path = require('path');
+const dotenv = require('dotenv');
 
-// Load environment variables from .env if dotenv is installed
-try {
-  require('dotenv').config();
-} catch (e) {
-  // dotenv optional
-}
-
-let appletConfig = {};
-try {
-  const cfgPath = path.resolve(__dirname, '../firebase-applet-config.json');
-  if (fs.existsSync(cfgPath)) {
-    appletConfig = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
-  }
-} catch (e) {
-  console.warn('[generate-sw] Could not read firebase-applet-config.json:', e);
-}
-
-const apiKey = process.env.VITE_FIREBASE_API_KEY || appletConfig.apiKey || '';
-const authDomain = process.env.VITE_FIREBASE_AUTH_DOMAIN || appletConfig.authDomain || 'solimedical-micu.firebaseapp.com';
-const projectId = process.env.VITE_FIREBASE_PROJECT_ID || appletConfig.projectId || 'solimedical-micu';
-const storageBucket = process.env.VITE_FIREBASE_STORAGE_BUCKET || appletConfig.storageBucket || 'solimedical-micu.firebasestorage.app';
-const messagingSenderId = process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || appletConfig.messagingSenderId || '356354051601';
-const appId = process.env.VITE_FIREBASE_APP_ID || appletConfig.appId || '';
-
-if (!apiKey) {
-  console.warn('[generate-sw] WARNING: apiKey is empty! Make sure VITE_FIREBASE_API_KEY or firebase-applet-config.json is configured.');
-}
+dotenv.config();
 
 const templatePath = path.resolve(__dirname, 'firebase-messaging-sw.template.js');
-let content = fs.readFileSync(templatePath, 'utf8');
+let content = '';
+if (fs.existsSync(templatePath)) {
+  content = fs.readFileSync(templatePath, 'utf8');
+} else {
+  const publicSw = path.resolve(__dirname, '../public/firebase-messaging-sw.js');
+  if (fs.existsSync(publicSw)) {
+    content = fs.readFileSync(publicSw, 'utf8');
+  }
+}
 
-content = content
-  .replace('__FIREBASE_API_KEY__', apiKey)
-  .replace('__FIREBASE_AUTH_DOMAIN__', authDomain)
-  .replace('__FIREBASE_PROJECT_ID__', projectId)
-  .replace('__FIREBASE_STORAGE_BUCKET__', storageBucket)
-  .replace('__FIREBASE_MESSAGING_SENDER_ID__', messagingSenderId)
-  .replace('__FIREBASE_APP_ID__', appId);
+const vars = {
+  VITE_FIREBASE_API_KEY: process.env.VITE_FIREBASE_API_KEY || 'AIzaSyA5NDAjz9mgzpkia99CIMkUSiEPg3hLQ9U',
+  VITE_FIREBASE_AUTH_DOMAIN: process.env.VITE_FIREBASE_AUTH_DOMAIN || 'solimedical-micu.firebaseapp.com',
+  VITE_FIREBASE_PROJECT_ID: process.env.VITE_FIREBASE_PROJECT_ID || 'solimedical-micu',
+  VITE_FIREBASE_STORAGE_BUCKET: process.env.VITE_FIREBASE_STORAGE_BUCKET || 'solimedical-micu.firebasestorage.app',
+  VITE_FIREBASE_MESSAGING_SENDER_ID: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '356354051601',
+  VITE_FIREBASE_APP_ID: process.env.VITE_FIREBASE_APP_ID || '1:356354051601:web:f2e0510dc522804d4dabb0',
+  VITE_FIREBASE_VAPID_KEY: process.env.VITE_FIREBASE_VAPID_KEY || 'BHx7GBa3Ol-ZsDcn5Dtui80q8SooxmuDlosFMQRukBOX6BmbyYYhpAEjQ5y_CLmImiqu5EE79nlzcjJcWwK4ktM',
+};
 
-const publicPath = path.resolve(__dirname, '../public/firebase-messaging-sw.js');
-fs.writeFileSync(publicPath, content, 'utf8');
-console.log(`[generate-sw] Generated ${publicPath} (apiKey length: ${apiKey.length})`);
+for (const [k, v] of Object.entries(vars)) {
+  content = content.replaceAll(`__${k}__`, v);
+}
 
-const distDir = path.resolve(__dirname, '../dist');
-if (fs.existsSync(distDir)) {
-  const distPath = path.join(distDir, 'firebase-messaging-sw.js');
-  fs.writeFileSync(distPath, content, 'utf8');
-  console.log(`[generate-sw] Updated ${distPath}`);
+const outPublic = path.resolve(__dirname, '../public/firebase-messaging-sw.js');
+fs.mkdirSync(path.dirname(outPublic), { recursive: true });
+fs.writeFileSync(outPublic, content);
+console.log(`[generate-sw] Generated ${outPublic} (apiKey length: ${vars.VITE_FIREBASE_API_KEY.length})`);
+
+const outDist = path.resolve(__dirname, '../dist/firebase-messaging-sw.js');
+if (fs.existsSync(path.dirname(outDist))) {
+  fs.writeFileSync(outDist, content);
+  console.log(`[generate-sw] Updated ${outDist}`);
 }

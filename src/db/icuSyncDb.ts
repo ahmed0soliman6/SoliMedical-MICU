@@ -1,4 +1,4 @@
-import Dexie, { type Table } from 'dexie';
+import Dexie, { Table } from 'dexie';
 import { 
   BedRecord, 
   BedStatus,
@@ -1037,17 +1037,3 @@ export async function ensureBedPatientSync(options?: { syncToCloud?: boolean }):
     }
   }
 }
-
-/**
- * DEPRECATED: purgePhantomCriticalVitals has been converted to a safe no-op.
- * Critical vitals (e.g. sys<=65 && dia<=45 or MAP<=50) represent genuine critical
- * clinical events (e.g. profound cardiogenic/septic shock) and must NEVER be automatically
- * purged or overwritten with fabricated "normalized" readings.
- * 
- * Maintained as a no-op to preserve backwards compatibility with callers.
- */
-export async function purgePhantomCriticalVitals(targetBedNumber?: string): Promise<void> {
-  // Safe no-op: Preserved for import compatibility; intentional no-op to protect real critical vital records.
-  return Promise.resolve();
-}
-

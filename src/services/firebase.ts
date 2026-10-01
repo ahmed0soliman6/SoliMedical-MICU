@@ -2655,6 +2655,9 @@ export async function clearAllCloudAndLocalDataAndReset(): Promise<{ success: bo
     const collectionsToClear = [
       'beds',
       'patients',
+      'archivedPatients',
+      'archived_patients',
+      'archive',
       'vitals',
       'sbarHandovers',
       'handovers',

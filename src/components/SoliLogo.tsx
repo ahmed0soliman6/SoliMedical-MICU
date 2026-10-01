@@ -206,3 +206,5 @@ export const SoliLogo: React.FC<SoliLogoProps> = ({
     </div>
   );
 };
+
+export default SoliLogo;

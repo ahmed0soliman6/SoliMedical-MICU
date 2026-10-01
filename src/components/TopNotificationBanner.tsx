@@ -39,14 +39,14 @@ const getNotificationStyle = (type: NotificationType) => {
         badge: 'bg-teal-900/80 text-teal-200 border-teal-600/60',
         Icon: ShieldCheck,
       };
-    case 'SBAR_RECEIVED':
+    case 'SBAR_SIGNED':
       return {
         bg: 'bg-cyan-950/95 dark:bg-cyan-950/95 text-cyan-100 border-cyan-500/60 shadow-cyan-900/30',
         iconBg: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40',
         badge: 'bg-cyan-900/80 text-cyan-200 border-cyan-600/60',
         Icon: CheckCircle2,
       };
-    case 'ISOLATION_CHANGE':
+    case 'CRITICAL_ALERT':
     default:
       return {
         bg: 'bg-amber-950/95 dark:bg-amber-950/95 text-amber-100 border-amber-500/60 shadow-amber-900/30',
@@ -136,3 +136,5 @@ export const TopNotificationBanner: React.FC = () => {
     </div>
   );
 };
+
+export default TopNotificationBanner;

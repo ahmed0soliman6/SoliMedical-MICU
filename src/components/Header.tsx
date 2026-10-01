@@ -1,47 +1,29 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef, FC } from 'react';
 import { 
-  Activity, 
-  UserPlus, 
-  ShieldAlert, 
-  Layers, 
-  Database,
-  Cloud, 
+  Menu, 
   Bell, 
   BellRing, 
-  Sliders, 
-  Languages, 
-  Menu, 
-  X, 
-  Volume2, 
+  AlertTriangle, 
+  ArrowLeft, 
+  ArrowRight, 
+  CheckCircle, 
+  ChevronDown, 
+  ChevronLeft, 
+  ChevronRight, 
+  ChevronUp, 
+  Layers, 
+  Loader, 
+  Trash, 
+  Volume, 
   VolumeX, 
-  CheckCircle,
-  CheckCircle2, 
-  Sun, 
-  Moon,
-  Trash2,
-  Check,
-  ChevronRight,
-  ChevronLeft,
-  ChevronDown,
-  ChevronUp,
-  Clock,
-  LogOut,
-  ShieldCheck,
-  ArrowRight,
-  ArrowLeft,
-  Wifi,
-  WifiOff,
-  CloudOff,
-  Loader2,
-  AlertTriangle
+  Wifi, 
+  WifiOff 
 } from 'lucide-react';
-import { BedRecord, PatientDossier, BedNumber } from '../types/schema.ts';
-import { requestNotificationPermission, playIcuAlarmAudio, checkConnectionHealth, ConnectionHealthResult } from '../services/firebase.ts';
+import { AppNotification } from '../types/notification.ts';
 import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
-import { getPatientForBed } from '../services/dataModel.ts';
 import { useAppNotifications } from '../services/NotificationContext.tsx';
-import { AppNotification } from '../types/notification.ts';
+import { getPatientForBed } from '../services/dataModel.ts';
 
 interface HeaderProps {
   beds: BedRecord[];
@@ -705,5 +687,3 @@ export const Header: React.FC<HeaderProps> = ({
     </header>
   );
 };
-
-

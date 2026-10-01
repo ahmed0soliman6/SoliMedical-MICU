@@ -1,30 +1,10 @@
-/**
- * Number & Digit Normalization Utility
- * Ensures all numbers in the application are standardized to English / Western numerals (0-9).
- * Automatically converts Eastern Arabic digits (٠-٩) and Persian digits (۰-۹) to standard English digits.
- */
+const ARABIC_DIGIT_REGEX = /[\u0660-\u0669\u06f0-\u06f9]/g;
 
 const ARABIC_PERSIAN_DIGITS_MAP: Record<string, string> = {
-  '٠': '0', '۰': '0',
-  '١': '1', '۱': '1',
-  '٢': '2', '۲': '2',
-  '٣': '3', '۳': '3',
-  '٤': '4', '۴': '4',
-  '٥': '5', '۵': '5',
-  '٦': '6', '۶': '6',
-  '٧': '7', '۷': '7',
-  '٨': '8', '۸': '8',
-  '٩': '9', '۹': '9',
-  '٫': '.',
-  '٬': ',',
-  '،': ',',
+  '٠': '0', '١': '1', '٢': '2', '٣': '3', '٤': '4', '٥': '5', '٦': '6', '٧': '7', '٨': '8', '٩': '9',
+  '۰': '0', '۱': '1', '۲': '2', '۳': '3', '۴': '4', '۵': '5', '۶': '6', '۷': '7', '۸': '8', '۹': '9'
 };
 
-const ARABIC_DIGIT_REGEX = /[٠-٩۰-۹٫]/g;
-
-/**
- * Converts any string or number containing Eastern Arabic digits to English/Western digits.
- */
 export const toEnglishDigits = (input: string | number | null | undefined): string => {
   if (input === null || input === undefined) return '';
   const str = String(input);

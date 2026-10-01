@@ -332,43 +332,20 @@ RECOMMENDATIONS:
             />
           </div>
 
-          {/* Readonly Logged in User Display */}
-          <div className="p-3.5 bg-slate-50 dark:bg-[#090f1d] border border-slate-200 dark:border-slate-800 rounded-xl flex items-center justify-between">
+          {/* Doctor Name Display */}
+          <div className="p-3 bg-slate-50 dark:bg-[#090f1d] border border-slate-200 dark:border-slate-800 rounded-xl flex items-center justify-between text-xs">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-400">
+              <div className="w-8 h-8 rounded-full bg-teal-500/10 border border-teal-500/30 flex items-center justify-center text-teal-600 dark:text-teal-400">
                 <User className="w-4 h-4" />
               </div>
-              <div>
-                <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-semibold leading-none">
-                  {lang === 'ar' ? 'مقدم الملاحظة الرقمية (مدخل البيانات الحالي):' : 'Digital Note Author (Data Entry Clerk):'}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-500 dark:text-slate-400 font-semibold">
+                  {lang === 'ar' ? 'اسم الطبيب:' : 'Physician Name:'}
                 </span>
-                <span className="text-xs font-bold text-teal-700 dark:text-teal-300 font-sans mt-1 block">
+                <span className="text-sm font-bold text-teal-700 dark:text-teal-300 font-sans">
                   {loggedInName}
                 </span>
               </div>
-            </div>
-            <div className="text-right">
-              <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-semibold leading-none">
-                {lang === 'ar' ? 'الدور السريري / رقم الموظف:' : 'Clinical Role / Badge ID:'}
-              </span>
-              <span className="text-xs font-semibold text-slate-700 dark:text-slate-200 mt-1 block font-mono">
-                {loggedInRole} • ID: {loggedInBadgeId}
-              </span>
-            </div>
-          </div>
-
-          {/* Cryptographic Compliance Standard Footer */}
-          <div className="p-3 bg-teal-50/50 dark:bg-[#080f1e] rounded-xl border border-teal-200 dark:border-teal-900/40 flex items-start gap-2.5">
-            <ShieldCheck className="w-5 h-5 text-teal-600 dark:text-teal-400 flex-shrink-0" />
-            <div className="space-y-0.5">
-              <span className="text-[11px] font-bold text-teal-800 dark:text-teal-300 block">
-                {lang === 'ar' ? 'معايير التوثيق الرقمي CBAHI / HIPAA' : 'CBAHI / HIPAA Compliance Standard'}
-              </span>
-              <p className="text-[10px] text-slate-600 dark:text-slate-400 leading-normal">
-                {lang === 'ar' 
-                  ? 'بمجرد التوقيع الرقمي للملاحظة، يتم حفظها وتوثيقها رسمياً في ملف المريض. التعديلات اللاحقة تتم عبر ملحقات (Addendums) معتمدة.' 
-                  : 'Upon digital signing, notes are securely logged in the patient record. Standard audits and updates can be executed via linked addendums.'}
-              </p>
             </div>
           </div>
 

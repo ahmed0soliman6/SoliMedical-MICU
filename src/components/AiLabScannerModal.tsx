@@ -832,3 +832,4 @@ export const AiLabScannerModal: React.FC<AiLabScannerModalProps> = ({
     </div>
   );
 };
+
