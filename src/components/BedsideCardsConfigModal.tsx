@@ -1,22 +1,3 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Sliders, 
-  X, 
-  Check, 
-  Eye, 
-  EyeOff, 
-  Wind, 
-  Droplet, 
-  Scale, 
-  Activity, 
-  FlaskConical, 
-  FileText, 
-  Sparkles,
-  RotateCcw,
-  Microscope,
-  Pill
-} from 'lucide-react';
-import { BedNumber } from '../types/schema.ts';
 import { useTranslation } from '../services/i18n.ts';
 
 export interface BedsideCardsConfig {
@@ -284,5 +265,3 @@ export const BedsideCardsConfigModal: React.FC<BedsideCardsConfigModalProps> = (
         </div>
       </div>
     </div>
-  );
-};

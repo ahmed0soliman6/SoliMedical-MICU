@@ -742,5 +742,4 @@ export const FluidBalanceModal: React.FC<FluidBalanceModalProps> = ({
         </form>
       </div>
     </div>
-  );
-};
+  )0

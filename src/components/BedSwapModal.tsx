@@ -398,5 +398,3 @@ export const BedSwapModal: React.FC<BedSwapModalProps> = ({
         </div>
       </div>
     </div>
-  );
-};

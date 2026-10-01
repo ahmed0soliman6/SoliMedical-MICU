@@ -76,5 +76,4 @@ export function usePWAInstall() {
     isIOS,
     isIPad,
     triggerInstall
-  };
-}
+ `

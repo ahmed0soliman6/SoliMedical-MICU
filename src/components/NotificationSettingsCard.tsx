@@ -484,4 +484,4 @@ export const NotificationSettingsCard: React.FC = () => {
       </div>
     </div>
   );
-};
+}

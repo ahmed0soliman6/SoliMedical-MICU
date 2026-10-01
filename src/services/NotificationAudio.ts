@@ -222,5 +222,4 @@ export function playGentleNotificationTone(type: NotificationType, ignoreMute: b
     }
   } catch (e) {
     console.warn('Unable to play gentle notification audio:', e);
-  }
-}
+@

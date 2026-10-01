@@ -371,4 +371,3 @@ export const BedOperationsSettingsCard: React.FC<BedOperationsSettingsCardProps>
       </div>
     </div>
   );
-};

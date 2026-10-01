@@ -1,46 +1,3 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { 
-  Activity, 
-  UserPlus, 
-  ShieldAlert, 
-  Layers, 
-  Database,
-  Cloud, 
-  Bell, 
-  BellRing, 
-  Sliders, 
-  Languages, 
-  Menu, 
-  X, 
-  Volume2, 
-  VolumeX, 
-  CheckCircle,
-  CheckCircle2, 
-  Sun, 
-  Moon,
-  Trash2,
-  Check,
-  ChevronRight,
-  ChevronLeft,
-  ChevronDown,
-  ChevronUp,
-  Clock,
-  LogOut,
-  ShieldCheck,
-  ArrowRight,
-  ArrowLeft,
-  Wifi,
-  WifiOff,
-  CloudOff,
-  Loader2,
-  AlertTriangle
-} from 'lucide-react';
-import { BedRecord, PatientDossier, BedNumber } from '../types/schema.ts';
-import { requestNotificationPermission, playIcuAlarmAudio, checkConnectionHealth, ConnectionHealthResult } from '../services/firebase.ts';
-import { useSystemSettings } from '../services/SettingsContext.tsx';
-import { useTranslation } from '../services/i18n.ts';
-import { getPatientForBed } from '../services/dataModel.ts';
-import { useAppNotifications } from '../services/NotificationContext.tsx';
 import { AppNotification } from '../types/notification.ts';
 
 interface HeaderProps {
@@ -705,5 +662,3 @@ export const Header: React.FC<HeaderProps> = ({
     </header>
   );
 };
-
-
