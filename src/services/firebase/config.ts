@@ -26,6 +26,7 @@ export const firebaseConfig: FirebaseConfigType = {
   storageBucket: (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_FIREBASE_STORAGE_BUCKET) || rawAppletConfig.storageBucket || '',
   messagingSenderId: (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_FIREBASE_MESSAGING_SENDER_ID) || rawAppletConfig.messagingSenderId || '',
   appId: (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_FIREBASE_APP_ID) || rawAppletConfig.appId || '',
+  measurementId: (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_FIREBASE_MEASUREMENT_ID) || rawAppletConfig.measurementId || '',
   firestoreDatabaseId: rawAppletConfig.firestoreDatabaseId || '',
 };
 

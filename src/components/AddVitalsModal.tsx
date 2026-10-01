@@ -426,5 +426,3 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
     </div>
   );
 };
-
-export default AddVitalsModal;

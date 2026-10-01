@@ -1,75 +1,40 @@
-import React, { 
-  createContext, 
-  useContext, 
-  useState, 
-  useEffect, 
-  useCallback, 
-  useRef, 
-  ReactNode 
-} from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { 
   collection, 
   doc, 
+  setDoc as fsetDoc, 
+  deleteDoc, 
+  onSnapshot, 
   query, 
   orderBy, 
-  limit, 
-  onSnapshot, 
-  deleteDoc, 
-  setDoc 
+  limit 
 } from 'firebase/firestore';
-import { firestore, sanitizeForFirestore, handleFirestoreError, OperationType } from './firebase.ts';
+import { AppNotification, NotificationType, AppNotificationTarget } from '../types/notification.ts';
 import { useSystemSettings } from './SettingsContext.tsx';
 import { useAuth } from './AuthContext.tsx';
-import { isAudioGloballyMuted, playGentleNotificationTone } from './NotificationAudio.ts';
+import { playGentleNotificationTone, isAudioGloballyMuted } from './NotificationAudio.ts';
+import { firestore, sanitizeForFirestore, handleFirestoreError, OperationType } from './firebase.ts';
 import { 
   checkIsFcmSupported, 
   requestFcmToken, 
   subscribeToForegroundFcmMessages, 
   broadcastFcmPush 
 } from './fcmService.ts';
-import { 
-  AppNotification, 
-  NotificationType, 
-  AppNotificationTarget 
-} from '../types/notification.ts';
 
-const NOTIFICATIONS_STORAGE_KEY = 'soli_medical_icu_notifications_v1';
-const MAX_NOTIFICATIONS = 50;
+const NOTIFICATIONS_STORAGE_KEY = 'soli_icu_notifications_queue_v2';
+const MAX_NOTIFICATIONS = 25;
 
-export function saveNotificationsToStorage(notifications: AppNotification[]) {
-  try {
-    localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(notifications));
-  } catch (e) {
-    console.error('Failed to save notifications to storage:', e);
-  }
-}
+export const ALLOWED_NOTIFICATION_TYPES: NotificationType[] = [
+  'ADMISSION',
+  'DISCHARGE',
+  'SBAR_HANDOVER',
+  'SBAR_RECEIVED',
+  'ISOLATION_CHANGE',
+  'CRITICAL_VITAL_ALERT',
+];
 
-export function loadSavedNotifications(): AppNotification[] {
-  try {
-    const data = localStorage.getItem(NOTIFICATIONS_STORAGE_KEY);
-    if (data) {
-      const parsed = JSON.parse(data);
-      if (Array.isArray(parsed)) return parsed;
-    }
-  } catch (e) {
-    console.error('Failed to load notifications from storage:', e);
-  }
-  return [];
-}
-
-export function isWhitelistedType(type: string): boolean {
-  const allowed = [
-    'ADMISSION',
-    'DISCHARGE',
-    'SBAR_HANDOVER',
-    'SBAR_SIGNED',
-    'SBAR_RECEIVED',
-    'CRITICAL_ALERT',
-    'CHAT_MESSAGE',
-    'PATIENT_TRANSFER',
-    'ISOLATION_CHANGE'
-  ];
-  return allowed.includes(type);
+function isWhitelistedType(type: any): type is NotificationType {
+  return typeof type === 'string' && ALLOWED_NOTIFICATION_TYPES.includes(type as NotificationType);
 }
 
 interface TriggerNotificationParams {
@@ -78,19 +43,19 @@ interface TriggerNotificationParams {
   titleAr: string;
   messageEn: string;
   messageAr: string;
-  target?: any;
+  target?: AppNotificationTarget;
   forceVisual?: boolean;
   forceAudio?: boolean;
 }
 
-interface NotificationContextProps {
+interface NotificationContextType {
   notifications: AppNotification[];
   unreadCount: number;
   activeBanner: AppNotification | null;
   isPushSupported: boolean;
   isPushEnabled: boolean;
   requestPushPermission: () => Promise<boolean>;
-  triggerNotification: (params: TriggerNotificationParams) => Promise<void>;
+  triggerNotification: (params: TriggerNotificationParams) => void;
   markAsRead: (id: string) => void;
   markAllAsRead: () => void;
   deleteNotification: (id: string) => void;
@@ -100,10 +65,35 @@ interface NotificationContextProps {
   setNavigationHandler: (handler: (target: AppNotificationTarget) => void) => void;
 }
 
-const NotificationContext = createContext<NotificationContextProps | null>(null);
+const NotificationContext = createContext<NotificationContextType | null>(null);
+
+function loadSavedNotifications(): AppNotification[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(NOTIFICATIONS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return parsed
+        .filter((item: any) => item && isWhitelistedType(item.type))
+        .slice(0, MAX_NOTIFICATIONS);
+    }
+  } catch (err) {
+    console.error('Failed to load notifications from storage:', err);
+  }
+  return [];
+}
+
+function saveNotificationsToStorage(list: AppNotification[]) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(list.slice(0, MAX_NOTIFICATIONS)));
+  } catch (err) {
+    console.error('Failed to save notifications to storage:', err);
+  }
+}
 
 export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-
   const { settings } = useSystemSettings();
   const { currentUser } = useAuth();
   const [notifications, setNotifications] = useState<AppNotification[]>(loadSavedNotifications);
@@ -448,7 +438,7 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
       // 4. Broadcast in real time to Cloud Firestore for other connected users
       try {
         const notifRef = doc(firestore, 'notifications', notifId);
-        await setDoc(notifRef, sanitizeForFirestore(newNotif));
+        await fsetDoc(notifRef, sanitizeForFirestore(newNotif));
       } catch (cloudErr) {
         console.warn('Cloud notification sync (offline cache active):', cloudErr);
       }

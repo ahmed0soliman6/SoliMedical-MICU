@@ -24,8 +24,7 @@ import { SettingsModal } from './components/SettingsModal.tsx';
 import { SbarHandoverView } from './components/SbarHandoverView.tsx';
 import { ClinicalNotesView } from './components/ClinicalNotesView.tsx';
 import { getPatientForBed, toggleBedOperationalStatus } from './services/dataModel.ts';
-import { ensureBedPatientSync } from './db/icuSyncDb.ts';
-import { purgePhantomCriticalVitals } from './services/dynamicLayoutService.ts';
+import { purgePhantomCriticalVitals, ensureBedPatientSync } from './db/icuSyncDb.ts';
 import { 
   subscribeToRealtimeFirestore, 
   seedInitialDataToFirestore

@@ -4,6 +4,7 @@
  * Provides deterministic text normalization, National ID hashing,
  * and exact search query helpers matching the Firestore Patient-Centric SSOT.
  */
+
 import { toEnglishDigits } from './numberUtils.ts';
 
 // Arabic Diacritics (Tashkeel) regex
@@ -21,23 +22,23 @@ const ARABIC_DIACRITICS_REGEX = /[\u064B-\u065F\u0670]/g;
 export function normalizeArabicName(input: string | null | undefined): string {
   if (!input) return '';
   let normalized = input.trim().toLowerCase();
-  
+
   // Strip diacritics
   normalized = normalized.replace(ARABIC_DIACRITICS_REGEX, '');
-  
+
   // Unify Alef forms
   normalized = normalized.replace(/[أإآٱ]/g, 'ا');
-  
+
   // Unify Taa Marbuta
   normalized = normalized.replace(/ة/g, 'ه');
-  
+
   // Unify Alef Maqsura
   normalized = normalized.replace(/ى/g, 'ي');
-  
+
   // Normalize spaces & punctuation
   normalized = normalized.replace(/[^\w\s\u0600-\u06FF]/g, ' ');
   normalized = normalized.replace(/\s+/g, ' ').trim();
-  
+
   return normalized;
 }
 
@@ -63,7 +64,6 @@ export async function computeSha256Hash(text: string): Promise<string> {
     const hashArray = Array.from(new Uint8Array(hashBuffer));
     return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
   }
-  
   // Deterministic fallback for non-crypto environment
   let hash = 0;
   for (let i = 0; i < text.length; i++) {

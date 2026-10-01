@@ -1,372 +1,391 @@
 import React, { useState } from 'react';
+import { 
+  User, 
+  Lock, 
+  Eye, 
+  EyeOff, 
+  LogIn, 
+  ShieldCheck, 
+  AlertCircle,
+  KeyRound,
+  CheckCircle2,
+  X
+} from 'lucide-react';
 import { useAuth } from '../services/AuthContext.tsx';
-import { useTranslation } from '../services/i18n.ts';
-import { StaffRole } from '../types/schema.ts';
-import { KeyRound, Eye, EyeOff, AlertCircle, Loader2, LogIn, Shield, Users, Globe } from 'lucide-react';
+import { sendPasswordResetEmail } from 'firebase/auth';
+import { auth } from '../services/firebase.ts';
+import { API_BASE_URL } from '../config/api.ts';
+
+import { SoliLogo } from './SoliLogo.tsx';
 
 export const LoginScreen: React.FC = () => {
-  const { lang, isRTL, setLanguage } = useTranslation();
-  const { loginWithEmailOrBadge, loginWithGoogle, quickDemoLogin } = useAuth();
+  const { loginWithEmailOrBadge } = useAuth();
 
-  const [identifier, setIdentifier] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'credentials' | 'demo'>('credentials');
 
-  const handleCredentialsSubmit = async (e: React.FormEvent) => {
+  // Forgot password modal state
+  const [showForgotModal, setShowForgotModal] = useState(false);
+  const [forgotInput, setForgotInput] = useState('');
+  const [forgotToken, setForgotToken] = useState('');
+  const [forgotNewPass, setForgotNewPass] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotMsg, setForgotMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (loading) return;
-
-    if (!identifier.trim()) {
-      setErrorMsg(lang === 'ar' ? 'يرجى إدخال البريد الإلكتروني أو رقم الشارة الخاص بك.' : 'Please enter your email or Badge ID.');
+    if (!username.trim() || !password.trim()) {
+      setErrorMsg('يرجى إدخال اسم المستخدم وكلمة المرور');
       return;
     }
 
-    if (!password.trim()) {
-      setErrorMsg(lang === 'ar' ? 'يرجى إدخال كلمة المرور أو رمز PIN الخاص بك.' : 'Please enter your password or PIN.');
+    setIsLoading(true);
+    setErrorMsg(null);
+
+    const res = await loginWithEmailOrBadge(username, password);
+    setIsLoading(false);
+
+    if (!res.success) {
+      setErrorMsg(res.message || 'بيانات الدخول غير صحيحة');
+    }
+  };
+
+  const handleForgotPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!forgotInput.trim() || !forgotToken.trim() || !forgotNewPass.trim()) {
+      setForgotMsg({ type: 'error', text: 'يرجى إدخال اسم المستخدم، رمز التشفير (كود الاستعادة)، وكلمة المرور الجديدة.' });
+      return;
+    }
+    if (forgotNewPass.trim().length < 6) {
+      setForgotMsg({ type: 'error', text: 'كلمة المرور الجديدة يجب ألا تقل عن 6 أحرف أو أرقام.' });
       return;
     }
 
-    setLoading(true);
-    setErrorMsg(null);
+    setForgotLoading(true);
+    setForgotMsg(null);
 
     try {
-      const res = await loginWithEmailOrBadge(identifier.trim(), password.trim());
-      setLoading(false);
-      if (!res.success) {
-        setErrorMsg(res.message || (lang === 'ar' ? 'بيانات الاعتماد غير صالحة.' : 'Invalid credentials.'));
+      const response = await fetch(`${API_BASE_URL}/api/admin/recovery`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: forgotInput.trim(),
+          recoveryCode: forgotToken.trim(),
+          newPassword: forgotNewPass.trim()
+        })
+      });
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        setForgotMsg({ type: 'error', text: 'تعذر الاتصال بالخادم الرئيسي للنظام. يرجى المحاولة بعد قليل.' });
+        return;
+      }
+      const data = await response.json();
+      if (data.success) {
+        setForgotMsg({ type: 'success', text: data.message || 'تمت استعادة كلمة المرور بنجاح. يمكنك تسجيل الدخول الآن.' });
+        setTimeout(() => {
+          setShowForgotModal(false);
+          setForgotInput('');
+          setForgotToken('');
+          setForgotNewPass('');
+          setForgotMsg(null);
+        }, 2000);
+      } else {
+        setForgotMsg({ type: 'error', text: data.message || 'فشل عملية الاستعادة. تحقق من صحة رمز التشفير واسم المستخدم.' });
       }
     } catch (err: any) {
-      setLoading(false);
-      setErrorMsg(err?.message || (lang === 'ar' ? 'حدث خطأ غير متوقع أثناء تسجيل الدخول.' : 'An unexpected error occurred.'));
-    }
-  };
-
-  const handleDemoLogin = async (role: StaffRole) => {
-    if (loading) return;
-    setLoading(true);
-    setErrorMsg(null);
-    try {
-      await quickDemoLogin(role);
-    } catch (err: any) {
-      setLoading(false);
-      setErrorMsg(err?.message || (lang === 'ar' ? 'فشل تسجيل الدخول كحساب تجريبي.' : 'Demo login failed.'));
-    }
-  };
-
-  const handleGoogleLogin = async () => {
-    if (loading) return;
-    setLoading(true);
-    setErrorMsg(null);
-    try {
-      const res = await loginWithGoogle();
-      setLoading(false);
-      if (!res.success) {
-        setErrorMsg(res.message || (lang === 'ar' ? 'فشل تسجيل الدخول بواسطة Google.' : 'Google sign-in failed.'));
-      }
-    } catch (err: any) {
-      setLoading(false);
-      setErrorMsg(err?.message || (lang === 'ar' ? 'حدث خطأ غير متوقع أثناء تسجيل الدخول بواسطة Google.' : 'Unexpected error during Google sign-in.'));
+      setForgotMsg({ type: 'error', text: err?.message || 'حدث خطأ أثناء الاتصال بالخادم.' });
+    } finally {
+      setForgotLoading(false);
     }
   };
 
   return (
-    <div
-      id="login-screen-wrapper"
-      className="min-h-screen bg-[#050a15] text-slate-100 flex flex-col items-center justify-center p-4 relative overflow-hidden select-none"
-      dir={isRTL ? 'rtl' : 'ltr'}
+    <div 
+      className="text-slate-200 antialiased selection:bg-cyan-500 selection:text-black flex flex-col justify-between items-center px-4 py-8 max-w-[430px] mx-auto min-h-screen w-full"
+      style={{
+        background: 'radial-gradient(circle at 50% 15%, #0d2847 0%, #050f21 55%, #02060f 100%)'
+      }}
     >
-      {/* Background Ambient Glows */}
-      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-teal-500/10 rounded-full blur-3xl -z-10 pointer-events-none" />
-      <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl -z-10 pointer-events-none" />
-
-      {/* Language Switcher Bar at the top */}
-      <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => setLanguage(lang === 'ar' ? 'en' : 'ar')}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-semibold text-slate-300 hover:text-white transition-all cursor-pointer active:scale-95 shadow-md shadow-black/30"
+      {/* HEADER SECTION: Clinic Logo, Monogram Badge & Title */}
+      <header className="w-full flex flex-col items-center text-center mt-2 mb-6" data-purpose="clinic-branding">
+        {/* Glowing Official Soli Medical MICU Logo */}
+        <div 
+          className="w-28 h-28 rounded-3xl bg-transparent flex items-center justify-center p-1 relative mb-4 shadow-2xl"
+          style={{
+            filter: 'drop-shadow(0 0 25px rgba(0, 229, 255, 0.35))'
+          }}
         >
-          <Globe className="w-3.5 h-3.5 text-teal-400" />
-          <span>{lang === 'ar' ? 'English (純 طبي)' : 'العربية (Clinical)'}</span>
-        </button>
-      </div>
+          <SoliLogo className="w-full h-full" />
+        </div>
 
-      <div
-        id="login-container"
-        className="w-full max-w-md bg-[#0a1122]/90 border border-slate-800/80 rounded-3xl p-6 text-slate-100 shadow-2xl space-y-6 relative z-10 backdrop-blur-md"
+        {/* Main Title */}
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white font-serif mb-1.5 drop-shadow-sm">
+          Soli Medical MICU
+        </h1>
+
+        {/* Subtitle matching Egyptian MICU Context */}
+        <p className="text-xs sm:text-sm text-cyan-200/70 font-normal leading-relaxed">
+          نظام العناية المركزة الباطنة • جمهورية مصر العربية
+        </p>
+      </header>
+
+      {/* LOGIN CARD SECTION - Ultra Clean (ONLY Username & Password) */}
+      <main 
+        className="w-full rounded-3xl bg-[#081326]/90 backdrop-blur-xl p-5 sm:p-6 shadow-2xl mb-6"
+        style={{
+          border: '1px solid rgba(0, 229, 255, 0.22)',
+          boxShadow: '0 10px 30px -10px rgba(0, 0, 0, 0.7), inset 0 1px 1px 0 rgba(255, 255, 255, 0.05)'
+        }}
+        data-purpose="login-container"
       >
-        {/* Header Branding */}
-        <div className="text-center space-y-2.5">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-teal-500 to-cyan-500 flex items-center justify-center text-slate-950 font-black text-2xl mx-auto shadow-lg shadow-teal-500/25">
-            S
-          </div>
-          <div>
-            <h1 className="text-lg font-bold tracking-tight text-white">
-              {lang === 'ar' ? 'العناية المركزة الباطنية Soli Medical' : 'Soli Medical MICU'}
-            </h1>
-            <p className="text-xs text-slate-400 font-medium">
-              {lang === 'ar'
-                ? 'محطة المراقبة السريرية والقياس عن بعد ICU-Sync'
-                : 'ICU-Sync Central Telemetry Station'}
-            </p>
+        {/* Header of Form */}
+        <div className="flex items-center justify-between pb-3 border-b border-slate-800/80 mb-5">
+          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-mono font-medium tracking-wide bg-cyan-950/70 text-cyan-400 border border-cyan-800/50">
+            v2.6 RBAC
+          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-slate-100">تسجيل الدخول للنظام</span>
+            <Lock className="w-4 h-4 text-[#00f2fe]" />
           </div>
         </div>
 
-        {/* Display Error Message */}
         {errorMsg && (
-          <div
-            id="login-error-banner"
-            className="p-3 bg-red-950/60 border border-red-500/50 text-red-200 text-xs font-medium rounded-xl flex items-center gap-2.5 shadow-sm animate-shake"
-          >
-            <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
-            <span className="leading-relaxed">{errorMsg}</span>
+          <div className="mb-4 p-3 rounded-xl bg-red-950/60 border border-red-500/50 text-red-200 text-xs flex items-center gap-2.5">
+            <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
+            <span>{errorMsg}</span>
           </div>
         )}
 
-        {/* Navigation Tabs */}
-        <div className="grid grid-cols-2 p-1 bg-slate-950 rounded-2xl border border-slate-850">
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab('credentials');
-              setErrorMsg(null);
-            }}
-            className={`py-2 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 ${
-              activeTab === 'credentials'
-                ? 'bg-slate-900 text-teal-400 border border-teal-500/20 shadow-md shadow-black/20'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Shield className="w-3.5 h-3.5" />
-            <span>{lang === 'ar' ? 'تسجيل الدخول' : 'Security Sign-In'}</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab('demo');
-              setErrorMsg(null);
-            }}
-            className={`py-2 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 ${
-              activeTab === 'demo'
-                ? 'bg-slate-900 text-teal-400 border border-teal-500/20 shadow-md shadow-black/20'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Users className="w-3.5 h-3.5" />
-            <span>{lang === 'ar' ? 'وصول سريع (تجريبي)' : 'Quick Demo Access'}</span>
-          </button>
-        </div>
-
-        {activeTab === 'credentials' ? (
-          /* Credentials Form */
-          <form id="credentials-login-form" onSubmit={handleCredentialsSubmit} className="space-y-4">
-            <div>
-              <label
-                htmlFor="identifier-input"
-                className="block text-xs font-semibold text-slate-300 mb-1.5"
-              >
-                {lang === 'ar' ? 'البريد الإلكتروني أو رقم الشارة الخاص بالمستشفى *' : 'Hospital Email or Badge ID *'}
-              </label>
-              <input
-                id="identifier-input"
+        {/* Form Controls: ONLY Username & Password */}
+        <form className="space-y-4" onSubmit={handleLogin}>
+          {/* Field: Username */}
+          <div>
+            <label className="block text-right text-xs font-medium text-slate-300 mb-1.5" htmlFor="username">
+              اسم المستخدم أو البريد الإلكتروني
+            </label>
+            <div className="relative rounded-xl shadow-inner">
+              <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-slate-400">
+                <User className="w-4 h-4 text-cyan-500/70" />
+              </div>
+              <input 
+                id="username"
+                name="username"
                 type="text"
-                value={identifier}
-                onChange={(e) => setIdentifier(e.target.value)}
-                disabled={loading}
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="اسم المستخدم أو البريد الإلكتروني"
                 required
-                className="w-full bg-slate-950 border border-slate-800 focus:border-teal-400 focus:ring-1 focus:ring-teal-400 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none transition-all disabled:opacity-50"
-                placeholder={lang === 'ar' ? 'مثال: badge-777 أو dr.ahmed@soli.med' : 'e.g. badge-777 or admin@soli.med'}
+                className="w-full pr-10 pl-3 py-3 bg-[#050b17] border border-slate-700/80 rounded-xl text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-1 focus:ring-[#00f2fe] focus:border-[#00f2fe] transition-all text-right font-sans tracking-wide"
               />
             </div>
+          </div>
 
-            <div>
-              <label
-                htmlFor="password-input"
-                className="block text-xs font-semibold text-slate-300 mb-1.5"
+          {/* Field: Password */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowForgotModal(true);
+                  setForgotInput(username);
+                  setForgotMsg(null);
+                }}
+                className="text-xs text-cyan-400 hover:text-cyan-300 transition-colors cursor-pointer"
               >
-                {lang === 'ar' ? 'كلمة المرور أو رمز PIN الخاص بك *' : 'Password or PIN Code *'}
+                نسيت كلمة المرور؟
+              </button>
+              <label className="block text-right text-xs font-medium text-slate-300" htmlFor="password">
+                كلمة المرور
               </label>
-              <div className="relative">
-                <input
-                  id="password-input"
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  disabled={loading}
-                  required
-                  className="w-full bg-slate-950 border border-slate-800 focus:border-teal-400 focus:ring-1 focus:ring-teal-400 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none font-mono transition-all disabled:opacity-50"
-                  placeholder="••••••••"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  disabled={loading}
-                  className={`absolute top-1/2 -translate-y-1/2 text-slate-400 hover:text-teal-300 p-1.5 cursor-pointer transition-colors ${
-                    isRTL ? 'left-2.5' : 'right-2.5'
-                  }`}
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
             </div>
+            <div className="relative rounded-xl shadow-inner">
+              <button 
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                aria-label="إظهار أو إخفاء كلمة المرور"
+                className={`absolute inset-y-0 left-0 pl-3.5 flex items-center transition-colors cursor-pointer ${showPassword ? 'text-cyan-400' : 'text-slate-400 hover:text-cyan-400'}`}
+              >
+                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
 
-            <button
+              <input 
+                id="password"
+                name="password"
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                required
+                className="w-full pl-11 pr-3 py-3 bg-[#050b17] border border-slate-700/80 rounded-xl text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-1 focus:ring-[#00f2fe] focus:border-[#00f2fe] transition-all text-left font-mono tracking-widest"
+              />
+            </div>
+          </div>
+
+          {/* Primary Action Button */}
+          <div className="pt-2">
+            <button 
               type="submit"
-              disabled={loading}
-              className="w-full py-2.5 bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs rounded-xl shadow-lg shadow-teal-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 active:scale-95 mt-2"
+              disabled={isLoading}
+              className="w-full bg-gradient-to-r from-[#00d2d3] via-[#00f2fe] to-[#00b4d8] hover:opacity-95 text-slate-950 font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 text-sm tracking-wide transition duration-150 ease-in-out cursor-pointer active:scale-[0.99] disabled:opacity-50"
+              style={{
+                boxShadow: '0 4px 20px -2px rgba(0, 242, 254, 0.45)'
+              }}
             >
-              {loading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
-                  <span>{lang === 'ar' ? 'جاري التحقق...' : 'Authenticating...'}</span>
-                </>
+              {isLoading ? (
+                <div className="w-5 h-5 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
               ) : (
                 <>
-                  <LogIn className="w-4 h-4 text-slate-950" />
-                  <span>{lang === 'ar' ? 'تسجيل الدخول الآمن' : 'Secure Clinical Login'}</span>
+                  <span>تسجيل الدخول</span>
+                  <LogIn className="w-4 h-4 rotate-180 text-slate-950" />
                 </>
               )}
             </button>
+          </div>
+        </form>
+      </main>
 
-            {/* Separator */}
-            <div className="relative flex items-center justify-center my-4 py-1">
-              <div className="border-t border-slate-800/80 w-full" />
-              <span className="absolute bg-[#0a1122] px-3 text-[10px] font-bold text-slate-500 tracking-wider uppercase">
-                {lang === 'ar' ? 'أو' : 'OR'}
-              </span>
-            </div>
+      {/* FOOTER SECTION */}
+      <footer className="w-full text-center space-y-1.5 pb-2" data-purpose="site-footer">
+        <p className="text-[11px] text-slate-400 leading-relaxed dir-ltr">
+          © 2026 Soli Medical MICU Systems (Egypt). <span className="font-sans">جميع الحقوق محفوظة.</span>
+        </p>
+        <p className="text-[10px] text-slate-500 flex items-center justify-center gap-1.5">
+          <span>نظام محمي وفقاً لمعايير نقابة أطباء مصر والهيئة العامة للاعتماد والرقابة الصحية (GAHAR)</span>
+          <ShieldCheck className="w-3.5 h-3.5 text-cyan-500/60" />
+        </p>
+      </footer>
 
-            {/* Google Authentication Option */}
-            <button
-              type="button"
-              onClick={handleGoogleLogin}
-              disabled={loading}
-              className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-200 hover:text-white font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 active:scale-95 shadow-md shadow-black/25"
-            >
-              <svg className="w-3.5 h-3.5 text-red-400 shrink-0" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12.24 10.285V14.4h6.887c-.648 2.41-2.519 4.113-5.136 4.113-3.555 0-6.437-2.882-6.437-6.437s2.882-6.437 6.437-6.437c1.554 0 2.98.548 4.113 1.455l3.111-3.111C18.995 1.944 15.82 1 12.24 1 6.136 1 1.25 6.136 1.25 12.24s4.886 11.24 10.99 11.24c6.236 0 11.24-4.886 11.24-11.24 0-.648-.051-1.334-.145-1.954H12.24z" />
-              </svg>
-              <span>{lang === 'ar' ? 'تسجيل بواسطة Google Workspace' : 'Sign in with Google Account'}</span>
-            </button>
-          </form>
-        ) : (
-          /* Quick Demo Login Grid */
-          <div className="space-y-4">
-            <div className="text-center p-3 bg-teal-950/20 border border-teal-500/20 rounded-2xl">
-              <p className="text-[11px] text-teal-300 font-semibold leading-relaxed">
-                {lang === 'ar'
-                  ? 'اختر دورك الوظيفي السريري لتسجيل الدخول السريع وفحص محاكي العلامات والقياس عن بعد:'
-                  : 'Select your clinical staff role to quickly preview the real-time ICU telemetry dashboard:'}
-              </p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2.5">
+      {/* Forgot Password Modal */}
+      {showForgotModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-[#0a1224] border border-cyan-500/40 rounded-3xl p-6 text-slate-100 shadow-2xl space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
+                  <KeyRound className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">
+                    استعادة كلمة المرور
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    أدخل البيانات المطلوبة لتعيين كلمة مرور جديدة
+                  </p>
+                </div>
+              </div>
               <button
                 type="button"
-                onClick={() => handleDemoLogin(StaffRole.ADMIN)}
-                disabled={loading}
-                className="p-3 bg-slate-900/60 hover:bg-slate-900 border border-slate-800 hover:border-teal-500/40 rounded-xl text-center transition-all cursor-pointer hover:shadow-lg disabled:opacity-50 group"
+                onClick={() => setShowForgotModal(false)}
+                className="w-8 h-8 rounded-lg bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
               >
-                <p className="text-xs font-bold text-white group-hover:text-teal-400">
-                  {lang === 'ar' ? 'مدير النظام (ADMIN)' : 'System Admin'}
-                </p>
-                <p className="text-[10px] text-slate-400 mt-0.5">
-                  {lang === 'ar' ? 'صلاحية كاملة وإعدادات' : 'Full access & logs'}
-                </p>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleDemoLogin(StaffRole.CONSULTANT)}
-                disabled={loading}
-                className="p-3 bg-slate-900/60 hover:bg-slate-900 border border-slate-800 hover:border-teal-500/40 rounded-xl text-center transition-all cursor-pointer hover:shadow-lg disabled:opacity-50 group"
-              >
-                <p className="text-xs font-bold text-white group-hover:text-teal-400">
-                  {lang === 'ar' ? 'استشاري (Consultant)' : 'Consultant MD'}
-                </p>
-                <p className="text-[10px] text-slate-400 mt-0.5">
-                  {lang === 'ar' ? 'اتخاذ القرار والتوقيع' : 'SBAR Sign-off'}
-                </p>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleDemoLogin(StaffRole.SPECIALIST)}
-                disabled={loading}
-                className="p-3 bg-slate-900/60 hover:bg-slate-900 border border-slate-800 hover:border-teal-500/40 rounded-xl text-center transition-all cursor-pointer hover:shadow-lg disabled:opacity-50 group"
-              >
-                <p className="text-xs font-bold text-white group-hover:text-teal-400">
-                  {lang === 'ar' ? 'أخصائي (Specialist)' : 'Specialist MD'}
-                </p>
-                <p className="text-[10px] text-slate-400 mt-0.5">
-                  {lang === 'ar' ? 'تعديل السجلات الطبية' : 'Manage patient dossier'}
-                </p>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleDemoLogin(StaffRole.RESIDENT)}
-                disabled={loading}
-                className="p-3 bg-slate-900/60 hover:bg-slate-900 border border-slate-800 hover:border-teal-500/40 rounded-xl text-center transition-all cursor-pointer hover:shadow-lg disabled:opacity-50 group"
-              >
-                <p className="text-xs font-bold text-white group-hover:text-teal-400">
-                  {lang === 'ar' ? 'مقيم (Resident)' : 'Resident MD'}
-                </p>
-                <p className="text-[10px] text-slate-400 mt-0.5">
-                  {lang === 'ar' ? 'كتابة ملاحظات وتأكيد' : 'Write notes & triage'}
-                </p>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleDemoLogin(StaffRole.LEAD_RN)}
-                disabled={loading}
-                className="p-3 bg-slate-900/60 hover:bg-slate-900 border border-slate-800 hover:border-teal-500/40 rounded-xl text-center transition-all cursor-pointer hover:shadow-lg disabled:opacity-50 group"
-              >
-                <p className="text-xs font-bold text-white group-hover:text-teal-400">
-                  {lang === 'ar' ? 'رئيس التمريض (Lead RN)' : 'Lead RN'}
-                </p>
-                <p className="text-[10px] text-slate-400 mt-0.5">
-                  {lang === 'ar' ? 'تنسيق الأسرة والورديات' : 'Triage & Bed manager'}
-                </p>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleDemoLogin(StaffRole.BEDSIDE_RN)}
-                disabled={loading}
-                className="p-3 bg-slate-900/60 hover:bg-slate-900 border border-slate-800 hover:border-teal-500/40 rounded-xl text-center transition-all cursor-pointer hover:shadow-lg disabled:opacity-50 group"
-              >
-                <p className="text-xs font-bold text-white group-hover:text-teal-400">
-                  {lang === 'ar' ? 'ممرض مناوب (Bedside RN)' : 'Bedside RN'}
-                </p>
-                <p className="text-[10px] text-slate-400 mt-0.5">
-                  {lang === 'ar' ? 'تسجيل العلامات والجرعات' : 'Vitals stream & infusions'}
-                </p>
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            {loading && (
-              <div className="flex items-center justify-center gap-2 pt-2 text-teal-400 text-xs font-semibold">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>{lang === 'ar' ? 'جاري الدخول السريع...' : 'Quick routing to Central Dashboard...'}</span>
+            {forgotMsg && (
+              <div className={`p-3 rounded-xl text-xs flex items-center gap-2 ${
+                forgotMsg.type === 'success' ? 'bg-cyan-950/60 border border-cyan-500/50 text-cyan-200' : 'bg-red-950/60 border border-red-500/50 text-red-200'
+              }`}>
+                {forgotMsg.type === 'success' ? <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0" /> : <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />}
+                <span>{forgotMsg.text}</span>
               </div>
             )}
-          </div>
-        )}
 
-        {/* Footer Regulatory compliance statement */}
-        <div className="text-center pt-2 border-t border-slate-800/60">
-          <p className="text-[10px] text-slate-500 leading-normal">
-            {lang === 'ar'
-              ? 'بوابة آمنة ومتوافقة مع معايير CBAHI و JCI و HIPAA لتوثيق حالات المرضى في العناية المركزة.'
-              : 'Secure & Authorized access portal. Compliant with CBAHI, JCI, and HIPAA ICU data privacy standards.'}
-          </p>
+            <form onSubmit={handleForgotPasswordSubmit} className="space-y-3.5">
+              <div>
+                <label className="block text-right text-xs font-medium text-slate-300 mb-1" htmlFor="forgot-username">
+                  اسم المستخدم أو البريد الإلكتروني
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-slate-400">
+                    <User className="w-4 h-4 text-cyan-500/70" />
+                  </div>
+                  <input
+                    id="forgot-username"
+                    type="text"
+                    value={forgotInput}
+                    onChange={(e) => setForgotInput(e.target.value)}
+                    placeholder=""
+                    required
+                    autoComplete="off"
+                    className="w-full pr-10 pl-3 py-2.5 bg-[#050b17] border border-slate-700 rounded-xl text-white placeholder-slate-500 text-xs focus:outline-none focus:ring-1 focus:ring-cyan-400 text-right font-sans"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-right text-xs font-medium text-slate-300 mb-1" htmlFor="forgot-token">
+                  رمز التشفير / كود الاستعادة
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-slate-400">
+                    <KeyRound className="w-4 h-4 text-cyan-500/70" />
+                  </div>
+                  <input
+                    id="forgot-token"
+                    type="password"
+                    value={forgotToken}
+                    onChange={(e) => setForgotToken(e.target.value)}
+                    placeholder=""
+                    required
+                    autoComplete="off"
+                    className="w-full pr-10 pl-3 py-2.5 bg-[#050b17] border border-slate-700 rounded-xl text-white placeholder-slate-500 text-xs focus:outline-none focus:ring-1 focus:ring-cyan-400 text-right font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-right text-xs font-medium text-slate-300 mb-1" htmlFor="forgot-newpass">
+                  كلمة المرور الجديدة (6 أحرف على الأقل)
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-slate-400">
+                    <Lock className="w-4 h-4 text-cyan-500/70" />
+                  </div>
+                  <input
+                    id="forgot-newpass"
+                    type="password"
+                    value={forgotNewPass}
+                    onChange={(e) => setForgotNewPass(e.target.value)}
+                    placeholder=""
+                    required
+                    minLength={6}
+                    autoComplete="new-password"
+                    className="w-full pr-10 pl-3 py-2.5 bg-[#050b17] border border-slate-700 rounded-xl text-white placeholder-slate-500 text-xs focus:outline-none focus:ring-1 focus:ring-cyan-400 text-left font-mono tracking-widest"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowForgotModal(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 cursor-pointer"
+                >
+                  إغلاق
+                </button>
+                <button
+                  type="submit"
+                  disabled={forgotLoading}
+                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-teal-500 hover:opacity-95 text-slate-950 font-bold text-xs shadow-lg shadow-cyan-500/20 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {forgotLoading ? (
+                    <div className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <KeyRound className="w-3.5 h-3.5" />
+                      <span>تحديث كلمة المرور بالرمز</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

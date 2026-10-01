@@ -451,5 +451,3 @@ export const Sidebar: React.FC<SidebarProps> = ({
     </>
   );
 };
-
-export default Sidebar;

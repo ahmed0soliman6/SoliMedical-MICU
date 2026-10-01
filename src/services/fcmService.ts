@@ -8,6 +8,7 @@
  * - Automatic device token registration and Firestore sync
  * - Seamless integration with NotificationProvider and Settings
  */
+
 import { getMessaging, getToken, onMessage, isSupported, Messaging } from 'firebase/messaging';
 import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { firebaseApp, firestore, auth, sanitizeForFirestore } from './firebase.ts';
@@ -15,6 +16,7 @@ import { AppNotification, NotificationType } from '../types/notification.ts';
 import { IcuUser } from '../types/schema.ts';
 
 const FCM_TOKEN_STORAGE_KEY = 'soli_icu_fcm_device_token';
+
 let messagingInstance: Messaging | null = null;
 let isMessagingSupported: boolean | null = null;
 
@@ -45,6 +47,7 @@ export async function checkIsFcmSupported(): Promise<boolean> {
 export async function getFcmMessaging(): Promise<Messaging | null> {
   const supported = await checkIsFcmSupported();
   if (!supported) return null;
+
   if (!messagingInstance) {
     try {
       messagingInstance = getMessaging(firebaseApp);
@@ -66,15 +69,18 @@ export async function requestFcmToken(currentUser?: IcuUser | null): Promise<str
       console.info('[FCM] Web Push not supported in this browser environment.');
       return null;
     }
+
     if (Notification.permission === 'denied') {
       console.info('[FCM] Notification permission is blocked by user.');
       return null;
     }
+
     const permission = await Notification.requestPermission();
     if (permission !== 'granted') {
       console.info('[FCM] Notification permission not granted:', permission);
       return null;
     }
+
     const messaging = await getFcmMessaging();
     if (!messaging) return null;
 
@@ -101,7 +107,8 @@ export async function requestFcmToken(currentUser?: IcuUser | null): Promise<str
     // Get FCM registration token with mandatory vapidKey and Service Worker Registration
     const token = await getToken(messaging, {
       vapidKey,
-      serviceWorkerRegistration: swReg,    }).catch(async (tokErr) => {
+      serviceWorkerRegistration: swReg,
+    }).catch(async (tokErr) => {
       console.warn('[FCM] getToken error with vapidKey:', tokErr);
       return null;
     });
@@ -117,6 +124,7 @@ export async function requestFcmToken(currentUser?: IcuUser | null): Promise<str
     if (currentUser?.uid) {
       await syncTokenToFirestore(token, currentUser);
     }
+
     return token;
   } catch (err) {
     console.warn('[FCM] requestFcmToken notice:', err);
@@ -130,10 +138,10 @@ export async function requestFcmToken(currentUser?: IcuUser | null): Promise<str
 export async function syncTokenToFirestore(token: string, user: IcuUser): Promise<void> {
   try {
     if (!token || !user?.uid) return;
-    
     // Encode token into a safe document ID
     const docId = `token_${token.slice(0, 32)}_${user.uid}`;
     const tokenRef = doc(firestore, 'fcmTokens', docId);
+
     const data = {
       token,
       uid: user.uid,
@@ -145,7 +153,7 @@ export async function syncTokenToFirestore(token: string, user: IcuUser): Promis
       updatedAt: new Date().toISOString(),
       createdAt: new Date().toISOString(),
     };
-    
+
     await setDoc(tokenRef, sanitizeForFirestore(data), { merge: true });
   } catch (e) {
     console.warn('[FCM] Token Firestore sync notice:', e);
@@ -159,13 +167,12 @@ export async function unregisterFcmToken(currentUser?: IcuUser | null): Promise<
   try {
     const token = localStorage.getItem(FCM_TOKEN_STORAGE_KEY);
     if (!token) return;
-    
+
     if (currentUser?.uid) {
       const docId = `token_${token.slice(0, 32)}_${currentUser.uid}`;
       const tokenRef = doc(firestore, 'fcmTokens', docId);
       await deleteDoc(tokenRef).catch(() => {});
     }
-    
     localStorage.removeItem(FCM_TOKEN_STORAGE_KEY);
   } catch (e) {
     console.warn('[FCM] Unregister token notice:', e);
@@ -181,12 +188,12 @@ export async function subscribeToForegroundFcmMessages(
   try {
     const messaging = await getFcmMessaging();
     if (!messaging) return null;
-    
+
     const unsubscribe = onMessage(messaging, (payload) => {
       console.log('[FCM] Foreground message received:', payload);
       const data = payload.data || {};
       const notifPayload = payload.notification || {};
-      
+
       const appNotif: AppNotification = {
         id: data.id || `fcm-${Date.now()}`,
         type: (data.type as NotificationType) || 'ADMISSION',
@@ -204,10 +211,10 @@ export async function subscribeToForegroundFcmMessages(
           patientMrn: data.patientMrn,
         } : undefined,
       };
-      
+
       onForegroundMessage(appNotif);
     });
-    
+
     return unsubscribe;
   } catch (err) {
     console.warn('[FCM] Foreground listener init notice:', err);
@@ -244,11 +251,11 @@ export async function broadcastFcmPush(notification: {
       action: notification.action || 'OPEN_BED',
       timestamp: new Date().toISOString(),
     };
-    
+
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
-    
+
     if (auth.currentUser) {
       try {
         const idToken = await auth.currentUser.getIdToken();
@@ -259,7 +266,7 @@ export async function broadcastFcmPush(notification: {
         console.warn('[FCM] Error obtaining auth ID token for broadcast:', tokenErr);
       }
     }
-    
+
     // Asynchronously dispatch to full-stack server FCM broadcast route
     fetch('/api/notifications/fcm-broadcast', {
       method: 'POST',

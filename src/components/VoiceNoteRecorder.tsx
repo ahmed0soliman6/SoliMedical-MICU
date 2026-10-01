@@ -182,61 +182,69 @@ export const VoiceNoteRecorder: React.FC<VoiceNoteRecorderProps> = ({
     let stream: MediaStream | null = null;
     try {
       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({ 
-            audio: {
-              echoCancellation: true,
-              noiseSuppression: true,
-              autoGainControl: true,
-            } 
-          });
-        } catch (constraintErr) {
-          console.warn('Advanced audio constraints failed, trying simple audio stream:', constraintErr);
-          stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        }
+        stream = await navigator.mediaDevices.getUserMedia({ 
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          } 
+        });
         mediaStreamRef.current = stream;
       }
     } catch (err: any) {
       console.warn('getUserMedia error:', err);
+      setErrorMsg(
+        lang === 'ar'
+          ? 'تم رفض إذن الميكروفون من قِبل المتصفح. يُرجى السماح بالوصول للميكروفون من إعدادات الموقع/المتصفح.'
+          : 'Microphone access was denied. Please allow microphone permissions in your browser settings.'
+      );
+      return;
     }
 
-    // 1. Initialize MediaRecorder for guaranteed audio recording & Gemini fallback if stream exists
-    if (stream) {
-      try {
-        const mimeTypes = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'];
-        let selectedMime = '';
-        for (const m of mimeTypes) {
-          if (MediaRecorder.isTypeSupported(m)) {
-            selectedMime = m;
-            break;
-          }
+    if (!stream) {
+      setErrorMsg(
+        lang === 'ar'
+          ? 'الميكروفون غير متوفر في هذا الجهاز.'
+          : 'Microphone is not available on this device.'
+      );
+      return;
+    }
+
+    // 1. Initialize MediaRecorder for guaranteed audio recording & Gemini fallback
+    try {
+      const mimeTypes = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'];
+      let selectedMime = '';
+      for (const m of mimeTypes) {
+        if (MediaRecorder.isTypeSupported(m)) {
+          selectedMime = m;
+          break;
         }
-
-        const mediaRecorder = selectedMime 
-          ? new MediaRecorder(stream, { mimeType: selectedMime })
-          : new MediaRecorder(stream);
-
-        mediaRecorder.ondataavailable = (e) => {
-          if (e.data && e.data.size > 0) {
-            audioChunksRef.current.push(e.data);
-          }
-        };
-
-        mediaRecorder.onstop = () => {
-          const audioBlob = new Blob(audioChunksRef.current, { 
-            type: selectedMime || 'audio/webm' 
-          });
-          // If web speech API didn't finalize anything or only interim, trigger AI transcription
-          if (!webSpeechTranscribedRef.current && audioBlob.size > 1000) {
-            transcribeAudioBlobWithAI(audioBlob, selectedLang);
-          }
-        };
-
-        mediaRecorderRef.current = mediaRecorder;
-        mediaRecorder.start(250); // collect chunks every 250ms
-      } catch (e) {
-        console.warn('MediaRecorder init error:', e);
       }
+
+      const mediaRecorder = selectedMime 
+        ? new MediaRecorder(stream, { mimeType: selectedMime })
+        : new MediaRecorder(stream);
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          audioChunksRef.current.push(e.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        const audioBlob = new Blob(audioChunksRef.current, { 
+          type: selectedMime || 'audio/webm' 
+        });
+        // If web speech API didn't finalize anything or only interim, trigger AI transcription
+        if (!webSpeechTranscribedRef.current && audioBlob.size > 1000) {
+          transcribeAudioBlobWithAI(audioBlob, selectedLang);
+        }
+      };
+
+      mediaRecorderRef.current = mediaRecorder;
+      mediaRecorder.start(250); // collect chunks every 250ms
+    } catch (e) {
+      console.warn('MediaRecorder init error:', e);
     }
 
     // 2. Also initialize Web Speech API if supported for live instant streaming
@@ -283,15 +291,10 @@ export const VoiceNoteRecorder: React.FC<VoiceNoteRecorderProps> = ({
         };
 
         recognition.onerror = (event: any) => {
-          console.warn('Web Speech Recognition error:', event.error);
-          if (event.error === 'not-allowed' || event.error === 'service-not-allowed' || event.error === 'audio-capture') {
-            if (!stream) {
-              setErrorMsg(
-                lang === 'ar'
-                  ? 'تم رفض إذن الميكروفون. يرجى السماح للموقع باستخدام الميكروفون من أيقونة القفل 🔒 بمتصفحك.'
-                  : 'Microphone permission denied. Please allow microphone access in your browser settings (lock icon 🔒).'
-              );
-            }
+          console.log('Web Speech event status:', event.error);
+          // If Web Speech is not allowed or failed, MediaRecorder is already recording audio for Gemini AI!
+          if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+            console.info('Switching seamlessly to Gemini AI Voice Dictation Engine.');
           }
         };
 
@@ -311,13 +314,6 @@ export const VoiceNoteRecorder: React.FC<VoiceNoteRecorderProps> = ({
       } catch (err) {
         console.warn('SpeechRecognition start failed, fallback to MediaRecorder only:', err);
       }
-    } else if (!stream) {
-      setErrorMsg(
-        lang === 'ar'
-          ? 'لم نتمكن من الوصول للميكروفون. يرجى التأكد من توصيل الميكروفون والسماح بالإذن من المتصفح.'
-          : 'Microphone is not available or permission was denied.'
-      );
-      return;
     }
 
     setIsListening(true);

@@ -1,3 +1,4 @@
+import { LabsTemplateManager } from './LabsTemplateManager.tsx';
 import React, { useState } from 'react';
 import { 
   Droplet, 

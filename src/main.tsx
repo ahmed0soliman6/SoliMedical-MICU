@@ -1,19 +1,25 @@
-import React from 'react';
-import ReactDOM from 'react-dom/client';
+import {StrictMode} from 'react';
+import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
-import { AuthProvider } from './services/AuthContext.tsx';
 import { SettingsProvider } from './services/SettingsContext.tsx';
+import { AuthProvider } from './services/AuthContext.tsx';
 import { NotificationProvider } from './services/NotificationContext.tsx';
+import { initGlobalArabicNumeralConverter } from './services/numberUtils.ts';
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <AuthProvider>
-      <SettingsProvider>
+// Initialize global auto-conversion of Arabic digits to English digits
+initGlobalArabicNumeralConverter();
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <SettingsProvider>
+      <AuthProvider>
         <NotificationProvider>
           <App />
         </NotificationProvider>
-      </SettingsProvider>
-    </AuthProvider>
-  </React.StrictMode>
+      </AuthProvider>
+    </SettingsProvider>
+  </StrictMode>,
 );
+
+

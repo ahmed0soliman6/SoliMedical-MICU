@@ -1,4 +1,14 @@
-import React, { useState, useEffect, useMemo, FC } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { 
+  Droplet, 
+  X, 
+  Check, 
+  AlertCircle, 
+  Plus, 
+  Minus,
+  Trash2, 
+  Sliders
+} from 'lucide-react';
 import { BedNumber, PatientDossier, InfusionPumpLine, PumpStatus } from '../types/schema.ts';
 import { db } from '../db/icuSyncDb.ts';
 import { doc, deleteDoc } from 'firebase/firestore';

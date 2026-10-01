@@ -10,7 +10,7 @@ import {
   ShieldAlert
 } from 'lucide-react';
 import { BedRecord, PatientDossier, BedNumber } from '../types/schema.ts';
-import { executeTransfer } from '../services/firestoreQueries.ts';
+import { executeTransfer } from '../services/operations.ts';
 import { useAuth } from '../services/AuthContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
 import { useAppNotifications } from '../services/NotificationContext.tsx';

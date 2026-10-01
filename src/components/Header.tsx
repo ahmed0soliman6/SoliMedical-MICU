@@ -1,29 +1,47 @@
-import React, { useState, useEffect, useCallback, useRef, FC } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
-  Menu, 
+  Activity, 
+  UserPlus, 
+  ShieldAlert, 
+  Layers, 
+  Database,
+  Cloud, 
   Bell, 
   BellRing, 
-  AlertTriangle, 
-  ArrowLeft, 
-  ArrowRight, 
-  CheckCircle, 
-  ChevronDown, 
-  ChevronLeft, 
-  ChevronRight, 
-  ChevronUp, 
-  Layers, 
-  Loader, 
-  Trash, 
-  Volume, 
+  Sliders, 
+  Languages, 
+  Menu, 
+  X, 
+  Volume2, 
   VolumeX, 
-  Wifi, 
-  WifiOff 
+  CheckCircle,
+  CheckCircle2, 
+  Sun, 
+  Moon,
+  Trash2,
+  Check,
+  ChevronRight,
+  ChevronLeft,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  LogOut,
+  ShieldCheck,
+  ArrowRight,
+  ArrowLeft,
+  Wifi,
+  WifiOff,
+  CloudOff,
+  Loader2,
+  AlertTriangle
 } from 'lucide-react';
-import { AppNotification } from '../types/notification.ts';
+import { BedRecord, PatientDossier, BedNumber } from '../types/schema.ts';
+import { requestNotificationPermission, playIcuAlarmAudio, checkConnectionHealth, ConnectionHealthResult } from '../services/firebase.ts';
 import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
-import { useAppNotifications } from '../services/NotificationContext.tsx';
 import { getPatientForBed } from '../services/dataModel.ts';
+import { useAppNotifications } from '../services/NotificationContext.tsx';
+import { AppNotification } from '../types/notification.ts';
 
 interface HeaderProps {
   beds: BedRecord[];
@@ -687,3 +705,5 @@ export const Header: React.FC<HeaderProps> = ({
     </header>
   );
 };
+
+
