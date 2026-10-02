@@ -203,6 +203,7 @@ export function getDefaultPermissionsForRole(role: StaffRole): UserPermissions {
     case StaffRole.ADMIN:
       return {
         'beds.view': true,
+        'beds.update': true,
         'patients.view': true,
         'patients.create': true,
         'patients.update': true,
@@ -245,6 +246,7 @@ export function getDefaultPermissionsForRole(role: StaffRole): UserPermissions {
     case StaffRole.SPECIALIST:
       return {
         'beds.view': true,
+        'beds.update': true,
         'patients.view': true,
         'patients.create': true,
         'patients.update': true,
@@ -284,6 +286,7 @@ export function getDefaultPermissionsForRole(role: StaffRole): UserPermissions {
     case StaffRole.RESIDENT:
       return {
         'beds.view': true,
+        'beds.update': false,
         'patients.view': true,
         'patients.create': true,
         'patients.update': true,
@@ -323,6 +326,7 @@ export function getDefaultPermissionsForRole(role: StaffRole): UserPermissions {
     case StaffRole.LEAD_RN:
       return {
         'beds.view': true,
+        'beds.update': true,
         'patients.view': true,
         'patients.create': true,
         'patients.update': true,
@@ -362,6 +366,7 @@ export function getDefaultPermissionsForRole(role: StaffRole): UserPermissions {
     case StaffRole.BEDSIDE_RN:
       return {
         'beds.view': true,
+        'beds.update': false,
         'patients.view': true,
         'patients.create': true,
         'patients.update': true,
@@ -401,6 +406,7 @@ export function getDefaultPermissionsForRole(role: StaffRole): UserPermissions {
     case StaffRole.CLINICAL_PHARMACIST:
       return {
         'beds.view': true,
+        'beds.update': false,
         'patients.view': true,
         'patients.create': false,
         'patients.update': false,
@@ -440,6 +446,7 @@ export function getDefaultPermissionsForRole(role: StaffRole): UserPermissions {
     case StaffRole.RESPIRATORY_THERAPIST:
       return {
         'beds.view': true,
+        'beds.update': false,
         'patients.view': true,
         'patients.create': false,
         'patients.update': false,
@@ -479,6 +486,7 @@ export function getDefaultPermissionsForRole(role: StaffRole): UserPermissions {
     case StaffRole.AUDITOR:
       return {
         'beds.view': true,
+        'beds.update': false,
         'patients.view': true,
         'patients.create': false,
         'patients.update': false,
@@ -518,6 +526,7 @@ export function getDefaultPermissionsForRole(role: StaffRole): UserPermissions {
     default:
       return {
         'beds.view': true,
+        'beds.update': false,
         'patients.view': false,
         'patients.create': false,
         'patients.update': false,

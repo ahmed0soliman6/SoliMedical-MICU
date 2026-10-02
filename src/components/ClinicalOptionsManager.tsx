@@ -19,6 +19,8 @@ import {
 } from 'lucide-react';
 import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
+import { useAuth } from '../services/AuthContext.tsx';
+import { StaffRole } from '../types/schema.ts';
 import { 
   InfusionDrugPreset, 
   VentilatorModePreset, 
@@ -31,10 +33,14 @@ import {
   DEFAULT_ANTIBIOTIC_PRESETS,
   DEFAULT_SBAR_FIELDS
 } from '../types/settings.ts';
+import { Lock } from 'lucide-react';
 
 export const ClinicalOptionsManager: React.FC = () => {
   const { settings, updateSettings } = useSystemSettings();
   const { lang, isRTL } = useTranslation();
+  const { currentUser, hasPermission } = useAuth();
+  const isAdmin = currentUser?.role === StaffRole.ADMIN || currentUser?.isSuperAdmin === true || (currentUser?.role as any) === 'ADMIN';
+  const canUpdateSettings = isAdmin || hasPermission('settings.update') || (currentUser?.permissions as any)?.['settings.update'] === true;
 
   const [activeTab, setActiveTab] = useState<'pumps' | 'vent' | 'fluids' | 'antibiotics' | 'labs' | 'sbar'>('pumps');
 
@@ -96,6 +102,7 @@ export const ClinicalOptionsManager: React.FC = () => {
   // Handlers for SBAR Custom Fields
   const handleSaveSbarField = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canUpdateSettings) return;
     if (!sbarLabelAr.trim() && !sbarLabelEn.trim()) return;
 
     if (editingSbarFieldId) {
@@ -133,6 +140,7 @@ export const ClinicalOptionsManager: React.FC = () => {
   };
 
   const handleStartEditSbarField = (field: SbarFieldConfig) => {
+    if (!canUpdateSettings) return;
     setEditingSbarFieldId(field.id);
     setSbarLabelAr(field.labelAr || '');
     setSbarLabelEn(field.labelEn || '');
@@ -142,12 +150,14 @@ export const ClinicalOptionsManager: React.FC = () => {
   };
 
   const handleDeleteSbarField = (id: string) => {
+    if (!canUpdateSettings) return;
     if (!confirm(lang === 'ar' ? 'هل أنت متأكد من حذف هذا الحقل من نموذج تسليم المناوبة؟' : 'Are you sure you want to remove this field?')) return;
     const updated = sbarFieldsList.filter(f => f.id !== id);
     updateSettings({ sbarFields: updated });
   };
 
   const handleResetSbarFields = () => {
+    if (!canUpdateSettings) return;
     if (!confirm(lang === 'ar' ? 'استعادة حقول نموذج SBAR الافتراضية؟' : 'Reset SBAR fields to defaults?')) return;
     updateSettings({ sbarFields: DEFAULT_SBAR_FIELDS });
   };
@@ -155,6 +165,7 @@ export const ClinicalOptionsManager: React.FC = () => {
   // Handlers for Antibiotics
   const handleAddAbxPreset = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canUpdateSettings) return;
     if (!abxNameEn.trim()) return;
 
     const newAbx: AntibioticPreset = {
@@ -188,6 +199,7 @@ export const ClinicalOptionsManager: React.FC = () => {
   };
 
   const handleDeleteAbxPreset = (id: string) => {
+    if (!canUpdateSettings) return;
     if (!confirm(lang === 'ar' ? 'هل أنت متأكد من حذف هذا المضاد الحيوي من مكتبة الوحدة؟' : 'Are you sure you want to remove this antibiotic from the catalog?')) return;
     updateSettings({
       antibioticsPresets: antibioticsPresets.filter(a => a.id !== id)
@@ -195,6 +207,7 @@ export const ClinicalOptionsManager: React.FC = () => {
   };
 
   const handleResetAbxPresets = () => {
+    if (!canUpdateSettings) return;
     if (!confirm(lang === 'ar' ? 'استعادة قائمة المضادات الحيوية القياسية للعناية المركزة؟' : 'Restore standard ICU antimicrobial presets?')) return;
     updateSettings({ antibioticsPresets: DEFAULT_ANTIBIOTIC_PRESETS });
   };
@@ -202,6 +215,7 @@ export const ClinicalOptionsManager: React.FC = () => {
   // Handlers for Drugs
   const handleAddDrug = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canUpdateSettings) return;
     if (!drugNameEn.trim()) return;
 
     const newDrug: InfusionDrugPreset = {
@@ -226,6 +240,7 @@ export const ClinicalOptionsManager: React.FC = () => {
   };
 
   const handleDeleteDrug = (id: string) => {
+    if (!canUpdateSettings) return;
     if (!confirm(lang === 'ar' ? 'هل أنت متأكد من حذف هذا الخيار من قائمة أدوية المضخات؟' : 'Are you sure you want to remove this medication option?')) return;
     updateSettings({
       infusionDrugs: drugs.filter(d => d.id !== id)
@@ -233,6 +248,7 @@ export const ClinicalOptionsManager: React.FC = () => {
   };
 
   const handleResetDrugs = () => {
+    if (!canUpdateSettings) return;
     if (!confirm(lang === 'ar' ? 'استعادة قائمة أدوية المضخات الافتراضية؟' : 'Restore default infusion medications catalog?')) return;
     updateSettings({ infusionDrugs: DEFAULT_INFUSION_DRUGS });
   };
@@ -240,6 +256,7 @@ export const ClinicalOptionsManager: React.FC = () => {
   // Handlers for Vent Modes
   const handleAddMode = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canUpdateSettings) return;
     const cleanId = (modeId.trim() || modeLabelEn.trim()).toUpperCase().replace(/\s+/g, '_');
     if (!cleanId) return;
 
@@ -261,6 +278,7 @@ export const ClinicalOptionsManager: React.FC = () => {
   };
 
   const handleDeleteMode = (id: string) => {
+    if (!canUpdateSettings) return;
     if (!confirm(lang === 'ar' ? 'هل أنت متأكد من حذف نمط التنفس هذا؟' : 'Are you sure you want to delete this ventilation mode?')) return;
     updateSettings({
       ventilatorModes: ventModes.filter(m => m.id !== id)
@@ -268,6 +286,7 @@ export const ClinicalOptionsManager: React.FC = () => {
   };
 
   const handleResetModes = () => {
+    if (!canUpdateSettings) return;
     if (!confirm(lang === 'ar' ? 'استعادة أوضاع أجهزة التنفس الافتراضية؟' : 'Restore default ventilator modes?')) return;
     updateSettings({ ventilatorModes: DEFAULT_VENTILATOR_MODES });
   };
@@ -275,6 +294,7 @@ export const ClinicalOptionsManager: React.FC = () => {
   // Handlers for Fluid Categories
   const handleAddFluidCategory = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canUpdateSettings) return;
     const cleanId = (fluidId.trim() || fluidLabelEn.trim()).toLowerCase().replace(/\s+/g, '_');
     if (!cleanId) return;
 
@@ -298,6 +318,7 @@ export const ClinicalOptionsManager: React.FC = () => {
   };
 
   const handleDeleteFluidCategory = (id: string) => {
+    if (!canUpdateSettings) return;
     if (!confirm(lang === 'ar' ? 'هل أنت متأكد من حذف هذا البند من ميزان السوائل؟' : 'Are you sure you want to delete this fluid balance item?')) return;
     updateSettings({
       fluidCategories: fluidCategories.filter(f => f.id !== id)
@@ -305,12 +326,23 @@ export const ClinicalOptionsManager: React.FC = () => {
   };
 
   const handleResetFluids = () => {
+    if (!canUpdateSettings) return;
     if (!confirm(lang === 'ar' ? 'استعادة بنود ميزان السوائل الافتراضية؟' : 'Restore default fluid balance items?')) return;
     updateSettings({ fluidCategories: DEFAULT_FLUID_CATEGORIES });
   };
 
   return (
     <div className="space-y-4">
+      {!canUpdateSettings && (
+        <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 text-amber-900 dark:text-amber-200 text-xs font-semibold flex items-center gap-2.5 shadow-sm">
+          <Lock className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
+          <span>
+            {lang === 'ar'
+              ? 'تنبيه الصلاحيات: دليل وخيارات الأدوية وأجهزة التنفس وميزان السوائل في وضع القراءة فقط. لإضافة أو حذف خيارات سريرية، يلزم صلاحية (settings.update) أو حساب مدير النظام.'
+              : 'Permission Notice: Clinical catalogs, drug presets, and ventilator/fluid options are in read-only mode. Adding or removing options requires settings.update permission or Admin role.'}
+          </span>
+        </div>
+      )}
       {/* Tab Switcher */}
       <div className="flex flex-wrap items-center gap-2 p-1.5 bg-[#060a14] border border-slate-800 rounded-xl">
         <button

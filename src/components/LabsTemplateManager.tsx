@@ -7,10 +7,13 @@ import {
   ChevronUp,
   SlidersHorizontal,
   Check,
-  X
+  X,
+  Lock
 } from 'lucide-react';
 import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
+import { useAuth } from '../services/AuthContext.tsx';
+import { StaffRole } from '../types/schema.ts';
 
 interface LabsTemplateManagerProps {
   isCollapsible?: boolean;
@@ -27,6 +30,10 @@ export const LabsTemplateManager: React.FC<LabsTemplateManagerProps> = ({
 }) => {
   const { settings, updateSettings } = useSystemSettings();
   const { lang, isRTL } = useTranslation();
+  const { currentUser, hasPermission } = useAuth();
+  const isAdmin = currentUser?.role === StaffRole.ADMIN || currentUser?.isSuperAdmin === true || (currentUser?.role as any) === 'ADMIN';
+  const canUpdateSettings = isAdmin || hasPermission('settings.update') || (currentUser?.permissions as any)?.['settings.update'] === true;
+
   const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
 
   const categories = settings.labCategories || [];
@@ -46,6 +53,7 @@ export const LabsTemplateManager: React.FC<LabsTemplateManagerProps> = ({
 
   const handleAddCategory = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canUpdateSettings) return;
     const idClean = newCatId.trim().toLowerCase().replace(/\s+/g, '_');
     if (!idClean) return;
     if (categories.some(c => c.id === idClean)) {
@@ -72,6 +80,7 @@ export const LabsTemplateManager: React.FC<LabsTemplateManagerProps> = ({
   };
 
   const handleDeleteCategory = (catId: string) => {
+    if (!canUpdateSettings) return;
     if (!confirm(
       lang === 'ar' 
         ? '⚠️ هل أنت متأكد من حذف هذا الصندوق بالكامل؟ هذا الإجراء سيؤدي لإخفاء حقول الإدخال وعواميد النتائج المتعلقة به في جدول المريض.' 
@@ -86,6 +95,7 @@ export const LabsTemplateManager: React.FC<LabsTemplateManagerProps> = ({
 
   const handleAddParameter = (catId: string, e: React.FormEvent) => {
     e.preventDefault();
+    if (!canUpdateSettings) return;
     const idClean = newParamId.trim().toLowerCase().replace(/\s+/g, '_');
     if (!idClean) return;
 
@@ -121,6 +131,7 @@ export const LabsTemplateManager: React.FC<LabsTemplateManagerProps> = ({
   };
 
   const handleDeleteParameter = (catId: string, paramId: string) => {
+    if (!canUpdateSettings) return;
     if (!confirm(lang === 'ar' ? 'هل تريد حذف هذا التحليل من الصندوق؟' : 'Are you sure you want to delete this parameter?')) return;
     const updated = categories.map(cat => {
       if (cat.id === catId) {
@@ -178,6 +189,17 @@ export const LabsTemplateManager: React.FC<LabsTemplateManagerProps> = ({
       {/* Main Content Body */}
       {(!isCollapsible || !isCollapsed) && (
         <div className="space-y-5 animate-in fade-in duration-200">
+          {!canUpdateSettings && (
+            <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-semibold flex items-center gap-2">
+              <Lock className="w-4 h-4 shrink-0 text-amber-400" />
+              <span>
+                {lang === 'ar'
+                  ? 'تنبيه: قوالب وصناديق التحاليل في وضع القراءة فقط. لإضافة أو حذف صناديق أو تحاليل، يلزم صلاحية (settings.update) أو حساب مدير النظام.'
+                  : 'Notice: Lab panels and parameters are in read-only mode. Adding or removing requires settings.update permission or Admin role.'}
+              </span>
+            </div>
+          )}
+
           {/* Action description & New Panel Button */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-slate-900/60 rounded-xl border border-slate-800/80">
             <span className="text-slate-300 text-xs leading-relaxed">
@@ -185,14 +207,16 @@ export const LabsTemplateManager: React.FC<LabsTemplateManagerProps> = ({
                 ? 'قم بإعداد صناديق التحاليل والتحاليل بداخل كل صندوق، وسيتم تحديث شاشات إدخال وعرض التحاليل تلقائياً.' 
                 : 'Configure lab panels and tests inside each panel. Bedside forms and charts will update automatically.'}
             </span>
-            <button
-              type="button"
-              onClick={() => setShowAddCategory(!showAddCategory)}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-extrabold text-xs transition-all shadow-md active:scale-95 cursor-pointer self-start sm:self-center flex-shrink-0"
-            >
-              <Plus className="w-4 h-4" />
-              <span>{lang === 'ar' ? 'إنشاء صندوق تحاليل جديد' : 'New Lab Panel Box'}</span>
-            </button>
+            {canUpdateSettings && (
+              <button
+                type="button"
+                onClick={() => setShowAddCategory(!showAddCategory)}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-extrabold text-xs transition-all shadow-md active:scale-95 cursor-pointer self-start sm:self-center flex-shrink-0"
+              >
+                <Plus className="w-4 h-4" />
+                <span>{lang === 'ar' ? 'إنشاء صندوق تحاليل جديد' : 'New Lab Panel Box'}</span>
+              </button>
+            )}
           </div>
 
           {/* Add New Category Form */}
@@ -296,14 +320,16 @@ export const LabsTemplateManager: React.FC<LabsTemplateManagerProps> = ({
                         </span>
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteCategory(cat.id)}
-                      className="p-1.5 rounded-lg bg-slate-900 hover:bg-red-950/40 text-slate-500 hover:text-red-400 transition-all border border-slate-800/80 cursor-pointer flex-shrink-0"
-                      title={lang === 'ar' ? 'حذف الصندوق بالكامل' : 'Delete entire box'}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {canUpdateSettings && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteCategory(cat.id)}
+                        className="p-1.5 rounded-lg bg-slate-900 hover:bg-red-950/40 text-slate-500 hover:text-red-400 transition-all border border-slate-800/80 cursor-pointer flex-shrink-0"
+                        title={lang === 'ar' ? 'حذف الصندوق بالكامل' : 'Delete entire box'}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
 
                   {/* Parameters List Table */}
@@ -332,14 +358,16 @@ export const LabsTemplateManager: React.FC<LabsTemplateManagerProps> = ({
                                 <td className="p-2 text-slate-400">{p.unit || '—'}</td>
                                 <td className="p-2 text-teal-400 font-bold">{p.normalRange}</td>
                                 <td className="p-2 text-end">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeleteParameter(cat.id, p.id)}
-                                    className="p-1 rounded bg-slate-900 hover:bg-red-950/30 text-slate-500 hover:text-red-400 transition-colors cursor-pointer"
-                                    title={lang === 'ar' ? 'حذف هذا التحليل' : 'Delete parameter'}
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
+                                  {canUpdateSettings && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteParameter(cat.id, p.id)}
+                                      className="p-1 rounded bg-slate-900 hover:bg-red-950/30 text-slate-500 hover:text-red-400 transition-colors cursor-pointer"
+                                      title={lang === 'ar' ? 'حذف هذا التحليل' : 'Delete parameter'}
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
                                 </td>
                               </tr>
                             ))}
@@ -351,92 +379,94 @@ export const LabsTemplateManager: React.FC<LabsTemplateManagerProps> = ({
                 </div>
 
                 {/* Add Parameter To This Box */}
-                <div className="pt-3 border-t border-slate-800/60">
-                  {activeCatForNewParam === cat.id ? (
-                    <form onSubmit={(e) => handleAddParameter(cat.id, e)} className="bg-slate-900/90 border border-teal-500/30 rounded-xl p-3 space-y-2.5 animate-in slide-in-from-top-2 duration-200">
-                      <div className="text-[11px] font-bold text-teal-300 mb-1 flex items-center gap-1.5">
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>{lang === 'ar' ? `إضافة تحليل جديد لـ (${cat.nameAr})` : `Add test to ${cat.nameEn}`}</span>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="block text-[9px] text-slate-400 mb-0.5">{lang === 'ar' ? 'رمز فريد (إنجليزي)' : 'Code ID'}</label>
-                          <input
-                            type="text"
-                            required
-                            placeholder={lang === 'ar' ? 'مثال: trop_i' : 'e.g. trop_i'}
-                            value={newParamId}
-                            onChange={(e) => setNewParamId(e.target.value)}
-                            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white text-xs font-mono focus:border-teal-500 focus:outline-none"
-                          />
+                {canUpdateSettings && (
+                  <div className="pt-3 border-t border-slate-800/60">
+                    {activeCatForNewParam === cat.id ? (
+                      <form onSubmit={(e) => handleAddParameter(cat.id, e)} className="bg-slate-900/90 border border-teal-500/30 rounded-xl p-3 space-y-2.5 animate-in slide-in-from-top-2 duration-200">
+                        <div className="text-[11px] font-bold text-teal-300 mb-1 flex items-center gap-1.5">
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>{lang === 'ar' ? `إضافة تحليل جديد لـ (${cat.nameAr})` : `Add test to ${cat.nameEn}`}</span>
                         </div>
-                        <div>
-                          <label className="block text-[9px] text-slate-400 mb-0.5">{lang === 'ar' ? 'الاسم الظاهر' : 'Display Name'}</label>
-                          <input
-                            type="text"
-                            required
-                            placeholder={lang === 'ar' ? 'مثال: Troponin I' : 'e.g., Troponin I'}
-                            value={newParamName}
-                            onChange={(e) => setNewParamName(e.target.value)}
-                            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white text-xs focus:border-teal-500 focus:outline-none"
-                          />
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-[9px] text-slate-400 mb-0.5">{lang === 'ar' ? 'رمز فريد (إنجليزي)' : 'Code ID'}</label>
+                            <input
+                              type="text"
+                              required
+                              placeholder={lang === 'ar' ? 'مثال: trop_i' : 'e.g. trop_i'}
+                              value={newParamId}
+                              onChange={(e) => setNewParamId(e.target.value)}
+                              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white text-xs font-mono focus:border-teal-500 focus:outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[9px] text-slate-400 mb-0.5">{lang === 'ar' ? 'الاسم الظاهر' : 'Display Name'}</label>
+                            <input
+                              type="text"
+                              required
+                              placeholder={lang === 'ar' ? 'مثال: Troponin I' : 'e.g., Troponin I'}
+                              value={newParamName}
+                              onChange={(e) => setNewParamName(e.target.value)}
+                              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white text-xs focus:border-teal-500 focus:outline-none"
+                            />
+                          </div>
                         </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="block text-[9px] text-slate-400 mb-0.5">{lang === 'ar' ? 'الوحدة' : 'Unit'}</label>
-                          <input
-                            type="text"
-                            placeholder={lang === 'ar' ? 'مثال: ng/mL' : 'e.g., ng/mL'}
-                            value={newParamUnit}
-                            onChange={(e) => setNewParamUnit(e.target.value)}
-                            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white text-xs focus:border-teal-500 focus:outline-none"
-                          />
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-[9px] text-slate-400 mb-0.5">{lang === 'ar' ? 'الوحدة' : 'Unit'}</label>
+                            <input
+                              type="text"
+                              placeholder={lang === 'ar' ? 'مثال: ng/mL' : 'e.g., ng/mL'}
+                              value={newParamUnit}
+                              onChange={(e) => setNewParamUnit(e.target.value)}
+                              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white text-xs focus:border-teal-500 focus:outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[9px] text-slate-400 mb-0.5">{lang === 'ar' ? 'المدى الطبيعي' : 'Normal Range'}</label>
+                            <input
+                              type="text"
+                              placeholder={lang === 'ar' ? 'مثال: < 0.04' : 'e.g. < 0.04'}
+                              value={newParamNormal}
+                              onChange={(e) => setNewParamNormal(e.target.value)}
+                              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white text-xs focus:border-teal-500 focus:outline-none"
+                            />
+                          </div>
                         </div>
-                        <div>
-                          <label className="block text-[9px] text-slate-400 mb-0.5">{lang === 'ar' ? 'المدى الطبيعي' : 'Normal Range'}</label>
-                          <input
-                            type="text"
-                            placeholder={lang === 'ar' ? 'مثال: < 0.04' : 'e.g. < 0.04'}
-                            value={newParamNormal}
-                            onChange={(e) => setNewParamNormal(e.target.value)}
-                            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white text-xs focus:border-teal-500 focus:outline-none"
-                          />
+                        <div className="flex items-center gap-1.5 justify-end pt-1">
+                          <button
+                            type="button"
+                            onClick={() => setActiveCatForNewParam(null)}
+                            className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-[10px]"
+                          >
+                            {lang === 'ar' ? 'إلغاء' : 'Cancel'}
+                          </button>
+                          <button
+                            type="submit"
+                            className="px-3.5 py-1 rounded-lg bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-[10px] shadow"
+                          >
+                            {lang === 'ar' ? 'إضافة للعلبة' : 'Add to Box'}
+                          </button>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-1.5 justify-end pt-1">
-                        <button
-                          type="button"
-                          onClick={() => setActiveCatForNewParam(null)}
-                          className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-[10px]"
-                        >
-                          {lang === 'ar' ? 'إلغاء' : 'Cancel'}
-                        </button>
-                        <button
-                          type="submit"
-                          className="px-3.5 py-1 rounded-lg bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-[10px] shadow"
-                        >
-                          {lang === 'ar' ? 'إضافة للعلبة' : 'Add to Box'}
-                        </button>
-                      </div>
-                    </form>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setActiveCatForNewParam(cat.id);
-                        setNewParamId('');
-                        setNewParamName('');
-                        setNewParamUnit('');
-                        setNewParamNormal('');
-                      }}
-                      className="w-full py-2 rounded-xl border border-dashed border-slate-800 hover:border-teal-500/50 bg-slate-900/30 hover:bg-slate-900/60 text-slate-400 hover:text-teal-300 transition-all text-center font-bold flex items-center justify-center gap-1.5 text-xs cursor-pointer"
-                    >
-                      <Plus className="w-3.5 h-3.5 text-teal-400" />
-                      <span>{lang === 'ar' ? 'إضافة نوع تحليل لهذا الصندوق' : 'Add Test to this Panel Box'}</span>
-                    </button>
-                  )}
-                </div>
+                      </form>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveCatForNewParam(cat.id);
+                          setNewParamId('');
+                          setNewParamName('');
+                          setNewParamUnit('');
+                          setNewParamNormal('');
+                        }}
+                        className="w-full py-2 rounded-xl border border-dashed border-slate-800 hover:border-teal-500/50 bg-slate-900/30 hover:bg-slate-900/60 text-slate-400 hover:text-teal-300 transition-all text-center font-bold flex items-center justify-center gap-1.5 text-xs cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5 text-teal-400" />
+                        <span>{lang === 'ar' ? 'إضافة نوع تحليل لهذا الصندوق' : 'Add Test to this Panel Box'}</span>
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
           </div>

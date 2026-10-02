@@ -169,7 +169,7 @@ service cloud.firestore {
     match /beds/{bedId} {
       allow read: if hasPerm('beds.view') || hasPerm('patients.view');
       allow create: if hasPerm('patients.create') || isAdmin();
-      allow update: if hasPerm('beds.view') || hasPerm('beds.update') || hasPerm('patients.create') || hasPerm('patients.update') || hasPerm('sbar.update') || hasPerm('sbar.create') || hasPerm('transfer.create') || hasPerm('bedSwap.create') || hasPerm('discharge.create') || isAdmin();
+      allow update: if hasPerm('beds.update') || hasPerm('patients.create') || hasPerm('patients.update') || hasPerm('sbar.update') || hasPerm('sbar.create') || hasPerm('transfer.create') || hasPerm('bedSwap.create') || hasPerm('discharge.create') || isAdmin();
       allow delete: if isAdmin();
     }
 
@@ -413,12 +413,12 @@ service cloud.firestore {
     // System Settings
     match /system_settings/{settingId} {
       allow read: if isNotDisabledUser() || isActiveUser() || hasPerm('settings.view');
-      allow write: if isAdmin() || hasPerm('settings.update');
+      allow write: if isAdmin() || hasPerm('settings.update') || hasPerm('sections.manage') || hasPerm('cards.manage');
     }
 
     match /settings/{settingId} {
       allow read: if isNotDisabledUser() || isActiveUser() || hasPerm('settings.view');
-      allow write: if isAdmin() || hasPerm('settings.update');
+      allow write: if isAdmin() || hasPerm('settings.update') || hasPerm('sections.manage') || hasPerm('cards.manage');
     }
 
     match /admins/{userId} {

@@ -76,11 +76,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
   const { t, lang, setLanguage, isRTL } = useTranslation();
   const { currentUser, hasPermission } = useAuth();
   
-  // Only system admin or super admin can see and trigger cloud reset / purge
+  // Permissions & Governance
   const isAdmin = currentUser?.role === StaffRole.ADMIN || currentUser?.isSuperAdmin === true || (currentUser?.role as any) === 'ADMIN';
+  const canUpdateSettings = isAdmin || hasPermission('settings.update') || (currentUser?.permissions as any)?.['settings.update'] === true;
+  const canViewSettings = isAdmin || canUpdateSettings || hasPermission('settings.view') || (currentUser?.permissions as any)?.['settings.view'] === true;
+  const canManageSections = isAdmin || canUpdateSettings || hasPermission('sections.manage') || (currentUser?.permissions as any)?.['sections.manage'] === true;
+  const canManageCards = isAdmin || canUpdateSettings || hasPermission('cards.manage') || (currentUser?.permissions as any)?.['cards.manage'] === true;
+  const canManageModules = isAdmin || canUpdateSettings || canManageSections;
+  const canManageBedsideCards = isAdmin || canUpdateSettings || canManageCards;
 
-  // Feature cards management permission (ADMIN / Super Admin or user with settings.update permission)
-  const canManageFeatures = isAdmin || hasPermission('settings.update') || (currentUser?.permissions as any)?.['settings.update'] === true;
+  const canAccessSystemSettings = isAdmin || canUpdateSettings || (canViewSettings && settings.features.enableSystemSettingsPage !== false);
   
   // All cards are folded/collapsed by default (مطوية أسفل بعضها)
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
@@ -107,7 +112,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
   const [deletePasswordInput, setDeletePasswordInput] = useState<string>('');
   const [deletePasswordError, setDeletePasswordError] = useState<string | null>(null);
 
-  if (!isOpen) return null;
+  if (!isOpen || !canAccessSystemSettings) return null;
 
   const handleClearLocalBrowserData = async () => {
     setIsSyncingLocal(true);
@@ -520,7 +525,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
   ];
 
   const sections = [
-    ...(canManageFeatures ? [
+    ...(canManageModules ? [
       {
         id: 'modules',
         labelAr: 'الموديولات والشاشات الرئيسية',
@@ -530,6 +535,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
         icon: Layers,
         items: featureItems.filter(f => f.category === 'modules')
       },
+    ] : []),
+    ...(canManageBedsideCards ? [
       {
         id: 'bedside',
         labelAr: 'خصائص ومكونات ملف السرير (Flowsheet)',
@@ -1035,7 +1042,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                                     type="text"
                                     value={unitForm.unitName}
                                     onChange={(e) => setUnitForm({ ...unitForm, unitName: e.target.value })}
-                                    className="w-full bg-white dark:bg-[#060a14] border border-slate-300 dark:border-slate-800 rounded-xl px-4 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500 transition-all font-semibold text-sm"
+                                    disabled={!canUpdateSettings}
+                                    className="w-full bg-white dark:bg-[#060a14] border border-slate-300 dark:border-slate-800 rounded-xl px-4 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500 transition-all font-semibold text-sm disabled:opacity-60 disabled:cursor-not-allowed"
                                   />
                                 </div>
                                 <div>
@@ -1046,18 +1054,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                                     type="text"
                                     value={unitForm.shiftName}
                                     onChange={(e) => setUnitForm({ ...unitForm, shiftName: e.target.value })}
-                                    className="w-full bg-white dark:bg-[#060a14] border border-slate-300 dark:border-slate-800 rounded-xl px-4 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500 transition-all font-semibold text-sm"
+                                    disabled={!canUpdateSettings}
+                                    className="w-full bg-white dark:bg-[#060a14] border border-slate-300 dark:border-slate-800 rounded-xl px-4 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:border-teal-500 transition-all font-semibold text-sm disabled:opacity-60 disabled:cursor-not-allowed"
                                   />
                                 </div>
                               </div>
                               <div className="flex items-center gap-3 pt-2">
-                                <button
-                                  type="submit"
-                                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs transition-all shadow-md cursor-pointer"
-                                >
-                                  <Save className="w-4 h-4" />
-                                  <span>{lang === 'ar' ? 'حفظ إعدادات الوحدة' : 'Save Unit Details'}</span>
-                                </button>
+                                {canUpdateSettings ? (
+                                  <button
+                                    type="submit"
+                                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs transition-all shadow-md cursor-pointer"
+                                  >
+                                    <Save className="w-4 h-4" />
+                                    <span>{lang === 'ar' ? 'حفظ إعدادات الوحدة' : 'Save Unit Details'}</span>
+                                  </button>
+                                ) : (
+                                  <div className="flex items-center gap-2 text-xs text-slate-400 font-semibold">
+                                    <Lock className="w-4 h-4 text-slate-400" />
+                                    <span>{lang === 'ar' ? 'تعديل بيانات الوحدة يتطلب صلاحية settings.update' : 'Editing unit details requires settings.update'}</span>
+                                  </div>
+                                )}
                                 {savedFeedback && (
                                   <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-bold text-xs animate-in fade-in">
                                     <Check className="w-4 h-4" />
@@ -1072,12 +1088,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                             {section.items?.map((item) => {
                               const isEnabled = settings.features[item.key];
                               const ItemIcon = item.icon;
+                              const isItemDisabled = (item.category === 'modules' && !canManageModules) ||
+                                                     (item.category === 'bedside' && !canManageBedsideCards) ||
+                                                     (item.category === 'alerts' && !canUpdateSettings);
                               return (
                                 <button
                                   key={item.key}
                                   type="button"
-                                  onClick={() => toggleFeature(item.key)}
-                                  className={`p-4 rounded-xl border text-left flex items-start justify-between gap-3 transition-all cursor-pointer ${
+                                  onClick={() => {
+                                    if (isItemDisabled) return;
+                                    toggleFeature(item.key);
+                                  }}
+                                  disabled={isItemDisabled}
+                                  className={`p-4 rounded-xl border text-left flex items-start justify-between gap-3 transition-all ${
+                                    isItemDisabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
+                                  } ${
                                     isEnabled 
                                       ? 'bg-teal-50/70 dark:bg-[#10192d] border-teal-300 dark:border-teal-500/30 text-slate-900 dark:text-white shadow-sm' 
                                       : 'bg-white dark:bg-[#060a14] border-slate-200 dark:border-slate-800/80 text-slate-600 dark:text-slate-400 opacity-70 hover:opacity-100'
@@ -1090,8 +1115,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                                       <ItemIcon className="w-4 h-4" />
                                     </div>
                                     <div>
-                                      <h4 className={`text-xs sm:text-sm font-bold transition-colors ${isEnabled ? 'text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-400'}`}>
-                                        {lang === 'ar' ? item.labelAr : item.labelEn}
+                                      <h4 className={`text-xs sm:text-sm font-bold transition-colors flex items-center gap-1.5 ${isEnabled ? 'text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-400'}`}>
+                                        <span>{lang === 'ar' ? item.labelAr : item.labelEn}</span>
+                                        {isItemDisabled && <Lock className="w-3.5 h-3.5 text-slate-400" />}
                                       </h4>
                                       <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
                                         {lang === 'ar' ? item.descriptionAr : item.descriptionEn}
@@ -1117,7 +1143,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
 
         {/* Restore System Defaults Footer */}
         <div className="pt-6 mt-4 border-t border-slate-200 dark:border-slate-800/80 flex flex-col items-center gap-3">
-          {canManageFeatures && (
+          {canUpdateSettings && (
             <button
               type="button"
               onClick={resetToDefaults}

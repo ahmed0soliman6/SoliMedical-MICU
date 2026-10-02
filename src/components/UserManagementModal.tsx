@@ -354,6 +354,7 @@ const PERMISSION_GROUPS: PermissionCategory[] = [
     title: { ar: 'الأسرّة وتدفق المرضى (Beds & Patient Flow)', en: 'Beds & Patient Flow' },
     permissions: [
       { key: 'beds.view', label: { ar: 'استعراض الأسرّة', en: 'View Beds (beds.view)' } },
+      { key: 'beds.update', label: { ar: 'إدارة وتعديل حالة تشغيل وصيانة الأسِرّة', en: 'Update Bed Status & Maintenance (beds.update)' } },
       { key: 'patients.view', label: { ar: 'استعراض ملفات المرضى', en: 'View Patients (patients.view)' } },
       { key: 'patients.create', label: { ar: 'إدخال وتنويم مريض جديد', en: 'Admit Patient (patients.create)' } },
       { key: 'patients.update', label: { ar: 'تعديل وتحديث ملف المريض', en: 'Update Patient (patients.update)' } },

@@ -62,7 +62,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const isAdmin = currentUser?.role === StaffRole.ADMIN || currentUser?.isSuperAdmin === true || (currentUser?.role as any) === 'ADMIN';
   const hasSettingsUpdate = hasPermission('settings.update') || (currentUser?.permissions as any)?.['settings.update'] === true;
-  const canAccessSystemSettings = isAdmin || hasSettingsUpdate || settings.features.enableSystemSettingsPage !== false;
+  const hasSettingsView = hasPermission('settings.view') || (currentUser?.permissions as any)?.['settings.view'] === true;
+  const canAccessSystemSettings = isAdmin || hasSettingsUpdate || (hasSettingsView && settings.features.enableSystemSettingsPage !== false);
 
   const [showChangePassModal, setShowChangePassModal] = useState(false);
 

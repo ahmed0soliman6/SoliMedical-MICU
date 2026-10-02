@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { db, ensureBedPatientSync } from '../db/icuSyncDb.ts';
-import { BedRecord, PatientDossier, BedNumber, BedStatus } from '../types/schema.ts';
+import { BedRecord, PatientDossier, BedNumber, BedStatus, StaffRole } from '../types/schema.ts';
 import { getPatientForBed, toggleBedOperationalStatus } from '../services/dataModel.ts';
 import { syncBedToCloud } from '../services/firebase.ts';
 import { useTranslation } from '../services/i18n.ts';
+import { useAuth } from '../services/AuthContext.tsx';
 import { 
   Wrench, 
   Power, 
@@ -15,7 +16,8 @@ import {
   Loader2, 
   Activity,
   Info,
-  RotateCcw
+  RotateCcw,
+  Lock
 } from 'lucide-react';
 
 interface BedOperationsSettingsCardProps {
@@ -24,6 +26,10 @@ interface BedOperationsSettingsCardProps {
 
 export const BedOperationsSettingsCard: React.FC<BedOperationsSettingsCardProps> = ({ onBedUpdated }) => {
   const { lang } = useTranslation();
+  const { currentUser, hasPermission } = useAuth();
+  const isAdmin = currentUser?.role === StaffRole.ADMIN || currentUser?.isSuperAdmin === true || (currentUser?.role as any) === 'ADMIN';
+  const canUpdateBeds = isAdmin || hasPermission('beds.update') || (currentUser?.permissions as any)?.['beds.update'] === true;
+
   const [beds, setBeds] = useState<BedRecord[]>([]);
   const [patients, setPatients] = useState<PatientDossier[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -49,6 +55,13 @@ export const BedOperationsSettingsCard: React.FC<BedOperationsSettingsCardProps>
   }, []);
 
   const handleToggle = async (bedNumber: BedNumber) => {
+    if (!canUpdateBeds) {
+      setStatusMessage({
+        text: lang === 'ar' ? 'تعديل حالة السرير يتطلب صلاحية إدارة الأسِرّة (beds.update) أو حساب مدير النظام.' : 'Bed status change requires beds.update permission or Admin role.',
+        isSuccess: false,
+      });
+      return;
+    }
     try {
       setActionBedNumber(bedNumber);
       setStatusMessage(null);
@@ -72,6 +85,13 @@ export const BedOperationsSettingsCard: React.FC<BedOperationsSettingsCardProps>
   };
 
   const handleResetBed = async (bedNumber: BedNumber) => {
+    if (!canUpdateBeds) {
+      setStatusMessage({
+        text: lang === 'ar' ? 'إعادة ضبط السرير يتطلب صلاحية إدارة الأسِرّة (beds.update) أو حساب مدير النظام.' : 'Bed reset requires beds.update permission or Admin role.',
+        isSuccess: false,
+      });
+      return;
+    }
     try {
       setActionBedNumber(bedNumber);
       setStatusMessage(null);
@@ -140,6 +160,18 @@ export const BedOperationsSettingsCard: React.FC<BedOperationsSettingsCardProps>
           </p>
         </div>
       </div>
+
+      {/* Read-Only Notice when !canUpdateBeds */}
+      {!canUpdateBeds && (
+        <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 text-amber-900 dark:text-amber-200 text-xs font-semibold flex items-center gap-2.5">
+          <Lock className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
+          <span>
+            {lang === 'ar'
+              ? 'تنبيه الصلاحيات: هذه الشاشة في وضع القراءة فقط. تعديل حالة صيانة وتشغيل الأسِرّة يتطلب صلاحية إدارة الأسِرّة (beds.update) أو حساب مدير النظام.'
+              : 'Permission Notice: Bed maintenance and operational status is in read-only mode. Modifying requires beds.update permission or Admin role.'}
+          </span>
+        </div>
+      )}
 
       {/* Real-time Status Feedback Toast / Banner */}
       {statusMessage && (
@@ -305,8 +337,9 @@ export const BedOperationsSettingsCard: React.FC<BedOperationsSettingsCardProps>
                       type="button"
                       id={`settings-reactivate-bed-${bed.bedNumber}`}
                       onClick={() => handleToggle(bed.bedNumber)}
-                      disabled={isActionLoading}
-                      className="w-full py-2.5 px-3 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                      disabled={isActionLoading || !canUpdateBeds}
+                      title={!canUpdateBeds ? (lang === 'ar' ? 'يتطلب صلاحية beds.update' : 'Requires beds.update permission') : undefined}
+                      className={`w-full py-2.5 px-3 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all ${!canUpdateBeds ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} disabled:opacity-50`}
                     >
                       {isActionLoading ? (
                         <>
@@ -323,8 +356,9 @@ export const BedOperationsSettingsCard: React.FC<BedOperationsSettingsCardProps>
                     <button
                       type="button"
                       onClick={() => handleResetBed(bed.bedNumber)}
-                      disabled={isActionLoading}
-                      className="w-full py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50 border border-slate-300 dark:border-slate-700"
+                      disabled={isActionLoading || !canUpdateBeds}
+                      title={!canUpdateBeds ? (lang === 'ar' ? 'يتطلب صلاحية beds.update' : 'Requires beds.update permission') : undefined}
+                      className={`w-full py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-xs flex items-center justify-center gap-1.5 transition-all ${!canUpdateBeds ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} disabled:opacity-50 border border-slate-300 dark:border-slate-700`}
                     >
                       <RotateCcw className="w-3 h-3 text-slate-500" />
                       <span>{lang === 'ar' ? 'إعادة الضبط كسرير شاغر نظيف' : 'Reset to Clean Vacant'}</span>
@@ -336,8 +370,9 @@ export const BedOperationsSettingsCard: React.FC<BedOperationsSettingsCardProps>
                       type="button"
                       id={`settings-deactivate-bed-${bed.bedNumber}`}
                       onClick={() => handleToggle(bed.bedNumber)}
-                      disabled={isActionLoading}
-                      className="w-full py-2.5 px-3 rounded-xl bg-slate-50 hover:bg-rose-50 dark:bg-slate-900 dark:hover:bg-rose-950/30 text-slate-700 hover:text-rose-700 dark:text-slate-300 dark:hover:text-rose-300 font-bold text-xs flex items-center justify-center gap-1.5 border border-slate-200 hover:border-rose-300 dark:border-slate-800 dark:hover:border-rose-900/50 transition-all cursor-pointer disabled:opacity-50"
+                      disabled={isActionLoading || !canUpdateBeds}
+                      title={!canUpdateBeds ? (lang === 'ar' ? 'يتطلب صلاحية beds.update' : 'Requires beds.update permission') : undefined}
+                      className={`w-full py-2.5 px-3 rounded-xl bg-slate-50 hover:bg-rose-50 dark:bg-slate-900 dark:hover:bg-rose-950/30 text-slate-700 hover:text-rose-700 dark:text-slate-300 dark:hover:text-rose-300 font-bold text-xs flex items-center justify-center gap-1.5 border border-slate-200 hover:border-rose-300 dark:border-slate-800 dark:hover:border-rose-900/50 transition-all ${!canUpdateBeds ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} disabled:opacity-50`}
                     >
                       {isActionLoading ? (
                         <>
@@ -355,8 +390,9 @@ export const BedOperationsSettingsCard: React.FC<BedOperationsSettingsCardProps>
                       <button
                         type="button"
                         onClick={() => handleResetBed(bed.bedNumber)}
-                        disabled={isActionLoading}
-                        className="w-full py-2 px-3 rounded-xl bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-900/50 text-amber-900 dark:text-amber-300 font-semibold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50 border border-amber-300 dark:border-amber-700/60"
+                        disabled={isActionLoading || !canUpdateBeds}
+                        title={!canUpdateBeds ? (lang === 'ar' ? 'يتطلب صلاحية beds.update' : 'Requires beds.update permission') : undefined}
+                        className={`w-full py-2 px-3 rounded-xl bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-900/50 text-amber-900 dark:text-amber-300 font-semibold text-xs flex items-center justify-center gap-1.5 transition-all ${!canUpdateBeds ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} disabled:opacity-50 border border-amber-300 dark:border-amber-700/60`}
                       >
                         <RotateCcw className="w-3 h-3 text-amber-600 dark:text-amber-400" />
                         <span>{lang === 'ar' ? 'إلغاء العزل وتصفير السرير كشاغر' : 'Clear Isolation & Set Vacant'}</span>

@@ -759,6 +759,7 @@ export interface PatientDossier {
 
 export interface UserPermissions {
   'beds.view'?: boolean;
+  'beds.update'?: boolean;
 
   'patients.view'?: boolean;
   'patients.create'?: boolean;

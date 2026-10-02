@@ -7,7 +7,8 @@ import {
   VentilatorParameters, 
   InfusionPumpLine,
   BedNumber,
-  BedStatus 
+  BedStatus,
+  StaffRole
 } from './types/schema.ts';
 import { UserPlus } from 'lucide-react';
 import { Header } from './components/Header.tsx';
@@ -96,14 +97,26 @@ const getInitialNavigationState = (): { tab: NavigationTab; bed: BedNumber | nul
 
 export default function App() {
   const { t, lang, isRTL } = useTranslation();
-  const { currentUser, isAuthenticated, needsInitialAdminSetup, isLoading: isAuthLoading } = useAuth();
+  const { currentUser, isAuthenticated, needsInitialAdminSetup, isLoading: isAuthLoading, hasPermission } = useAuth();
   const { settings } = useSystemSettings();
   const { setNavigationHandler } = useAppNotifications();
   const [isReady, setIsReady] = useState(false);
 
+  const isAdmin = currentUser?.role === StaffRole.ADMIN || currentUser?.isSuperAdmin === true || (currentUser?.role as any) === 'ADMIN';
+  const hasSettingsUpdate = hasPermission('settings.update') || (currentUser?.permissions as any)?.['settings.update'] === true;
+  const hasSettingsView = hasPermission('settings.view') || (currentUser?.permissions as any)?.['settings.view'] === true;
+  const canAccessSystemSettings = isAdmin || hasSettingsUpdate || (hasSettingsView && settings.features.enableSystemSettingsPage !== false);
+
   // Robust persistent navigation state across reloads
   const [activeTab, setActiveTab] = useState<NavigationTab>(() => getInitialNavigationState().tab);
   const [selectedBedNumber, setSelectedBedNumber] = useState<BedNumber | null>(() => getInitialNavigationState().bed);
+
+  // Prevent unauthorized direct access to settings
+  useEffect(() => {
+    if (activeTab === 'settings' && !canAccessSystemSettings && isAuthenticated && !isAuthLoading) {
+      setActiveTab('beds');
+    }
+  }, [activeTab, canAccessSystemSettings, isAuthenticated, isAuthLoading]);
 
   // Sync navigation state with localStorage and URL hash on changes
   useEffect(() => {
@@ -588,12 +601,14 @@ export default function App() {
               onClose={() => setActiveTab('beds')}
             />
           ) : activeTab === 'settings' ? (
-            <SettingsModal
-              isOpen={true}
-              onClose={() => setActiveTab('beds')}
-              onOpenUserManagement={() => setActiveTab('users')}
-              onBedUpdated={reloadData}
-            />
+            canAccessSystemSettings ? (
+              <SettingsModal
+                isOpen={true}
+                onClose={() => setActiveTab('beds')}
+                onOpenUserManagement={() => setActiveTab('users')}
+                onBedUpdated={reloadData}
+              />
+            ) : null
           ) : activeTab === 'chat' ? (
             <HospitalChatView />
           ) : (

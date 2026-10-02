@@ -26,13 +26,20 @@ import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
 import { playGentleNotificationTone } from '../services/NotificationAudio.ts';
 import { useAppNotifications } from '../services/NotificationContext.tsx';
+import { useAuth } from '../services/AuthContext.tsx';
+import { StaffRole } from '../types/schema.ts';
 import { NotificationType } from '../types/notification.ts';
 import { DEFAULT_VITAL_THRESHOLDS, VitalThresholdsConfig } from '../types/settings.ts';
+import { Lock } from 'lucide-react';
 
 export const NotificationSettingsCard: React.FC = () => {
   const { settings, updateNotificationSettings } = useSystemSettings();
   const { isPushSupported, isPushEnabled, requestPushPermission, triggerNotification } = useAppNotifications();
   const { lang, isRTL } = useTranslation();
+  const { currentUser, hasPermission } = useAuth();
+  const isAdmin = currentUser?.role === StaffRole.ADMIN || currentUser?.isSuperAdmin === true || (currentUser?.role as any) === 'ADMIN';
+  const canUpdateSettings = isAdmin || hasPermission('settings.update') || (currentUser?.permissions as any)?.['settings.update'] === true;
+
   const [isRequestingPush, setIsRequestingPush] = useState(false);
   const [testSent, setTestSent] = useState(false);
 
@@ -67,10 +74,12 @@ export const NotificationSettingsCard: React.FC = () => {
   };
 
   const handleToggleMasterVisual = () => {
+    if (!canUpdateSettings) return;
     updateNotificationSettings({ masterVisual: !notifs.masterVisual });
   };
 
   const handleToggleMasterAudio = () => {
+    if (!canUpdateSettings) return;
     updateNotificationSettings({ masterAudio: !notifs.masterAudio });
   };
 
@@ -79,6 +88,7 @@ export const NotificationSettingsCard: React.FC = () => {
   };
 
   const handleUpdateThresholds = (changes: Partial<VitalThresholdsConfig>) => {
+    if (!canUpdateSettings) return;
     updateNotificationSettings({
       vitalThresholds: {
         ...thresholds,
@@ -88,12 +98,14 @@ export const NotificationSettingsCard: React.FC = () => {
   };
 
   const handleResetThresholds = () => {
+    if (!canUpdateSettings) return;
     updateNotificationSettings({
       vitalThresholds: DEFAULT_VITAL_THRESHOLDS,
     });
   };
 
   const handleToggleEventVisual = (eventKey: keyof typeof notifs.events) => {
+    if (!canUpdateSettings) return;
     const current = notifs.events[eventKey];
     updateNotificationSettings({
       events: {
@@ -107,6 +119,7 @@ export const NotificationSettingsCard: React.FC = () => {
   };
 
   const handleToggleEventAudio = (eventKey: keyof typeof notifs.events) => {
+    if (!canUpdateSettings) return;
     const current = notifs.events[eventKey];
     updateNotificationSettings({
       events: {
@@ -199,6 +212,17 @@ export const NotificationSettingsCard: React.FC = () => {
 
   return (
     <div className="space-y-6 mt-2" dir={isRTL ? 'rtl' : 'ltr'}>
+      {!canUpdateSettings && (
+        <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 text-amber-900 dark:text-amber-200 text-xs font-semibold flex items-center gap-2.5 shadow-sm">
+          <Lock className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
+          <span>
+            {lang === 'ar'
+              ? 'تنبيه الصلاحيات: إعدادات وعتبات الإنذار المشتركة للنظام في وضع القراءة فقط. لتعديلها يلزم صلاحية (settings.update) أو حساب مدير النظام.'
+              : 'Permission Notice: Global system notification settings & vital thresholds are in read-only mode. Modifying requires settings.update permission or Admin role.'}
+          </span>
+        </div>
+      )}
+
       {/* Master Controls Panel (Fully Dual-Theme Responsive) */}
       <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#0a1122] border border-slate-200 dark:border-slate-800 shadow-sm transition-colors">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4 mb-4">
@@ -239,7 +263,10 @@ export const NotificationSettingsCard: React.FC = () => {
           <button
             type="button"
             onClick={handleToggleMasterVisual}
-            className={`p-3.5 rounded-xl border flex items-center justify-between gap-3 text-left transition-all cursor-pointer ${
+            disabled={!canUpdateSettings}
+            className={`p-3.5 rounded-xl border flex items-center justify-between gap-3 text-left transition-all ${
+              !canUpdateSettings ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'
+            } ${
               notifs.masterVisual
                 ? 'bg-teal-50/80 dark:bg-[#0f172a] border-teal-400 dark:border-teal-500/40 text-slate-900 dark:text-white shadow-sm'
                 : 'bg-slate-50 dark:bg-[#040811] border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400'
@@ -275,7 +302,10 @@ export const NotificationSettingsCard: React.FC = () => {
           <button
             type="button"
             onClick={handleToggleMasterAudio}
-            className={`p-3.5 rounded-xl border flex items-center justify-between gap-3 text-left transition-all cursor-pointer ${
+            disabled={!canUpdateSettings}
+            className={`p-3.5 rounded-xl border flex items-center justify-between gap-3 text-left transition-all ${
+              !canUpdateSettings ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'
+            } ${
               notifs.masterAudio
                 ? 'bg-teal-50/80 dark:bg-[#0f172a] border-teal-400 dark:border-teal-500/40 text-slate-900 dark:text-white shadow-sm'
                 : 'bg-slate-50 dark:bg-[#040811] border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400'
@@ -431,7 +461,10 @@ export const NotificationSettingsCard: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => handleToggleEventVisual(evt.key)}
-                    className={`p-2 rounded-xl border flex items-center justify-between text-left transition-all cursor-pointer ${
+                    disabled={!canUpdateSettings}
+                    className={`p-2 rounded-xl border flex items-center justify-between text-left transition-all ${
+                      !canUpdateSettings ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'
+                    } ${
                       eventSetting.visual
                         ? 'bg-teal-50 dark:bg-teal-500/10 border-teal-300 dark:border-teal-500/40 text-teal-900 dark:text-teal-200'
                         : 'bg-slate-50 dark:bg-slate-900/60 border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-500'
@@ -456,7 +489,10 @@ export const NotificationSettingsCard: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => handleToggleEventAudio(evt.key)}
-                    className={`p-2 rounded-xl border flex items-center justify-between text-left transition-all cursor-pointer ${
+                    disabled={!canUpdateSettings}
+                    className={`p-2 rounded-xl border flex items-center justify-between text-left transition-all ${
+                      !canUpdateSettings ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'
+                    } ${
                       eventSetting.audio
                         ? 'bg-teal-50 dark:bg-teal-500/10 border-teal-300 dark:border-teal-500/40 text-teal-900 dark:text-teal-200'
                         : 'bg-slate-50 dark:bg-slate-900/60 border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-500'
