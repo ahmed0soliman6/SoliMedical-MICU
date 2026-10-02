@@ -240,7 +240,6 @@ export function getDefaultPermissionsForRole(role: StaffRole): UserPermissions {
         'users.delete': true,
         'audit.view': true,
         'medicalRecords.delete': true,
-        'clinicalNotes.delete': true,
       };
     case StaffRole.CONSULTANT:
     case StaffRole.SPECIALIST:
