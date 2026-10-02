@@ -2651,10 +2651,20 @@ export async function clearAllCloudAndLocalDataAndReset(): Promise<{ success: bo
       db.patientAntibiotics.clear(),
     ]);
 
-    // 2. Clear Firestore Cloud Collections completely
+    // 2. Clear Firestore Cloud Collections completely (including patients archive & hospital chat)
     const collectionsToClear = [
       'beds',
       'patients',
+      'archivedPatients',
+      'archived_patients',
+      'archive',
+      'dispositionRecords',
+      'episodes',
+      'chats',
+      'chatMessages',
+      'chat_messages',
+      'messages',
+      'hospital_chat',
       'vitals',
       'sbarHandovers',
       'handovers',
@@ -2664,6 +2674,7 @@ export async function clearAllCloudAndLocalDataAndReset(): Promise<{ success: bo
       'infusion_pumps',
       'fluidBalances',
       'fluid_balances',
+      'fluidBalances24H',
       'statLabs',
       'patientAntibiotics',
       'medical_records',
@@ -2673,7 +2684,8 @@ export async function clearAllCloudAndLocalDataAndReset(): Promise<{ success: bo
       'addendums',
       'auditLogs',
       'transfers',
-      'operations'
+      'operations',
+      'notifications'
     ];
 
     for (const colName of collectionsToClear) {
@@ -2684,6 +2696,39 @@ export async function clearAllCloudAndLocalDataAndReset(): Promise<{ success: bo
       } catch (colErr) {
         console.warn(`Collection clear failed for ${colName}:`, colErr);
       }
+    }
+
+    // Re-initialize clean default general department chat
+    try {
+      await setDoc(doc(firestore, 'chats', 'dept_general'), {
+        id: 'dept_general',
+        type: 'DEPARTMENT',
+        name: 'MICU Central Coordination',
+        participantUids: [],
+        department: 'ALL',
+        lastMessage: 'Channel initialized for secure clinical communications.',
+        lastMessageAt: new Date().toISOString(),
+        lastMessageSenderName: 'System',
+        unreadCounts: {},
+        createdAt: new Date().toISOString(),
+        createdByUid: 'system',
+      });
+    } catch (chatInitErr) {
+      console.warn('Notice re-initializing general department chat:', chatInitErr);
+    }
+
+    // Clear local chat/archive cache keys in browser localStorage
+    if (typeof window !== 'undefined') {
+      try {
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && (key.startsWith('soli_chat_read_') || key.startsWith('soli_chat_') || key.startsWith('soli_archive_'))) {
+            keysToRemove.push(key);
+          }
+        }
+        keysToRemove.forEach(k => localStorage.removeItem(k));
+      } catch {}
     }
 
     // 3. Reset clean, vacant beds into local IndexedDB & Firestore dynamically based on settings
