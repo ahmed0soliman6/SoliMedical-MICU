@@ -137,9 +137,9 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
   const [formUsername, setFormUsername] = useState('');
   const [formDisplayName, setFormDisplayName] = useState('');
   const [formPassword, setFormPassword] = useState('');
-  const [formRole, setFormRole] = useState<StaffRole>(StaffRole.BEDSIDE_RN);
+  const [formRole, setFormRole] = useState<StaffRole>(StaffRole.RESIDENT);
   const [formPermissions, setFormPermissions] = useState<UserPermissions>(
-    getDefaultPermissionsForRole(StaffRole.BEDSIDE_RN)
+    getDefaultPermissionsForRole(StaffRole.RESIDENT)
   );
   const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [togglingUid, setTogglingUid] = useState<string | null>(null);
@@ -157,13 +157,18 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
     setFormDisplayName('');
     setFormPassword('');
     setShowFormPassword(false);
-    setFormRole(StaffRole.BEDSIDE_RN);
-    setFormPermissions(getDefaultPermissionsForRole(StaffRole.BEDSIDE_RN));
+    setFormRole(StaffRole.RESIDENT);
+    setFormPermissions(getDefaultPermissionsForRole(StaffRole.RESIDENT));
     setIsAddMode(true);
     setStatusMsg(null);
   };
 
   const handleOpenEdit = (user: IcuUser) => {
+    const isTargetAdmin = user.role === StaffRole.ADMIN || user.isSuperAdmin === true || (user.role as any) === 'ADMIN';
+    if (isTargetAdmin && !isAdmin && currentUser?.uid !== user.uid) {
+      setStatusMsg({ type: 'error', text: lang === 'ar' ? 'لا يمكن تعديل حساب مدير النظام إلا بواسطة مدير النظام نفسه.' : 'Only an Admin can edit an Admin account.' });
+      return;
+    }
     setEditingUser(user);
     const uname = user.email.includes('@solimedical-micu.org') 
       ? user.email.replace('@solimedical-micu.org', '') 
@@ -179,6 +184,11 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
   };
 
   const handleOpenChangePassword = (user: IcuUser) => {
+    const isTargetAdmin = user.role === StaffRole.ADMIN || user.isSuperAdmin === true || (user.role as any) === 'ADMIN';
+    if (isTargetAdmin && !isAdmin) {
+      setStatusMsg({ type: 'error', text: lang === 'ar' ? 'لا يمكن تغيير كلمة سر مدير النظام إلا بواسطة مدير النظام.' : 'Only an Admin can change Admin password.' });
+      return;
+    }
     setUserToChangePassword(user);
     setNewPasswordInput('');
     setConfirmPasswordInput('');
@@ -190,6 +200,15 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
   const handleSaveNewPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userToChangePassword) return;
+
+    const isTargetAdmin = userToChangePassword.role === StaffRole.ADMIN || userToChangePassword.isSuperAdmin === true || (userToChangePassword.role as any) === 'ADMIN';
+    if (isTargetAdmin && !isAdmin) {
+      setChangePassStatus({
+        type: 'error',
+        text: lang === 'ar' ? 'لا يمكن تغيير كلمة سر مدير النظام إلا بواسطة مدير النظام.' : 'Only an Admin can change Admin password.'
+      });
+      return;
+    }
 
     if (!newPasswordInput.trim() || newPasswordInput.trim().length < 6) {
       setChangePassStatus({
@@ -226,6 +245,12 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
 
   const handleConfirmDelete = async () => {
     if (!userToDelete) return;
+    const isTargetAdmin = userToDelete.role === StaffRole.ADMIN || userToDelete.isSuperAdmin === true || (userToDelete.role as any) === 'ADMIN';
+    if (isTargetAdmin && !isAdmin) {
+      setStatusMsg({ type: 'error', text: lang === 'ar' ? 'لا يمكن حذف حساب مدير النظام مهما كانت الصلاحيات الممنوحة.' : 'Cannot delete Admin account.' });
+      setUserToDelete(null);
+      return;
+    }
     setStatusMsg(null);
     const res = await deleteUser(userToDelete.uid);
     if (res.success) {
@@ -237,6 +262,11 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
   };
 
   const handleToggleUserStatus = async (targetUser: IcuUser) => {
+    const isTargetAdmin = targetUser.role === StaffRole.ADMIN || targetUser.isSuperAdmin === true || (targetUser.role as any) === 'ADMIN';
+    if (isTargetAdmin) {
+      setStatusMsg({ type: 'error', text: lang === 'ar' ? 'لا يمكن تعطيل أو إيقاف حساب مدير النظام.' : 'Cannot disable Admin account.' });
+      return;
+    }
     if (togglingUid) return;
     setTogglingUid(targetUser.uid);
     setStatusMsg(null);
@@ -406,6 +436,7 @@ const PERMISSION_GROUPS: PermissionCategory[] = [
   }
 ];
 
+  const isAdmin = currentUser?.role === StaffRole.ADMIN || currentUser?.isSuperAdmin === true || (currentUser?.role as any) === 'ADMIN';
   const canCreateUsers = hasPermission('users.create');
   const canUpdateUsers = hasPermission('users.update');
   const canDisableUsers = hasPermission('users.disable');
@@ -439,18 +470,20 @@ const PERMISSION_GROUPS: PermissionCategory[] = [
           <div className="flex items-center gap-2">
             {!isAddMode && activeTab === 'users' && (
               <>
-                <button
-                  onClick={() => {
-                    setRecoveryCodeInput('');
-                    setRecoveryStatus(null);
-                    setShowRecoveryModal(true);
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-teal-300 text-xs font-bold transition-all cursor-pointer"
-                  title="إدارة وتوليد رمز استعادة كلمة سر المدير"
-                >
-                  <KeyRound className="w-3.5 h-3.5" />
-                  <span>{lang === 'ar' ? 'رمز استعادة المدير' : 'Recovery Token'}</span>
-                </button>
+                {isAdmin && (
+                  <button
+                    onClick={() => {
+                      setRecoveryCodeInput('');
+                      setRecoveryStatus(null);
+                      setShowRecoveryModal(true);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-teal-300 text-xs font-bold transition-all cursor-pointer"
+                    title="إدارة وتوليد رمز استعادة كلمة سر المدير"
+                  >
+                    <KeyRound className="w-3.5 h-3.5" />
+                    <span>{lang === 'ar' ? 'رمز استعادة المدير' : 'Recovery Token'}</span>
+                  </button>
+                )}
 
                 {canCreateUsers && (
                   <button
@@ -733,6 +766,8 @@ const PERMISSION_GROUPS: PermissionCategory[] = [
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {filteredUsers.map((user) => {
                   const isCurrent = currentUser?.uid === user.uid;
+                  const isTargetAdmin = user.role === StaffRole.ADMIN || user.isSuperAdmin === true || (user.role as any) === 'ADMIN';
+                  const canManageThisUser = !isTargetAdmin || isAdmin;
                   return (
                     <div
                       key={user.uid}
@@ -785,7 +820,7 @@ const PERMISSION_GROUPS: PermissionCategory[] = [
                         </div>
 
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          {canUpdateUsers && (
+                          {canUpdateUsers && canManageThisUser && (
                             <button
                               type="button"
                               onClick={() => handleOpenEdit(user)}
@@ -797,7 +832,7 @@ const PERMISSION_GROUPS: PermissionCategory[] = [
                             </button>
                           )}
 
-                          {canUpdateUsers && (
+                          {canUpdateUsers && canManageThisUser && (
                             <button
                               type="button"
                               onClick={() => handleOpenChangePassword(user)}
@@ -809,7 +844,7 @@ const PERMISSION_GROUPS: PermissionCategory[] = [
                             </button>
                           )}
 
-                          {!isCurrent && canDisableUsers && (
+                          {!isCurrent && canDisableUsers && canManageThisUser && (
                             <button
                               type="button"
                               disabled={togglingUid === user.uid}
@@ -837,7 +872,7 @@ const PERMISSION_GROUPS: PermissionCategory[] = [
                             </button>
                           )}
 
-                          {!isCurrent && canDeleteUsers && (
+                          {!isCurrent && canDeleteUsers && canManageThisUser && (
                             <button
                               type="button"
                               onClick={() => setUserToDelete(user)}
