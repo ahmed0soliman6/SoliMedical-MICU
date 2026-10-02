@@ -279,7 +279,12 @@ async function verifyAdminCaller(authHeader: string | undefined): Promise<{ isAd
       if (userDoc.exists) {
         const u = userDoc.data() as any;
         isCallerActive = u.active !== false && u.isActive !== false;
-        isCallerAdmin = u.role === 'ADMIN' || u.isSuperAdmin === true;
+        isCallerAdmin = u.role === 'ADMIN' || 
+                        u.isSuperAdmin === true ||
+                        u.permissions?.['users.delete'] === true ||
+                        u.permissions?.['users.update'] === true ||
+                        u.permissions?.['users.create'] === true ||
+                        u.permissions?.['users.disable'] === true;
       }
 
       if (!isCallerAdmin) {

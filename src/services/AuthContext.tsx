@@ -34,7 +34,7 @@ import {
   updatePassword,
   User as FirebaseUser 
 } from 'firebase/auth';
-import { collection, onSnapshot, doc, getDoc, getDocs, query, where, Unsubscribe } from 'firebase/firestore';
+import { collection, onSnapshot, doc, getDoc, getDocs, query, where, deleteDoc, Unsubscribe } from 'firebase/firestore';
 import { db } from '../db/icuSyncDb.ts';
 import { recordAuditLog } from './auditService.ts';
 
@@ -958,8 +958,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // ONLY AFTER Firebase Authentication deletion succeeds on the server:
       // The server has already removed users/{uid} and admins/{uid} from Firestore.
-      // Update local Dexie database and refresh state.
+      // Update local Dexie database and refresh UI state immediately.
       await db.users.delete(uid);
+      setAllUsers(prev => prev.filter(u => u.uid !== uid));
+      try {
+        await deleteDoc(doc(firestore, 'users', uid)).catch(() => {});
+        await deleteDoc(doc(firestore, 'admins', uid)).catch(() => {});
+      } catch {}
       await refreshUsers();
 
       recordAuditLog({
