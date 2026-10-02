@@ -100,6 +100,17 @@ service cloud.firestore {
     }
 
     // Fine-grained Feature Flag scope functions for sections.manage vs cards.manage
+    function isAddendumAppendOnly() {
+      return (
+        (!('content' in resource.data) || request.resource.data.content == resource.data.content) &&
+        (!('noteType' in resource.data) || request.resource.data.noteType == resource.data.noteType) &&
+        (!('patientId' in resource.data) || request.resource.data.patientId == resource.data.patientId) &&
+        (!('createdByUid' in resource.data) || request.resource.data.createdByUid == resource.data.createdByUid) &&
+        (!('authorId' in resource.data) || request.resource.data.authorId == resource.data.authorId) &&
+        (!('createdAt' in resource.data) || request.resource.data.createdAt == resource.data.createdAt)
+      );
+    }
+
     function isSectionsOnlyFeatureUpdate() {
       return request.resource.data.features.diff(resource.data.features).affectedKeys().hasOnly([
         'enableBedMatrix',
