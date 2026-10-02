@@ -255,14 +255,14 @@ service cloud.firestore {
     match /sbarHandovers/{sbarId} {
       allow read: if hasPerm('sbar.view') || hasPerm('patients.view');
       allow create: if hasPerm('sbar.create') && isValidMedicalRecordCreate();
-      allow update: if (isAdmin() || (hasPerm('sbar.update') && isRecordOwner())) && isValidMedicalRecordUpdate();
+      allow update: if (isAdmin() || hasPerm('sbar.update') || hasPerm('sbar.create')) && isValidMedicalRecordUpdate();
       allow delete: if isAdmin() || hasPerm('medicalRecords.delete');
     }
 
     match /handovers/{handoverId} {
       allow read: if hasPerm('sbar.view') || hasPerm('patients.view');
       allow create: if hasPerm('sbar.create') && isValidMedicalRecordCreate();
-      allow update: if (isAdmin() || (hasPerm('sbar.update') && isRecordOwner())) && isValidMedicalRecordUpdate();
+      allow update: if (isAdmin() || hasPerm('sbar.update') || hasPerm('sbar.create')) && isValidMedicalRecordUpdate();
       allow delete: if isAdmin() || hasPerm('medicalRecords.delete');
     }
 
