@@ -9,6 +9,7 @@
     "start": "node dist/server.cjs",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
+    "test": "tsx src/tests/permissions.test.ts",
     "lint": "tsc --noEmit",
     "cap:sync": "npx cap sync android",
     "cap:open": "npx cap open android"

@@ -135,7 +135,7 @@ export function canDeleteClinicalNote(
     authorRole?: string;
   } | null | undefined
 ): boolean {
-  if (!user) return false;
+  if (!user || !user.uid) return false;
 
   // 1. Admin / Super Admin has universal delete authority
   if (
@@ -150,15 +150,14 @@ export function canDeleteClinicalNote(
   // 2. User with explicit delete permission granted by Admin
   if (
     user.permissions?.['medicalRecords.delete'] === true ||
-    user.permissions?.['clinicalNotes.delete'] === true ||
-    canDeleteRecord(user)
+    user.permissions?.['clinicalNotes.delete'] === true
   ) {
     return true;
   }
 
   if (!note) return false;
 
-  // 3. Author / Creator of the note
+  // 3. Author / Creator of the note - Strictly matching UID / staffId / badgeId (NO name-based matching)
   const userUids = [user.uid, user.badgeId, user.staffId].filter(Boolean) as string[];
   const noteAuthorIds = [
     note.authorId,
@@ -166,36 +165,16 @@ export function canDeleteClinicalNote(
     note.createdByUid,
   ].filter(Boolean) as string[];
 
-  // Match UIDs / IDs (including staff- prefixes)
+  // Match UIDs / IDs strictly (including staff- prefixes)
   const idMatches = userUids.some(uId => 
     noteAuthorIds.some(nId => 
       nId === uId || 
       nId === `staff-${uId}` || 
-      `staff-${nId}` === uId ||
-      nId.includes(uId) ||
-      uId.includes(nId)
+      `staff-${nId}` === uId
     )
   );
 
-  if (idMatches) return true;
-
-  // Match Author Name (trimmed, lowercase) against user name variations
-  const userNames = [
-    user.name,
-    user.displayName,
-    user.nameAr,
-    user.nameEn,
-    user.username,
-  ].filter(Boolean).map((n: string) => n.trim().toLowerCase());
-
-  if (note.authorName) {
-    const cleanAuthorName = note.authorName.trim().toLowerCase();
-    if (userNames.some(uName => uName === cleanAuthorName || cleanAuthorName.includes(uName) || uName.includes(cleanAuthorName))) {
-      return true;
-    }
-  }
-
-  return false;
+  return idMatches;
 }
 
 /**
