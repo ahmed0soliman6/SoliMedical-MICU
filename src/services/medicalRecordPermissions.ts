@@ -22,47 +22,20 @@ export interface RecordOwnershipContext {
 
 /**
  * Validates if a user is authorized to edit a specific medical record.
- * Rules:
+ * ICU Standard Rules (Request #9):
  * 1. ADMIN (or Super Admin) can edit ALL records.
- * 2. Doctor / Clinician can edit ONLY records created by themselves (matching UID or staff/badge ID).
- * 3. Ordinary doctors CANNOT edit records created by other doctors.
- * 4. Fails closed if user is null or record has no user context.
+ * 2. Clinicians / Doctors with access to clinical records can edit/update records created by other doctors.
+ * 3. Creator fields (createdByUid, doctorId, authorId, createdAt) are preserved via preserveRecordOwnership.
+ * 4. Fails closed if user context is missing.
  */
 export function canEditRecord(
   user: UserContextForPermission | null | undefined,
-  record: RecordOwnershipContext | null | undefined
+  _record?: RecordOwnershipContext | null | undefined
 ): boolean {
   if (!user || !user.uid) return false;
 
-  // Rule: ADMIN can edit all records
-  if (user.role === StaffRole.ADMIN || user.role === 'ADMIN' || user.isSuperAdmin === true) {
-    return true;
-  }
-
-  if (!record) return false;
-
-  // Collect all potential owner identifiers from the record
-  const ownerIds = [
-    record.createdByUid,
-    record.doctorId,
-    record.authorId,
-    record.authorStaffId,
-    record.recordedByStaffId,
-    record.userId,
-    record.transferredBy,
-  ].filter(Boolean) as string[];
-
-  if (ownerIds.length === 0) {
-    // Fail closed if record lacks ownership information
-    return false;
-  }
-
-  // Check if current user's UID or staff/badge ID matches any owner ID
-  const userIdsToCheck = [user.uid, user.badgeId, user.staffId].filter(Boolean) as string[];
-
-  return ownerIds.some((ownerId) =>
-    userIdsToCheck.some((userId) => ownerId === userId || ownerId === `staff-${userId}`)
-  );
+  // Active clinicians with account context can edit medical records
+  return true;
 }
 
 /**

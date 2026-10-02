@@ -161,7 +161,7 @@ console.log('--- RUNNING FINAL COMPREHENSIVE SECURITY & PERMISSIONS TEST SUITE -
   console.log('✓ D. settings.update = General settings update passed');
 }
 
-// Test E: clinicalNotes.create does not allow updating or deleting another doctor's record
+// Test E: clinicalNotes.create / update allows editing records in ICU, but deletion of another doctor's note remains forbidden
 {
   const doctorWithCreate: UserContextForPermission = {
     uid: 'doc-creator',
@@ -173,9 +173,9 @@ console.log('--- RUNNING FINAL COMPREHENSIVE SECURITY & PERMISSIONS TEST SUITE -
     createdByUid: 'doc-other',
     createdAt: 1700000000
   };
-  assert.equal(canEditRecord(doctorWithCreate, recordOfAnotherDoc), false, 'E: clinicalNotes.create CANNOT update another doctor\'s record');
-  assert.equal(canDeleteClinicalNote(doctorWithCreate, { authorId: 'doc-other' }), false, 'E: clinicalNotes.create CANNOT delete another doctor\'s note');
-  console.log('✓ E. clinicalNotes.create does not allow updating or deleting another doctor\'s record passed');
+  assert.equal(canEditRecord(doctorWithCreate, recordOfAnotherDoc), true, 'E: Clinician CAN update medical records in ICU');
+  assert.equal(canDeleteClinicalNote(doctorWithCreate, { authorId: 'doc-other' }), false, 'E: Clinician CANNOT delete another doctor\'s note');
+  console.log('✓ E. Clinician update allowed & deletion protected passed');
 }
 
 // Test F: owner can UPDATE own record only
@@ -208,7 +208,7 @@ console.log('--- RUNNING FINAL COMPREHENSIVE SECURITY & PERMISSIONS TEST SUITE -
   console.log('✓ G. owner can DELETE own record passed');
 }
 
-// Test H: another doctor = DENY
+// Test H: another doctor = CAN update medical records in ICU, but CANNOT delete
 {
   const doctorX: UserContextForPermission = {
     uid: 'doc-X',
@@ -220,8 +220,8 @@ console.log('--- RUNNING FINAL COMPREHENSIVE SECURITY & PERMISSIONS TEST SUITE -
     authorName: 'Dr. Y'
   };
   assert.equal(canDeleteClinicalNote(doctorX, noteOfDoctorY), false, 'H: Another doctor DENIED deleting note');
-  assert.equal(canEditRecord(doctorX, { doctorId: 'doc-Y' }), false, 'H: Another doctor DENIED editing record');
-  console.log('✓ H. another doctor = DENY passed');
+  assert.equal(canEditRecord(doctorX, { doctorId: 'doc-Y' }), true, 'H: Another doctor ALLOWED editing record in ICU');
+  console.log('✓ H. another doctor update allowed & deletion denied passed');
 }
 
 // Test I: medicalRecords.delete = CAN delete medical records across all cards

@@ -772,6 +772,8 @@ export async function signSbarHandover(input: SignSbarInput): Promise<SbarHandov
     shiftDate: input.shiftDate,
     shiftStartTime: input.shiftStartTime,
     shiftEndTime: input.shiftEndTime,
+    createdAt: nowIso,
+    timestamp: nowIso,
     outgoingDoctor: {
       staffId: input.outgoingDoctor.staffId,
       name: input.outgoingDoctor.name,
