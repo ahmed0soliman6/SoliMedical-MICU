@@ -241,7 +241,11 @@ service cloud.firestore {
     match /clinicalNotes/{noteId} {
       allow read: if hasPerm('clinicalNotes.view') || hasPerm('patients.view');
       allow create: if hasPerm('clinicalNotes.create') && isValidMedicalRecordCreate();
-      allow update: if (isAdmin() || (hasPerm('clinicalNotes.update') && isRecordOwner())) && isValidMedicalRecordUpdate();
+      allow update: if (
+        isAdmin() ||
+        (hasPerm('clinicalNotes.update') && (isRecordOwner() || isAddendumAppendOnly())) ||
+        (hasPerm('clinicalNotes.create') && (isRecordOwner() || isAddendumAppendOnly()))
+      ) && isValidMedicalRecordUpdate();
       allow delete: if isAdmin() || hasPerm('medicalRecords.delete') || (isActiveUser() && isRecordOwner());
     }
 
