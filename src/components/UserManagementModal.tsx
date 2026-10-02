@@ -409,10 +409,10 @@ const PERMISSION_GROUPS: PermissionCategory[] = [
       { key: 'clinicalNotes.view', label: { ar: 'استعراض الملاحظات السريرية', en: 'View Clinical Notes (clinicalNotes.view)' } },
       { key: 'clinicalNotes.create', label: { ar: 'كتابة وتوثيق ملاحظات طبية', en: 'Sign Clinical Notes (clinicalNotes.create)' } },
       { key: 'clinicalNotes.update', label: { ar: 'إضافة ملاحق غير قابلة للحذف', en: 'Add Note Addendum (clinicalNotes.update)' } },
-      { key: 'clinicalNotes.delete', label: { ar: 'حذف الملاحظات الطبية والعروضات', en: 'Delete Clinical Notes (clinicalNotes.delete)' } },
       { key: 'sbar.view', label: { ar: 'استعراض تقارير التسليم SBAR', en: 'View SBAR Handover (sbar.view)' } },
       { key: 'sbar.create', label: { ar: 'إنشاء تقرير تسليم مناوبة SBAR', en: 'Create SBAR Handover (sbar.create)' } },
       { key: 'sbar.update', label: { ar: 'اعتماد وتوقيع تقرير SBAR', en: 'Sign SBAR Handover (sbar.update)' } },
+      { key: 'medicalRecords.delete', label: { ar: 'حذف السجلات الطبية (الملاحظات، العلامات الحيوية، المضخات، التنفس، السوائل، التحاليل، الأشعة والفحوصات، المضادات، نقل الدم، وتقارير SBAR)', en: 'Delete Medical Records Across Clinical Cards (medicalRecords.delete)' } },
     ]
   },
   {
@@ -431,7 +431,6 @@ const PERMISSION_GROUPS: PermissionCategory[] = [
       { key: 'users.disable', label: { ar: 'إيقاف وتعطيل حسابات الكوادر', en: 'Disable User (users.disable)' } },
       { key: 'users.delete', label: { ar: 'حذف حسابات الكوادر نهائياً', en: 'Delete User (users.delete)' } },
       { key: 'audit.view', label: { ar: 'الاطلاع على سجلات الرقابة CBAHI/JCI', en: 'View Audit Logs (audit.view)' } },
-      { key: 'medicalRecords.delete', label: { ar: 'حذف السجلات الطبية (الملاحظات الطبية، العروضات، المضادات، الفحوصات، المضخات، جهاز التنفس، السوائل، التحاليل)', en: 'Delete Medical Records (medicalRecords.delete)' } },
     ]
   }
 ];

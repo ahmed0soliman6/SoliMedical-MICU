@@ -51,16 +51,19 @@ service cloud.firestore {
       );
     }
 
+    // Enforce that on CREATE, creator UID must match request.auth.uid to prevent impersonation
     function isValidMedicalRecordCreate() {
       return isActiveUser() && (
-        isAdmin() || 
-        request.resource.data.createdByUid == request.auth.uid ||
-        !("createdByUid" in request.resource.data)
+        isAdmin() || (
+          (!('createdByUid' in request.resource.data) || request.resource.data.createdByUid == request.auth.uid) &&
+          (!('authorId' in request.resource.data) || request.resource.data.authorId == request.auth.uid || request.resource.data.authorId == ('staff-' + request.auth.uid)) &&
+          (!('doctorId' in request.resource.data) || request.resource.data.doctorId == request.auth.uid || request.resource.data.doctorId == ('staff-' + request.auth.uid))
+        )
       );
     }
 
     function isRecordOwner() {
-      return (
+      return isAuthenticated() && (
         // 1. Matches request.auth.uid
         ("createdByUid" in resource.data && resource.data.createdByUid == request.auth.uid) ||
         ("doctorId" in resource.data && resource.data.doctorId == request.auth.uid) ||
@@ -94,6 +97,41 @@ service cloud.firestore {
           (!("createdAt" in resource.data) || request.resource.data.createdAt == resource.data.createdAt)
         )
       );
+    }
+
+    // Fine-grained Feature Flag scope functions for sections.manage vs cards.manage
+    function isSectionsOnlyFeatureUpdate() {
+      return request.resource.data.features.diff(resource.data.features).affectedKeys().hasOnly([
+        'enableBedMatrix',
+        'enableTotalOccupancyBadge',
+        'enableSbarHandover',
+        'enableClinicalNotes',
+        'enableArchiveSearch',
+        'enableClinicalChat',
+        'enableFloatingChatWidget',
+        'enableSystemSettingsPage',
+        'enableAdmissions'
+      ]);
+    }
+
+    function isCardsOnlyFeatureUpdate() {
+      return request.resource.data.features.diff(resource.data.features).affectedKeys().hasOnly([
+        'enableTelemetryVitals',
+        'enableVentilatorParameters',
+        'enableInfusionPumps',
+        'enableFluidBalance',
+        'enableAntibioticsCard',
+        'enableLabFlowsheet',
+        'enableInvestigations',
+        'enableAiLabScanner',
+        'enableAiInvestigationScanner',
+        'enableBedTransferAndSwap',
+        'enableBedIsolationControls',
+        'enableAcuityLevels',
+        'enableCodeStatus',
+        'enableSha256Addendums',
+        'enableVoiceNoteDictation'
+      ]);
     }
 
     // Connection testing
@@ -202,29 +240,29 @@ service cloud.firestore {
     // Clinical Notes
     match /clinicalNotes/{noteId} {
       allow read: if hasPerm('clinicalNotes.view') || hasPerm('patients.view');
-      allow create: if hasPerm('clinicalNotes.create');
+      allow create: if hasPerm('clinicalNotes.create') && isValidMedicalRecordCreate();
       allow update: if (isAdmin() || (hasPerm('clinicalNotes.update') && isRecordOwner())) && isValidMedicalRecordUpdate();
-      allow delete: if isAdmin() || hasPerm('medicalRecords.delete') || hasPerm('clinicalNotes.delete') || (isActiveUser() && isRecordOwner());
+      allow delete: if isAdmin() || hasPerm('medicalRecords.delete') || (isActiveUser() && isRecordOwner());
     }
 
     match /addendums/{addendumId} {
       allow read: if hasPerm('clinicalNotes.view') || hasPerm('patients.view');
-      allow create: if hasPerm('clinicalNotes.create') || hasPerm('clinicalNotes.update');
+      allow create: if (hasPerm('clinicalNotes.create') || hasPerm('clinicalNotes.update')) && isValidMedicalRecordCreate();
       allow update: if false; // Immutable addendums
-      allow delete: if isAdmin() || hasPerm('medicalRecords.delete') || hasPerm('clinicalNotes.delete') || (isActiveUser() && isRecordOwner());
+      allow delete: if isAdmin() || hasPerm('medicalRecords.delete') || (isActiveUser() && isRecordOwner());
     }
 
     // SBAR Handovers & Shift Transitions (Collaborative Doctor-to-Doctor Shift Transfer)
     match /sbarHandovers/{sbarId} {
       allow read: if hasPerm('sbar.view') || hasPerm('patients.view');
-      allow create: if hasPerm('sbar.create');
+      allow create: if hasPerm('sbar.create') && isValidMedicalRecordCreate();
       allow update: if (isAdmin() || (hasPerm('sbar.update') && isRecordOwner())) && isValidMedicalRecordUpdate();
       allow delete: if isAdmin() || hasPerm('medicalRecords.delete');
     }
 
     match /handovers/{handoverId} {
       allow read: if hasPerm('sbar.view') || hasPerm('patients.view');
-      allow create: if hasPerm('sbar.create');
+      allow create: if hasPerm('sbar.create') && isValidMedicalRecordCreate();
       allow update: if (isAdmin() || (hasPerm('sbar.update') && isRecordOwner())) && isValidMedicalRecordUpdate();
       allow delete: if isAdmin() || hasPerm('medicalRecords.delete');
     }
@@ -232,91 +270,91 @@ service cloud.firestore {
     // Telemetry Vitals, Ventilator, Infusions & Labs
     match /vitals/{vitalId} {
       allow read: if hasPerm('vitals.view') || hasPerm('beds.view') || hasPerm('patients.view');
-      allow create: if hasPerm('vitals.create');
+      allow create: if hasPerm('vitals.create') && isValidMedicalRecordCreate();
       allow update: if (isAdmin() || (hasPerm('vitals.update') && isRecordOwner())) && isValidMedicalRecordUpdate();
       allow delete: if isAdmin() || hasPerm('medicalRecords.delete') || (isActiveUser() && isRecordOwner());
     }
 
     match /ventilators/{id} {
       allow read: if hasPerm('vitals.view') || hasPerm('beds.view') || hasPerm('patients.view');
-      allow create: if hasPerm('vitals.create');
+      allow create: if hasPerm('vitals.create') && isValidMedicalRecordCreate();
       allow update: if (isAdmin() || (hasPerm('vitals.update') && isRecordOwner())) && isValidMedicalRecordUpdate();
       allow delete: if isAdmin() || hasPerm('medicalRecords.delete') || (isActiveUser() && isRecordOwner());
     }
 
     match /infusionPumps/{id} {
       allow read: if hasPerm('vitals.view') || hasPerm('beds.view') || hasPerm('patients.view');
-      allow create: if hasPerm('vitals.create');
+      allow create: if hasPerm('vitals.create') && isValidMedicalRecordCreate();
       allow update: if (isAdmin() || (hasPerm('vitals.update') && isRecordOwner())) && isValidMedicalRecordUpdate();
       allow delete: if isAdmin() || hasPerm('medicalRecords.delete') || (isActiveUser() && isRecordOwner());
     }
 
     match /infusion_pumps/{id} {
       allow read: if hasPerm('vitals.view') || hasPerm('beds.view') || hasPerm('patients.view');
-      allow create: if hasPerm('vitals.create');
+      allow create: if hasPerm('vitals.create') && isValidMedicalRecordCreate();
       allow update: if (isAdmin() || (hasPerm('vitals.update') && isRecordOwner())) && isValidMedicalRecordUpdate();
       allow delete: if isAdmin() || hasPerm('medicalRecords.delete') || (isActiveUser() && isRecordOwner());
     }
 
     match /patientAntibiotics/{id} {
       allow read: if hasPerm('vitals.view') || hasPerm('beds.view') || hasPerm('patients.view');
-      allow create: if hasPerm('vitals.create');
+      allow create: if hasPerm('vitals.create') && isValidMedicalRecordCreate();
       allow update: if (isAdmin() || (hasPerm('vitals.update') && isRecordOwner())) && isValidMedicalRecordUpdate();
       allow delete: if isAdmin() || hasPerm('medicalRecords.delete') || (isActiveUser() && isRecordOwner());
     }
 
     match /fluidBalances/{id} {
       allow read: if hasPerm('vitals.view') || hasPerm('beds.view') || hasPerm('patients.view');
-      allow create: if hasPerm('vitals.create');
+      allow create: if hasPerm('vitals.create') && isValidMedicalRecordCreate();
       allow update: if (isAdmin() || (hasPerm('vitals.update') && isRecordOwner())) && isValidMedicalRecordUpdate();
       allow delete: if isAdmin() || hasPerm('medicalRecords.delete') || (isActiveUser() && isRecordOwner());
     }
 
     match /fluid_balances/{id} {
       allow read: if hasPerm('vitals.view') || hasPerm('beds.view') || hasPerm('patients.view');
-      allow create: if hasPerm('vitals.create');
+      allow create: if hasPerm('vitals.create') && isValidMedicalRecordCreate();
       allow update: if (isAdmin() || (hasPerm('vitals.update') && isRecordOwner())) && isValidMedicalRecordUpdate();
       allow delete: if isAdmin() || hasPerm('medicalRecords.delete') || (isActiveUser() && isRecordOwner());
     }
 
     match /fluidBalances24H/{id} {
       allow read: if hasPerm('vitals.view') || hasPerm('beds.view') || hasPerm('patients.view');
-      allow create: if hasPerm('vitals.create');
+      allow create: if hasPerm('vitals.create') && isValidMedicalRecordCreate();
       allow update: if (isAdmin() || (hasPerm('vitals.update') && isRecordOwner())) && isValidMedicalRecordUpdate();
       allow delete: if isAdmin() || hasPerm('medicalRecords.delete') || (isActiveUser() && isRecordOwner());
     }
 
     match /statLabs/{id} {
       allow read: if hasPerm('labs.view') || hasPerm('patients.view');
-      allow create: if hasPerm('labs.create');
+      allow create: if hasPerm('labs.create') && isValidMedicalRecordCreate();
       allow update: if (isAdmin() || (hasPerm('labs.update') && isRecordOwner())) && isValidMedicalRecordUpdate();
       allow delete: if isAdmin() || hasPerm('medicalRecords.delete') || (isActiveUser() && isRecordOwner());
     }
 
     match /labResults/{id} {
       allow read: if hasPerm('labs.view') || hasPerm('patients.view');
-      allow create: if hasPerm('labs.create');
+      allow create: if hasPerm('labs.create') && isValidMedicalRecordCreate();
       allow update: if (isAdmin() || (hasPerm('labs.update') && isRecordOwner())) && isValidMedicalRecordUpdate();
       allow delete: if isAdmin() || hasPerm('medicalRecords.delete') || (isActiveUser() && isRecordOwner());
     }
 
     match /investigations/{id} {
       allow read: if hasPerm('investigations.view') || hasPerm('patients.view');
-      allow create: if hasPerm('investigations.create');
+      allow create: if hasPerm('investigations.create') && isValidMedicalRecordCreate();
       allow update: if (isAdmin() || (hasPerm('investigations.update') && isRecordOwner())) && isValidMedicalRecordUpdate();
       allow delete: if isAdmin() || hasPerm('medicalRecords.delete') || (isActiveUser() && isRecordOwner());
     }
 
     match /transfusions/{id} {
       allow read: if hasPerm('patients.view');
-      allow create: if hasPerm('vitals.create') || hasPerm('clinicalNotes.create');
+      allow create: if (hasPerm('vitals.create') || hasPerm('clinicalNotes.create')) && isValidMedicalRecordCreate();
       allow update: if (isAdmin() || ((hasPerm('vitals.update') || hasPerm('clinicalNotes.update')) && isRecordOwner())) && isValidMedicalRecordUpdate();
       allow delete: if isAdmin() || hasPerm('medicalRecords.delete') || (isActiveUser() && isRecordOwner());
     }
 
     match /medical_records/{recordId} {
       allow read: if hasPerm('patients.view');
-      allow create: if hasPerm('clinicalNotes.create');
+      allow create: if hasPerm('clinicalNotes.create') && isValidMedicalRecordCreate();
       allow update: if (isAdmin() || (hasPerm('clinicalNotes.update') && isRecordOwner())) && isValidMedicalRecordUpdate();
       allow delete: if isAdmin() || hasPerm('medicalRecords.delete') || (isActiveUser() && isRecordOwner());
     }
@@ -402,16 +440,26 @@ service cloud.firestore {
     match /system_settings/{settingId} {
       allow read: if isNotDisabledUser() || isActiveUser() || hasPerm('settings.view');
       allow write: if isAdmin() || hasPerm('settings.update') || (
-        (hasPerm('sections.manage') || hasPerm('cards.manage')) &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['features', 'lastUpdated'])
+        hasPerm('sections.manage') &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['features', 'lastUpdated']) &&
+        isSectionsOnlyFeatureUpdate()
+      ) || (
+        hasPerm('cards.manage') &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['features', 'lastUpdated']) &&
+        isCardsOnlyFeatureUpdate()
       );
     }
 
     match /settings/{settingId} {
       allow read: if isNotDisabledUser() || isActiveUser() || hasPerm('settings.view');
       allow write: if isAdmin() || hasPerm('settings.update') || (
-        (hasPerm('sections.manage') || hasPerm('cards.manage')) &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['features', 'lastUpdated'])
+        hasPerm('sections.manage') &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['features', 'lastUpdated']) &&
+        isSectionsOnlyFeatureUpdate()
+      ) || (
+        hasPerm('cards.manage') &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['features', 'lastUpdated']) &&
+        isCardsOnlyFeatureUpdate()
       );
     }
 

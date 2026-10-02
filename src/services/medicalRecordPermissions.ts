@@ -149,8 +149,7 @@ export function canDeleteClinicalNote(
 
   // 2. User with explicit delete permission granted by Admin
   if (
-    user.permissions?.['medicalRecords.delete'] === true ||
-    user.permissions?.['clinicalNotes.delete'] === true
+    user.permissions?.['medicalRecords.delete'] === true
   ) {
     return true;
   }

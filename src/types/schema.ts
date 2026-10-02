@@ -782,7 +782,6 @@ export interface UserPermissions {
   'clinicalNotes.view'?: boolean;
   'clinicalNotes.create'?: boolean;
   'clinicalNotes.update'?: boolean;
-  'clinicalNotes.delete'?: boolean;
 
   'sbar.view'?: boolean;
   'sbar.create'?: boolean;
