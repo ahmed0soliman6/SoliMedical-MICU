@@ -74,10 +74,13 @@ interface SettingsModalProps {
 export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onOpenUserManagement, onBedUpdated }) => {
   const { settings, toggleFeature, updateSettings, themeOption, setThemeOption, resetToDefaults } = useSystemSettings();
   const { t, lang, setLanguage, isRTL } = useTranslation();
-  const { currentUser } = useAuth();
+  const { currentUser, hasPermission } = useAuth();
   
   // Only system admin or super admin can see and trigger cloud reset / purge
   const isAdmin = currentUser?.role === StaffRole.ADMIN || currentUser?.isSuperAdmin === true;
+
+  // Feature cards management permission (ADMIN / Super Admin or user with settings.update permission)
+  const canManageFeatures = isAdmin || hasPermission('settings.update') || (currentUser?.permissions as any)?.['settings.update'] === true;
   
   // All cards are folded/collapsed by default (مطوية أسفل بعضها)
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
@@ -517,24 +520,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
   ];
 
   const sections = [
-    {
-      id: 'modules',
-      labelAr: 'الموديولات والشاشات الرئيسية',
-      labelEn: 'Core System Modules',
-      badgeAr: '5 موديولات',
-      badgeEn: '5 Modules',
-      icon: Layers,
-      items: featureItems.filter(f => f.category === 'modules')
-    },
-    {
-      id: 'bedside',
-      labelAr: 'خصائص ومكونات ملف السرير (Flowsheet)',
-      labelEn: 'Bedside Clinical Flowsheet',
-      badgeAr: '9 خصائص',
-      badgeEn: '9 Features',
-      icon: Activity,
-      items: featureItems.filter(f => f.category === 'bedside')
-    },
+    ...(canManageFeatures ? [
+      {
+        id: 'modules',
+        labelAr: 'الموديولات والشاشات الرئيسية',
+        labelEn: 'Core System Modules',
+        badgeAr: '5 موديولات',
+        badgeEn: '5 Modules',
+        icon: Layers,
+        items: featureItems.filter(f => f.category === 'modules')
+      },
+      {
+        id: 'bedside',
+        labelAr: 'خصائص ومكونات ملف السرير (Flowsheet)',
+        labelEn: 'Bedside Clinical Flowsheet',
+        badgeAr: '9 خصائص',
+        badgeEn: '9 Features',
+        icon: Activity,
+        items: featureItems.filter(f => f.category === 'bedside')
+      },
+    ] : []),
     {
       id: 'alerts',
       labelAr: 'الإنذارات السريرية وتأكيد الخروج',
@@ -1112,14 +1117,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
 
         {/* Restore System Defaults Footer */}
         <div className="pt-6 mt-4 border-t border-slate-200 dark:border-slate-800/80 flex flex-col items-center gap-3">
-          <button
-            type="button"
-            onClick={resetToDefaults}
-            className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:text-amber-700 dark:hover:text-amber-400 hover:border-amber-300 dark:hover:border-amber-500/30 transition-all text-xs font-bold cursor-pointer group shadow-sm"
-          >
-            <RotateCcw className="w-4 h-4 group-hover:rotate-180 transition-transform duration-500" />
-            <span>{lang === 'ar' ? 'استعادة إعدادات المصنع الافتراضية' : 'Restore System Factory Defaults'}</span>
-          </button>
+          {canManageFeatures && (
+            <button
+              type="button"
+              onClick={resetToDefaults}
+              className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:text-amber-700 dark:hover:text-amber-400 hover:border-amber-300 dark:hover:border-amber-500/30 transition-all text-xs font-bold cursor-pointer group shadow-sm"
+            >
+              <RotateCcw className="w-4 h-4 group-hover:rotate-180 transition-transform duration-500" />
+              <span>{lang === 'ar' ? 'استعادة إعدادات المصنع الافتراضية' : 'Restore System Factory Defaults'}</span>
+            </button>
+          )}
           <div className="text-[11px] font-mono font-medium text-slate-400 dark:text-slate-500 tracking-wider">
             Soli Medical MICU (ICU-Sync) • v4.3.0
           </div>

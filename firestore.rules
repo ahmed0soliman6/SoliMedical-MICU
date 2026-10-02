@@ -412,12 +412,12 @@ service cloud.firestore {
 
     // System Settings
     match /system_settings/{settingId} {
-      allow read: if isActiveUser() || hasPerm('settings.view');
+      allow read: if isNotDisabledUser() || isActiveUser() || hasPerm('settings.view');
       allow write: if isAdmin() || hasPerm('settings.update');
     }
 
     match /settings/{settingId} {
-      allow read: if isActiveUser() || hasPerm('settings.view');
+      allow read: if isNotDisabledUser() || isActiveUser() || hasPerm('settings.view');
       allow write: if isAdmin() || hasPerm('settings.update');
     }
 
