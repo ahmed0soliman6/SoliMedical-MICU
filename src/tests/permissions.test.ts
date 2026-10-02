@@ -175,7 +175,6 @@ console.log('--- RUNNING FINAL COMPREHENSIVE SECURITY & PERMISSIONS TEST SUITE -
   };
   assert.equal(canEditRecord(doctorWithCreate, recordOfAnotherDoc), false, 'E: clinicalNotes.create CANNOT update another doctor\'s record');
   assert.equal(canDeleteClinicalNote(doctorWithCreate, { authorId: 'doc-other' }), false, 'E: clinicalNotes.create CANNOT delete another doctor\'s note');
-  assert.equal(canAppendAddendum(doctorWithCreate), true, 'E: clinicalNotes.create CAN append addendum/reply to any note');
   console.log('✓ E. clinicalNotes.create does not allow updating or deleting another doctor\'s record passed');
 }
 

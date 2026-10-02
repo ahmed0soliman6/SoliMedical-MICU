@@ -87,7 +87,6 @@ service cloud.firestore {
     function isValidMedicalRecordUpdate() {
       return isActiveUser() && (
         isAdmin() || (
-          isRecordOwner() &&
           (!("createdByUid" in resource.data) || request.resource.data.createdByUid == resource.data.createdByUid) &&
           (!("doctorId" in resource.data) || request.resource.data.doctorId == resource.data.doctorId) &&
           (!("authorId" in resource.data) || request.resource.data.authorId == resource.data.authorId) &&
@@ -100,17 +99,6 @@ service cloud.firestore {
     }
 
     // Fine-grained Feature Flag scope functions for sections.manage vs cards.manage
-    function isAddendumAppendOnly() {
-      return (
-        (!('content' in resource.data) || request.resource.data.content == resource.data.content) &&
-        (!('noteType' in resource.data) || request.resource.data.noteType == resource.data.noteType) &&
-        (!('patientId' in resource.data) || request.resource.data.patientId == resource.data.patientId) &&
-        (!('createdByUid' in resource.data) || request.resource.data.createdByUid == resource.data.createdByUid) &&
-        (!('authorId' in resource.data) || request.resource.data.authorId == resource.data.authorId) &&
-        (!('createdAt' in resource.data) || request.resource.data.createdAt == resource.data.createdAt)
-      );
-    }
-
     function isSectionsOnlyFeatureUpdate() {
       return request.resource.data.features.diff(resource.data.features).affectedKeys().hasOnly([
         'enableBedMatrix',
@@ -252,11 +240,7 @@ service cloud.firestore {
     match /clinicalNotes/{noteId} {
       allow read: if hasPerm('clinicalNotes.view') || hasPerm('patients.view');
       allow create: if hasPerm('clinicalNotes.create') && isValidMedicalRecordCreate();
-      allow update: if (
-        isAdmin() ||
-        (hasPerm('clinicalNotes.update') && (isRecordOwner() || isAddendumAppendOnly())) ||
-        (hasPerm('clinicalNotes.create') && (isRecordOwner() || isAddendumAppendOnly()))
-      ) && isValidMedicalRecordUpdate();
+      allow update: if (isAdmin() || hasPerm('clinicalNotes.update') || hasPerm('clinicalNotes.create')) && isValidMedicalRecordUpdate();
       allow delete: if isAdmin() || hasPerm('medicalRecords.delete') || (isActiveUser() && isRecordOwner());
     }
 

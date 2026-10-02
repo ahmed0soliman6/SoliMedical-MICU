@@ -220,23 +220,3 @@ export function preserveRecordOwnership<T extends RecordOwnershipContext>(
 
   return result;
 }
-
-/**
- * Validates if a user is authorized to append an addendum / reply to a clinical note.
- * Any authenticated clinician/user with 'clinicalNotes.update' or 'clinicalNotes.create' permission (or ADMIN)
- * can append an addendum / reply to ANY clinical note, while preserving original note authorship.
- */
-export function canAppendAddendum(
-  user: UserContextForPermission | null | undefined
-): boolean {
-  if (!user || !user.uid) return false;
-
-  if (user.role === StaffRole.ADMIN || user.role === 'ADMIN' || user.isSuperAdmin === true) {
-    return true;
-  }
-
-  return (
-    user.permissions?.['clinicalNotes.update'] === true ||
-    user.permissions?.['clinicalNotes.create'] === true
-  );
-}
