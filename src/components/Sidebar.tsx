@@ -17,7 +17,7 @@ import {
   Moon,
   Monitor
 } from 'lucide-react';
-import { BedRecord, PatientDossier, BedNumber } from '../types/schema.ts';
+import { BedRecord, PatientDossier, BedNumber, StaffRole } from '../types/schema.ts';
 import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
 import { useAuth } from '../services/AuthContext.tsx';
@@ -59,6 +59,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const { settings, themeOption, setThemeOption } = useSystemSettings();
   const { t, lang, setLanguage, isRTL } = useTranslation();
   const { currentUser, logout, hasPermission } = useAuth();
+
+  const isAdmin = currentUser?.role === StaffRole.ADMIN || currentUser?.isSuperAdmin === true || (currentUser?.role as any) === 'ADMIN';
+  const hasSettingsUpdate = hasPermission('settings.update') || (currentUser?.permissions as any)?.['settings.update'] === true;
+  const canAccessSystemSettings = isAdmin || hasSettingsUpdate || settings.features.enableSystemSettingsPage !== false;
 
   const [showChangePassModal, setShowChangePassModal] = useState(false);
 
@@ -258,7 +262,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
 
         {/* 6. System Settings */}
-        {settings.features.enableSystemSettingsPage !== false && (
+        {canAccessSystemSettings && (
           <button
             onClick={() => handleSelectTab('settings')}
             className={`w-full flex items-center justify-between p-3 rounded-xl text-xs font-semibold transition-all cursor-pointer ${

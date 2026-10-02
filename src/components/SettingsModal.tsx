@@ -77,7 +77,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
   const { currentUser, hasPermission } = useAuth();
   
   // Only system admin or super admin can see and trigger cloud reset / purge
-  const isAdmin = currentUser?.role === StaffRole.ADMIN || currentUser?.isSuperAdmin === true;
+  const isAdmin = currentUser?.role === StaffRole.ADMIN || currentUser?.isSuperAdmin === true || (currentUser?.role as any) === 'ADMIN';
 
   // Feature cards management permission (ADMIN / Super Admin or user with settings.update permission)
   const canManageFeatures = isAdmin || hasPermission('settings.update') || (currentUser?.permissions as any)?.['settings.update'] === true;
