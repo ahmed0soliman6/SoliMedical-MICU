@@ -1694,7 +1694,24 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
       'addendums',
       'timestamp',
       4,
-      (data) => db.addendums.put(data),
+      async (data) => {
+        await db.addendums.put(data);
+        try {
+          const noteKey = data.noteId || (data as any).originalNoteId;
+          if (noteKey) {
+            const existingNote = await db.clinicalNotes.get(noteKey);
+            if (existingNote) {
+              const currentAdds = existingNote.addendums || [];
+              if (!currentAdds.some(a => a.id === data.id)) {
+                await db.clinicalNotes.update(noteKey, {
+                  addendums: [...currentAdds, data],
+                  consultationStatus: data.reasonForAddendum === 'CONSULTANT_COUNTERSIGN' ? 'REPLIED' : existingNote.consultationStatus,
+                });
+              }
+            }
+          }
+        } catch {}
+      },
       undefined,
       'addendums'
     );

@@ -13,6 +13,7 @@ import {
   syncVitalsToCloud,
   syncSbarToCloud,
   syncClinicalNoteToCloud,
+  syncAddendumToCloud,
   firestore,
   sanitizeForFirestore,
 } from './firebase.ts';
@@ -639,12 +640,15 @@ export async function appendImmutableAddendum(input: AppendAddendumInput): Promi
     await db.auditLogs.put(auditLog);
   });
 
+  // Push standalone addendum to Firebase Firestore collection 'addendums'
+  syncAddendumToCloud(newAddendum).catch((e) => console.warn('Sync addendum to cloud notice:', e));
+
   // Push updated note to Firebase Firestore (outside the transaction)
   syncClinicalNoteToCloud({
     ...originalNote,
     addendums: updatedAddendums,
     consultationStatus: (originalNote.noteType as any) === 'CONSULTATION_NOTE' ? 'REPLIED' : originalNote.consultationStatus,
-  });
+  }).catch((e) => console.warn('Sync parent note to cloud notice:', e));
 
   return newAddendum;
 }

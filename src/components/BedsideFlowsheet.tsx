@@ -58,6 +58,7 @@ import {
   StatLabPanel,
   LabResultItem,
   InvestigationItem,
+  Addendum,
   BedStatus,
   AcuityLevel,
   IntakePathway,
@@ -184,6 +185,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
   const [labsList, setLabsList] = useState<StatLabPanel[]>([]);
   const [labResults, setLabResults] = useState<LabResultItem[]>([]);
   const [investigations, setInvestigations] = useState<InvestigationItem[]>([]);
+  const [addendumsByNoteId, setAddendumsByNoteId] = useState<Record<string, Addendum[]>>({});
 
   // Clinical equipment and card management modals
   const [isVentilatorModalOpen, setIsVentilatorModalOpen] = useState(false);
@@ -328,7 +330,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       .where('patientId')
       .equals(patient.id)
       .toArray();
-    sbars.sort((a, b) => new Date(b.outgoingDoctor?.signedAt || b.shiftDate || 0).getTime() - new Date(a.outgoingDoctor?.signedAt || a.shiftDate || 0).getTime());
+    sbars.sort((a, b) => new Date(b.createdAt || b.outgoingDoctor?.signedAt || b.shiftDate || 0).getTime() - new Date(a.createdAt || a.outgoingDoctor?.signedAt || a.shiftDate || 0).getTime());
     setSbarList(sbars);
 
     const notes = (await db.clinicalNotes
@@ -337,24 +339,30 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       .sortBy('timestamp')).reverse();
     setNotesList(notes);
 
-    const labs = await db.statLabs
-      .where('patientId')
-      .equals(patient.id)
-      .sortBy('timestamp');
+    const allAddendums = (await db.addendums
+      .where('patientId').equals(patient.id).sortBy('timestamp')).reverse();
+    const grouped: Record<string, Addendum[]> = {};
+    for (const add of allAddendums) {
+      const noteKey = add.noteId || (add as any).originalNoteId;
+      if (noteKey) {
+        if (!grouped[noteKey]) grouped[noteKey] = [];
+        grouped[noteKey].push(add);
+      }
+    }
+    setAddendumsByNoteId(grouped);
+
+    const labs = (await db.statLabs
+      .where('patientId').equals(patient.id).sortBy('timestamp')).reverse();
     setLabsList(labs);
 
     // Load Daily Lab Flowsheet Items (Trend-enabled)
-    const labItems = await db.labResults
-      .where('patientId')
-      .equals(patient.id)
-      .sortBy('timestamp');
+    const labItems = (await db.labResults
+      .where('patientId').equals(patient.id).sortBy('timestamp')).reverse();
     setLabResults(labItems);
 
     // Load Investigations & Imaging Items
-    const invItems = await db.investigations
-      .where('patientId')
-      .equals(patient.id)
-      .sortBy('timestamp');
+    const invItems = (await db.investigations
+      .where('patientId').equals(patient.id).sortBy('timestamp')).reverse();
     setInvestigations(invItems);
 
     // Load Active & Past Antibiotics for patient
@@ -4074,7 +4082,15 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                 <>
                   {(showMoreNotes ? notesList : notesList.slice(0, 4)).map((note) => {
                     const isConsultation = note.noteType === 'CONSULTATION_NOTE';
-                    const hasReply = note.consultationStatus === 'REPLIED' || (note.addendums && note.addendums.some(a => a.reasonForAddendum === 'CONSULTANT_COUNTERSIGN'));
+                    const directAdds = addendumsByNoteId[note.id] || [];
+                    const embeddedAdds = note.addendums || [];
+                    const addendumMap = new Map<string, Addendum>();
+                    embeddedAdds.forEach(a => { if (a?.id) addendumMap.set(a.id, a); });
+                    directAdds.forEach(a => { if (a?.id) addendumMap.set(a.id, a); });
+                    const noteAddendums = Array.from(addendumMap.values()).sort(
+                      (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+                    );
+                    const hasReply = note.consultationStatus === 'REPLIED' || noteAddendums.some(a => a.reasonForAddendum === 'CONSULTANT_COUNTERSIGN');
                     const isNoteExpanded = !!expandedBedsideNotes[note.id];
                     const canDelete = canDeleteClinicalNote(currentUser, note);
 
@@ -4214,14 +4230,14 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                             </div>
 
                             {/* Chained Addendums */}
-                            {note.addendums && note.addendums.length > 0 && (
+                            {noteAddendums.length > 0 && (
                               <div className="bg-purple-50/70 dark:bg-[#0a101f] border border-purple-200 dark:border-slate-800 border-l-4 sm:border-r-4 border-purple-500 p-3 rounded-lg space-y-2 mt-2">
                                 <div className="text-[11px] font-bold text-purple-900 dark:text-purple-300 flex items-center gap-1">
                                   <Lock className="w-3.5 h-3.5" />
-                                  <span>{lang === 'ar' ? `الملحقات التوضيحية (${note.addendums.length}):` : `Addendums & Updates (${note.addendums.length}):`}</span>
+                                  <span>{lang === 'ar' ? `الملحقات التوضيحية (${noteAddendums.length}):` : `Addendums & Updates (${noteAddendums.length}):`}</span>
                                 </div>
 
-                                {note.addendums.map((addendum) => (
+                                {noteAddendums.map((addendum) => (
                                   <div key={addendum.id} className="text-xs space-y-1 bg-white dark:bg-[#070c17] p-2.5 rounded-lg border border-purple-200 dark:border-purple-900/30 text-slate-800 dark:text-slate-200">
                                     <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 font-mono">
                                       <span>{new Date(addendum.timestamp).toLocaleString('en-US')}</span>
