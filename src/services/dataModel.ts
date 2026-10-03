@@ -487,7 +487,7 @@ export interface AddVitalsInput {
   spo2Percent: number;
   fio2SuppliedPercent: number;
   respiratoryRateCpm: number;
-  coreTemperatureCelsius: number;
+  coreTemperatureCelsius?: number;
   temperatureSite?: 'FOLEY_CORE' | 'AXILLARY' | 'TYMPANIC' | 'RECTAL';
   gcsTotalScore: number;
   gcsBreakdown?: { eyeOpening: number; verbalResponse: number; motorResponse: number };

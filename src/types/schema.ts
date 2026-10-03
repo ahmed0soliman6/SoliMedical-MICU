@@ -352,8 +352,8 @@ export interface TelemetryVitals {
   oxygenSaturationPercent?: number; // Alias for spo2Percent
   fio2SuppliedPercent: number;
   respiratoryRateCpm: number;
-  coreTemperatureCelsius: number;
-  temperatureSite: 'FOLEY_CORE' | 'AXILLARY' | 'TYMPANIC' | 'RECTAL';
+  coreTemperatureCelsius?: number;
+  temperatureSite?: 'FOLEY_CORE' | 'AXILLARY' | 'TYMPANIC' | 'RECTAL';
   gcsTotalScore: number;
   gcsBreakdown: GCSBreakdown;
   sedationRassScore?: number; // Richmond Agitation-Sedation Scale (-5 to +4)

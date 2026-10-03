@@ -110,6 +110,8 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
       const staffId = currentUser?.badgeId || currentUser?.id || currentUser?.uid || '7721';
       const userRole = (currentUser?.role as StaffRole) || StaffRole.LEAD_RN;
 
+      const parsedTemp = coreTemp.trim() ? (parseEnglishFloat(coreTemp) || undefined) : undefined;
+
       if (vitalsToEdit) {
         const updatedVitals: TelemetryVitals = {
           ...vitalsToEdit,
@@ -122,8 +124,8 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
           spo2Percent: parseEnglishInt(spo2) || 98,
           fio2SuppliedPercent: parseEnglishInt(fio2) || 21,
           respiratoryRateCpm: parseEnglishInt(respiratoryRate) || 16,
-          coreTemperatureCelsius: parseEnglishFloat(coreTemp) || 37.0,
-          temperatureSite: tempSite,
+          coreTemperatureCelsius: parsedTemp,
+          temperatureSite: parsedTemp ? tempSite : undefined,
           gcsTotalScore: parseEnglishInt(gcsTotal) || 15,
           sedationRassScore: !isNaN(parseEnglishInt(sedationRass)) ? parseEnglishInt(sedationRass) : 0,
           cvpMmHg: cvp ? parseEnglishInt(cvp) : undefined,
@@ -149,8 +151,8 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
           spo2Percent: parseEnglishInt(spo2) || 98,
           fio2SuppliedPercent: parseEnglishInt(fio2) || 21,
           respiratoryRateCpm: parseEnglishInt(respiratoryRate) || 16,
-          coreTemperatureCelsius: parseEnglishFloat(coreTemp) || 37.0,
-          temperatureSite: tempSite,
+          coreTemperatureCelsius: parsedTemp,
+          temperatureSite: parsedTemp ? tempSite : undefined,
           gcsTotalScore: parseEnglishInt(gcsTotal) || 15,
           sedationRassScore: !isNaN(parseEnglishInt(sedationRass)) ? parseEnglishInt(sedationRass) : 0,
           cvpMmHg: cvp ? parseEnglishInt(cvp) : undefined,
@@ -246,21 +248,6 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
                 />
               </div>
             </div>
-
-            <div className="flex items-center gap-2 pt-1">
-              <input
-                type="checkbox"
-                id="artLine"
-                checked={isArterialLine}
-                onChange={(e) => setIsArterialLine(e.target.checked)}
-                className="w-4 h-4 rounded text-teal-500 bg-slate-900 border-slate-700"
-              />
-              <label htmlFor="artLine" className="text-slate-300 cursor-pointer">
-                {lang === 'ar' 
-                  ? 'شريان شرياني مباشر (Continuous Invasive Arterial Line)' 
-                  : 'Continuous Invasive Arterial Line (A-Line)'}
-              </label>
-            </div>
           </div>
 
           {/* Heart Rate & Rhythm */}
@@ -335,15 +322,15 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
             <div>
               <label className="text-[11px] text-slate-400 flex items-center gap-1">
                 <Thermometer className="w-3 h-3 text-amber-400" />
-                <span>{lang === 'ar' ? 'حرارة (°C)' : 'Temp (°C)'}</span>
+                <span>{lang === 'ar' ? 'حرارة (°C) (اختياري)' : 'Temp (°C) (Opt)'}</span>
               </label>
               <input
                 type="text"
                 inputMode="decimal"
                 value={coreTemp}
                 onChange={(e) => setCoreTemp(toEnglishDigits(e.target.value))}
+                placeholder="e.g. 37.0"
                 className="w-full mt-1 bg-[#0f172a] border border-slate-700 rounded-lg px-2.5 py-2 text-white font-mono font-bold focus:border-teal-500 focus:outline-none"
-                required
               />
             </div>
 

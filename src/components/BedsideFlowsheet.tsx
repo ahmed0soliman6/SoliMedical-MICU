@@ -414,6 +414,62 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
 
   const latestVitals = vitalsHistory[0] || null;
 
+  const isVitalAuthor = (vital: TelemetryVitals) => {
+    if (!currentUser) return false;
+    const userIds = [currentUser.uid, currentUser.badgeId, currentUser.staffId, (currentUser as any).id].filter(Boolean) as string[];
+    const userNames = [currentUser.nameAr, currentUser.nameEn, currentUser.displayName].filter(Boolean) as string[];
+    
+    const recStaffId = vital.recordedBy?.staffId;
+    const recName = vital.recordedBy?.name;
+    const recUid = (vital as any).createdByUid || (vital as any).authorId || (vital as any).userId;
+
+    if (recUid && userIds.some(id => recUid === id || recUid === `staff-${id}`)) return true;
+    if (recStaffId && userIds.some(id => recStaffId === id || recStaffId === `staff-${id}`)) return true;
+    if (recName && userNames.some(name => name.trim().toLowerCase() === recName.trim().toLowerCase())) return true;
+    return false;
+  };
+
+  const canEditVital = (vital: TelemetryVitals) => {
+    if (!currentUser || readOnly) return false;
+    if (currentUser.role === StaffRole.ADMIN || currentUser.role === 'ADMIN' || currentUser.role === 'SUPER_ADMIN' || currentUser.isSuperAdmin === true) return true;
+    if (currentUser.permissions?.['medicalRecords.update'] === true || currentUser.permissions?.['medicalRecords.manage'] === true) return true;
+    return isVitalAuthor(vital);
+  };
+
+  const canDeleteVital = (vital: TelemetryVitals) => {
+    if (!currentUser || readOnly) return false;
+    if (currentUser.role === StaffRole.ADMIN || currentUser.role === 'ADMIN' || currentUser.role === 'SUPER_ADMIN' || currentUser.isSuperAdmin === true) return true;
+    if (currentUser.permissions?.['medicalRecords.delete'] === true) return true;
+    return isVitalAuthor(vital);
+  };
+
+  const handleDeleteVital = async (e: React.MouseEvent, targetVital: TelemetryVitals) => {
+    e.stopPropagation();
+    if (!canDeleteVital(targetVital)) {
+      alert(
+        lang === 'ar'
+          ? 'عفواً، حذف القراءة الحيوية متاح فقط لمدير النظام (Admin)، أو من لديه صلاحية الحذف من الإدارة، أو كاتب القراءة فقط.'
+          : 'Unauthorized: Vital reading deletion is restricted to Admins, users with delete permission, or the recording staff member only.'
+      );
+      return;
+    }
+    if (!window.confirm(lang === 'ar' ? 'هل أنت متأكد من حذف هذه القراءة الحيوية؟' : 'Are you sure you want to delete this vital reading?')) {
+      return;
+    }
+
+    try {
+      await db.vitals.delete(targetVital.id);
+      await deleteDoc(doc(firestore, 'vitals', targetVital.id)).catch((err) => {
+        console.warn('Delete vital from cloud notice:', err);
+      });
+      setVitalsHistory((prev) => prev.filter((item) => item.id !== targetVital.id));
+      onDataUpdated();
+    } catch (err) {
+      console.error('Error deleting vital reading:', err);
+      alert(lang === 'ar' ? 'حدث خطأ أثناء الحذف.' : 'Delete error.');
+    }
+  };
+
   // Ventilator Driving Pressure & PF Ratio Calculations
   const drivingPressure = (ventilator?.plateauPressureCmH2O && ventilator?.peepCmH2O)
     ? ventilator.plateauPressureCmH2O - ventilator.peepCmH2O
@@ -1632,18 +1688,16 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                   {/* SpO2 */}
                   <div className="bg-[#070c18] px-3 py-2 rounded-xl border border-slate-800/80 flex items-center justify-between hover:border-slate-700 transition-colors">
                     <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">SpO₂</span>
-                    <span className="text-sm font-extrabold text-teal-300 font-mono flex items-center gap-1">
-                      <span>{latestVitals.spo2Percent}%</span>
-                      <span className="text-[10px] text-slate-500 font-normal">({latestVitals.fio2SuppliedPercent}% Fi)</span>
+                    <span className="text-sm font-extrabold text-teal-300 font-mono">
+                      {latestVitals.spo2Percent}%
                     </span>
                   </div>
 
                   {/* Core Temp */}
                   <div className="bg-[#070c18] px-3 py-2 rounded-xl border border-slate-800/80 flex items-center justify-between hover:border-slate-700 transition-colors">
                     <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Temp</span>
-                    <span className="text-sm font-extrabold text-amber-300 font-mono flex items-center gap-1">
-                      <span>{latestVitals.coreTemperatureCelsius}°C</span>
-                      <span className="text-[10px] text-slate-500 font-normal">({latestVitals.temperatureSite})</span>
+                    <span className="text-sm font-extrabold text-amber-300 font-mono">
+                      {latestVitals.coreTemperatureCelsius !== undefined && latestVitals.coreTemperatureCelsius !== null ? `${latestVitals.coreTemperatureCelsius}°C` : '—'}
                     </span>
                   </div>
 
@@ -1660,7 +1714,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                   <div className="bg-[#070c18] px-3 py-2 rounded-xl border border-slate-800/80 flex items-center justify-between hover:border-slate-700 transition-colors animate-in fade-in">
                     <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">CVP</span>
                     <span className="text-sm font-extrabold text-blue-400 font-mono flex items-center gap-1">
-                      <span>{latestVitals.cvpMmHg !== undefined && latestVitals.cvpMmHg !== null ? `${latestVitals.cvpMmHg} mmHg` : '—'}</span>
+                      <span>{latestVitals.cvpMmHg !== undefined && latestVitals.cvpMmHg !== null ? `${latestVitals.cvpMmHg}` : '—'}</span>
                       <span className="text-[10px] text-slate-500 font-normal">({latestVitals.bloodGlucoseMgDl ?? '—'} G)</span>
                     </span>
                   </div>
@@ -1677,9 +1731,9 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                   {!readOnly && (
                     <button
                       onClick={onOpenAddVitals}
-                      className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-teal-500/20 text-teal-300 text-xs font-bold cursor-pointer hover:bg-teal-500/30 transition-all"
+                      className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shadow-md shadow-teal-500/20 border-2 border-teal-300 dark:border-teal-400/90 ring-2 ring-teal-500/40 hover:ring-teal-400/60 hover:scale-[1.02] active:scale-95 transition-all cursor-pointer"
                     >
-                      <Plus className="w-3.5 h-3.5" />
+                      <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
                       <span>{lang === 'ar' ? 'إضافة قراءة جديدة' : 'Add Reading'}</span>
                     </button>
                   )}
@@ -1688,67 +1742,80 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                 <div className="overflow-x-auto">
                   <table className={`w-full text-xs ${isRTL ? 'text-right' : 'text-left'}`}>
                     <thead>
-                      <tr className="border-b border-slate-800 text-slate-400 font-mono">
-                        <th className="py-2 px-3">Date & Time</th>
-                        <th className="py-2 px-3">BP</th>
-                        <th className="py-2 px-3">HR</th>
-                        <th className="py-2 px-3">SpO₂</th>
-                        <th className="py-2 px-3">RR</th>
-                        <th className="py-2 px-3">CVP</th>
-                        <th className="py-2 px-3">BG</th>
-                        <th className="py-2 px-3">Staff / Actions</th>
+                      <tr className="border-b border-slate-800 text-slate-400 font-mono text-[11px]">
+                        <th className="py-2 px-2 whitespace-nowrap">Date & Time</th>
+                        <th className="py-2 px-2 whitespace-nowrap">BP</th>
+                        <th className="py-2 px-2 whitespace-nowrap">HR</th>
+                        <th className="py-2 px-2 whitespace-nowrap">SpO₂</th>
+                        <th className="py-2 px-2 whitespace-nowrap">RR</th>
+                        <th className="py-2 px-2 whitespace-nowrap">CVP</th>
+                        <th className="py-2 px-2 whitespace-nowrap">BG</th>
+                        <th className="py-2 px-2 whitespace-nowrap">Staff / Actions</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-800/60 font-mono">
+                    <tbody className="divide-y divide-slate-800/60 font-mono text-xs">
                       {(showAllVitals ? vitalsHistory : vitalsHistory.slice(0, 4)).map((v) => {
                         const d = new Date(v.timestamp);
                         const dateStr = formatNumericDate(d);
                         const timeStr = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
                         return (
                           <tr key={v.id} className="hover:bg-slate-800/30">
-                            <td className="py-2.5 px-3">
-                              <div className="flex flex-col">
+                            <td className="py-2 px-2 whitespace-nowrap">
+                              <div className="flex flex-col text-[11px] leading-tight font-mono">
                                 <span className="font-bold text-slate-200">{dateStr}</span>
-                                <span className="text-[10px] text-slate-400 font-mono">{timeStr}</span>
+                                <span className="text-[9.5px] text-slate-400 font-medium">{timeStr}</span>
                               </div>
                             </td>
-                            <td className={`py-2.5 px-3 text-white font-bold ${v.meanArterialPressureMmHg < 65 ? 'text-red-400 animate-pulse font-black' : ''}`}>
-                              {v.systolicBpMmHg}/{v.diastolicBpMmHg} {v.isArterialLine ? '(Art)' : '(Cuff)'}
+                            <td className={`py-2 px-2 whitespace-nowrap text-white font-bold ${v.meanArterialPressureMmHg < 65 ? 'text-red-400 animate-pulse font-black' : ''}`}>
+                              {v.systolicBpMmHg}/{v.diastolicBpMmHg}
                             </td>
-                            <td className="py-2.5 px-3 text-emerald-400">
+                            <td className="py-2 px-2 whitespace-nowrap text-emerald-400 font-bold">
                               {v.heartRateBpm}
                             </td>
-                            <td className="py-2.5 px-3 text-teal-300">
-                              {v.spo2Percent}% ({v.fio2SuppliedPercent}% Fi)
+                            <td className="py-2 px-2 whitespace-nowrap text-teal-300 font-bold">
+                              {v.spo2Percent}%
                             </td>
-                            <td className="py-2.5 px-3 text-slate-300">
+                            <td className="py-2 px-2 whitespace-nowrap text-slate-300">
                               {v.respiratoryRateCpm}
                             </td>
-                            <td className="py-2.5 px-3 text-blue-400">
-                              {v.cvpMmHg !== undefined && v.cvpMmHg !== null ? `${v.cvpMmHg} mmHg` : '—'}
+                            <td className="py-2 px-2 whitespace-nowrap text-blue-400 font-bold">
+                              {v.cvpMmHg !== undefined && v.cvpMmHg !== null ? `${v.cvpMmHg}` : '—'}
                             </td>
-                            <td className="py-2.5 px-3 text-amber-300">
+                            <td className="py-2 px-2 whitespace-nowrap text-amber-300 font-bold">
                               {v.bloodGlucoseMgDl !== undefined && v.bloodGlucoseMgDl !== null ? `${v.bloodGlucoseMgDl}` : '—'}
                             </td>
-                            <td className="py-2.5 px-3">
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="text-slate-400 text-[11px] font-sans truncate max-w-[110px]">
+                            <td className="py-2 px-2 whitespace-nowrap">
+                              <div className="flex items-center justify-between gap-1.5">
+                                <span className="text-slate-400 text-[10.5px] font-sans truncate max-w-[100px]">
                                   {v.recordedBy?.name || (lang === 'ar' ? 'الكادر الطبي' : 'Staff')}
                                 </span>
-                                {!readOnly && canEditRecord(currentUser, v as any) && (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setSelectedVitalForEdit(v);
-                                      setIsEditVitalsModalOpen(true);
-                                    }}
-                                    className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-teal-500/10 hover:bg-teal-500/20 text-teal-300 border border-teal-500/30 text-[10px] font-bold transition-all cursor-pointer shadow-xs active:scale-95 whitespace-nowrap"
-                                    title={lang === 'ar' ? 'تعديل القراءة الحيوية' : 'Edit vital reading'}
-                                  >
-                                    <Edit3 className="w-3 h-3" />
-                                    <span>{lang === 'ar' ? 'تعديل' : 'Edit'}</span>
-                                  </button>
-                                )}
+                                <div className="flex items-center gap-1">
+                                  {canEditVital(v) && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedVitalForEdit(v);
+                                        setIsEditVitalsModalOpen(true);
+                                      }}
+                                      className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-teal-500/10 hover:bg-teal-500/20 text-teal-300 border border-teal-500/30 text-[10px] font-bold transition-all cursor-pointer shadow-xs active:scale-95 whitespace-nowrap"
+                                      title={lang === 'ar' ? 'تعديل القراءة الحيوية' : 'Edit vital reading'}
+                                    >
+                                      <Edit3 className="w-3 h-3" />
+                                      <span>{lang === 'ar' ? 'تعديل' : 'Edit'}</span>
+                                    </button>
+                                  )}
+                                  {canDeleteVital(v) && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => handleDeleteVital(e, v)}
+                                      className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-rose-500/10 hover:bg-rose-500/25 text-rose-400 border border-rose-500/30 text-[10px] font-bold transition-all cursor-pointer shadow-xs active:scale-95 whitespace-nowrap"
+                                      title={lang === 'ar' ? 'حذف القراءة الحيوية' : 'Delete vital reading'}
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                      <span>{lang === 'ar' ? 'حذف' : 'Delete'}</span>
+                                    </button>
+                                  )}
+                                </div>
                               </div>
                             </td>
                           </tr>
