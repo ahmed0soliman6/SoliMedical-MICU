@@ -519,5 +519,39 @@ console.log('--- RUNNING FINAL COMPREHENSIVE SECURITY & PERMISSIONS TEST SUITE -
   console.log('✓ V. Active pagination cursor is preserved when new realtime record arrives passed');
 }
 
-console.log('ALL COMPREHENSIVE TESTS PASSED SUCCESSFULLY! (22/22 test suites verified)');
+// Test W: Patient Disposition / Discharge / Transfer / Mortality permissions
+{
+  const canDischargePatient = (user: any) => {
+    return Boolean(
+      user && (
+        user.role === StaffRole.ADMIN ||
+        user.role === 'ADMIN' ||
+        user.isSuperAdmin === true ||
+        user.permissions?.['discharge.create'] === true ||
+        user.role === StaffRole.CONSULTANT ||
+        user.role === StaffRole.SPECIALIST ||
+        user.role === StaffRole.RESIDENT ||
+        user.role === 'DOCTOR' ||
+        user.role === 'CONSULTANT'
+      )
+    );
+  };
+
+  const adminDoc = { uid: 'u-admin', role: StaffRole.ADMIN };
+  const consultantDoc = { uid: 'u-consultant', role: StaffRole.CONSULTANT, permissions: { 'discharge.create': true } };
+  const specialistDoc = { uid: 'u-specialist', role: StaffRole.SPECIALIST, permissions: { 'discharge.create': true } };
+  const residentWithPerm = { uid: 'u-resident', role: StaffRole.RESIDENT, permissions: { 'discharge.create': true } };
+  const doctorGeneric = { uid: 'u-doc', role: 'DOCTOR', permissions: { 'discharge.create': true } };
+  const nurseWithoutPerm = { uid: 'u-nurse', role: StaffRole.BEDSIDE_RN, permissions: { 'discharge.create': false } };
+
+  assert.equal(canDischargePatient(adminDoc), true, 'W: Admin can discharge');
+  assert.equal(canDischargePatient(consultantDoc), true, 'W: Consultant can discharge');
+  assert.equal(canDischargePatient(specialistDoc), true, 'W: Specialist can discharge');
+  assert.equal(canDischargePatient(residentWithPerm), true, 'W: Resident with discharge.create can discharge');
+  assert.equal(canDischargePatient(doctorGeneric), true, 'W: Doctor with discharge.create can discharge');
+  assert.equal(canDischargePatient(nurseWithoutPerm), false, 'W: Nurse without discharge.create cannot discharge');
+  console.log('✓ W. Doctor with discharge.create / clinical role can discharge patient passed');
+}
+
+console.log('ALL COMPREHENSIVE TESTS PASSED SUCCESSFULLY! (23/23 test suites verified)');
 

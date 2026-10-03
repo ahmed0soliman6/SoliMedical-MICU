@@ -139,8 +139,22 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
 }) => {
   const { settings } = useSystemSettings();
   const { t, lang, isRTL } = useTranslation();
-  const { currentUser } = useAuth();
+  const { currentUser, hasPermission } = useAuth();
   const { triggerNotification } = useAppNotifications();
+
+  const canDischarge = Boolean(
+    currentUser?.role === StaffRole.ADMIN ||
+    currentUser?.isSuperAdmin === true ||
+    (currentUser?.role as any) === 'ADMIN' ||
+    hasPermission?.('discharge.create') ||
+    currentUser?.permissions?.['discharge.create'] === true ||
+    currentUser?.role === StaffRole.CONSULTANT ||
+    currentUser?.role === StaffRole.SPECIALIST ||
+    currentUser?.role === StaffRole.RESIDENT ||
+    (currentUser?.role as any) === 'DOCTOR' ||
+    (currentUser?.role as any) === 'PHYSICIAN' ||
+    (currentUser?.role as any) === 'CONSULTANT'
+  );
   
   const [activeTab, setActiveTab] = useState<'all' | 'paperFlowsheet' | 'labs' | 'antibiotics' | 'investigations' | 'vitals' | 'vent' | 'pumps' | 'fluids' | 'sbar' | 'notes' | 'disposition' | 'labTemplates'>(() => {
     try {
@@ -909,6 +923,14 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       alert(lang === 'ar' ? 'يرجى اختيار مسار إنهاء الإقامة أولاً.' : 'Please select a disposition pathway first.');
       return;
     }
+    if (!canDischarge) {
+      alert(
+        lang === 'ar'
+          ? 'عذراً، يتطلب هذا الإجراء صلاحية تخريج أو نقل المرضى (discharge.create). يرجى مراجعة إدارة الصلاحيات.'
+          : 'Access Denied: You do not have permission to discharge or transfer patients (discharge.create).'
+      );
+      return;
+    }
     const currentUserName = currentUser ? (lang === 'ar' ? currentUser.nameAr || currentUser.nameEn : currentUser.nameEn || currentUser.nameAr) : 'Dr. Hesham Talaat';
     const finalPhysicianSign = useOtherConsultant ? otherConsultantName.trim() : currentUserName;
     if (useOtherConsultant && !otherConsultantName.trim()) {
@@ -926,9 +948,9 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
         dispositionType: dispType,
         summaryText: dispSummary,
         authorStaff: {
-          staffId: 'DOC-8811',
+          staffId: currentUser?.badgeId || currentUser?.uid || 'DOC-8811',
           name: finalPhysicianSign,
-          role: StaffRole.CONSULTANT,
+          role: (currentUser?.role as StaffRole) || StaffRole.CONSULTANT,
         },
       });
 
@@ -4533,8 +4555,12 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                     <button
                       type="button"
                       onClick={handleExecuteDisposition}
+                      disabled={!canDischarge}
+                      title={!canDischarge ? (lang === 'ar' ? 'يتطلب هذا الإجراء صلاحية تخريج المريض (discharge.create)' : 'Requires discharge permission (discharge.create)') : undefined}
                       className={`px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg transition-all active:scale-95 cursor-pointer ${
-                        dispType === DispositionType.CLINICAL_MORTALITY
+                        !canDischarge
+                          ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700 opacity-60'
+                          : dispType === DispositionType.CLINICAL_MORTALITY
                           ? 'bg-red-600 hover:bg-red-500 text-white'
                           : 'bg-teal-500 hover:bg-teal-400 text-slate-950'
                       }`}

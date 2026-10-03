@@ -926,6 +926,7 @@ export interface WardAuditLog {
   targetPatientMrn?: string;
   description: string;
   immutableHash: string;
+  createdByUid?: string;
 }
 
 export interface PatientAntibiotic {

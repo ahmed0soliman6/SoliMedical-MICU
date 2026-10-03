@@ -199,8 +199,9 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 // -------------------------------------------------------------
 // Default Role Permissions Matrix
 // -------------------------------------------------------------
-export function getDefaultPermissionsForRole(role: StaffRole): UserPermissions {
+export function getDefaultPermissionsForRole(role: StaffRole | string): UserPermissions {
   switch (role) {
+    case 'ADMIN':
     case StaffRole.ADMIN:
       return {
         'beds.view': true,
@@ -242,8 +243,12 @@ export function getDefaultPermissionsForRole(role: StaffRole): UserPermissions {
         'audit.view': true,
         'medicalRecords.delete': true,
       };
+    case 'CONSULTANT':
     case StaffRole.CONSULTANT:
+    case 'SPECIALIST':
     case StaffRole.SPECIALIST:
+    case 'DOCTOR':
+    case 'PHYSICIAN':
       return {
         'beds.view': true,
         'beds.update': true,
@@ -283,6 +288,7 @@ export function getDefaultPermissionsForRole(role: StaffRole): UserPermissions {
         'users.delete': false,
         'audit.view': true,
       };
+    case 'RESIDENT':
     case StaffRole.RESIDENT:
       return {
         'beds.view': true,
@@ -308,7 +314,7 @@ export function getDefaultPermissionsForRole(role: StaffRole): UserPermissions {
         'sbar.update': true,
         'transfer.create': true,
         'bedSwap.create': true,
-        'discharge.create': false,
+        'discharge.create': true,
         'chat.view': true,
         'chat.create': true,
         'chat.delete': false,
@@ -323,6 +329,7 @@ export function getDefaultPermissionsForRole(role: StaffRole): UserPermissions {
         'users.delete': false,
         'audit.view': false,
       };
+    case 'LEAD_RN':
     case StaffRole.LEAD_RN:
       return {
         'beds.view': true,
@@ -363,6 +370,7 @@ export function getDefaultPermissionsForRole(role: StaffRole): UserPermissions {
         'users.delete': false,
         'audit.view': true,
       };
+    case 'NURSE':
     case StaffRole.BEDSIDE_RN:
       return {
         'beds.view': true,

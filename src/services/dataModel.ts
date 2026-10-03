@@ -16,6 +16,7 @@ import {
   syncAddendumToCloud,
   firestore,
   sanitizeForFirestore,
+  auth,
 } from './firebase.ts';
 import { runTransaction, doc, collection, query, where, getDocs, deleteDoc } from 'firebase/firestore';
 import {
@@ -1055,6 +1056,9 @@ export async function dischargeOrTransferPatient(input: DispositionInput): Promi
   const rawPayload = `${patient.id}|${input.dispositionType}|${input.summaryText}|${input.authorStaff.staffId}|${nowIso}`;
   const hash = await computeSha256(rawPayload);
 
+  const currentUserUid = auth.currentUser?.uid;
+  const authorStaffId = input.authorStaff.staffId || currentUserUid || 'DOC-8811';
+
   const summaryNote: ClinicalNote = {
     id: `note-dispo-${Date.now()}`,
     bedId: input.bedNumber,
@@ -1062,14 +1066,15 @@ export async function dischargeOrTransferPatient(input: DispositionInput): Promi
     noteType: noteType,
     title: noteTitle,
     content: input.summaryText,
-    authorId: `staff-${input.authorStaff.staffId}`,
+    authorId: currentUserUid ? (currentUserUid.startsWith('staff-') ? currentUserUid : `staff-${currentUserUid}`) : `staff-${authorStaffId}`,
     authorName: input.authorStaff.name,
     authorRole: input.authorStaff.role,
-    authorStaffId: input.authorStaff.staffId,
+    authorStaffId: authorStaffId,
+    createdByUid: currentUserUid,
     timestamp: nowIso,
     isImmutable: true,
     cryptographicHash: hash,
-    digitalSignatureToken: `SIGN-DISPO-${input.authorStaff.staffId}-${Date.now().toString(16)}`,
+    digitalSignatureToken: `SIGN-DISPO-${authorStaffId}-${Date.now().toString(16)}`,
     addendums: [],
   };
 
@@ -1082,6 +1087,7 @@ export async function dischargeOrTransferPatient(input: DispositionInput): Promi
     targetPatientMrn: patient.mrn,
     description: `Patient ${patient.fullNameEn} (MRN: ${patient.mrn}) processed for ${input.dispositionType}. Bed ${input.bedNumber} transitioned to DECONTAMINATING.`,
     immutableHash: hash,
+    createdByUid: currentUserUid,
   };
 
   // --- SOURCE OF TRUTH #1: FIRESTORE TRANSACTION FIRST (IF ONLINE) ---
