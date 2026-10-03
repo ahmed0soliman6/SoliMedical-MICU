@@ -509,6 +509,7 @@ export async function addTimestampedVitals(input: AddVitalsInput): Promise<Telem
   const nowIso = new Date().toISOString();
   const map = Math.round(input.diastolicBpMmHg + (input.systolicBpMmHg - input.diastolicBpMmHg) / 3);
 
+  const currentUserUid = auth.currentUser?.uid;
   const vitalsRecord: TelemetryVitals = {
     id: `vit-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
     bedId: input.bedId,
@@ -534,7 +535,11 @@ export async function addTimestampedVitals(input: AddVitalsInput): Promise<Telem
     cvpMmHg: input.cvpMmHg,
     recordedBy: input.recordedBy,
     clinicalNotes: input.clinicalNotes,
-  };
+    createdByUid: currentUserUid,
+    authorId: currentUserUid ? (currentUserUid.startsWith('staff-') ? currentUserUid : `staff-${currentUserUid}`) : input.recordedBy?.staffId,
+    authorStaffId: input.recordedBy?.staffId || currentUserUid,
+    recordedByStaffId: input.recordedBy?.staffId || currentUserUid,
+  } as any;
 
   await db.transaction('rw', [db.vitals, db.beds, db.auditLogs], async () => {
     await db.vitals.put(vitalsRecord);

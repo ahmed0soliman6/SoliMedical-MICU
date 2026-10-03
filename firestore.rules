@@ -72,22 +72,37 @@ service cloud.firestore {
 
     function isRecordOwner() {
       return isAuthenticated() && (
-        // 1. Matches request.auth.uid
+        // 1. Matches request.auth.uid directly or with staff- prefix
         ("createdByUid" in resource.data && resource.data.createdByUid == request.auth.uid) ||
         ("doctorId" in resource.data && resource.data.doctorId == request.auth.uid) ||
-        ("authorId" in resource.data && resource.data.authorId == request.auth.uid) ||
-        ("authorStaffId" in resource.data && resource.data.authorStaffId == request.auth.uid) ||
-        ("recordedByStaffId" in resource.data && resource.data.recordedByStaffId == request.auth.uid) ||
+        ("authorId" in resource.data && (resource.data.authorId == request.auth.uid || resource.data.authorId == ('staff-' + request.auth.uid))) ||
+        ("authorStaffId" in resource.data && (resource.data.authorStaffId == request.auth.uid || resource.data.authorStaffId == ('staff-' + request.auth.uid))) ||
+        ("recordedByStaffId" in resource.data && (resource.data.recordedByStaffId == request.auth.uid || resource.data.recordedByStaffId == ('staff-' + request.auth.uid))) ||
         ("userId" in resource.data && resource.data.userId == request.auth.uid) ||
+        ("recordedBy" in resource.data && "staffId" in resource.data.recordedBy && (resource.data.recordedBy.staffId == request.auth.uid || resource.data.recordedBy.staffId == ('staff-' + request.auth.uid))) ||
         
         // 2. Matches user badgeId / staffId
         (isExistingUser() && "badgeId" in getUserData() && (
           ("createdByUid" in resource.data && resource.data.createdByUid == getUserData().badgeId) ||
           ("doctorId" in resource.data && resource.data.doctorId == getUserData().badgeId) ||
-          ("authorId" in resource.data && resource.data.authorId == getUserData().badgeId) ||
-          ("authorStaffId" in resource.data && resource.data.authorStaffId == getUserData().badgeId) ||
-          ("recordedByStaffId" in resource.data && resource.data.recordedByStaffId == getUserData().badgeId) ||
-          ("userId" in resource.data && resource.data.userId == getUserData().badgeId)
+          ("authorId" in resource.data && (resource.data.authorId == getUserData().badgeId || resource.data.authorId == ('staff-' + getUserData().badgeId))) ||
+          ("authorStaffId" in resource.data && (resource.data.authorStaffId == getUserData().badgeId || resource.data.authorStaffId == ('staff-' + getUserData().badgeId))) ||
+          ("recordedByStaffId" in resource.data && (resource.data.recordedByStaffId == getUserData().badgeId || resource.data.recordedByStaffId == ('staff-' + getUserData().badgeId))) ||
+          ("userId" in resource.data && resource.data.userId == getUserData().badgeId) ||
+          ("recordedBy" in resource.data && "staffId" in resource.data.recordedBy && (resource.data.recordedBy.staffId == getUserData().badgeId || resource.data.recordedBy.staffId == ('staff-' + getUserData().badgeId)))
+        )) ||
+
+        // 3. Matches author/recorder full name in Arabic, English, or Display Name
+        (isExistingUser() && "recordedBy" in resource.data && "name" in resource.data.recordedBy && (
+          ("nameAr" in getUserData() && resource.data.recordedBy.name == getUserData().nameAr) ||
+          ("nameEn" in getUserData() && resource.data.recordedBy.name == getUserData().nameEn) ||
+          ("displayName" in getUserData() && resource.data.recordedBy.name == getUserData().displayName)
+        )) ||
+
+        (isExistingUser() && "authorName" in resource.data && (
+          ("nameAr" in getUserData() && resource.data.authorName == getUserData().nameAr) ||
+          ("nameEn" in getUserData() && resource.data.authorName == getUserData().nameEn) ||
+          ("displayName" in getUserData() && resource.data.authorName == getUserData().displayName)
         ))
       );
     }

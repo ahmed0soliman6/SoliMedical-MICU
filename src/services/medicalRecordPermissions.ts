@@ -46,13 +46,18 @@ export function canEditRecord(
  * 3. Doctors / Clinicians can delete records created by themselves (matching UID or staff/badge ID).
  */
 export function canDeleteRecord(
-  user: UserContextForPermission | null | undefined,
-  record?: RecordOwnershipContext | RecordOwnershipContext[] | null | undefined
+  user: UserContextForPermission | any | null | undefined,
+  record?: RecordOwnershipContext | RecordOwnershipContext[] | any | null | undefined
 ): boolean {
   if (!user || !user.uid) return false;
 
   // 1. ADMIN / Super Admin can delete all records
-  if (user.role === StaffRole.ADMIN || user.role === 'ADMIN' || user.isSuperAdmin === true) {
+  if (
+    user.role === StaffRole.ADMIN ||
+    user.role === 'ADMIN' ||
+    user.role === 'SUPER_ADMIN' ||
+    user.isSuperAdmin === true
+  ) {
     return true;
   }
 
@@ -64,7 +69,10 @@ export function canDeleteRecord(
   // 3. User is the creator/owner of the record
   if (record) {
     const recordsToCheck = Array.isArray(record) ? record : [record];
-    const userIdsToCheck = [user.uid, user.badgeId, user.staffId].filter(Boolean) as string[];
+    const userIdsToCheck = [user.uid, user.badgeId, user.staffId, user.id].filter(Boolean) as string[];
+    const userNamesToCheck = [user.nameAr, user.nameEn, user.displayName]
+      .filter(Boolean)
+      .map((n: string) => n.trim().toLowerCase());
 
     return recordsToCheck.every((rec) => {
       if (!rec) return false;
@@ -75,15 +83,28 @@ export function canDeleteRecord(
         rec.authorId,
         rec.authorStaffId,
         rec.recordedByStaffId,
+        rec.recordedBy?.staffId,
         rec.userId,
         rec.transferredBy,
+        rec.reviewedByDoctorStaffId,
+        rec.orderedByDoctorStaffId,
       ].filter(Boolean) as string[];
 
-      if (ownerIds.length === 0) return false;
-
-      return ownerIds.some((ownerId) =>
-        userIdsToCheck.some((userId) => ownerId === userId || ownerId === `staff-${userId}`)
+      const hasIdMatch = ownerIds.length > 0 && ownerIds.some((ownerId) =>
+        userIdsToCheck.some((userId) =>
+          ownerId === userId ||
+          ownerId === `staff-${userId}` ||
+          `staff-${ownerId}` === userId
+        )
       );
+      if (hasIdMatch) return true;
+
+      const recName = (rec.authorName || rec.recordedBy?.name || rec.reviewedByDoctorName || rec.orderedByDoctorName)?.trim()?.toLowerCase();
+      if (recName && userNamesToCheck.includes(recName)) {
+        return true;
+      }
+
+      return false;
     });
   }
 

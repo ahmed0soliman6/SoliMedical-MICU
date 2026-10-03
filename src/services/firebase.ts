@@ -2374,6 +2374,15 @@ export async function syncVitalsToCloud(vitals: TelemetryVitals): Promise<void> 
   }
 }
 
+export async function deleteVitalsFromCloud(vitalId: string): Promise<void> {
+  try {
+    await deleteDoc(doc(firestore, 'vitals', vitalId));
+  } catch (err) {
+    console.warn('Delete vital from cloud notice:', err);
+    handleFirestoreError(err, OperationType.DELETE, `vitals/${vitalId}`);
+  }
+}
+
 export async function syncSbarToCloud(sbar: SbarHandoverReport): Promise<void> {
   try {
     const sbarRef = doc(firestore, 'sbarHandovers', sbar.id);

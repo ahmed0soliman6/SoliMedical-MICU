@@ -107,7 +107,7 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
     setIsSubmitting(true);
     try {
       const userDisplay = currentUser?.nameAr || currentUser?.nameEn || currentUser?.displayName || currentUser?.email || (lang === 'ar' ? 'تمريض العناية المركزة' : 'ICU Staff RN');
-      const staffId = currentUser?.badgeId || currentUser?.id || currentUser?.uid || '7721';
+      const staffId = currentUser?.badgeId || currentUser?.uid || currentUser?.id || 'DOC-ICU';
       const userRole = (currentUser?.role as StaffRole) || StaffRole.LEAD_RN;
 
       const parsedTemp = coreTemp.trim() ? (parseEnglishFloat(coreTemp) || undefined) : undefined;
@@ -131,12 +131,14 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
           cvpMmHg: cvp ? parseEnglishInt(cvp) : undefined,
           bloodGlucoseMgDl: bloodGlucose ? parseEnglishFloat(bloodGlucose) : undefined,
           clinicalNotes: clinicalNotes.trim() || undefined,
-          recordedBy: {
+          recordedBy: vitalsToEdit.recordedBy || {
             staffId,
             name: userDisplay,
             role: userRole,
           },
-        };
+          createdByUid: (vitalsToEdit as any).createdByUid || currentUser?.uid,
+          authorId: (vitalsToEdit as any).authorId || currentUser?.uid,
+        } as any;
         await db.vitals.put(updatedVitals);
         await syncVitalsToCloud(updatedVitals);
       } else {

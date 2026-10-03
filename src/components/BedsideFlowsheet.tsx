@@ -71,7 +71,7 @@ import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
 import { useAuth } from '../services/AuthContext.tsx';
 import { useAppNotifications } from '../services/NotificationContext.tsx';
-import { syncStatLabsToCloud, deleteStatLabFromCloud, syncLabResultToCloud, syncPatientToCloud, syncPumpToCloud, deletePumpFromCloud, deleteClinicalNoteFromCloud, firestore, fetchFullCategoryFromCloud, subscribeToActivePatientFlowsheet, hasMoreCategoryData } from '../services/firebase.ts';
+import { syncStatLabsToCloud, deleteStatLabFromCloud, syncLabResultToCloud, syncPatientToCloud, syncPumpToCloud, deletePumpFromCloud, deleteClinicalNoteFromCloud, deleteVitalsFromCloud, firestore, fetchFullCategoryFromCloud, subscribeToActivePatientFlowsheet, hasMoreCategoryData } from '../services/firebase.ts';
 import { canEditRecord, canDeleteRecord, canDeleteClinicalNote } from '../services/medicalRecordPermissions.ts';
 import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { FullPageAdmission } from './FullPageAdmission.tsx';
@@ -430,30 +430,53 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
 
   const isVitalAuthor = (vital: TelemetryVitals) => {
     if (!currentUser) return false;
-    const userIds = [currentUser.uid, currentUser.badgeId, currentUser.staffId, (currentUser as any).id].filter(Boolean) as string[];
-    const userNames = [currentUser.nameAr, currentUser.nameEn, currentUser.displayName].filter(Boolean) as string[];
     
-    const recStaffId = vital.recordedBy?.staffId;
-    const recName = vital.recordedBy?.name;
-    const recUid = (vital as any).createdByUid || (vital as any).authorId || (vital as any).userId;
+    // 1. Match by UID
+    const vitalUid = (vital as any).createdByUid || (vital as any).authorId || (vital as any).userId;
+    if (vitalUid && currentUser.uid && (vitalUid === currentUser.uid || vitalUid === `staff-${currentUser.uid}`)) {
+      return true;
+    }
 
-    if (recUid && userIds.some(id => recUid === id || recUid === `staff-${id}`)) return true;
-    if (recStaffId && userIds.some(id => recStaffId === id || recStaffId === `staff-${id}`)) return true;
-    if (recName && userNames.some(name => name.trim().toLowerCase() === recName.trim().toLowerCase())) return true;
+    // 2. Match by exact badgeId if set and not a generic placeholder
+    if (currentUser.badgeId && currentUser.badgeId.trim() !== '' && currentUser.badgeId !== '7721' && currentUser.badgeId !== 'DOC-ICU') {
+      const recStaffId = vital.recordedBy?.staffId;
+      if (recStaffId && (recStaffId === currentUser.badgeId || recStaffId === `staff-${currentUser.badgeId}`)) {
+        return true;
+      }
+    }
+
+    // 3. Match by exact user name
+    const recName = vital.recordedBy?.name?.trim()?.toLowerCase();
+    if (recName) {
+      const userNames = [currentUser.nameAr, currentUser.nameEn, currentUser.displayName]
+        .filter(Boolean)
+        .map(n => n!.trim().toLowerCase());
+      if (userNames.includes(recName)) {
+        return true;
+      }
+    }
+
     return false;
   };
 
   const canEditVital = (vital: TelemetryVitals) => {
     if (!currentUser || readOnly) return false;
-    if (currentUser.role === StaffRole.ADMIN || currentUser.role === 'ADMIN' || currentUser.role === 'SUPER_ADMIN' || currentUser.isSuperAdmin === true) return true;
-    if (currentUser.permissions?.['medicalRecords.update'] === true || currentUser.permissions?.['medicalRecords.manage'] === true) return true;
-    return isVitalAuthor(vital);
+    const isAdmin = currentUser.role === StaffRole.ADMIN || currentUser.role === 'ADMIN' || currentUser.role === 'SUPER_ADMIN' || currentUser.isSuperAdmin === true;
+    const hasUpdatePermission = hasPermission?.('vitals.update') || (currentUser.permissions as any)?.['vitals.update'] === true;
+    if (isAdmin) return true;
+    if (isVitalAuthor(vital)) return true;
+    return Boolean(hasUpdatePermission);
   };
 
   const canDeleteVital = (vital: TelemetryVitals) => {
     if (!currentUser || readOnly) return false;
-    if (currentUser.role === StaffRole.ADMIN || currentUser.role === 'ADMIN' || currentUser.role === 'SUPER_ADMIN' || currentUser.isSuperAdmin === true) return true;
-    if (currentUser.permissions?.['medicalRecords.delete'] === true) return true;
+    const isAdmin = currentUser.role === StaffRole.ADMIN || currentUser.role === 'ADMIN' || currentUser.role === 'SUPER_ADMIN' || currentUser.isSuperAdmin === true;
+    const hasDeletePermission = hasPermission?.('medicalRecords.delete') || (currentUser.permissions as any)?.['medicalRecords.delete'] === true;
+    
+    // 1. Admin or User with 'medicalRecords.delete' permission can delete ANY vital
+    if (isAdmin || hasDeletePermission) return true;
+
+    // 2. Otherwise only the author/owner can delete their own vital
     return isVitalAuthor(vital);
   };
 
@@ -462,25 +485,27 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
     if (!canDeleteVital(targetVital)) {
       alert(
         lang === 'ar'
-          ? 'عفواً، حذف القراءة الحيوية متاح فقط لمدير النظام (Admin)، أو من لديه صلاحية الحذف من الإدارة، أو كاتب القراءة فقط.'
-          : 'Unauthorized: Vital reading deletion is restricted to Admins, users with delete permission, or the recording staff member only.'
+          ? 'عفواً، حذف القراءة الحيوية متاح فقط لمدير النظام (Admin)، أو من لديه صلاحية حذف السجلات الطبية، أو كاتب القراءة فقط.'
+          : 'Unauthorized: Vital reading deletion is restricted to Admins, users with medicalRecords.delete permission, or the recording staff member only.'
       );
       return;
     }
-    if (!window.confirm(lang === 'ar' ? 'هل أنت متأكد من حذف هذه القراءة الحيوية؟' : 'Are you sure you want to delete this vital reading?')) {
+    if (!window.confirm(lang === 'ar' ? 'هل أنت متأكد من حذف هذه القراءة الحيوية نهائياً من السحابة وقاعدة البيانات؟' : 'Are you sure you want to permanently delete this vital reading?')) {
       return;
     }
 
     try {
+      // 1. Delete locally from Dexie
       await db.vitals.delete(targetVital.id);
-      await deleteDoc(doc(firestore, 'vitals', targetVital.id)).catch((err) => {
-        console.warn('Delete vital from cloud notice:', err);
-      });
+
+      // 2. Delete permanently from Firestore Cloud
+      await deleteVitalsFromCloud(targetVital.id);
+
       setVitalsHistory((prev) => prev.filter((item) => item.id !== targetVital.id));
       onDataUpdated();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error deleting vital reading:', err);
-      alert(lang === 'ar' ? 'حدث خطأ أثناء الحذف.' : 'Delete error.');
+      alert(lang === 'ar' ? `حدث خطأ أثناء الحذف: ${err?.message || ''}` : `Delete error: ${err?.message || ''}`);
     }
   };
 
