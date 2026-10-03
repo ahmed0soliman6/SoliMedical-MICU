@@ -62,7 +62,12 @@ export function canDeleteRecord(
   }
 
   // 2. User has explicit permission to delete medical records
-  if (user.permissions?.['medicalRecords.delete'] === true) {
+  if (
+    user.permissions?.['medicalRecords.delete'] === true ||
+    user.permissions?.['vitals.delete'] === true ||
+    user.permissions?.['labs.delete'] === true ||
+    user.permissions?.['investigations.delete'] === true
+  ) {
     return true;
   }
 
@@ -143,7 +148,8 @@ export function canDeleteClinicalNote(
 
   // 2. User with explicit delete permission granted by Admin
   if (
-    user.permissions?.['medicalRecords.delete'] === true
+    user.permissions?.['medicalRecords.delete'] === true ||
+    user.permissions?.['clinicalNotes.delete'] === true
   ) {
     return true;
   }

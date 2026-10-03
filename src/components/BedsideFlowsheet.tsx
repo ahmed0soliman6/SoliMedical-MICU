@@ -830,11 +830,14 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
 
   const handleDeleteLabColumn = async (id: string, author: string) => {
     const doctorName = currentUser?.nameEn || currentUser?.nameAr || currentUser?.email || 'Dr. Guest';
-    const isAuthor = author === doctorName || currentUser?.role === 'ADMIN' || currentUser?.role === 'SUPER_ADMIN';
-    if (!isAuthor) {
+    const isAdmin = currentUser?.role === StaffRole.ADMIN || currentUser?.role === 'ADMIN' || currentUser?.role === 'SUPER_ADMIN' || currentUser?.isSuperAdmin === true;
+    const hasDeletePermission = hasPermission?.('medicalRecords.delete') || (currentUser?.permissions as any)?.['medicalRecords.delete'] === true || (currentUser?.permissions as any)?.['labs.delete'] === true;
+    const isAuthor = author === doctorName;
+
+    if (!isAdmin && !isAuthor && !hasDeletePermission) {
       alert(lang === 'ar' 
-        ? `⚠️ غير مصرح: تم تسجيل هذا العمود بواسطة [${author}]. ولا يمكن حذفه لضمان سلامة السجلات الطبية.`
-        : `⚠️ Unauthorized: This column was recorded by [${author}]. It cannot be deleted to preserve medical records integrity.`);
+        ? `⚠️ غير مصرح: تم تسجيل هذا العمود بواسطة [${author}]. الحذف يتطلب صلاحية كاتب العمود، أدمن النظام، أو صلاحية حذف السجلات الطبية.`
+        : `⚠️ Unauthorized: This column was recorded by [${author}]. Deletion requires the author, Admin, or user with medical records delete permission.`);
       return;
     }
 

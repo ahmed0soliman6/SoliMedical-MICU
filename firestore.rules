@@ -279,14 +279,14 @@ service cloud.firestore {
       allow read: if hasPerm('sbar.view') || hasPerm('patients.view');
       allow create: if hasPerm('sbar.create') && isValidMedicalRecordCreate();
       allow update: if (isAdmin() || hasPerm('sbar.update') || hasPerm('sbar.create')) && isValidMedicalRecordUpdate();
-      allow delete: if isAdmin() || hasPerm('medicalRecords.delete');
+      allow delete: if isAdmin() || hasPerm('medicalRecords.delete') || (isActiveUser() && isRecordOwner());
     }
 
     match /handovers/{handoverId} {
       allow read: if hasPerm('sbar.view') || hasPerm('patients.view');
       allow create: if hasPerm('sbar.create') && isValidMedicalRecordCreate();
       allow update: if (isAdmin() || hasPerm('sbar.update') || hasPerm('sbar.create')) && isValidMedicalRecordUpdate();
-      allow delete: if isAdmin() || hasPerm('medicalRecords.delete');
+      allow delete: if isAdmin() || hasPerm('medicalRecords.delete') || (isActiveUser() && isRecordOwner());
     }
 
     // Telemetry Vitals, Ventilator, Infusions & Labs

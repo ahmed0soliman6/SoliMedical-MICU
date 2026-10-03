@@ -1521,10 +1521,23 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
         for (const change of snap.docChanges()) {
           if (change.type === 'added' || change.type === 'modified') {
             await putFn(change.doc.data() as T);
+          } else if (change.type === 'removed') {
+            try {
+              const docRef = doc(firestore, colName, change.doc.id);
+              const docSnap = await getDoc(docRef);
+              if (!docSnap.exists()) {
+                if (_deleteFn) {
+                  await _deleteFn(change.doc.id);
+                } else if (colName in db && typeof (db as any)[colName]?.delete === 'function') {
+                  await (db as any)[colName].delete(change.doc.id);
+                }
+              }
+            } catch {
+              if (_deleteFn) {
+                await _deleteFn(change.doc.id).catch(() => {});
+              }
+            }
           }
-          // Note: In limit(4) query, change.type === 'removed' occurs when an older record
-          // gets pushed out of the latest-4 window by a newer record. We preserve existing
-          // historical records in IndexedDB instead of deleting them.
         }
 
         // Requirements 7 & 8: Maintain realtime boundary vs historical cursor
@@ -1567,6 +1580,22 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
             for (const change of fSnap.docChanges()) {
               if (change.type === 'added' || change.type === 'modified') {
                 await putFn(change.doc.data() as T);
+              } else if (change.type === 'removed') {
+                try {
+                  const docRef = doc(firestore, colName, change.doc.id);
+                  const docSnap = await getDoc(docRef);
+                  if (!docSnap.exists()) {
+                    if (_deleteFn) {
+                      await _deleteFn(change.doc.id);
+                    } else if (colName in db && typeof (db as any)[colName]?.delete === 'function') {
+                      await (db as any)[colName].delete(change.doc.id);
+                    }
+                  }
+                } catch {
+                  if (_deleteFn) {
+                    await _deleteFn(change.doc.id).catch(() => {});
+                  }
+                }
               }
             }
             notify();
@@ -1606,7 +1635,7 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
       'timestamp',
       4,
       (data) => db.vitals.put(data),
-      undefined,
+      (id) => db.vitals.delete(id),
       'vitals',
       false
     );
@@ -1617,7 +1646,7 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
       'timestamp',
       10,
       (data) => db.labResults.put(data),
-      undefined,
+      (id) => db.labResults.delete(id),
       'labs_direct'
     );
 
@@ -1626,7 +1655,7 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
       'timestamp',
       10,
       (data) => db.statLabs.put(data),
-      undefined,
+      (id) => db.statLabs.delete(id),
       'labs_stat'
     );
 
@@ -1636,7 +1665,7 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
       'timestamp',
       4,
       (data) => db.investigations.put(data),
-      undefined,
+      (id) => db.investigations.delete(id),
       'investigations',
       false
     );
@@ -1647,7 +1676,7 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
       'periodStartTimestamp',
       4,
       (data) => db.fluidBalances.put(data),
-      undefined,
+      (id) => db.fluidBalances.delete(id),
       'fluids',
       false
     );
@@ -1658,7 +1687,7 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
       'createdAt',
       4,
       (data) => db.sbarHandovers.put(data),
-      undefined,
+      (id) => db.sbarHandovers.delete(id),
       'sbar'
     );
 
@@ -1668,7 +1697,7 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
       'timestamp',
       4,
       (data) => db.clinicalNotes.put(data),
-      undefined,
+      (id) => db.clinicalNotes.delete(id),
       'notes'
     );
 
@@ -1695,7 +1724,9 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
           }
         } catch {}
       },
-      undefined,
+      async (id) => {
+        await db.addendums.delete(id);
+      },
       'addendums'
     );
 
