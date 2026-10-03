@@ -297,11 +297,10 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
   const loadBedsideData = useCallback(async () => {
     if (!patient?.id) return;
 
-    const vitals = await db.vitals
+    const vitals = (await db.vitals
       .where('patientId')
       .equals(patient.id)
-      .reverse()
-      .sortBy('timestamp');
+      .sortBy('timestamp')).reverse();
 
     setVitalsHistory(vitals);
 
@@ -332,11 +331,10 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
     sbars.sort((a, b) => new Date(b.outgoingDoctor?.signedAt || b.shiftDate || 0).getTime() - new Date(a.outgoingDoctor?.signedAt || a.shiftDate || 0).getTime());
     setSbarList(sbars);
 
-    const notes = await db.clinicalNotes
+    const notes = (await db.clinicalNotes
       .where('patientId')
       .equals(patient.id)
-      .reverse()
-      .sortBy('timestamp');
+      .sortBy('timestamp')).reverse();
     setNotesList(notes);
 
     const labs = await db.statLabs
@@ -360,11 +358,10 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
     setInvestigations(invItems);
 
     // Load Active & Past Antibiotics for patient
-    const abxItems = await db.patientAntibiotics
+    const abxItems = (await db.patientAntibiotics
       .where('patientId')
       .equals(patient.id)
-      .reverse()
-      .sortBy('createdAt');
+      .sortBy('createdAt')).reverse();
     setAntibioticsList(abxItems);
   }, [patient?.id]);
 
