@@ -160,15 +160,17 @@ export async function admitPatient(input: DirectAdmissionInput): Promise<{ patie
 
   if (isOnline) {
     try {
-      // Check in active patients
-      const activeSnap = await getDocs(query(collection(firestore, 'patients'), where('mrn', '==', searchMrn)));
-      if (!activeSnap.empty) {
-        existingPatientDoc = activeSnap.docs[0].data();
-      } else {
-        // Check in archived patients
-        const archiveSnap = await getDocs(query(collection(firestore, 'archivedPatients'), where('mrn', '==', searchMrn)));
-        if (!archiveSnap.empty) {
-          existingPatientDoc = archiveSnap.docs[0].data();
+      if (searchMrn) {
+        // Check in active patients
+        const activeSnap = await getDocs(query(collection(firestore, 'patients'), where('mrn', '==', searchMrn)));
+        if (!activeSnap.empty) {
+          existingPatientDoc = activeSnap.docs[0].data();
+        } else {
+          // Check in archived patients
+          const archiveSnap = await getDocs(query(collection(firestore, 'archivedPatients'), where('mrn', '==', searchMrn)));
+          if (!archiveSnap.empty) {
+            existingPatientDoc = archiveSnap.docs[0].data();
+          }
         }
       }
 
@@ -201,10 +203,13 @@ export async function admitPatient(input: DirectAdmissionInput): Promise<{ patie
   if (!existingPatientDoc) {
     try {
       const localPatients = await db.patients.toArray();
-      const match = localPatients.find(p => p.mrn === searchMrn);
-      if (match) {
-        existingPatientDoc = match;
-      } else if (normalizedName && last4) {
+      if (searchMrn) {
+        const match = localPatients.find(p => p.mrn && p.mrn.trim() === searchMrn);
+        if (match) {
+          existingPatientDoc = match;
+        }
+      }
+      if (!existingPatientDoc && normalizedName && last4) {
         const match2 = localPatients.find(p => p.normalizedFullName === normalizedName && p.nationalIdLast4 === last4);
         if (match2) {
           existingPatientDoc = match2;

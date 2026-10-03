@@ -335,7 +335,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
         nameEn: cleanDisplayName,
         email: userEmail,
         role: formRole,
-        licenseNumber: `LIC-${Math.floor(100000 + Math.random() * 900000)}`,
+        licenseNumber: '',
         department: 'Medical Intensive Care Unit',
         badgeId: cleanUsername,
         pinCode: cleanPassword,

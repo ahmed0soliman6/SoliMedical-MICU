@@ -428,7 +428,7 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
         targetBed,
         existingPatientId: selectedExistingPatient?.patientId,
         unitId: settings.unit.unitId || 'MICU-MAIN',
-        mrn: toEnglishDigits(mrn.trim() || `MRN-${Math.floor(10000 + Math.random() * 90000)}`),
+        mrn: toEnglishDigits(mrn.trim()),
         nationalId: cleanNatId,
         fullNameAr: fullNameAr.trim(),
         fullNameEn: fullNameAr.trim(),
