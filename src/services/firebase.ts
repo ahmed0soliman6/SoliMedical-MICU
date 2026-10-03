@@ -1617,7 +1617,7 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
       }
     }, (err) => handleFirestoreError(err, OperationType.GET, `patients/${patientId}`)));
 
-    // 2. Historical Growing Record: Telemetry Vitals (latest 4 records with deterministic secondary order)
+    // 2. Historical Growing Record: Telemetry Vitals (latest 4 records)
     setupHistoricalListener<TelemetryVitals>(
       'vitals',
       'timestamp',
@@ -1625,7 +1625,7 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
       (data) => db.vitals.put(data),
       undefined,
       'vitals',
-      true
+      false
     );
 
     // 3. Historical Record: Lab Results (limit 10 live onSnapshot)
@@ -1647,7 +1647,7 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
       'labs_stat'
     );
 
-    // 4. Historical Growing Record: Investigations & Imaging (latest 4 records with deterministic secondary order)
+    // 4. Historical Growing Record: Investigations & Imaging (latest 4 records)
     setupHistoricalListener<InvestigationItem>(
       'investigations',
       'timestamp',
@@ -1655,10 +1655,10 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
       (data) => db.investigations.put(data),
       undefined,
       'investigations',
-      true
+      false
     );
 
-    // 5. Historical Growing Record: Fluid Balances 12H/24H (latest 4 records with deterministic secondary order)
+    // 5. Historical Growing Record: Fluid Balances 12H/24H (latest 4 records)
     setupHistoricalListener<FluidBalance24H>(
       'fluidBalances',
       'periodStartTimestamp',
@@ -1666,7 +1666,7 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
       (data) => db.fluidBalances.put(data),
       undefined,
       'fluids',
-      true
+      false
     );
 
     // 6. Historical Growing Record: SBAR Shift Handover Reports (latest 4 records)
