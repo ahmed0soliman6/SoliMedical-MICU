@@ -193,3 +193,11 @@ export function preserveRecordOwnership<T extends RecordOwnershipContext>(
 
   return result;
 }
+
+/**
+ * Validates if a user is authorized to append an addendum / reply to a clinical note.
+ * In ICU, any authenticated clinician can append an immutable addendum/reply.
+ */
+export function canAppendAddendum(user: UserContextForPermission | null | undefined): boolean {
+  return !!(user && user.uid);
+}

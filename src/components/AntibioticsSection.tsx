@@ -24,7 +24,8 @@ import {
   Calculator,
   Zap,
   RotateCcw,
-  Check
+  Check,
+  Download
 } from 'lucide-react';
 import { PatientAntibiotic, PatientDossier, BedRecord, BedNumber, LabResultItem, Gender } from '../types/schema.ts';
 import { AntibioticPreset, SystemSettings } from '../types/settings.ts';

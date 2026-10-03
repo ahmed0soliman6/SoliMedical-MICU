@@ -39,7 +39,8 @@ import {
   Play,
   Pause,
   PowerOff,
-  Pill
+  Pill,
+  Download
 } from 'lucide-react';
 import { 
   BedRecord, 
