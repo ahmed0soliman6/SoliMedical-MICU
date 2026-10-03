@@ -1457,7 +1457,8 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
     orderField: string,
     limitCount: number,
     putFn: (data: T) => Promise<any>,
-    _deleteFn?: (id: string) => Promise<any>
+    _deleteFn?: (id: string) => Promise<any>,
+    categoryKey?: string
   ) => {
     try {
       const q = query(
@@ -1475,6 +1476,21 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
           // gets pushed out of the latest-4 window by a newer record. We preserve existing
           // historical records in IndexedDB instead of deleting them.
         }
+
+        // Requirement 3: Record the actual last document from realtime limit(4) in paginationMap
+        if (categoryKey && snap.docs.length > 0) {
+          const mapKey = `${patientId}_${categoryKey}`;
+          const current = paginationMap.get(mapKey);
+          // Only initialize or update cursor if user hasn't paginated further
+          if (!current || (!current.isFetching && !current.lastDoc)) {
+            paginationMap.set(mapKey, {
+              lastDoc: snap.docs[snap.docs.length - 1],
+              hasMore: snap.docs.length >= limitCount,
+              isFetching: false
+            });
+          }
+        }
+
         notify();
       }, (err) => {
         handleFirestoreError(err, OperationType.GET, colName);
@@ -1490,6 +1506,17 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
               for (const change of fSnap.docChanges()) {
                 if (change.type === 'added' || change.type === 'modified') {
                   await putFn(change.doc.data() as T);
+                }
+              }
+              if (categoryKey && fSnap.docs.length > 0) {
+                const mapKey = `${patientId}_${categoryKey}`;
+                const current = paginationMap.get(mapKey);
+                if (!current || (!current.isFetching && !current.lastDoc)) {
+                  paginationMap.set(mapKey, {
+                    lastDoc: fSnap.docs[fSnap.docs.length - 1],
+                    hasMore: fSnap.docs.length >= limitCount,
+                    isFetching: false
+                  });
                 }
               }
               notify();
@@ -1528,7 +1555,8 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
       'timestamp',
       4,
       (data) => db.vitals.put(data),
-      (id) => db.vitals.delete(id)
+      (id) => db.vitals.delete(id),
+      'vitals'
     );
 
     // 3. Historical Record: Lab Results (limit 10 live onSnapshot)
@@ -1537,7 +1565,8 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
       'timestamp',
       10,
       (data) => db.labResults.put(data),
-      (id) => db.labResults.delete(id)
+      (id) => db.labResults.delete(id),
+      'labs_direct'
     );
 
     setupHistoricalListener<StatLabPanel>(
@@ -1545,7 +1574,8 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
       'timestamp',
       10,
       (data) => db.statLabs.put(data),
-      (id) => db.statLabs.delete(id)
+      (id) => db.statLabs.delete(id),
+      'labs_stat'
     );
 
     // 4. Historical Growing Record: Investigations & Imaging (latest 4 records)
@@ -1554,7 +1584,8 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
       'timestamp',
       4,
       (data) => db.investigations.put(data),
-      (id) => db.investigations.delete(id)
+      (id) => db.investigations.delete(id),
+      'investigations'
     );
 
     // 5. Historical Growing Record: Fluid Balances 12H/24H (latest 4 records)
@@ -1563,7 +1594,8 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
       'periodStartTimestamp',
       4,
       (data) => db.fluidBalances.put(data),
-      (id) => db.fluidBalances.delete(id)
+      (id) => db.fluidBalances.delete(id),
+      'fluids'
     );
 
     // 6. Historical Growing Record: SBAR Shift Handover Reports (latest 4 records)
@@ -1572,7 +1604,8 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
       'createdAt',
       4,
       (data) => db.sbarHandovers.put(data),
-      (id) => db.sbarHandovers.delete(id)
+      (id) => db.sbarHandovers.delete(id),
+      'sbar'
     );
 
     // 7. Historical Growing Record: Clinical Progress Notes (latest 4 records)
@@ -1581,7 +1614,8 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
       'timestamp',
       4,
       (data) => db.clinicalNotes.put(data),
-      (id) => db.clinicalNotes.delete(id)
+      (id) => db.clinicalNotes.delete(id),
+      'notes'
     );
 
     // 8. Historical Growing Record: Clinical Note Addendums (latest 4 records)
@@ -1590,7 +1624,8 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
       'timestamp',
       4,
       (data) => db.addendums.put(data),
-      (id) => db.addendums.delete(id)
+      (id) => db.addendums.delete(id),
+      'addendums'
     );
 
     // 9. Current State: Patient Active Antibiotics (orderBy startDate desc + limit 4)
@@ -1599,7 +1634,8 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
       'startDate',
       4,
       (data) => db.patientAntibiotics.put(data),
-      (id) => db.patientAntibiotics.delete(id)
+      (id) => db.patientAntibiotics.delete(id),
+      'abx'
     );
 
     // 10. Current State: Active Ventilator Settings (orderBy timestamp desc + limit 4)
@@ -1608,7 +1644,8 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
       'timestamp',
       4,
       (data) => db.ventilators.put(data),
-      (id) => db.ventilators.delete(id)
+      (id) => db.ventilators.delete(id),
+      'vent'
     );
 
     // 11. Current State: Active Infusion Pumps (orderBy id desc + limit 4)
@@ -1617,7 +1654,8 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
       'id',
       4,
       (data) => db.infusionPumps.put(data),
-      (id) => db.infusionPumps.delete(id)
+      (id) => db.infusionPumps.delete(id),
+      'pumps'
     );
 
   } catch (err) {

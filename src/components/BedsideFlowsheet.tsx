@@ -380,6 +380,14 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
     // 1) Load Dexie local data once on patient/bed change
     loadBedsideData();
 
+    // Listen for icu-data-updated event from pagination fetches to refresh React state immediately
+    const handleIcuDataUpdated = () => {
+      loadBedsideData();
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('icu-data-updated', handleIcuDataUpdated);
+    }
+
     // 2) & 3) If readOnly is false and patient.id exists, subscribe to realtime flowsheet updates
     let unsubActivePatientSync: (() => void) | null = null;
     if (!readOnly && patient?.id) {
@@ -388,8 +396,11 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       });
     }
 
-    // 4) Clean up unsubscribe when patient changes or card closes
+    // 4) Clean up unsubscribe and event listeners when patient changes or card closes
     return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('icu-data-updated', handleIcuDataUpdated);
+      }
       if (unsubActivePatientSync) {
         unsubActivePatientSync();
       }
@@ -1213,19 +1224,20 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
             return (
               <button
                 key={tab.id}
-                onClick={() => {
+                onClick={async () => {
                   const tabId = tab.id;
                   setActiveTab(tabId as any);
                   if (patient?.id) {
-                    if (tabId === 'vitals') fetchFullCategoryFromCloud(patient.id, 'vitals');
-                    else if (tabId === 'sbar') fetchFullCategoryFromCloud(patient.id, 'sbar');
-                    else if (tabId === 'fluids') fetchFullCategoryFromCloud(patient.id, 'fluids');
-                    else if (tabId === 'notes') fetchFullCategoryFromCloud(patient.id, 'notes');
-                    else if (tabId === 'vent') fetchFullCategoryFromCloud(patient.id, 'vent');
-                    else if (tabId === 'pumps') fetchFullCategoryFromCloud(patient.id, 'pumps');
-                    else if (tabId === 'antibiotics') fetchFullCategoryFromCloud(patient.id, 'abx');
-                    else if (tabId === 'labs') fetchFullCategoryFromCloud(patient.id, 'labs');
-                    else if (tabId === 'investigations') fetchFullCategoryFromCloud(patient.id, 'investigations');
+                    if (tabId === 'vitals') await fetchFullCategoryFromCloud(patient.id, 'vitals');
+                    else if (tabId === 'sbar') await fetchFullCategoryFromCloud(patient.id, 'sbar');
+                    else if (tabId === 'fluids') await fetchFullCategoryFromCloud(patient.id, 'fluids');
+                    else if (tabId === 'notes') await fetchFullCategoryFromCloud(patient.id, 'notes');
+                    else if (tabId === 'vent') await fetchFullCategoryFromCloud(patient.id, 'vent');
+                    else if (tabId === 'pumps') await fetchFullCategoryFromCloud(patient.id, 'pumps');
+                    else if (tabId === 'antibiotics') await fetchFullCategoryFromCloud(patient.id, 'abx');
+                    else if (tabId === 'labs') await fetchFullCategoryFromCloud(patient.id, 'labs');
+                    else if (tabId === 'investigations') await fetchFullCategoryFromCloud(patient.id, 'investigations');
+                    await loadBedsideData();
                   }
                 }}
                 className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl whitespace-nowrap transition-all font-semibold ${
@@ -1760,6 +1772,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                       onClick={async () => {
                         if (patient?.id) {
                           await fetchFullCategoryFromCloud(patient.id, 'vitals');
+                          await loadBedsideData();
                         }
                         setShowAllVitals(true);
                       }}
@@ -3507,20 +3520,24 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                         );
                       })}
 
-                      {allFluidBalances.length > 4 && (
+                      {(showMoreBedsideFluids || allFluidBalances.length >= 4 || hasMoreCategoryData(patient?.id, 'fluids')) && (
                         <button
                           type="button"
-                          onClick={() => {
+                          onClick={async () => {
                             if (!showMoreBedsideFluids && patient?.id) {
-                              fetchFullCategoryFromCloud(patient.id, 'fluids');
+                              await fetchFullCategoryFromCloud(patient.id, 'fluids');
+                              await loadBedsideData();
                             }
                             setShowMoreBedsideFluids(!showMoreBedsideFluids);
                           }}
-                          className="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 hover:bg-slate-700 text-teal-300 border border-teal-500/30 whitespace-nowrap shrink-0 transition-all cursor-pointer"
+                          className="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 hover:bg-slate-700 text-teal-300 border border-teal-500/30 whitespace-nowrap shrink-0 transition-all cursor-pointer flex items-center gap-1"
                         >
-                          {showMoreBedsideFluids 
-                            ? (lang === 'ar' ? 'عرض أقل' : 'Less') 
-                            : (lang === 'ar' ? `إظهار المزيد (+${allFluidBalances.length - 4})` : `More (+${allFluidBalances.length - 4})`)}
+                          <Download className="w-3 h-3" />
+                          <span>
+                            {showMoreBedsideFluids 
+                              ? (lang === 'ar' ? 'عرض أقل' : 'Less') 
+                              : (lang === 'ar' ? 'المزيد' : 'More')}
+                          </span>
                         </button>
                       )}
                     </div>
@@ -3729,6 +3746,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                         onClick={async () => {
                           if (patient?.id) {
                             await fetchFullCategoryFromCloud(patient.id, 'fluids');
+                            await loadBedsideData();
                           }
                           setShowMoreBedsideFluids(true);
                         }}
@@ -3968,6 +3986,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                         onClick={async () => {
                           if (patient?.id) {
                             await fetchFullCategoryFromCloud(patient.id, 'sbar');
+                            await loadBedsideData();
                           }
                           setShowMoreSbars(true);
                         }}
@@ -4246,6 +4265,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                     onClick={async () => {
                       if (patient?.id) {
                         await fetchFullCategoryFromCloud(patient.id, 'notes');
+                        await loadBedsideData();
                       }
                       setShowMoreNotes(true);
                     }}

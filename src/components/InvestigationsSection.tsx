@@ -19,14 +19,15 @@ import {
   Camera,
   ChevronDown,
   ChevronUp,
-  Tag
+  Tag,
+  Download
 } from 'lucide-react';
 import { InvestigationItem } from '../types/schema.ts';
 import { useTranslation } from '../services/i18n.ts';
 import { useAuth } from '../services/AuthContext.tsx';
 import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { db } from '../db/icuSyncDb.ts';
-import { syncInvestigationToCloud, deleteInvestigationFromCloud, fetchFullCategoryFromCloud } from '../services/firebase.ts';
+import { syncInvestigationToCloud, deleteInvestigationFromCloud, fetchFullCategoryFromCloud, hasMoreCategoryData } from '../services/firebase.ts';
 import { AiInvestigationScannerModal } from './AiInvestigationScannerModal.tsx';
 import { canDeleteRecord } from '../services/medicalRecordPermissions.ts';
 import { useLockBodyScroll } from '../hooks/useLockBodyScroll.ts';
@@ -176,6 +177,23 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [expandedReports, setExpandedReports] = useState<Record<string, boolean>>({});
   const [showAllReports, setShowAllReports] = useState<boolean>(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+
+  const handleFetchMoreInvestigations = async () => {
+    if (!patientId || isLoadingMore) return;
+    setIsLoadingMore(true);
+    try {
+      await fetchFullCategoryFromCloud(patientId, 'investigations');
+      setShowAllReports(true);
+      if (onInvestigationAdded) {
+        onInvestigationAdded();
+      }
+    } catch (err) {
+      console.warn('Could not fetch more investigations from cloud:', err);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
 
   const patientInvestigations = (investigations || []).filter(inv => inv && inv.patientId === patientId);
 
@@ -428,7 +446,7 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
           {(() => {
             const sorted = [...patientInvestigations].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
             const visible = showAllReports ? sorted : sorted.slice(0, 4);
-            const hasMore = sorted.length > 4;
+            const hasMore = showAllReports || sorted.length >= 4 || hasMoreCategoryData(patientId, 'investigations');
 
             return (
               <>
@@ -662,23 +680,31 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
                   );
                 })}
 
-                {/* Show More Button if > 4 reports */}
+                {/* Show More Button for Investigations */}
                 {hasMore && (
-                  <div className="text-center pt-2">
+                  <div className="flex justify-center pt-2 gap-2">
                     <button
                       type="button"
-                      onClick={() => {
-                        if (!showAllReports && patientId) {
-                          fetchFullCategoryFromCloud(patientId, 'investigations');
-                        }
-                        setShowAllReports(!showAllReports);
-                      }}
-                      className="px-4 py-2 text-xs font-bold rounded-xl bg-teal-50 dark:bg-teal-500/10 hover:bg-teal-100 dark:hover:bg-teal-500/20 text-teal-800 dark:text-teal-300 border border-teal-300 dark:border-teal-500/30 transition-all cursor-pointer shadow-sm"
+                      onClick={handleFetchMoreInvestigations}
+                      disabled={isLoadingMore}
+                      className="px-4 py-2 text-xs font-bold rounded-xl bg-teal-50 dark:bg-teal-500/10 hover:bg-teal-100 dark:hover:bg-teal-500/20 text-teal-800 dark:text-teal-300 border border-teal-300 dark:border-teal-500/30 transition-all cursor-pointer shadow-sm flex items-center gap-1.5 active:scale-95 disabled:opacity-50"
                     >
-                      {showAllReports 
-                        ? (lang === 'ar' ? 'إخفاء (عرض 4 فقط)' : 'Show Less') 
-                        : (lang === 'ar' ? `اظهار المزيد (${sorted.length - 4} تقارير أخرى)` : `Show More (${sorted.length - 4} more)`)}
+                      <Download className="w-3.5 h-3.5" />
+                      <span>
+                        {showAllReports 
+                          ? (lang === 'ar' ? 'تحميل المزيد من الفحوصات' : 'Load More Investigations') 
+                          : (lang === 'ar' ? 'عرض الفحوصات والتقارير السابقة' : 'Show Previous Investigations')}
+                      </span>
                     </button>
+                    {showAllReports && (
+                      <button
+                        type="button"
+                        onClick={() => setShowAllReports(false)}
+                        className="px-3 py-2 text-xs font-bold rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 border border-slate-300 dark:border-slate-700 transition-all cursor-pointer shadow-sm"
+                      >
+                        {lang === 'ar' ? 'عرض أقل' : 'Show Less'}
+                      </button>
+                    )}
                   </div>
                 )}
               </>
