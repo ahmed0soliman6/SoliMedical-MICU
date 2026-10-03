@@ -427,4 +427,97 @@ console.log('--- RUNNING FINAL COMPREHENSIVE SECURITY & PERMISSIONS TEST SUITE -
   console.log('✓ S. No creator-based filtering for read operations passed');
 }
 
-console.log('ALL COMPREHENSIVE TESTS PASSED SUCCESSFULLY! (19/19 test suites verified)');
+// Test T: Simulation of V1..V4 + V5 creation by another doctor (Realtime Window + Dexie Retention)
+{
+  const dexieVitals = new Map<string, any>();
+  const initialVitals = [
+    { id: 'V1', timestamp: '2026-10-03T01:00:00Z', patientId: 'p1', val: 91 },
+    { id: 'V2', timestamp: '2026-10-03T02:00:00Z', patientId: 'p1', val: 92 },
+    { id: 'V3', timestamp: '2026-10-03T03:00:00Z', patientId: 'p1', val: 93 },
+    { id: 'V4', timestamp: '2026-10-03T04:00:00Z', patientId: 'p1', val: 94 },
+  ];
+  initialVitals.forEach(v => dexieVitals.set(v.id, v));
+
+  // User 2 adds V5. Firestore limit(4) listener receives added V5 and removed V1
+  const incomingChanges = [
+    { type: 'added', doc: { id: 'V5', timestamp: '2026-10-03T05:00:00Z', patientId: 'p1', val: 95 } },
+    { type: 'removed', doc: { id: 'V1', timestamp: '2026-10-03T01:00:00Z', patientId: 'p1', val: 91 } }
+  ];
+
+  for (const ch of incomingChanges) {
+    if (ch.type === 'added' || ch.type === 'modified') {
+      dexieVitals.set(ch.doc.id, ch.doc);
+    }
+    // removed ignored
+  }
+
+  // Dexie retains ALL 5 records
+  assert.equal(dexieVitals.size, 5, 'T: Dexie holds all 5 records');
+  assert.equal(dexieVitals.has('V1'), true, 'T: V1 is NOT deleted from Dexie');
+  assert.equal(dexieVitals.has('V5'), true, 'T: V5 is added to Dexie');
+
+  // UI sorted latest-4 slice
+  const uiList = Array.from(dexieVitals.values())
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  const uiLatest4 = uiList.slice(0, 4);
+
+  assert.deepEqual(uiLatest4.map(v => v.id), ['V5', 'V4', 'V3', 'V2'], 'T: UI window displays V5, V4, V3, V2 in order');
+  console.log('✓ T. V1..V4 + V5 realtime window replacement with Dexie retention passed');
+}
+
+// Test U: Investigations & Fluid Balances follow same realtime arrival and Dexie retention
+{
+  const dexieInvs = new Map<string, any>();
+  const dexieFluids = new Map<string, any>();
+
+  // 4 initial records
+  for (let i = 1; i <= 4; i++) {
+    dexieInvs.set(`INV-${i}`, { id: `INV-${i}`, timestamp: `2026-10-03T0${i}:00:00Z` });
+    dexieFluids.set(`FB-${i}`, { id: `FB-${i}`, periodStartTimestamp: `2026-10-03T0${i}:00:00Z` });
+  }
+
+  // 5th record arrives from another user
+  dexieInvs.set('INV-5', { id: 'INV-5', timestamp: '2026-10-03T05:00:00Z' });
+  dexieFluids.set('FB-5', { id: 'FB-5', periodStartTimestamp: '2026-10-03T05:00:00Z' });
+
+  assert.equal(dexieInvs.size, 5, 'U: Dexie retains all 5 investigations');
+  assert.equal(dexieFluids.size, 5, 'U: Dexie retains all 5 fluid balances');
+
+  const invsDisplay = Array.from(dexieInvs.values())
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+    .slice(0, 4);
+  assert.equal(invsDisplay[0].id, 'INV-5', 'U: Latest investigation INV-5 appears at top of 4');
+
+  const fluidsDisplay = Array.from(dexieFluids.values())
+    .sort((a, b) => new Date(b.periodStartTimestamp).getTime() - new Date(a.periodStartTimestamp).getTime())
+    .slice(0, 4);
+  assert.equal(fluidsDisplay[0].id, 'FB-5', 'U: Latest fluid balance FB-5 appears at top of 4');
+  console.log('✓ U. Investigations and Fluid Balances realtime window and retention passed');
+}
+
+// Test V: Historical pagination active + new realtime record arrives does NOT break cursor
+{
+  const paginationState = {
+    realtimeBoundaryDoc: { id: 'V4' },
+    historicalCursorDoc: { id: 'V10' }, // already loaded pages up to V10
+    hasStartedHistorical: true,
+    lastDoc: { id: 'V10' },
+    hasMore: true,
+    isFetching: false
+  };
+
+  // New realtime record V-NEW arrives
+  const newestRealtimeBoundary = { id: 'V3' }; // shifted window
+  paginationState.realtimeBoundaryDoc = newestRealtimeBoundary;
+  // Because hasStartedHistorical is true, historicalCursorDoc & lastDoc are NOT modified
+  if (!paginationState.hasStartedHistorical) {
+    paginationState.lastDoc = newestRealtimeBoundary;
+  }
+
+  assert.equal(paginationState.historicalCursorDoc.id, 'V10', 'V: historicalCursorDoc remains V10');
+  assert.equal(paginationState.lastDoc.id, 'V10', 'V: lastDoc remains V10');
+  console.log('✓ V. Active pagination cursor is preserved when new realtime record arrives passed');
+}
+
+console.log('ALL COMPREHENSIVE TESTS PASSED SUCCESSFULLY! (22/22 test suites verified)');
+

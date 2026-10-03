@@ -1224,21 +1224,9 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
             return (
               <button
                 key={tab.id}
-                onClick={async () => {
+                onClick={() => {
                   const tabId = tab.id;
                   setActiveTab(tabId as any);
-                  if (patient?.id) {
-                    if (tabId === 'vitals') await fetchFullCategoryFromCloud(patient.id, 'vitals');
-                    else if (tabId === 'sbar') await fetchFullCategoryFromCloud(patient.id, 'sbar');
-                    else if (tabId === 'fluids') await fetchFullCategoryFromCloud(patient.id, 'fluids');
-                    else if (tabId === 'notes') await fetchFullCategoryFromCloud(patient.id, 'notes');
-                    else if (tabId === 'vent') await fetchFullCategoryFromCloud(patient.id, 'vent');
-                    else if (tabId === 'pumps') await fetchFullCategoryFromCloud(patient.id, 'pumps');
-                    else if (tabId === 'antibiotics') await fetchFullCategoryFromCloud(patient.id, 'abx');
-                    else if (tabId === 'labs') await fetchFullCategoryFromCloud(patient.id, 'labs');
-                    else if (tabId === 'investigations') await fetchFullCategoryFromCloud(patient.id, 'investigations');
-                    await loadBedsideData();
-                  }
                 }}
                 className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl whitespace-nowrap transition-all font-semibold ${
                   isActive

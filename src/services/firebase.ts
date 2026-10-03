@@ -23,7 +23,8 @@ import {
   getDocFromServer,
   updateDoc as fupdateDoc,
   deleteField,
-  serverTimestamp
+  serverTimestamp,
+  documentId
 } from 'firebase/firestore';
 import {
   getAuth,
@@ -1223,6 +1224,31 @@ export function subscribeToRealtimeFirestore(
 }
 
 // -------------------------------------------------------------
+// Category Pagination & Realtime Boundary Management
+// -------------------------------------------------------------
+interface CategoryCursorState {
+  realtimeBoundaryDoc: QueryDocumentSnapshot | null;
+  historicalCursorDoc: QueryDocumentSnapshot | null;
+  hasStartedHistorical: boolean;
+  lastDoc: QueryDocumentSnapshot | null;
+  hasMore: boolean;
+  isFetching: boolean;
+}
+
+const paginationMap = new Map<string, CategoryCursorState>();
+
+function initCursorState(lastDoc: QueryDocumentSnapshot | null, hasMore: boolean): CategoryCursorState {
+  return {
+    realtimeBoundaryDoc: lastDoc,
+    historicalCursorDoc: null,
+    hasStartedHistorical: false,
+    lastDoc,
+    hasMore,
+    isFetching: false
+  };
+}
+
+// -------------------------------------------------------------
 // On-Demand Fetch for Patient Historical Records (Strict 4 Records Limit)
 // -------------------------------------------------------------
 export async function fetchPatientHistoricalDataFromCloud(patientId: string): Promise<void> {
@@ -1285,99 +1311,90 @@ export async function fetchPatientHistoricalDataFromCloud(patientId: string): Pr
       const list: TelemetryVitals[] = [];
       vitalsSnap.forEach(d => list.push(d.data() as TelemetryVitals));
       await db.vitals.bulkPut(list);
-      paginationMap.set(`${patientId}_vitals`, {
-        lastDoc: vitalsSnap.docs[vitalsSnap.docs.length - 1],
-        hasMore: vitalsSnap.docs.length >= 4,
-        isFetching: false
-      });
+      paginationMap.set(`${patientId}_vitals`, initCursorState(
+        vitalsSnap.docs[vitalsSnap.docs.length - 1],
+        vitalsSnap.docs.length >= 4
+      ));
     }
 
     if (notesSnap && !notesSnap.empty) {
       const list: ClinicalNote[] = [];
       notesSnap.forEach(d => list.push(d.data() as ClinicalNote));
       await db.clinicalNotes.bulkPut(list);
-      paginationMap.set(`${patientId}_notes`, {
-        lastDoc: notesSnap.docs[notesSnap.docs.length - 1],
-        hasMore: notesSnap.docs.length >= 4,
-        isFetching: false
-      });
+      paginationMap.set(`${patientId}_notes`, initCursorState(
+        notesSnap.docs[notesSnap.docs.length - 1],
+        notesSnap.docs.length >= 4
+      ));
     }
 
     if (sbarsSnap && !sbarsSnap.empty) {
       const list: SbarHandoverReport[] = [];
       sbarsSnap.forEach(d => list.push(d.data() as SbarHandoverReport));
       await db.sbarHandovers.bulkPut(list);
-      paginationMap.set(`${patientId}_sbar`, {
-        lastDoc: sbarsSnap.docs[sbarsSnap.docs.length - 1],
-        hasMore: sbarsSnap.docs.length >= 4,
-        isFetching: false
-      });
+      paginationMap.set(`${patientId}_sbar`, initCursorState(
+        sbarsSnap.docs[sbarsSnap.docs.length - 1],
+        sbarsSnap.docs.length >= 4
+      ));
     }
 
     if (ventsSnap && !ventsSnap.empty) {
       const list: VentilatorParameters[] = [];
       ventsSnap.forEach(d => list.push(d.data() as VentilatorParameters));
       await db.ventilators.bulkPut(list);
-      paginationMap.set(`${patientId}_vent`, {
-        lastDoc: ventsSnap.docs[ventsSnap.docs.length - 1],
-        hasMore: ventsSnap.docs.length >= 4,
-        isFetching: false
-      });
+      paginationMap.set(`${patientId}_vent`, initCursorState(
+        ventsSnap.docs[ventsSnap.docs.length - 1],
+        ventsSnap.docs.length >= 4
+      ));
     }
 
     if (pumpsSnap && !pumpsSnap.empty) {
       const list: InfusionPumpLine[] = [];
       pumpsSnap.forEach(d => list.push(d.data() as InfusionPumpLine));
       await db.infusionPumps.bulkPut(list);
-      paginationMap.set(`${patientId}_pumps`, {
-        lastDoc: pumpsSnap.docs[pumpsSnap.docs.length - 1],
-        hasMore: pumpsSnap.docs.length >= 4,
-        isFetching: false
-      });
+      paginationMap.set(`${patientId}_pumps`, initCursorState(
+        pumpsSnap.docs[pumpsSnap.docs.length - 1],
+        pumpsSnap.docs.length >= 4
+      ));
     }
 
     if (fluidsSnap && !fluidsSnap.empty) {
       const list: FluidBalance24H[] = [];
       fluidsSnap.forEach(d => list.push(d.data() as FluidBalance24H));
       await db.fluidBalances.bulkPut(list);
-      paginationMap.set(`${patientId}_fluids`, {
-        lastDoc: fluidsSnap.docs[fluidsSnap.docs.length - 1],
-        hasMore: fluidsSnap.docs.length >= 4,
-        isFetching: false
-      });
+      paginationMap.set(`${patientId}_fluids`, initCursorState(
+        fluidsSnap.docs[fluidsSnap.docs.length - 1],
+        fluidsSnap.docs.length >= 4
+      ));
     }
 
     if (statLabsSnap && !statLabsSnap.empty) {
       const list: StatLabPanel[] = [];
       statLabsSnap.forEach(d => list.push(d.data() as StatLabPanel));
       await db.statLabs.bulkPut(list);
-      paginationMap.set(`${patientId}_labs_stat`, {
-        lastDoc: statLabsSnap.docs[statLabsSnap.docs.length - 1],
-        hasMore: statLabsSnap.docs.length >= 4,
-        isFetching: false
-      });
+      paginationMap.set(`${patientId}_labs_stat`, initCursorState(
+        statLabsSnap.docs[statLabsSnap.docs.length - 1],
+        statLabsSnap.docs.length >= 4
+      ));
     }
 
     if (abxSnap && !abxSnap.empty) {
       const list: PatientAntibiotic[] = [];
       abxSnap.forEach(d => list.push(d.data() as PatientAntibiotic));
       await db.patientAntibiotics.bulkPut(list);
-      paginationMap.set(`${patientId}_abx`, {
-        lastDoc: abxSnap.docs[abxSnap.docs.length - 1],
-        hasMore: abxSnap.docs.length >= 4,
-        isFetching: false
-      });
+      paginationMap.set(`${patientId}_abx`, initCursorState(
+        abxSnap.docs[abxSnap.docs.length - 1],
+        abxSnap.docs.length >= 4
+      ));
     }
 
     if (directLabsSnap && !directLabsSnap.empty) {
       const list: LabResultItem[] = [];
       directLabsSnap.forEach(d => list.push(d.data() as LabResultItem));
       await db.labResults.bulkPut(list);
-      paginationMap.set(`${patientId}_labs_direct`, {
-        lastDoc: directLabsSnap.docs[directLabsSnap.docs.length - 1],
-        hasMore: directLabsSnap.docs.length >= 4,
-        isFetching: false
-      });
+      paginationMap.set(`${patientId}_labs_direct`, initCursorState(
+        directLabsSnap.docs[directLabsSnap.docs.length - 1],
+        directLabsSnap.docs.length >= 4
+      ));
     }
 
     if (medRecordsSnap && !medRecordsSnap.empty) {
@@ -1399,11 +1416,10 @@ export async function fetchPatientHistoricalDataFromCloud(patientId: string): Pr
       const list: InvestigationItem[] = [];
       directInvsSnap.forEach(d => list.push(d.data() as InvestigationItem));
       await db.investigations.bulkPut(list);
-      paginationMap.set(`${patientId}_investigations`, {
-        lastDoc: directInvsSnap.docs[directInvsSnap.docs.length - 1],
-        hasMore: directInvsSnap.docs.length >= 4,
-        isFetching: false
-      });
+      paginationMap.set(`${patientId}_investigations`, initCursorState(
+        directInvsSnap.docs[directInvsSnap.docs.length - 1],
+        directInvsSnap.docs.length >= 4
+      ));
     }
 
     if (transfusionsSnap && !transfusionsSnap.empty) {
@@ -1458,15 +1474,24 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
     limitCount: number,
     putFn: (data: T) => Promise<any>,
     _deleteFn?: (id: string) => Promise<any>,
-    categoryKey?: string
+    categoryKey?: string,
+    useDeterministicSecondaryOrder: boolean = false
   ) => {
     try {
-      const q = query(
-        collection(firestore, colName),
-        where('patientId', '==', patientId),
-        orderBy(orderField, 'desc'),
-        limit(limitCount)
-      );
+      const q = useDeterministicSecondaryOrder
+        ? query(
+            collection(firestore, colName),
+            where('patientId', '==', patientId),
+            orderBy(orderField, 'desc'),
+            orderBy(documentId(), 'desc'),
+            limit(limitCount)
+          )
+        : query(
+            collection(firestore, colName),
+            where('patientId', '==', patientId),
+            orderBy(orderField, 'desc'),
+            limit(limitCount)
+          );
       const unsub = onSnapshot(q, async (snap) => {
         for (const change of snap.docChanges()) {
           if (change.type === 'added' || change.type === 'modified') {
@@ -1477,29 +1502,43 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
           // historical records in IndexedDB instead of deleting them.
         }
 
-        // Requirement 3: Record the actual last document from realtime limit(4) in paginationMap
+        // Requirements 7 & 8: Maintain realtime boundary vs historical cursor
         if (categoryKey && snap.docs.length > 0) {
           const mapKey = `${patientId}_${categoryKey}`;
           const current = paginationMap.get(mapKey);
-          // Only initialize or update cursor if user hasn't paginated further
-          if (!current || (!current.isFetching && !current.lastDoc)) {
+          const newestRealtimeBoundary = snap.docs[snap.docs.length - 1];
+
+          if (!current) {
             paginationMap.set(mapKey, {
-              lastDoc: snap.docs[snap.docs.length - 1],
+              realtimeBoundaryDoc: newestRealtimeBoundary,
+              historicalCursorDoc: null,
+              hasStartedHistorical: false,
+              lastDoc: newestRealtimeBoundary,
               hasMore: snap.docs.length >= limitCount,
               isFetching: false
             });
+          } else {
+            // Always update realtime window boundary with current snapshot's 4th document
+            current.realtimeBoundaryDoc = newestRealtimeBoundary;
+            // If user has NOT started historical pagination, realtime boundary is also the lastDoc
+            if (!current.hasStartedHistorical) {
+              current.lastDoc = newestRealtimeBoundary;
+              current.hasMore = snap.docs.length >= limitCount;
+            }
+            paginationMap.set(mapKey, current);
           }
         }
 
         notify();
       }, (err) => {
         handleFirestoreError(err, OperationType.GET, colName);
-        // If query failed due to missing index on composite (patientId + orderField), fallback to un-ordered limit query
+        // If query failed due to missing index on composite (patientId + orderField), fallback
         if ((err as any)?.code === 'failed-precondition') {
           try {
             const fallbackQ = query(
               collection(firestore, colName),
               where('patientId', '==', patientId),
+              orderBy(orderField, 'desc'),
               limit(limitCount)
             );
             const fallbackUnsub = onSnapshot(fallbackQ, async (fSnap) => {
@@ -1511,16 +1550,45 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
               if (categoryKey && fSnap.docs.length > 0) {
                 const mapKey = `${patientId}_${categoryKey}`;
                 const current = paginationMap.get(mapKey);
-                if (!current || (!current.isFetching && !current.lastDoc)) {
+                const boundary = fSnap.docs[fSnap.docs.length - 1];
+                if (!current) {
                   paginationMap.set(mapKey, {
-                    lastDoc: fSnap.docs[fSnap.docs.length - 1],
+                    realtimeBoundaryDoc: boundary,
+                    historicalCursorDoc: null,
+                    hasStartedHistorical: false,
+                    lastDoc: boundary,
                     hasMore: fSnap.docs.length >= limitCount,
                     isFetching: false
                   });
+                } else {
+                  current.realtimeBoundaryDoc = boundary;
+                  if (!current.hasStartedHistorical) {
+                    current.lastDoc = boundary;
+                    current.hasMore = fSnap.docs.length >= limitCount;
+                  }
+                  paginationMap.set(mapKey, current);
                 }
               }
               notify();
-            }, (fbErr) => handleFirestoreError(fbErr, OperationType.GET, colName));
+            }, (fbErr) => {
+              handleFirestoreError(fbErr, OperationType.GET, colName);
+              try {
+                const simpleQ = query(
+                  collection(firestore, colName),
+                  where('patientId', '==', patientId),
+                  limit(limitCount)
+                );
+                const simpleUnsub = onSnapshot(simpleQ, async (sSnap) => {
+                  for (const change of sSnap.docChanges()) {
+                    if (change.type === 'added' || change.type === 'modified') {
+                      await putFn(change.doc.data() as T);
+                    }
+                  }
+                  notify();
+                }, (sErr) => handleFirestoreError(sErr, OperationType.GET, colName));
+                unsubs.push(simpleUnsub);
+              } catch {}
+            });
             unsubs.push(fallbackUnsub);
           } catch (e) {
             handleFirestoreError(e, OperationType.GET, colName);
@@ -1549,14 +1617,15 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
       }
     }, (err) => handleFirestoreError(err, OperationType.GET, `patients/${patientId}`)));
 
-    // 2. Historical Growing Record: Telemetry Vitals (latest 4 records)
+    // 2. Historical Growing Record: Telemetry Vitals (latest 4 records with deterministic secondary order)
     setupHistoricalListener<TelemetryVitals>(
       'vitals',
       'timestamp',
       4,
       (data) => db.vitals.put(data),
-      (id) => db.vitals.delete(id),
-      'vitals'
+      undefined,
+      'vitals',
+      true
     );
 
     // 3. Historical Record: Lab Results (limit 10 live onSnapshot)
@@ -1565,7 +1634,7 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
       'timestamp',
       10,
       (data) => db.labResults.put(data),
-      (id) => db.labResults.delete(id),
+      undefined,
       'labs_direct'
     );
 
@@ -1574,28 +1643,30 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
       'timestamp',
       10,
       (data) => db.statLabs.put(data),
-      (id) => db.statLabs.delete(id),
+      undefined,
       'labs_stat'
     );
 
-    // 4. Historical Growing Record: Investigations & Imaging (latest 4 records)
+    // 4. Historical Growing Record: Investigations & Imaging (latest 4 records with deterministic secondary order)
     setupHistoricalListener<InvestigationItem>(
       'investigations',
       'timestamp',
       4,
       (data) => db.investigations.put(data),
-      (id) => db.investigations.delete(id),
-      'investigations'
+      undefined,
+      'investigations',
+      true
     );
 
-    // 5. Historical Growing Record: Fluid Balances 12H/24H (latest 4 records)
+    // 5. Historical Growing Record: Fluid Balances 12H/24H (latest 4 records with deterministic secondary order)
     setupHistoricalListener<FluidBalance24H>(
       'fluidBalances',
       'periodStartTimestamp',
       4,
       (data) => db.fluidBalances.put(data),
-      (id) => db.fluidBalances.delete(id),
-      'fluids'
+      undefined,
+      'fluids',
+      true
     );
 
     // 6. Historical Growing Record: SBAR Shift Handover Reports (latest 4 records)
@@ -1604,7 +1675,7 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
       'createdAt',
       4,
       (data) => db.sbarHandovers.put(data),
-      (id) => db.sbarHandovers.delete(id),
+      undefined,
       'sbar'
     );
 
@@ -1614,7 +1685,7 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
       'timestamp',
       4,
       (data) => db.clinicalNotes.put(data),
-      (id) => db.clinicalNotes.delete(id),
+      undefined,
       'notes'
     );
 
@@ -1624,39 +1695,60 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
       'timestamp',
       4,
       (data) => db.addendums.put(data),
-      (id) => db.addendums.delete(id),
+      undefined,
       'addendums'
     );
 
-    // 9. Current State: Patient Active Antibiotics (orderBy startDate desc + limit 4)
-    setupHistoricalListener<PatientAntibiotic>(
-      'patientAntibiotics',
-      'startDate',
-      4,
-      (data) => db.patientAntibiotics.put(data),
-      (id) => db.patientAntibiotics.delete(id),
-      'abx'
+    // 9. Requirement 5: Patient Active Antibiotics (Realtime WITHOUT limit - full patient scope)
+    const abxQuery = query(
+      collection(firestore, 'patientAntibiotics'),
+      where('patientId', '==', patientId)
     );
+    const unsubAbx = onSnapshot(abxQuery, async (snap) => {
+      for (const change of snap.docChanges()) {
+        if (change.type === 'added' || change.type === 'modified') {
+          await db.patientAntibiotics.put(change.doc.data() as PatientAntibiotic);
+        } else if (change.type === 'removed') {
+          await db.patientAntibiotics.delete(change.doc.id);
+        }
+      }
+      notify();
+    }, (err) => handleFirestoreError(err, OperationType.GET, 'patientAntibiotics'));
+    unsubs.push(unsubAbx);
 
-    // 10. Current State: Active Ventilator Settings (orderBy timestamp desc + limit 4)
-    setupHistoricalListener<VentilatorParameters>(
-      'ventilators',
-      'timestamp',
-      4,
-      (data) => db.ventilators.put(data),
-      (id) => db.ventilators.delete(id),
-      'vent'
+    // 10. Requirement 4: Active Ventilator Settings (Realtime WITHOUT limit - current patient doc with internal history)
+    const ventQuery = query(
+      collection(firestore, 'ventilators'),
+      where('patientId', '==', patientId)
     );
+    const unsubVent = onSnapshot(ventQuery, async (snap) => {
+      for (const change of snap.docChanges()) {
+        if (change.type === 'added' || change.type === 'modified') {
+          await db.ventilators.put(change.doc.data() as VentilatorParameters);
+        } else if (change.type === 'removed') {
+          await db.ventilators.delete(change.doc.id);
+        }
+      }
+      notify();
+    }, (err) => handleFirestoreError(err, OperationType.GET, 'ventilators'));
+    unsubs.push(unsubVent);
 
-    // 11. Current State: Active Infusion Pumps (orderBy id desc + limit 4)
-    setupHistoricalListener<InfusionPumpLine>(
-      'infusionPumps',
-      'id',
-      4,
-      (data) => db.infusionPumps.put(data),
-      (id) => db.infusionPumps.delete(id),
-      'pumps'
+    // 11. Requirement 6: Active Infusion Pumps (Realtime WITHOUT limit - full patient scope channels)
+    const pumpsQuery = query(
+      collection(firestore, 'infusionPumps'),
+      where('patientId', '==', patientId)
     );
+    const unsubPumps = onSnapshot(pumpsQuery, async (snap) => {
+      for (const change of snap.docChanges()) {
+        if (change.type === 'added' || change.type === 'modified') {
+          await db.infusionPumps.put(change.doc.data() as InfusionPumpLine);
+        } else if (change.type === 'removed') {
+          await db.infusionPumps.delete(change.doc.id);
+        }
+      }
+      notify();
+    }, (err) => handleFirestoreError(err, OperationType.GET, 'infusionPumps'));
+    unsubs.push(unsubPumps);
 
   } catch (err) {
     console.warn(`Could not subscribe to active patient ${patientId}:`, err);
@@ -1677,14 +1769,6 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
     }
   };
 }
-
-interface CategoryCursorState {
-  lastDoc: QueryDocumentSnapshot | null;
-  hasMore: boolean;
-  isFetching: boolean;
-}
-
-const paginationMap = new Map<string, CategoryCursorState>();
 
 export function hasMoreCategoryData(patientId: string, category: string): boolean {
   if (!patientId) return false;
@@ -1729,8 +1813,22 @@ export async function fetchFullCategoryFromCloud(
     const statKey = `${patientId}_labs_stat`;
     const directKey = `${patientId}_labs_direct`;
 
-    const statState = paginationMap.get(statKey) || { lastDoc: null, hasMore: true, isFetching: false };
-    const directState = paginationMap.get(directKey) || { lastDoc: null, hasMore: true, isFetching: false };
+    const statState = paginationMap.get(statKey) || { 
+      realtimeBoundaryDoc: null,
+      historicalCursorDoc: null,
+      hasStartedHistorical: false,
+      lastDoc: null, 
+      hasMore: true, 
+      isFetching: false 
+    };
+    const directState = paginationMap.get(directKey) || { 
+      realtimeBoundaryDoc: null,
+      historicalCursorDoc: null,
+      hasStartedHistorical: false,
+      lastDoc: null, 
+      hasMore: true, 
+      isFetching: false 
+    };
 
     // Check if sub-collections have no more data or are fetching
     if ((!statState.hasMore && !directState.hasMore) ||
@@ -1746,19 +1844,27 @@ export async function fetchFullCategoryFromCloud(
     try {
       const promises = [];
 
+      const statCursor = statState.hasStartedHistorical
+        ? statState.historicalCursorDoc
+        : (statState.realtimeBoundaryDoc || statState.lastDoc);
+
       // statLabs query with independent statState cursor
       if (statState.hasMore) {
         let qStat = query(collection(firestore, 'statLabs'), where('patientId', '==', patientId), orderBy('timestamp', 'desc'));
-        qStat = statState.lastDoc ? query(qStat, startAfter(statState.lastDoc), limit(pageSize)) : query(qStat, limit(pageSize));
+        qStat = statCursor ? query(qStat, startAfter(statCursor), limit(pageSize)) : query(qStat, limit(pageSize));
         promises.push(getDocs(qStat).then(snap => ({ type: 'stat', snap })).catch(() => ({ type: 'stat', snap: null })));
       } else {
         promises.push(Promise.resolve({ type: 'stat', snap: null }));
       }
 
+      const directCursor = directState.hasStartedHistorical
+        ? directState.historicalCursorDoc
+        : (directState.realtimeBoundaryDoc || directState.lastDoc);
+
       // labResults query with independent directState cursor
       if (directState.hasMore) {
         let qDirect = query(collection(firestore, 'labResults'), where('patientId', '==', patientId), orderBy('timestamp', 'desc'));
-        qDirect = directState.lastDoc ? query(qDirect, startAfter(directState.lastDoc), limit(pageSize)) : query(qDirect, limit(pageSize));
+        qDirect = directCursor ? query(qDirect, startAfter(directCursor), limit(pageSize)) : query(qDirect, limit(pageSize));
         promises.push(getDocs(qDirect).then(snap => ({ type: 'direct', snap })).catch(() => ({ type: 'direct', snap: null })));
       } else {
         promises.push(Promise.resolve({ type: 'direct', snap: null }));
@@ -1771,7 +1877,9 @@ export async function fetchFullCategoryFromCloud(
           const list: StatLabPanel[] = [];
           res.snap.forEach(d => list.push(d.data() as StatLabPanel));
           await db.statLabs.bulkPut(list);
-          statState.lastDoc = res.snap.docs[res.snap.docs.length - 1];
+          statState.hasStartedHistorical = true;
+          statState.historicalCursorDoc = res.snap.docs[res.snap.docs.length - 1];
+          statState.lastDoc = statState.historicalCursorDoc;
           if (res.snap.docs.length < pageSize) statState.hasMore = false;
         } else if (res.type === 'stat' && res.snap) {
           statState.hasMore = false;
@@ -1781,7 +1889,9 @@ export async function fetchFullCategoryFromCloud(
           const list: LabResultItem[] = [];
           res.snap.forEach(d => list.push(d.data() as LabResultItem));
           await db.labResults.bulkPut(list);
-          directState.lastDoc = res.snap.docs[res.snap.docs.length - 1];
+          directState.hasStartedHistorical = true;
+          directState.historicalCursorDoc = res.snap.docs[res.snap.docs.length - 1];
+          directState.lastDoc = directState.historicalCursorDoc;
           if (res.snap.docs.length < pageSize) directState.hasMore = false;
         } else if (res.type === 'direct' && res.snap) {
           directState.hasMore = false;
@@ -1803,7 +1913,14 @@ export async function fetchFullCategoryFromCloud(
   }
 
   const key = `${patientId}_${category}`;
-  const state = paginationMap.get(key) || { lastDoc: null, hasMore: true, isFetching: false };
+  const state = paginationMap.get(key) || { 
+    realtimeBoundaryDoc: null,
+    historicalCursorDoc: null,
+    hasStartedHistorical: false,
+    lastDoc: null, 
+    hasMore: true, 
+    isFetching: false 
+  };
 
   // Deduplication Check: If all historical pages were already fetched or fetch is in progress, skip!
   if (!state.hasMore || state.isFetching) {
@@ -1813,20 +1930,25 @@ export async function fetchFullCategoryFromCloud(
   state.isFetching = true;
   paginationMap.set(key, state);
 
+  // Requirements 7 & 8: Determine cursor to start after
+  const cursorToUse = state.hasStartedHistorical
+    ? state.historicalCursorDoc
+    : (state.realtimeBoundaryDoc || state.lastDoc);
+
   try {
     switch (category) {
       case 'abx': {
         let q = query(collection(firestore, 'patientAntibiotics'), where('patientId', '==', patientId), orderBy('startDate', 'desc'));
-        if (state.lastDoc) {
-          q = query(q, startAfter(state.lastDoc), limit(pageSize));
+        if (cursorToUse) {
+          q = query(q, startAfter(cursorToUse), limit(pageSize));
         } else {
           q = query(q, limit(pageSize));
         }
         let snap = await getDocs(q).catch(() => null);
         if (!snap) {
           // Fallback if orderBy requires composite index
-          const fallbackQ = state.lastDoc 
-            ? query(collection(firestore, 'patientAntibiotics'), where('patientId', '==', patientId), startAfter(state.lastDoc), limit(pageSize))
+          const fallbackQ = cursorToUse 
+            ? query(collection(firestore, 'patientAntibiotics'), where('patientId', '==', patientId), startAfter(cursorToUse), limit(pageSize))
             : query(collection(firestore, 'patientAntibiotics'), where('patientId', '==', patientId), limit(pageSize));
           snap = await getDocs(fallbackQ).catch(() => null);
         }
@@ -1834,7 +1956,9 @@ export async function fetchFullCategoryFromCloud(
           const list: PatientAntibiotic[] = [];
           snap.forEach(d => list.push(d.data() as PatientAntibiotic));
           await db.patientAntibiotics.bulkPut(list);
-          state.lastDoc = snap.docs[snap.docs.length - 1];
+          state.hasStartedHistorical = true;
+          state.historicalCursorDoc = snap.docs[snap.docs.length - 1];
+          state.lastDoc = state.historicalCursorDoc;
           if (snap.docs.length < pageSize) {
             state.hasMore = false;
           }
@@ -1845,8 +1969,8 @@ export async function fetchFullCategoryFromCloud(
       }
       case 'vitals': {
         let q = query(collection(firestore, 'vitals'), where('patientId', '==', patientId), orderBy('timestamp', 'desc'));
-        if (state.lastDoc) {
-          q = query(q, startAfter(state.lastDoc), limit(pageSize));
+        if (cursorToUse) {
+          q = query(q, startAfter(cursorToUse), limit(pageSize));
         } else {
           q = query(q, limit(pageSize));
         }
@@ -1855,7 +1979,9 @@ export async function fetchFullCategoryFromCloud(
           const list: TelemetryVitals[] = [];
           snap.forEach(d => list.push(d.data() as TelemetryVitals));
           await db.vitals.bulkPut(list);
-          state.lastDoc = snap.docs[snap.docs.length - 1];
+          state.hasStartedHistorical = true;
+          state.historicalCursorDoc = snap.docs[snap.docs.length - 1];
+          state.lastDoc = state.historicalCursorDoc;
           if (snap.docs.length < pageSize) {
             state.hasMore = false;
           }
@@ -1866,8 +1992,8 @@ export async function fetchFullCategoryFromCloud(
       }
       case 'sbar': {
         let q = query(collection(firestore, 'sbarHandovers'), where('patientId', '==', patientId), orderBy('createdAt', 'desc'));
-        if (state.lastDoc) {
-          q = query(q, startAfter(state.lastDoc), limit(pageSize));
+        if (cursorToUse) {
+          q = query(q, startAfter(cursorToUse), limit(pageSize));
         } else {
           q = query(q, limit(pageSize));
         }
@@ -1876,7 +2002,9 @@ export async function fetchFullCategoryFromCloud(
           const list: SbarHandoverReport[] = [];
           snap.forEach(d => list.push(d.data() as SbarHandoverReport));
           await db.sbarHandovers.bulkPut(list);
-          state.lastDoc = snap.docs[snap.docs.length - 1];
+          state.hasStartedHistorical = true;
+          state.historicalCursorDoc = snap.docs[snap.docs.length - 1];
+          state.lastDoc = state.historicalCursorDoc;
           if (snap.docs.length < pageSize) {
             state.hasMore = false;
           }
@@ -1887,15 +2015,15 @@ export async function fetchFullCategoryFromCloud(
       }
       case 'fluids': {
         let q = query(collection(firestore, 'fluidBalances'), where('patientId', '==', patientId), orderBy('periodStartTimestamp', 'desc'));
-        if (state.lastDoc) {
-          q = query(q, startAfter(state.lastDoc), limit(pageSize));
+        if (cursorToUse) {
+          q = query(q, startAfter(cursorToUse), limit(pageSize));
         } else {
           q = query(q, limit(pageSize));
         }
         let snap = await getDocs(q).catch(() => null);
         if (!snap) {
-          const fallbackQ = state.lastDoc
-            ? query(collection(firestore, 'fluidBalances'), where('patientId', '==', patientId), startAfter(state.lastDoc), limit(pageSize))
+          const fallbackQ = cursorToUse
+            ? query(collection(firestore, 'fluidBalances'), where('patientId', '==', patientId), startAfter(cursorToUse), limit(pageSize))
             : query(collection(firestore, 'fluidBalances'), where('patientId', '==', patientId), limit(pageSize));
           snap = await getDocs(fallbackQ).catch(() => null);
         }
@@ -1903,7 +2031,9 @@ export async function fetchFullCategoryFromCloud(
           const list: FluidBalance24H[] = [];
           snap.forEach(d => list.push(d.data() as FluidBalance24H));
           await db.fluidBalances.bulkPut(list);
-          state.lastDoc = snap.docs[snap.docs.length - 1];
+          state.hasStartedHistorical = true;
+          state.historicalCursorDoc = snap.docs[snap.docs.length - 1];
+          state.lastDoc = state.historicalCursorDoc;
           if (snap.docs.length < pageSize) {
             state.hasMore = false;
           }
@@ -1914,15 +2044,15 @@ export async function fetchFullCategoryFromCloud(
       }
       case 'notes': {
         let q = query(collection(firestore, 'clinicalNotes'), where('patientId', '==', patientId), orderBy('timestamp', 'desc'));
-        if (state.lastDoc) {
-          q = query(q, startAfter(state.lastDoc), limit(pageSize));
+        if (cursorToUse) {
+          q = query(q, startAfter(cursorToUse), limit(pageSize));
         } else {
           q = query(q, limit(pageSize));
         }
         let snap = await getDocs(q).catch(() => null);
         if (!snap) {
-          const fallbackQ = state.lastDoc
-            ? query(collection(firestore, 'clinicalNotes'), where('patientId', '==', patientId), startAfter(state.lastDoc), limit(pageSize))
+          const fallbackQ = cursorToUse
+            ? query(collection(firestore, 'clinicalNotes'), where('patientId', '==', patientId), startAfter(cursorToUse), limit(pageSize))
             : query(collection(firestore, 'clinicalNotes'), where('patientId', '==', patientId), limit(pageSize));
           snap = await getDocs(fallbackQ).catch(() => null);
         }
@@ -1930,7 +2060,9 @@ export async function fetchFullCategoryFromCloud(
           const list: ClinicalNote[] = [];
           snap.forEach(d => list.push(d.data() as ClinicalNote));
           await db.clinicalNotes.bulkPut(list);
-          state.lastDoc = snap.docs[snap.docs.length - 1];
+          state.hasStartedHistorical = true;
+          state.historicalCursorDoc = snap.docs[snap.docs.length - 1];
+          state.lastDoc = state.historicalCursorDoc;
           if (snap.docs.length < pageSize) {
             state.hasMore = false;
           }
@@ -1950,15 +2082,15 @@ export async function fetchFullCategoryFromCloud(
       }
       case 'vent': {
         let q = query(collection(firestore, 'ventilators'), where('patientId', '==', patientId), orderBy('timestamp', 'desc'));
-        if (state.lastDoc) {
-          q = query(q, startAfter(state.lastDoc), limit(pageSize));
+        if (cursorToUse) {
+          q = query(q, startAfter(cursorToUse), limit(pageSize));
         } else {
           q = query(q, limit(pageSize));
         }
         let snap = await getDocs(q).catch(() => null);
         if (!snap) {
-          const fallbackQ = state.lastDoc
-            ? query(collection(firestore, 'ventilators'), where('patientId', '==', patientId), startAfter(state.lastDoc), limit(pageSize))
+          const fallbackQ = cursorToUse
+            ? query(collection(firestore, 'ventilators'), where('patientId', '==', patientId), startAfter(cursorToUse), limit(pageSize))
             : query(collection(firestore, 'ventilators'), where('patientId', '==', patientId), limit(pageSize));
           snap = await getDocs(fallbackQ).catch(() => null);
         }
@@ -1966,7 +2098,9 @@ export async function fetchFullCategoryFromCloud(
           const list: VentilatorParameters[] = [];
           snap.forEach(d => list.push(d.data() as VentilatorParameters));
           await db.ventilators.bulkPut(list);
-          state.lastDoc = snap.docs[snap.docs.length - 1];
+          state.hasStartedHistorical = true;
+          state.historicalCursorDoc = snap.docs[snap.docs.length - 1];
+          state.lastDoc = state.historicalCursorDoc;
           if (snap.docs.length < pageSize) {
             state.hasMore = false;
           }
@@ -1977,15 +2111,17 @@ export async function fetchFullCategoryFromCloud(
       }
       case 'pumps': {
         let q = query(collection(firestore, 'infusionPumps'), where('patientId', '==', patientId), limit(pageSize));
-        if (state.lastDoc) {
-          q = query(q, startAfter(state.lastDoc), limit(pageSize));
+        if (cursorToUse) {
+          q = query(q, startAfter(cursorToUse), limit(pageSize));
         }
         const snap = await getDocs(q).catch(() => null);
         if (snap && !snap.empty) {
           const list: InfusionPumpLine[] = [];
           snap.forEach(d => list.push(d.data() as InfusionPumpLine));
           await db.infusionPumps.bulkPut(list);
-          state.lastDoc = snap.docs[snap.docs.length - 1];
+          state.hasStartedHistorical = true;
+          state.historicalCursorDoc = snap.docs[snap.docs.length - 1];
+          state.lastDoc = state.historicalCursorDoc;
           if (snap.docs.length < pageSize) {
             state.hasMore = false;
           }
@@ -1996,15 +2132,15 @@ export async function fetchFullCategoryFromCloud(
       }
       case 'investigations': {
         let q = query(collection(firestore, 'investigations'), where('patientId', '==', patientId), orderBy('timestamp', 'desc'));
-        if (state.lastDoc) {
-          q = query(q, startAfter(state.lastDoc), limit(pageSize));
+        if (cursorToUse) {
+          q = query(q, startAfter(cursorToUse), limit(pageSize));
         } else {
           q = query(q, limit(pageSize));
         }
         let snap = await getDocs(q).catch(() => null);
         if (!snap) {
-          const fallbackQ = state.lastDoc
-            ? query(collection(firestore, 'investigations'), where('patientId', '==', patientId), startAfter(state.lastDoc), limit(pageSize))
+          const fallbackQ = cursorToUse
+            ? query(collection(firestore, 'investigations'), where('patientId', '==', patientId), startAfter(cursorToUse), limit(pageSize))
             : query(collection(firestore, 'investigations'), where('patientId', '==', patientId), limit(pageSize));
           snap = await getDocs(fallbackQ).catch(() => null);
         }
@@ -2012,7 +2148,9 @@ export async function fetchFullCategoryFromCloud(
           const list: InvestigationItem[] = [];
           snap.forEach(d => list.push(d.data() as InvestigationItem));
           await db.investigations.bulkPut(list);
-          state.lastDoc = snap.docs[snap.docs.length - 1];
+          state.hasStartedHistorical = true;
+          state.historicalCursorDoc = snap.docs[snap.docs.length - 1];
+          state.lastDoc = state.historicalCursorDoc;
           if (snap.docs.length < pageSize) {
             state.hasMore = false;
           }
