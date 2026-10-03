@@ -69,8 +69,8 @@ import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
 import { useAuth } from '../services/AuthContext.tsx';
 import { useAppNotifications } from '../services/NotificationContext.tsx';
-import { syncStatLabsToCloud, deleteStatLabFromCloud, syncLabResultToCloud, syncPatientToCloud, syncPumpToCloud, deletePumpFromCloud, deleteClinicalNoteFromCloud, firestore, fetchFullCategoryFromCloud, subscribeToActivePatientFlowsheet } from '../services/firebase.ts';
-import { canDeleteRecord, canDeleteClinicalNote } from '../services/medicalRecordPermissions.ts';
+import { syncStatLabsToCloud, deleteStatLabFromCloud, syncLabResultToCloud, syncPatientToCloud, syncPumpToCloud, deletePumpFromCloud, deleteClinicalNoteFromCloud, firestore, fetchFullCategoryFromCloud, subscribeToActivePatientFlowsheet, hasMoreCategoryData } from '../services/firebase.ts';
+import { canEditRecord, canDeleteRecord, canDeleteClinicalNote } from '../services/medicalRecordPermissions.ts';
 import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { FullPageAdmission } from './FullPageAdmission.tsx';
 import { LabFlowsheetSection } from './LabFlowsheetSection.tsx';
@@ -1222,7 +1222,8 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                     else if (tabId === 'notes') fetchFullCategoryFromCloud(patient.id, 'notes');
                     else if (tabId === 'vent') fetchFullCategoryFromCloud(patient.id, 'vent');
                     else if (tabId === 'pumps') fetchFullCategoryFromCloud(patient.id, 'pumps');
-                    else if (tabId === 'labs' || tabId === 'antibiotics') fetchFullCategoryFromCloud(patient.id, 'labs');
+                    else if (tabId === 'antibiotics') fetchFullCategoryFromCloud(patient.id, 'abx');
+                    else if (tabId === 'labs') fetchFullCategoryFromCloud(patient.id, 'labs');
                     else if (tabId === 'investigations') fetchFullCategoryFromCloud(patient.id, 'investigations');
                   }
                 }}
@@ -1728,7 +1729,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                                 <span className="text-slate-400 text-[11px] font-sans truncate max-w-[110px]">
                                   {v.recordedBy?.name || (lang === 'ar' ? 'الكادر الطبي' : 'Staff')}
                                 </span>
-                                {!readOnly && (currentUser?.uid === v.recordedBy?.staffId || currentUser?.badgeId === v.recordedBy?.staffId || currentUser?.role === StaffRole.ADMIN || currentUser?.role === 'ADMIN' || currentUser?.isSuperAdmin === true) && (
+                                {!readOnly && canEditRecord(currentUser, v as any) && (
                                   <button
                                     type="button"
                                     onClick={() => {
@@ -1751,25 +1752,35 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                   </table>
                 </div>
 
-                {vitalsHistory.length >= 4 && (
-                  <div className="flex justify-center pt-2">
+                {(showAllVitals || vitalsHistory.length >= 4 || hasMoreCategoryData(patient?.id, 'vitals')) && (
+                  <div className="flex justify-center pt-2 gap-2">
                     <button
                       type="button"
-                      onClick={() => {
-                        if (!showAllVitals && patient?.id) {
-                          fetchFullCategoryFromCloud(patient.id, 'vitals');
+                      onClick={async () => {
+                        if (patient?.id) {
+                          await fetchFullCategoryFromCloud(patient.id, 'vitals');
                         }
-                        setShowAllVitals(!showAllVitals);
+                        setShowAllVitals(true);
                       }}
                       className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-teal-300 font-bold text-xs border border-slate-700 transition-all cursor-pointer shadow-sm active:scale-95"
                     >
+                      <Download className="w-3.5 h-3.5" />
                       <span>
                         {showAllVitals 
-                          ? (lang === 'ar' ? 'عرض أقل' : 'Show Less') 
-                          : (lang === 'ar' ? `عرض المزيد (${vitalsHistory.length > 4 ? vitalsHistory.length - 4 : '+'} سجلات إضافية)` : `Show More (${vitalsHistory.length > 4 ? vitalsHistory.length - 4 : '+'} more records)`)}
+                          ? (lang === 'ar' ? 'تحميل المزيد من السجلات الحيوية' : 'Load More Vital Readings') 
+                          : (lang === 'ar' ? 'عرض السجلات التاريخية السابقة' : 'Show More / Historical Records')}
                       </span>
-                      {showAllVitals ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                     </button>
+                    {showAllVitals && (
+                      <button
+                        type="button"
+                        onClick={() => setShowAllVitals(false)}
+                        className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-800/60 hover:bg-slate-700 text-slate-400 font-bold text-xs border border-slate-700 transition-all cursor-pointer shadow-sm active:scale-95"
+                      >
+                        <ChevronUp className="w-3.5 h-3.5" />
+                        <span>{lang === 'ar' ? 'عرض أقل' : 'Show Less'}</span>
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -3710,22 +3721,34 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                     })}
                   </div>
 
-                  {allFluidBalances.length > 4 && (
-                    <div className="pt-1 text-center">
+                  {(showMoreBedsideFluids || allFluidBalances.length >= 4 || hasMoreCategoryData(patient?.id, 'fluids')) && (
+                    <div className="pt-1 text-center flex items-center justify-center gap-2">
                       <button
                         type="button"
-                        onClick={() => {
-                          if (!showMoreBedsideFluids && patient?.id) {
-                            fetchFullCategoryFromCloud(patient.id, 'fluids');
+                        onClick={async () => {
+                          if (patient?.id) {
+                            await fetchFullCategoryFromCloud(patient.id, 'fluids');
                           }
-                          setShowMoreBedsideFluids(!showMoreBedsideFluids);
+                          setShowMoreBedsideFluids(true);
                         }}
-                        className="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-teal-300 border border-teal-500/30 text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                        className="flex-1 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-teal-300 border border-teal-500/30 text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 active:scale-98"
                       >
-                        {showMoreBedsideFluids
-                          ? (lang === 'ar' ? 'عرض أقل' : 'Show Less')
-                          : (lang === 'ar' ? `إظهار المزيد (+${allFluidBalances.length - 4} سجلات أخرى)` : `Show More (+${allFluidBalances.length - 4} more)`)}
+                        <Download className="w-3.5 h-3.5" />
+                        <span>
+                          {showMoreBedsideFluids
+                            ? (lang === 'ar' ? 'تحميل المزيد من ميزان السوائل' : 'Load More Fluid Records')
+                            : (lang === 'ar' ? 'عرض السجلات السابقة لميزان السوائل' : 'Show Previous Fluid Records')}
+                        </span>
                       </button>
+                      {showMoreBedsideFluids && (
+                        <button
+                          type="button"
+                          onClick={() => setShowMoreBedsideFluids(false)}
+                          className="px-4 py-2 rounded-xl bg-slate-800/60 hover:bg-slate-700 text-slate-400 border border-slate-700 text-xs font-bold transition-all cursor-pointer"
+                        >
+                          {lang === 'ar' ? 'عرض أقل' : 'Show Less'}
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -3937,25 +3960,34 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                   ))}
 
                   {/* Show More Button after 4th record */}
-                  {sbarList.length >= 4 && (
-                    <div className="pt-2 text-center">
+                  {(showMoreSbars || sbarList.length >= 4 || hasMoreCategoryData(patient?.id, 'sbar')) && (
+                    <div className="pt-2 text-center flex items-center justify-center gap-2">
                       <button
                         type="button"
-                        onClick={() => {
-                          if (!showMoreSbars && patient?.id) {
-                            fetchFullCategoryFromCloud(patient.id, 'sbar');
+                        onClick={async () => {
+                          if (patient?.id) {
+                            await fetchFullCategoryFromCloud(patient.id, 'sbar');
                           }
-                          setShowMoreSbars(!showMoreSbars);
+                          setShowMoreSbars(true);
                         }}
-                        className="px-5 py-2 rounded-xl bg-teal-500/20 hover:bg-teal-500/30 border border-teal-500/40 text-teal-300 font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-2 mx-auto active:scale-95 shadow-md"
+                        className="px-5 py-2 rounded-xl bg-teal-500/20 hover:bg-teal-500/30 border border-teal-500/40 text-teal-300 font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-2 active:scale-95 shadow-md"
                       >
+                        <Download className="w-3.5 h-3.5 text-teal-400" />
                         <span>
                           {showMoreSbars
-                            ? (lang === 'ar' ? 'عرض أقل' : 'Show Less')
-                            : (lang === 'ar' ? `إظهار المزيد (${sbarList.length > 4 ? sbarList.length - 4 : '+'} تقارير متبقية)` : `Show More (${sbarList.length > 4 ? sbarList.length - 4 : '+'} remaining)`)}
+                            ? (lang === 'ar' ? 'تحميل تقارير تسليم أقدم' : 'Load Older Handover Reports')
+                            : (lang === 'ar' ? 'عرض تقارير التسليم السابقة' : 'Show Older Handovers')}
                         </span>
-                        {showMoreSbars ? <ChevronUp className="w-4 h-4 text-teal-400" /> : <ChevronDown className="w-4 h-4 text-teal-400" />}
                       </button>
+                      {showMoreSbars && (
+                        <button
+                          type="button"
+                          onClick={() => setShowMoreSbars(false)}
+                          className="px-4 py-2 rounded-xl bg-slate-800/60 hover:bg-slate-700 text-slate-400 border border-slate-700 font-bold text-xs transition-all cursor-pointer"
+                        >
+                          {lang === 'ar' ? 'عرض أقل' : 'Show Less'}
+                        </button>
+                      )}
                     </div>
                   )}
                 </>
@@ -4206,25 +4238,34 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                   })}
 
               {/* Show More Button for Clinical Notes */}
-              {notesList.length >= 4 && (
-                <div className="pt-2 text-center">
+              {(showMoreNotes || notesList.length >= 4 || hasMoreCategoryData(patient?.id, 'notes')) && (
+                <div className="pt-2 text-center flex items-center justify-center gap-2">
                   <button
                     type="button"
-                    onClick={() => {
-                      if (!showMoreNotes && patient?.id) {
-                        fetchFullCategoryFromCloud(patient.id, 'notes');
+                    onClick={async () => {
+                      if (patient?.id) {
+                        await fetchFullCategoryFromCloud(patient.id, 'notes');
                       }
-                      setShowMoreNotes(!showMoreNotes);
+                      setShowMoreNotes(true);
                     }}
-                    className="px-5 py-2 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/40 text-purple-300 font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-2 mx-auto active:scale-95 shadow-md"
+                    className="px-5 py-2 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/40 text-purple-300 font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-2 active:scale-95 shadow-md"
                   >
+                    <Download className="w-3.5 h-3.5 text-purple-400" />
                     <span>
                       {showMoreNotes
-                        ? (lang === 'ar' ? 'عرض أقل' : 'Show Less')
-                        : (lang === 'ar' ? `إظهار المزيد (${notesList.length > 4 ? notesList.length - 4 : '+'} ملاحظات إضافية)` : `Show More (${notesList.length > 4 ? notesList.length - 4 : '+'} more notes)`)}
+                        ? (lang === 'ar' ? 'تحميل المزيد من الملاحظات السريرية' : 'Load More Clinical Notes')
+                        : (lang === 'ar' ? 'عرض الملاحظات السريرية السابقة' : 'Show Previous Clinical Notes')}
                     </span>
-                    {showMoreNotes ? <ChevronUp className="w-4 h-4 text-purple-400" /> : <ChevronDown className="w-4 h-4 text-purple-400" />}
                   </button>
+                  {showMoreNotes && (
+                    <button
+                      type="button"
+                      onClick={() => setShowMoreNotes(false)}
+                      className="px-4 py-2 rounded-xl bg-slate-800/60 hover:bg-slate-700 text-slate-400 border border-slate-700 font-bold text-xs transition-all cursor-pointer"
+                    >
+                      {lang === 'ar' ? 'عرض أقل' : 'Show Less'}
+                    </button>
+                  )}
                 </div>
               )}
               </>

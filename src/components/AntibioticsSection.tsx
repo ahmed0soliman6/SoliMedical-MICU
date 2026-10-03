@@ -32,7 +32,7 @@ import { useTranslation } from '../services/i18n.ts';
 import { useAuth } from '../services/AuthContext.tsx';
 import { canEditRecord, canDeleteRecord, preserveRecordOwnership } from '../services/medicalRecordPermissions.ts';
 import { db } from '../db/icuSyncDb.ts';
-import { syncPatientAntibioticToCloud, deletePatientAntibioticFromCloud, fetchFullCategoryFromCloud } from '../services/firebase.ts';
+import { syncPatientAntibioticToCloud, deletePatientAntibioticFromCloud, fetchFullCategoryFromCloud, hasMoreCategoryData } from '../services/firebase.ts';
 import { useLockBodyScroll } from '../hooks/useLockBodyScroll.ts';
 
 // Dictionary of standard ICU antimicrobial doses & parameters
@@ -1611,27 +1611,34 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
               </div>
 
               {/* Show More / Show Less Pagination Button for Historical Courses */}
-              {activeFilter !== 'ACTIVE' && (filteredAntibiotics.length > 4 || (!showAllAbx && filteredAntibiotics.length >= 4)) && (
-                <div className="flex justify-center pt-2">
+              {activeFilter !== 'ACTIVE' && (showAllAbx || filteredAntibiotics.length >= 4 || hasMoreCategoryData(patient?.id, 'abx')) && (
+                <div className="flex justify-center pt-2 gap-2">
                   <button
                     type="button"
-                    onClick={showAllAbx ? () => setShowAllAbx(false) : handleFetchMoreAbx}
+                    onClick={handleFetchMoreAbx}
                     disabled={isLoadingMoreAbx}
                     className="px-4 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-400 border border-slate-700 hover:border-amber-500/50 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm disabled:opacity-50"
                   >
                     {isLoadingMoreAbx ? (
                       <div className="w-3.5 h-3.5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
-                    ) : showAllAbx ? (
-                      <ChevronUp className="w-4 h-4" />
                     ) : (
-                      <ChevronDown className="w-4 h-4" />
+                      <Download className="w-3.5 h-3.5" />
                     )}
                     <span>
                       {showAllAbx 
-                        ? (lang === 'ar' ? 'عرض أقل' : 'Show Less') 
-                        : (lang === 'ar' ? 'إظهار المزيد من السجلات' : 'Show More Records')}
+                        ? (lang === 'ar' ? 'تحميل المزيد من كورسات المضادات' : 'Load More Antibiotic Courses') 
+                        : (lang === 'ar' ? 'إظهار السجلات السابقة' : 'Show Previous Records')}
                     </span>
                   </button>
+                  {showAllAbx && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllAbx(false)}
+                      className="px-3 py-1.5 rounded-xl bg-slate-800/60 hover:bg-slate-700 text-slate-400 border border-slate-700 text-xs font-semibold transition-all cursor-pointer"
+                    >
+                      {lang === 'ar' ? 'عرض أقل' : 'Show Less'}
+                    </button>
+                  )}
                 </div>
               )}
             </div>

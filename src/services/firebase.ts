@@ -1227,11 +1227,10 @@ export function subscribeToRealtimeFirestore(
 // -------------------------------------------------------------
 export async function fetchPatientHistoricalDataFromCloud(patientId: string): Promise<void> {
   if (!patientId) return;
-  // Clear stale pagination cache for this patient so new queries can be made
-  resetCategoryPagination(patientId);
 
   try {
     const [
+      vitalsSnap,
       notesSnap,
       sbarsSnap,
       ventsSnap,
@@ -1245,6 +1244,9 @@ export async function fetchPatientHistoricalDataFromCloud(patientId: string): Pr
       transfusionsSnap,
       addendumsSnap
     ] = await Promise.all([
+      getDocs(query(collection(firestore, 'vitals'), where('patientId', '==', patientId), orderBy('timestamp', 'desc'), limit(4))).catch(() => 
+        getDocs(query(collection(firestore, 'vitals'), where('patientId', '==', patientId), limit(4))).catch(() => null)
+      ),
       getDocs(query(collection(firestore, 'clinicalNotes'), where('patientId', '==', patientId), orderBy('timestamp', 'desc'), limit(4))).catch(() => 
         getDocs(query(collection(firestore, 'clinicalNotes'), where('patientId', '==', patientId), limit(4))).catch(() => null)
       ),
@@ -1278,6 +1280,17 @@ export async function fetchPatientHistoricalDataFromCloud(patientId: string): Pr
         getDocs(query(collection(firestore, 'addendums'), where('patientId', '==', patientId), limit(4))).catch(() => null)
       ),
     ]);
+
+    if (vitalsSnap && !vitalsSnap.empty) {
+      const list: TelemetryVitals[] = [];
+      vitalsSnap.forEach(d => list.push(d.data() as TelemetryVitals));
+      await db.vitals.bulkPut(list);
+      paginationMap.set(`${patientId}_vitals`, {
+        lastDoc: vitalsSnap.docs[vitalsSnap.docs.length - 1],
+        hasMore: vitalsSnap.docs.length >= 4,
+        isFetching: false
+      });
+    }
 
     if (notesSnap && !notesSnap.empty) {
       const list: ClinicalNote[] = [];
@@ -1444,7 +1457,7 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
     orderField: string,
     limitCount: number,
     putFn: (data: T) => Promise<any>,
-    deleteFn: (id: string) => Promise<any>
+    _deleteFn?: (id: string) => Promise<any>
   ) => {
     try {
       const q = query(
@@ -1457,9 +1470,10 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
         for (const change of snap.docChanges()) {
           if (change.type === 'added' || change.type === 'modified') {
             await putFn(change.doc.data() as T);
-          } else if (change.type === 'removed') {
-            await deleteFn(change.doc.id);
           }
+          // Note: In limit(4) query, change.type === 'removed' occurs when an older record
+          // gets pushed out of the latest-4 window by a newer record. We preserve existing
+          // historical records in IndexedDB instead of deleting them.
         }
         notify();
       }, (err) => {
@@ -1476,8 +1490,6 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
               for (const change of fSnap.docChanges()) {
                 if (change.type === 'added' || change.type === 'modified') {
                   await putFn(change.doc.data() as T);
-                } else if (change.type === 'removed') {
-                  await deleteFn(change.doc.id);
                 }
               }
               notify();
@@ -1635,6 +1647,22 @@ interface CategoryCursorState {
 }
 
 const paginationMap = new Map<string, CategoryCursorState>();
+
+export function hasMoreCategoryData(patientId: string, category: string): boolean {
+  if (!patientId) return false;
+  if (category === 'labs') {
+    const statKey = `${patientId}_labs_stat`;
+    const directKey = `${patientId}_labs_direct`;
+    const statState = paginationMap.get(statKey);
+    const directState = paginationMap.get(directKey);
+    if (!statState && !directState) return true;
+    return (statState?.hasMore ?? true) || (directState?.hasMore ?? true);
+  }
+  const key = `${patientId}_${category}`;
+  const state = paginationMap.get(key);
+  if (!state) return true;
+  return state.hasMore;
+}
 
 export function resetCategoryPagination(patientId?: string): void {
   if (patientId) {
@@ -2197,7 +2225,6 @@ export async function syncSbarToCloud(sbar: SbarHandoverReport): Promise<void> {
 
 export async function syncClinicalNoteToCloud(note: ClinicalNote): Promise<void> {
   try {
-    if (note.patientId) resetCategoryPagination(note.patientId);
     const noteRef = doc(firestore, 'clinicalNotes', note.id);
     const payload = {
       ...note,
@@ -2241,7 +2268,6 @@ export async function syncClinicalNoteToCloud(note: ClinicalNote): Promise<void>
 
 export async function syncAddendumToCloud(addendum: Addendum): Promise<void> {
   try {
-    if (addendum.patientId) resetCategoryPagination(addendum.patientId);
     const addRef = doc(firestore, 'addendums', addendum.id);
     const payload = {
       ...addendum,
@@ -2272,7 +2298,6 @@ export async function deleteAddendumFromCloud(addendumId: string): Promise<void>
 
 export async function syncVentilatorToCloud(vent: VentilatorParameters): Promise<void> {
   try {
-    if (vent.patientId) resetCategoryPagination(vent.patientId);
     const ventRef = doc(firestore, 'ventilators', vent.id);
     const payload = {
       ...vent,
@@ -2286,7 +2311,6 @@ export async function syncVentilatorToCloud(vent: VentilatorParameters): Promise
 
 export async function syncPumpToCloud(pump: InfusionPumpLine): Promise<void> {
   try {
-    if (pump.patientId) resetCategoryPagination(pump.patientId);
     const payload = {
       ...pump,
       serverUpdatedAt: serverTimestamp(),
@@ -2320,7 +2344,6 @@ export async function deleteVentilatorFromCloud(ventId: string): Promise<void> {
 
 export async function syncFluidBalanceToCloud(fluid: FluidBalance24H): Promise<void> {
   try {
-    if (fluid.patientId) resetCategoryPagination(fluid.patientId);
     const payload = {
       ...fluid,
       serverUpdatedAt: serverTimestamp(),
@@ -2345,7 +2368,6 @@ export async function deleteFluidBalanceFromCloud(fluidId: string): Promise<void
 
 export async function syncStatLabsToCloud(labs: StatLabPanel): Promise<void> {
   try {
-    if (labs.patientId) resetCategoryPagination(labs.patientId);
     const payload = {
       ...labs,
       serverUpdatedAt: serverTimestamp(),
@@ -2367,7 +2389,6 @@ export async function deleteStatLabFromCloud(labId: string): Promise<void> {
 
 export async function syncPatientAntibioticToCloud(abx: PatientAntibiotic): Promise<void> {
   try {
-    if (abx.patientId) resetCategoryPagination(abx.patientId);
     const payload = {
       ...abx,
       serverUpdatedAt: serverTimestamp(),
@@ -2389,7 +2410,6 @@ export async function deletePatientAntibioticFromCloud(abxId: string): Promise<v
 
 export async function syncLabResultToCloud(labItem: LabResultItem): Promise<void> {
   try {
-    if (labItem.patientId) resetCategoryPagination(labItem.patientId);
     const tsNumber = labItem.timestamp ? new Date(labItem.timestamp).getTime() : Date.now();
     const payload = sanitizeForFirestore({
       ...labItem,
@@ -2421,7 +2441,6 @@ export async function deleteLabResultFromCloud(labId: string): Promise<void> {
 
 export async function syncInvestigationToCloud(invItem: InvestigationItem): Promise<void> {
   try {
-    if (invItem.patientId) resetCategoryPagination(invItem.patientId);
     const tsNumber = invItem.timestamp ? new Date(invItem.timestamp).getTime() : Date.now();
     const payload = sanitizeForFirestore({
       ...invItem,
