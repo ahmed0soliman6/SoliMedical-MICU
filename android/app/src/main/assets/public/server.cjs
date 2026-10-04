@@ -308,7 +308,7 @@ async function verifyAdminCallerToken(authHeader) {
       if (callerDoc.exists) {
         const callerData = callerDoc.data();
         isCallerActive = callerData.active !== false && callerData.isActive !== false;
-        isCallerAdmin = callerData.role === "ADMIN" || callerData.isSuperAdmin === true;
+        isCallerAdmin = callerData.role === "ADMIN" || callerData.isSuperAdmin === true || callerData.permissions?.["users.delete"] === true || callerData.permissions?.["users.update"] === true || callerData.permissions?.["users.create"] === true || callerData.permissions?.["users.disable"] === true;
       } else {
         const adminDoc = await db.collection("admins").doc(callerUid).get();
         if (adminDoc.exists) {
