@@ -1,8 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Activity, Lock, ChevronDown, ChevronUp } from 'lucide-react';
+import { Activity, Lock, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 import { SbarHandoverReport, PatientDossier, BedRecord } from '../types/schema.ts';
 import { db } from '../db/icuSyncDb.ts';
 import { useTranslation } from '../services/i18n.ts';
+import { useAuth } from '../services/AuthContext.tsx';
+import { canDeleteRecord } from '../services/medicalRecordPermissions.ts';
+import { doc, deleteDoc } from 'firebase/firestore';
+import { firestore } from '../services/firebase.ts';
 
 interface SbarHandoverViewProps {
   beds: BedRecord[];
@@ -14,6 +18,7 @@ export const SbarHandoverView: React.FC<SbarHandoverViewProps> = ({
   patients,
 }) => {
   const { t, lang, isRTL } = useTranslation();
+  const { currentUser } = useAuth();
   const [handovers, setHandovers] = useState<SbarHandoverReport[]>([]);
   const [showAll, setShowAll] = useState(false);
 
@@ -25,6 +30,26 @@ export const SbarHandoverView: React.FC<SbarHandoverViewProps> = ({
     const list = await db.sbarHandovers.toArray();
     list.sort((a, b) => new Date(b.outgoingDoctor?.signedAt || b.shiftDate || 0).getTime() - new Date(a.outgoingDoctor?.signedAt || a.shiftDate || 0).getTime());
     setHandovers(list);
+  };
+
+  const handleDeleteSbar = async (sbarId: string) => {
+    const sbarItem = handovers.find(s => s.id === sbarId);
+    if (sbarItem && !canDeleteRecord(currentUser, sbarItem, 'sbar')) {
+      alert(lang === 'ar' ? 'غير مصرح بحذف تقرير التسليم SBAR هذا.' : 'Unauthorized to delete this SBAR report.');
+      return;
+    }
+    if (!window.confirm(lang === 'ar' ? 'هل أنت متأكد من حذف تقرير تسليم المناوبة SBAR هذا نهائياً؟' : 'Are you sure you want to permanently delete this SBAR report?')) {
+      return;
+    }
+    try {
+      await db.sbarHandovers.delete(sbarId);
+      await deleteDoc(doc(firestore, 'sbarHandovers', sbarId)).catch(() => {});
+      await deleteDoc(doc(firestore, 'handovers', sbarId)).catch(() => {});
+      setHandovers(prev => prev.filter(s => s.id !== sbarId));
+    } catch (err) {
+      console.error('Failed to delete SBAR report:', err);
+      alert(lang === 'ar' ? 'حدث خطأ أثناء الحذف.' : 'Delete error.');
+    }
   };
 
   const displayedHandovers = showAll ? handovers : handovers.slice(0, 2);
@@ -79,6 +104,16 @@ export const SbarHandoverView: React.FC<SbarHandoverViewProps> = ({
 
                       <div className="flex items-center gap-2 text-xs text-slate-400 font-mono">
                         <span>{sbar.shiftDate} ({sbar.shiftStartTime} - {sbar.shiftEndTime})</span>
+                        {canDeleteRecord(currentUser, sbar, 'sbar') && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteSbar(sbar.id)}
+                            className="p-1 rounded text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                            title={lang === 'ar' ? 'حذف تقرير التسليم SBAR' : 'Delete SBAR report'}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     </div>
 

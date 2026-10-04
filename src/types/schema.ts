@@ -162,6 +162,10 @@ export interface LabResultItem {
   notes?: string;
   recordedByName: string;
   recordedByStaffId?: string;
+  createdBy?: string;
+  createdByUid?: string;
+  authorId?: string;
+  userId?: string;
 }
 
 export interface InvestigationItem {
@@ -176,7 +180,10 @@ export interface InvestigationItem {
   notes?: string;
   recordedByName: string;
   recordedByStaffId?: string;
+  createdBy?: string;
   createdByUid?: string;
+  authorId?: string;
+  userId?: string;
   lastModifiedByName?: string;
   lastModifiedByStaffId?: string;
   lastModifiedAt?: string;
@@ -620,6 +627,10 @@ export interface SbarHandoverReport {
   customFields?: Record<string, string>;
   isLocked: boolean; // Once signed, immutable
   cryptographicHash: string;
+  createdBy?: string;
+  createdByUid?: string;
+  authorId?: string;
+  userId?: string;
 }
 
 // -------------------------------------------------------------
@@ -643,8 +654,10 @@ export interface Addendum {
 }
 
 export interface MedicalRecordOwnership {
+  createdBy?: string;
   createdByUid: string;
   createdByName: string;
+  userId?: string;
   createdAt: number | string;
   updatedByUid: string;
   updatedAt: number | string;

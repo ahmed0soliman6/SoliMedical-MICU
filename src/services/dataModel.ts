@@ -540,7 +540,9 @@ export async function addTimestampedVitals(input: AddVitalsInput): Promise<Telem
     cvpMmHg: input.cvpMmHg,
     recordedBy: input.recordedBy,
     clinicalNotes: input.clinicalNotes,
-    createdByUid: currentUserUid,
+    createdBy: auth.currentUser?.uid || currentUserUid || input.recordedBy?.staffId,
+    createdByUid: auth.currentUser?.uid || currentUserUid || input.recordedBy?.staffId,
+    userId: auth.currentUser?.uid || currentUserUid || input.recordedBy?.staffId,
     authorId: currentUserUid ? (currentUserUid.startsWith('staff-') ? currentUserUid : `staff-${currentUserUid}`) : input.recordedBy?.staffId,
     authorStaffId: input.recordedBy?.staffId || currentUserUid,
     recordedByStaffId: input.recordedBy?.staffId || currentUserUid,
@@ -702,7 +704,9 @@ export async function createClinicalNote(input: CreateClinicalNoteInput): Promis
     authorName: input.authorName,
     authorRole: input.authorRole,
     authorStaffId: input.authorStaffId,
-    createdByUid: input.createdByUid || (input.authorId ? input.authorId.replace('staff-', '') : undefined),
+    createdBy: auth.currentUser?.uid || input.createdByUid || (input.authorId ? input.authorId.replace('staff-', '') : undefined) || input.authorStaffId,
+    createdByUid: input.createdByUid || auth.currentUser?.uid || (input.authorId ? input.authorId.replace('staff-', '') : undefined) || input.authorStaffId,
+    userId: auth.currentUser?.uid || input.createdByUid || (input.authorId ? input.authorId.replace('staff-', '') : undefined) || input.authorStaffId,
     timestamp: nowIso,
     isImmutable: true,
     cryptographicHash: hash,
@@ -810,6 +814,10 @@ export async function signSbarHandover(input: SignSbarInput): Promise<SbarHandov
     customFields: input.customFields,
     isLocked: true,
     cryptographicHash: hash,
+    createdBy: auth.currentUser?.uid || (input as any).createdByUid || (input.outgoingDoctor.staffId ? input.outgoingDoctor.staffId.replace('staff-', '') : undefined),
+    createdByUid: (input as any).createdByUid || auth.currentUser?.uid || (input.outgoingDoctor.staffId ? input.outgoingDoctor.staffId.replace('staff-', '') : undefined),
+    userId: auth.currentUser?.uid || (input as any).createdByUid || (input.outgoingDoctor.staffId ? input.outgoingDoctor.staffId.replace('staff-', '') : undefined),
+    authorId: auth.currentUser?.uid || input.outgoingDoctor.staffId,
   };
 
   await db.transaction('rw', [db.sbarHandovers, db.auditLogs], async () => {

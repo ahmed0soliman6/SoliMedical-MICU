@@ -651,6 +651,28 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
     }
   };
 
+  const handleDeleteSbar = async (sbarId: string) => {
+    const sbarItem = sbarList.find(s => s.id === sbarId);
+    if (sbarItem && !canDeleteRecord(currentUser, sbarItem, 'sbar')) {
+      alert(lang === 'ar' ? 'غير مصرح بحذف تقرير التسليم SBAR هذا.' : 'Unauthorized to delete this SBAR handover.');
+      return;
+    }
+    if (!window.confirm(lang === 'ar' ? 'هل أنت متأكد من حذف تقرير تسليم المناوبة SBAR هذا نهائياً من السحابة وقاعدة البيانات؟' : 'Are you sure you want to permanently delete this SBAR handover report?')) {
+      return;
+    }
+
+    try {
+      await db.sbarHandovers.delete(sbarId);
+      await deleteDoc(doc(firestore, 'sbarHandovers', sbarId)).catch(() => {});
+      await deleteDoc(doc(firestore, 'handovers', sbarId)).catch(() => {});
+      setSbarList(prev => prev.filter(s => s.id !== sbarId));
+      onDataUpdated();
+    } catch (err: any) {
+      console.error('Error deleting SBAR handover:', err);
+      alert(lang === 'ar' ? `حدث خطأ أثناء الحذف: ${err?.message || ''}` : `Delete error: ${err?.message || ''}`);
+    }
+  };
+
   // Ventilator Driving Pressure & PF Ratio Calculations
   const drivingPressure = (ventilator?.plateauPressureCmH2O && ventilator?.peepCmH2O)
     ? ventilator.plateauPressureCmH2O - ventilator.peepCmH2O
@@ -4184,6 +4206,17 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                           <Sparkles className="w-3 h-3 text-teal-400" />
                           <span>{lang === 'ar' ? 'استخدام كقالب لمناوبة جديدة' : 'Use as Template'}</span>
                         </button>
+
+                        {!readOnly && canDeleteRecord(currentUser, sbar, 'sbar') && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteSbar(sbar.id)}
+                            className="p-1 rounded text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                            title={lang === 'ar' ? 'حذف تقرير التسليم SBAR' : 'Delete SBAR report'}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     </div>
 
@@ -4460,16 +4493,12 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                               )
                             )}
 
-                            {!readOnly && (
+                            {!readOnly && canDelete && (
                               <button
                                 type="button"
                                 onClick={(e) => handleDeleteBedsideNote(e, note)}
-                                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 active:scale-95 border ${
-                                  canDelete 
-                                    ? 'bg-rose-50 hover:bg-rose-100 border-rose-300 text-rose-700 dark:bg-rose-500/10 dark:hover:bg-rose-500/25 dark:border-rose-500/30 dark:text-rose-400 dark:hover:text-rose-300' 
-                                    : 'bg-slate-100 hover:bg-rose-50 border-slate-300 text-slate-600 hover:text-rose-700 dark:bg-slate-800/80 dark:hover:bg-rose-950/40 dark:border-slate-700 dark:text-slate-400 dark:hover:text-rose-400'
-                                }`}
-                                title={lang === 'ar' ? 'حذف الملاحظة (المدير أو صاحب الصلاحية أو كاتب الملاحظة فقط)' : 'Delete Note (Admin, authorized user, or author only)'}
+                                className="px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 active:scale-95 border bg-rose-50 hover:bg-rose-100 border-rose-300 text-rose-700 dark:bg-rose-500/10 dark:hover:bg-rose-500/25 dark:border-rose-500/30 dark:text-rose-400 dark:hover:text-rose-300"
+                                title={lang === 'ar' ? 'حذف الملاحظة' : 'Delete Note'}
                               >
                                 <Trash2 className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400" />
                                 <span className="font-medium">{lang === 'ar' ? 'حذف' : 'Delete'}</span>

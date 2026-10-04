@@ -169,7 +169,6 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
 
   const canCreateInvestigations = Boolean(!readOnly && (isAdminUser || hasPermission?.('investigations.create') || (currentUser?.permissions as any)?.['investigations.create'] === true));
   const canUpdateInvestigations = Boolean(!readOnly && (isAdminUser || hasPermission?.('investigations.update') || (currentUser?.permissions as any)?.['investigations.update'] === true));
-  const canDeleteInvestigations = Boolean(isAdminUser || hasPermission?.('medicalRecords.delete') || (currentUser?.permissions as any)?.['medicalRecords.delete'] === true || (currentUser?.permissions as any)?.['medicalRecords.deleteAny'] === true || (currentUser?.permissions as any)?.['investigations.deleteOwn'] === true);
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isAiScanModalOpen, setIsAiScanModalOpen] = useState(false);
@@ -246,7 +245,10 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
       bedNumber,
       recordedByName: `${userDisplay} (AI OCR)`,
       recordedByStaffId: currentUser?.badgeId || currentUser?.uid,
+      createdBy: currentUser?.uid,
       createdByUid: currentUser?.uid,
+      userId: currentUser?.uid,
+      authorId: currentUser?.badgeId || currentUser?.uid,
     };
 
     // 1. Dexie local database
@@ -363,7 +365,10 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
           notes: notes.trim() || undefined,
           recordedByName: userDisplay,
           recordedByStaffId: currentUser?.badgeId || currentUser?.uid,
+          createdBy: currentUser?.uid,
           createdByUid: currentUser?.uid,
+          userId: currentUser?.uid,
+          authorId: currentUser?.badgeId || currentUser?.uid,
         };
 
         // 1. Dexie local database

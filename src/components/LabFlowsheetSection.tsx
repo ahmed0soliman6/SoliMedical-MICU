@@ -31,7 +31,7 @@ import { useTranslation } from '../services/i18n.ts';
 import { useAuth } from '../services/AuthContext.tsx';
 import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { db } from '../db/icuSyncDb.ts';
-import { syncLabResultToCloud, deleteLabResultFromCloud } from '../services/firebase.ts';
+import { syncLabResultToCloud, deleteLabResultFromCloud, auth } from '../services/firebase.ts';
 import { COLLECTIONS } from '../types/contracts.ts';
 import { AiLabScannerModal } from './AiLabScannerModal.tsx';
 import { toEnglishDigits } from '../services/numberUtils.ts';
@@ -303,7 +303,6 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
 
   const canCreateLabs = Boolean(!readOnly && (isAdminUser || hasPermission?.('labs.create') || (currentUser?.permissions as any)?.['labs.create'] === true));
   const canUpdateLabs = Boolean(!readOnly && (isAdminUser || hasPermission?.('labs.update') || (currentUser?.permissions as any)?.['labs.update'] === true));
-  const canDeleteLabs = Boolean(isAdminUser || hasPermission?.('medicalRecords.delete') || (currentUser?.permissions as any)?.['medicalRecords.delete'] === true || (currentUser?.permissions as any)?.['medicalRecords.deleteAny'] === true || (currentUser?.permissions as any)?.['labs.deleteOwn'] === true);
 
   const dynamicPresets = React.useMemo(() => {
     if (settings.labCategories && settings.labCategories.length > 0) {
@@ -538,6 +537,10 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
         notes: formNotes.trim() || undefined,
         recordedByName: userDisplay,
         recordedByStaffId: currentUser?.badgeId || currentUser?.uid,
+        createdBy: auth.currentUser?.uid || currentUser?.uid,
+        createdByUid: auth.currentUser?.uid || currentUser?.uid,
+        userId: auth.currentUser?.uid || currentUser?.uid,
+        authorId: auth.currentUser?.uid || currentUser?.badgeId || currentUser?.uid,
       };
 
       // 1. Write to local Dexie table
@@ -578,6 +581,10 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
         status: 'RESULTED',
         recordedByName: userDisplay,
         recordedByStaffId: currentUser?.badgeId || currentUser?.uid,
+        createdBy: auth.currentUser?.uid || currentUser?.uid,
+        createdByUid: auth.currentUser?.uid || currentUser?.uid,
+        userId: auth.currentUser?.uid || currentUser?.uid,
+        authorId: auth.currentUser?.uid || currentUser?.badgeId || currentUser?.uid,
       };
 
       await db.labResults.put(newRecord);
@@ -593,9 +600,31 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
     }
   };
 
+  const handleDeleteLab = async (labId: string) => {
+    const labItem = labResults.find(l => l.id === labId);
+    if (labItem && !canDeleteRecord(currentUser, labItem, 'labs')) {
+      alert(lang === 'ar' ? 'غير مصرح بحذف هذه النتيجة المخبرية.' : 'Unauthorized to delete this lab result.');
+      return;
+    }
+    if (!window.confirm(lang === 'ar' ? 'هل أنت متأكد من حذف نتيجة التحليل هذه؟' : 'Are you sure you want to delete this lab result?')) {
+      return;
+    }
+    setIsSaving(true);
+    try {
+      await db.labResults.delete(labId);
+      await deleteLabResultFromCloud(labId);
+      onLabAdded();
+    } catch (err) {
+      console.error('Failed to delete lab result:', err);
+      alert(lang === 'ar' ? 'حدث خطأ أثناء حذف نتيجة التحليل.' : 'Error deleting lab result.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const triggerDeleteLabType = (testName: string) => {
     const items = groupedLabs.get(testName) || [];
-    const canDelete = canDeleteRecord(currentUser, items) || 
+    const canDelete = canDeleteRecord(currentUser, items, 'labs') || 
                       currentUser?.role === StaffRole.CONSULTANT;
 
     if (!canDelete) {
@@ -1012,6 +1041,19 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
                                 </div>
 
                                 <div className="flex items-center gap-1.5">
+                                  {canDeleteRecord(currentUser, latest, 'labs') && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleDeleteLab(latest.id);
+                                      }}
+                                      className="p-1 rounded text-slate-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
+                                      title={lang === 'ar' ? 'حذف نتيجة التحليل' : 'Delete lab reading'}
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
                                   <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
                                     {items.length} {lang === "ar" ? "قراءات" : "readings"}
                                   </span>
@@ -1174,7 +1216,7 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
                       <span>{lang === 'ar' ? 'إضافة قراءة جديدة' : 'Add Reading'}</span>
                     </button>
                   )}
-                  {canDeleteLabs && (
+                  {canDeleteRecord(currentUser, groupedLabs.get(selectedTestName) || [], 'labs') && (
                     <button
                       type="button"
                       onClick={() => {
@@ -1306,20 +1348,30 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
                                   {lang === 'ar' ? 'إلغاء' : 'Cancel'}
                                 </button>
                               </div>
-                            ) : (isOwner || canUpdateLabs) ? (
-                              <button
-                                type="button"
-                                onClick={() => triggerEditRecord(rec)}
-                                className="inline-flex items-center justify-center gap-1 px-2.5 py-1 rounded bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/20 hover:border-indigo-500/40 text-[11px] font-bold transition-all cursor-pointer shadow-sm active:scale-95 mx-auto"
-                                title={lang === 'ar' ? 'تعديل هذا التحليل' : 'Edit my recorded reading'}
-                              >
-                                <Edit className="w-3 h-3 text-indigo-400 shrink-0" />
-                                <span>{lang === 'ar' ? 'تعديل' : 'Edit'}</span>
-                              </button>
                             ) : (
-                              <span className="text-[10px] text-slate-600 font-medium italic">
-                                —
-                              </span>
+                              <div className="flex items-center justify-center gap-1.5">
+                                {(isOwner || canUpdateLabs) && (
+                                  <button
+                                    type="button"
+                                    onClick={() => triggerEditRecord(rec)}
+                                    className="inline-flex items-center justify-center gap-1 px-2.5 py-1 rounded bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/20 hover:border-indigo-500/40 text-[11px] font-bold transition-all cursor-pointer shadow-sm active:scale-95"
+                                    title={lang === 'ar' ? 'تعديل هذا التحليل' : 'Edit my recorded reading'}
+                                  >
+                                    <Edit className="w-3 h-3 text-indigo-400 shrink-0" />
+                                    <span>{lang === 'ar' ? 'تعديل' : 'Edit'}</span>
+                                  </button>
+                                )}
+                                {canDeleteRecord(currentUser, rec, 'labs') && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteLab(rec.id)}
+                                    className="inline-flex items-center justify-center p-1 rounded bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-red-500/30 text-[11px] font-bold transition-all cursor-pointer shadow-sm active:scale-95"
+                                    title={lang === 'ar' ? 'حذف نتيجة التحليل' : 'Delete lab reading'}
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
                             )}
                           </td>
                         </tr>
@@ -1593,6 +1645,10 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
                 notes: `AI Optical OCR - ${data.summaryEn || ''}`,
                 recordedByName: doctorName,
                 recordedByStaffId: currentUser?.badgeId || currentUser?.uid,
+                createdBy: auth.currentUser?.uid || currentUser?.uid,
+                createdByUid: auth.currentUser?.uid || currentUser?.uid,
+                userId: auth.currentUser?.uid || currentUser?.uid,
+                authorId: auth.currentUser?.uid || currentUser?.badgeId || currentUser?.uid,
               };
             });
 

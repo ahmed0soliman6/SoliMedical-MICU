@@ -150,7 +150,9 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
             name: userDisplay,
             role: userRole,
           },
-          createdByUid: (vitalsToEdit as any).createdByUid || currentUser?.uid,
+          createdBy: (vitalsToEdit as any).createdBy || (vitalsToEdit as any).createdByUid || currentUser?.uid,
+          createdByUid: (vitalsToEdit as any).createdByUid || (vitalsToEdit as any).createdBy || currentUser?.uid,
+          userId: (vitalsToEdit as any).userId || (vitalsToEdit as any).createdBy || currentUser?.uid,
           authorId: (vitalsToEdit as any).authorId || currentUser?.uid,
         } as any;
         await db.vitals.put(updatedVitals);

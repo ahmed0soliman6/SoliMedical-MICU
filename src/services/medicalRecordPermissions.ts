@@ -28,7 +28,7 @@ export interface RecordOwnershipContext {
   authorName?: string;
 }
 
-export type CategoryPermissionKey = 'vitals' | 'labs' | 'investigations' | 'clinicalNotes' | 'handovers' | 'sbar';
+export type CategoryPermissionKey = 'vitals' | 'labs' | 'investigations' | 'clinicalNotes' | 'handovers' | 'sbar' | 'vitals.update' | 'labs.update' | 'clinicalNotes.update' | string;
 
 /**
  * Validates if a user is authorized to edit/update a specific medical record.
@@ -51,13 +51,41 @@ export function canEditRecord(
     return true;
   }
 
-  const updateKey = categoryKey === 'sbar' ? 'sbar.update' : `${categoryKey}.update`;
-  const altKey = categoryKey === 'handovers' ? 'sbar.update' : (categoryKey === 'sbar' ? 'handovers.update' : undefined);
+  // Doctor ownership: author / creator can always edit their own medical record
+  const isOwner = Boolean(
+    record && (
+      (record.createdBy && (record.createdBy === user.uid || record.createdBy === `staff-${user.uid}`)) ||
+      (record.createdByUid && (record.createdByUid === user.uid || record.createdByUid === `staff-${user.uid}`)) ||
+      (record.doctorId && (record.doctorId === user.uid || record.doctorId === `staff-${user.uid}`)) ||
+      (record.authorId && (record.authorId === user.uid || record.authorId === `staff-${user.uid}`)) ||
+      (record.authorStaffId && (record.authorStaffId === user.uid || record.authorStaffId === `staff-${user.uid}`)) ||
+      (record.recordedByStaffId && (record.recordedByStaffId === user.uid || record.recordedByStaffId === `staff-${user.uid}`)) ||
+      (record.userId && (record.userId === user.uid || record.userId === `staff-${user.uid}`)) ||
+      (user.badgeId && (
+        record.authorStaffId === user.badgeId ||
+        record.recordedByStaffId === user.badgeId ||
+        record.authorId === user.badgeId ||
+        record.createdByUid === user.badgeId ||
+        record.doctorId === user.badgeId
+      ))
+    )
+  );
+
+  if (isOwner) return true;
+
+  const cleanCat = categoryKey ? String(categoryKey).replace(/\.(update|create|view)$/, '') : 'vitals';
+  const updateKey = cleanCat === 'sbar' ? 'sbar.update' : `${cleanCat}.update`;
+  const altKey = cleanCat === 'handovers' ? 'sbar.update' : (cleanCat === 'sbar' ? 'handovers.update' : undefined);
 
   return Boolean(
     user.permissions?.[updateKey] === true ||
     (altKey && user.permissions?.[altKey] === true) ||
-    user.permissions?.[`${categoryKey}.create`] === true
+    user.permissions?.[`${cleanCat}.create`] === true ||
+    user.permissions?.[categoryKey] === true ||
+    user.permissions?.['clinicalNotes.create'] === true ||
+    user.permissions?.['clinicalNotes.update'] === true ||
+    user.permissions?.['patients.update'] === true ||
+    user.permissions?.['patients.create'] === true
   );
 }
 

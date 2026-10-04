@@ -2425,8 +2425,13 @@ export async function syncPatientToCloud(patient: PatientDossier): Promise<void>
 export async function syncVitalsToCloud(vitals: TelemetryVitals): Promise<void> {
   try {
     const vitRef = doc(firestore, 'vitals', vitals.id);
+    const vAny = vitals as any;
+    const creatorUid = auth.currentUser?.uid || vAny.recordedByStaffId || vAny.createdBy || vAny.createdByUid;
     const payload = {
       ...vitals,
+      createdBy: vAny.createdBy || auth.currentUser?.uid || creatorUid,
+      createdByUid: vAny.createdByUid || auth.currentUser?.uid || creatorUid,
+      userId: vAny.userId || auth.currentUser?.uid || creatorUid,
       serverUpdatedAt: serverTimestamp(),
     };
     await setDoc(vitRef, sanitizeForFirestore(payload));
@@ -2447,8 +2452,13 @@ export async function deleteVitalsFromCloud(vitalId: string): Promise<void> {
 export async function syncSbarToCloud(sbar: SbarHandoverReport): Promise<void> {
   try {
     const sbarRef = doc(firestore, 'sbarHandovers', sbar.id);
+    const creatorUid = auth.currentUser?.uid || sbar.outgoingDoctor?.staffId || sbar.createdBy || sbar.createdByUid;
     const payload = {
       ...sbar,
+      createdBy: sbar.createdBy || auth.currentUser?.uid || creatorUid,
+      createdByUid: sbar.createdByUid || auth.currentUser?.uid || creatorUid,
+      userId: sbar.userId || auth.currentUser?.uid || creatorUid,
+      authorId: sbar.authorId || auth.currentUser?.uid || sbar.outgoingDoctor?.staffId,
       createdAt: sbar.createdAt || sbar.outgoingDoctor?.signedAt || sbar.shiftDate || new Date().toISOString(),
       timestamp: sbar.timestamp || sbar.outgoingDoctor?.signedAt || sbar.shiftDate || new Date().toISOString(),
       serverUpdatedAt: serverTimestamp(),
@@ -2484,8 +2494,12 @@ export async function syncSbarToCloud(sbar: SbarHandoverReport): Promise<void> {
 export async function syncClinicalNoteToCloud(note: ClinicalNote): Promise<void> {
   try {
     const noteRef = doc(firestore, 'clinicalNotes', note.id);
+    const creatorUid = auth.currentUser?.uid || note.authorStaffId || note.authorId || note.createdBy || note.createdByUid;
     const payload = {
       ...note,
+      createdBy: note.createdBy || auth.currentUser?.uid || creatorUid,
+      createdByUid: note.createdByUid || auth.currentUser?.uid || creatorUid,
+      userId: note.userId || auth.currentUser?.uid || creatorUid,
       serverUpdatedAt: serverTimestamp(),
     };
     await setDoc(noteRef, sanitizeForFirestore(payload), { merge: true });
@@ -2557,8 +2571,12 @@ export async function deleteAddendumFromCloud(addendumId: string): Promise<void>
 export async function syncVentilatorToCloud(vent: VentilatorParameters): Promise<void> {
   try {
     const ventRef = doc(firestore, 'ventilators', vent.id);
+    const creatorUid = auth.currentUser?.uid || (vent as any).createdBy || (vent as any).createdByUid;
     const payload = {
       ...vent,
+      createdBy: (vent as any).createdBy || auth.currentUser?.uid || creatorUid,
+      createdByUid: (vent as any).createdByUid || auth.currentUser?.uid || creatorUid,
+      userId: (vent as any).userId || auth.currentUser?.uid || creatorUid,
       serverUpdatedAt: serverTimestamp(),
     };
     await setDoc(ventRef, sanitizeForFirestore(payload), { merge: true });
@@ -2569,8 +2587,12 @@ export async function syncVentilatorToCloud(vent: VentilatorParameters): Promise
 
 export async function syncPumpToCloud(pump: InfusionPumpLine): Promise<void> {
   try {
+    const creatorUid = auth.currentUser?.uid || (pump as any).createdBy || (pump as any).createdByUid;
     const payload = {
       ...pump,
+      createdBy: (pump as any).createdBy || auth.currentUser?.uid || creatorUid,
+      createdByUid: (pump as any).createdByUid || auth.currentUser?.uid || creatorUid,
+      userId: (pump as any).userId || auth.currentUser?.uid || creatorUid,
       serverUpdatedAt: serverTimestamp(),
     };
     const pumpRef = doc(firestore, 'infusionPumps', pump.id);
@@ -2602,8 +2624,12 @@ export async function deleteVentilatorFromCloud(ventId: string): Promise<void> {
 
 export async function syncFluidBalanceToCloud(fluid: FluidBalance24H): Promise<void> {
   try {
+    const creatorUid = auth.currentUser?.uid || (fluid as any).createdBy || (fluid as any).createdByUid;
     const payload = {
       ...fluid,
+      createdBy: (fluid as any).createdBy || auth.currentUser?.uid || creatorUid,
+      createdByUid: (fluid as any).createdByUid || auth.currentUser?.uid || creatorUid,
+      userId: (fluid as any).userId || auth.currentUser?.uid || creatorUid,
       serverUpdatedAt: serverTimestamp(),
     };
     const fluidRef = doc(firestore, 'fluidBalances', fluid.id);
@@ -2626,8 +2652,12 @@ export async function deleteFluidBalanceFromCloud(fluidId: string): Promise<void
 
 export async function syncStatLabsToCloud(labs: StatLabPanel): Promise<void> {
   try {
+    const creatorUid = auth.currentUser?.uid || (labs as any).createdBy || (labs as any).createdByUid;
     const payload = {
       ...labs,
+      createdBy: (labs as any).createdBy || auth.currentUser?.uid || creatorUid,
+      createdByUid: (labs as any).createdByUid || auth.currentUser?.uid || creatorUid,
+      userId: (labs as any).userId || auth.currentUser?.uid || creatorUid,
       serverUpdatedAt: serverTimestamp(),
     };
     const labsRef = doc(firestore, 'statLabs', labs.id);
@@ -2647,8 +2677,12 @@ export async function deleteStatLabFromCloud(labId: string): Promise<void> {
 
 export async function syncPatientAntibioticToCloud(abx: PatientAntibiotic): Promise<void> {
   try {
+    const creatorUid = auth.currentUser?.uid || (abx as any).prescribedByStaffId || (abx as any).createdBy || (abx as any).createdByUid;
     const payload = {
       ...abx,
+      createdBy: (abx as any).createdBy || auth.currentUser?.uid || creatorUid,
+      createdByUid: (abx as any).createdByUid || auth.currentUser?.uid || creatorUid,
+      userId: (abx as any).userId || auth.currentUser?.uid || creatorUid,
       serverUpdatedAt: serverTimestamp(),
     };
     const abxRef = doc(firestore, 'patientAntibiotics', abx.id);
@@ -2669,9 +2703,14 @@ export async function deletePatientAntibioticFromCloud(abxId: string): Promise<v
 export async function syncLabResultToCloud(labItem: LabResultItem): Promise<void> {
   try {
     const tsNumber = labItem.timestamp ? new Date(labItem.timestamp).getTime() : Date.now();
+    const creatorUid = auth.currentUser?.uid || labItem.recordedByStaffId || labItem.createdBy || (labItem as any).createdByUid;
     const payload = sanitizeForFirestore({
       ...labItem,
       recordType: 'LAB',
+      createdBy: labItem.createdBy || auth.currentUser?.uid || creatorUid,
+      createdByUid: (labItem as any).createdByUid || auth.currentUser?.uid || creatorUid,
+      userId: (labItem as any).userId || auth.currentUser?.uid || creatorUid,
+      authorId: (labItem as any).authorId || auth.currentUser?.uid || labItem.recordedByStaffId,
       timestamp: labItem.timestamp || new Date().toISOString(),
       createdAt: (labItem as any).createdAt || tsNumber,
       updatedAt: Date.now(),
@@ -2700,9 +2739,14 @@ export async function deleteLabResultFromCloud(labId: string): Promise<void> {
 export async function syncInvestigationToCloud(invItem: InvestigationItem): Promise<void> {
   try {
     const tsNumber = invItem.timestamp ? new Date(invItem.timestamp).getTime() : Date.now();
+    const creatorUid = auth.currentUser?.uid || invItem.recordedByStaffId || invItem.createdBy || (invItem as any).createdByUid;
     const payload = sanitizeForFirestore({
       ...invItem,
       recordType: 'INVESTIGATION',
+      createdBy: invItem.createdBy || auth.currentUser?.uid || creatorUid,
+      createdByUid: (invItem as any).createdByUid || auth.currentUser?.uid || creatorUid,
+      userId: (invItem as any).userId || auth.currentUser?.uid || creatorUid,
+      authorId: (invItem as any).authorId || auth.currentUser?.uid || invItem.recordedByStaffId,
       timestamp: invItem.timestamp || new Date().toISOString(),
       createdAt: (invItem as any).createdAt || tsNumber,
       updatedAt: Date.now(),

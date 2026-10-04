@@ -586,5 +586,64 @@ console.log('--- RUNNING FINAL COMPREHENSIVE SECURITY & PERMISSIONS TEST SUITE -
   console.log('✓ X. Vitals view and create permission toggles strictly enforced passed');
 }
 
-console.log('ALL COMPREHENSIVE TESTS PASSED SUCCESSFULLY! (24/24 test suites verified)');
+// Test Y: Granular deleteOwn vs deleteAny across all medical record categories
+{
+  const ownUid = 'user-owner-123';
+  const otherUid = 'user-colleague-456';
+
+  const ownRecord = { id: 'rec-1', createdBy: ownUid };
+  const otherRecord = { id: 'rec-2', createdBy: otherUid };
+
+  const categories: Array<'vitals' | 'labs' | 'investigations' | 'clinicalNotes' | 'sbar'> = [
+    'vitals',
+    'labs',
+    'investigations',
+    'clinicalNotes',
+    'sbar',
+  ];
+
+  for (const cat of categories) {
+    const permKey = cat === 'sbar' ? 'sbar.deleteOwn' : `${cat}.deleteOwn`;
+    const userWithDeleteOwn: UserContextForPermission = {
+      uid: ownUid,
+      role: StaffRole.RESIDENT,
+      permissions: { [permKey]: true },
+    };
+
+    // 1. Can delete own record
+    assert.equal(
+      canDeleteRecord(userWithDeleteOwn, ownRecord, cat),
+      true,
+      `Y: ${cat}.deleteOwn CAN delete own record`
+    );
+
+    // 2. CANNOT delete other doctor's record
+    assert.equal(
+      canDeleteRecord(userWithDeleteOwn, otherRecord, cat),
+      false,
+      `Y: ${cat}.deleteOwn CANNOT delete other doctor's record`
+    );
+  }
+
+  // 3. User with medicalRecords.delete / medicalRecords.deleteAny can delete ANY record regardless of creator
+  const userWithUniversalDelete: UserContextForPermission = {
+    uid: 'admin-supervisor',
+    role: StaffRole.CONSULTANT,
+    permissions: { 'medicalRecords.delete': true },
+  };
+  const userWithDeleteAny: UserContextForPermission = {
+    uid: 'dept-head',
+    role: StaffRole.SPECIALIST,
+    permissions: { 'medicalRecords.deleteAny': true },
+  };
+
+  for (const cat of categories) {
+    assert.equal(canDeleteRecord(userWithUniversalDelete, otherRecord, cat), true, `Y: medicalRecords.delete CAN delete ${cat} of others`);
+    assert.equal(canDeleteRecord(userWithDeleteAny, otherRecord, cat), true, `Y: medicalRecords.deleteAny CAN delete ${cat} of others`);
+  }
+
+  console.log('✓ Y. Granular deleteOwn vs deleteAny across all medical categories passed');
+}
+
+console.log('ALL COMPREHENSIVE TESTS PASSED SUCCESSFULLY! (25/25 test suites verified)');
 
