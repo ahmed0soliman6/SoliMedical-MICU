@@ -284,10 +284,47 @@ export async function deleteChatMessage(messageId: string): Promise<void> {
 }
 
 /**
- * Deletes an entire direct chat conversation and its associated messages
+ * Deletes all messages in a chat conversation (including dept_general) and resets channel summary
+ */
+export async function clearChatConversationMessages(chatId: string): Promise<void> {
+  if (!chatId) return;
+  try {
+    const colRef = collection(firestore, MESSAGES_COLLECTION);
+    const q = query(colRef, where('chatId', '==', chatId));
+    const snapshot = await getDocs(q);
+    const deletePromises = snapshot.docs.map(d => deleteDoc(d.ref).catch(() => {}));
+    await Promise.all(deletePromises);
+  } catch (err) {
+    console.warn('Error deleting conversation messages:', err);
+  }
+
+  try {
+    const chatRef = doc(firestore, CHATS_COLLECTION, chatId);
+    const snap = await getDoc(chatRef);
+    if (snap.exists()) {
+      await updateDoc(chatRef, {
+        lastMessage: 'تم تفريغ محادثات القناة بنجاح.',
+        lastMessageAt: new Date().toISOString(),
+        unreadCounts: {},
+      }).catch(() => {});
+    }
+  } catch (err) {
+    console.warn('Error updating chat document after clearing messages:', err);
+  }
+}
+
+/**
+ * Deletes an entire direct chat conversation and its associated messages.
+ * For department channels (like dept_general), clears all messages without deleting the channel.
  */
 export async function deleteChatConversation(chatId: string): Promise<void> {
-  if (!chatId || chatId === 'dept_general') return;
+  if (!chatId) return;
+
+  if (chatId === 'dept_general' || DEFAULT_DEPARTMENTS.some(d => d.id === chatId)) {
+    await clearChatConversationMessages(chatId);
+    return;
+  }
+
   try {
     const colRef = collection(firestore, MESSAGES_COLLECTION);
     const q = query(colRef, where('chatId', '==', chatId));

@@ -5,7 +5,7 @@ import {
   Trash2,
   Loader2
 } from 'lucide-react';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, onSnapshot, doc, deleteDoc } from 'firebase/firestore';
 import { PatientDossier, BedNumber } from '../types/schema.ts';
 import { db } from '../db/icuSyncDb.ts';
 import { firestore } from '../services/firebase.ts';
@@ -121,14 +121,26 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
       }
 
       // If online data was fetched, update state with combined deduplicated records
-      if (patientMap.size > 0) {
+      if (activeSnap !== null || archiveSnap !== null) {
         const combined = Array.from(patientMap.values());
         setAllPatients(combined);
 
-        // Update local Dexie cache asynchronously
+        // Synchronize and reconcile local Dexie cache:
         try {
-          await db.patients.bulkPut(combined);
-        } catch {}
+          if (combined.length === 0) {
+            await db.patients.clear();
+          } else {
+            const validIds = new Set(combined.map(p => p.id));
+            const existingLocal = await db.patients.toArray();
+            const staleIds = existingLocal.filter(p => !validIds.has(p.id)).map(p => p.id);
+            if (staleIds.length > 0) {
+              await db.patients.bulkDelete(staleIds);
+            }
+            await db.patients.bulkPut(combined);
+          }
+        } catch (dexieSyncErr) {
+          console.warn('Dexie patients reconciliation notice:', dexieSyncErr);
+        }
       }
     } catch (cloudErr) {
       console.warn('Firestore direct fetch error in ArchiveSearchModal, relying on local cache:', cloudErr);
@@ -138,55 +150,97 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
   }, []);
 
   useEffect(() => {
-    if (isOpen) {
-      loadPatients();
-      if (initialSearchTerm) {
-        setSearchTerm(initialSearchTerm);
-      }
-      if (initialFilterType) {
-        setFilterType(initialFilterType);
-      }
+    if (!isOpen) return;
+
+    loadPatients();
+    if (initialSearchTerm) {
+      setSearchTerm(initialSearchTerm);
     }
+    if (initialFilterType) {
+      setFilterType(initialFilterType);
+    }
+
+    // 1. Subscribe to real-time changes in archivedPatients while modal is open
+    const unsubArchive = onSnapshot(collection(firestore, 'archivedPatients'), () => {
+      loadPatients();
+    }, (err) => {
+      console.warn('Real-time archivedPatients subscription notice:', err);
+    });
+
+    // 2. Subscribe to real-time changes in patients while modal is open
+    const unsubPatients = onSnapshot(collection(firestore, 'patients'), () => {
+      loadPatients();
+    }, (err) => {
+      console.warn('Real-time patients subscription notice:', err);
+    });
+
+    // 3. Listen to local broadcast sync events
+    const handleSyncEvent = () => {
+      loadPatients();
+    };
+    window.addEventListener('icu-data-updated', handleSyncEvent);
+    window.addEventListener('soli-cloud-purged', handleSyncEvent);
+
+    return () => {
+      unsubArchive();
+      unsubPatients();
+      window.removeEventListener('icu-data-updated', handleSyncEvent);
+      window.removeEventListener('soli-cloud-purged', handleSyncEvent);
+    };
   }, [isOpen, initialSearchTerm, initialFilterType, loadPatients]);
 
-  const handleDeleteMortalityPatient = async (patient: PatientDossier) => {
+  const handleDeleteArchivedPatient = async (patient: PatientDossier) => {
     if (!isAdmin) {
       alert(lang === 'ar' ? 'غير مصرح: الحذف متاح فقط لمدير النظام (ADMIN).' : 'Unauthorized: Deletion is available for ADMIN only.');
       return;
     }
 
+    const patientName = patient.fullNameAr || patient.fullNameEn || (patient as any).patientName || 'المريض';
     const confirmMsg = lang === 'ar'
-      ? `هل أنت متأكد من حذف سجل المتوفى للمريض "${patient.fullNameAr || patient.fullNameEn}" (#${patient.mrn}) نهائياً من قاعدة البيانات والمنظومة؟`
-      : `Are you sure you want to permanently delete the mortality record for "${patient.fullNameEn}" (#${patient.mrn}) from the database?`;
+      ? `هل أنت متأكد من حذف سجل المريض "${patientName}" (#${patient.mrn}) نهائياً من الأرشيف والسحابة وكافة السجلات المرتبطة به؟`
+      : `Are you sure you want to permanently delete the archived record for "${patientName}" (#${patient.mrn}) from the cloud database?`;
 
     if (!confirm(confirmMsg)) return;
 
     try {
       setDeletingPatientId(patient.id);
 
-      // Server-side permanent deletion
-      const res = await fetch('/api/admin/mortality/delete', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token || ''}`
-        },
-        body: JSON.stringify({ patientId: patient.id })
-      });
-
-      const resData = await res.json().catch(() => null);
-
-      if (!res.ok || (resData && !resData.success)) {
-        throw new Error(resData?.message || (lang === 'ar' ? 'فشلت عملية الحذف من السيرفر.' : 'Server deletion failed.'));
+      // 1. Attempt server-side permanent deletion
+      let serverDeleted = false;
+      try {
+        const res = await fetch('/api/admin/archive/delete-patient', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token || ''}`
+          },
+          body: JSON.stringify({ patientId: patient.id })
+        });
+        const resData = await res.json().catch(() => null);
+        if (res.ok && resData?.success) {
+          serverDeleted = true;
+        }
+      } catch (srvErr) {
+        console.warn('Server archive deletion attempt failed, trying fallback:', srvErr);
       }
 
-      // Local IndexedDB deletion
-      await db.patients.delete(patient.id);
-      await db.clinicalNotes.where('patientId').equals(patient.id).delete();
-      await db.vitals.where('patientId').equals(patient.id).delete();
-      await db.patientAntibiotics.where('patientId').equals(patient.id).delete();
+      // Fallback to mortality endpoint or direct Firestore deletion if needed
+      if (!serverDeleted) {
+        try {
+          await Promise.all([
+            deleteDoc(doc(firestore, 'archivedPatients', patient.id)).catch(() => {}),
+            deleteDoc(doc(firestore, 'patients', patient.id)).catch(() => {})
+          ]);
+        } catch {}
+      }
 
-      alert(lang === 'ar' ? 'تم حذف ملف حالة الوفاة وكافة سجلاته بنجاح.' : 'Mortality record deleted successfully.');
+      // 2. Local IndexedDB deletion
+      await db.patients.delete(patient.id);
+      await db.clinicalNotes.where('patientId').equals(patient.id).delete().catch(() => {});
+      await db.vitals.where('patientId').equals(patient.id).delete().catch(() => {});
+      await db.patientAntibiotics.where('patientId').equals(patient.id).delete().catch(() => {});
+
+      alert(lang === 'ar' ? 'تم حذف ملف المريض وكافة سجلاته نهائياً بنجاح.' : 'Patient record deleted successfully.');
       await loadPatients();
     } catch (err: any) {
       alert(err?.message || (lang === 'ar' ? 'حدث خطأ أثناء عملية الحذف.' : 'An error occurred during deletion.'));
@@ -471,12 +525,12 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
                       </button>
                     )}
 
-                    {isDeceased && isAdmin && (
+                    {isAdmin && !isActive && (
                       <button
-                        onClick={() => handleDeleteMortalityPatient(patient)}
+                        onClick={() => handleDeleteArchivedPatient(patient)}
                         disabled={deletingPatientId === patient.id}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-xs font-bold transition-all shadow-sm cursor-pointer disabled:opacity-50"
-                        title={lang === 'ar' ? 'حذف سجل الوفاة من قاعدة البيانات نهائياً (ADMIN)' : 'Delete mortality record permanently (ADMIN)'}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-500/40 text-xs font-bold transition-all shadow-sm cursor-pointer disabled:opacity-50"
+                        title={lang === 'ar' ? 'حذف هذا السجل نهائياً من الأرشيف والسحابة (خاص بمدير النظام ADMIN)' : 'Delete this record permanently from archive & cloud (ADMIN)'}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                         <span>{deletingPatientId === patient.id ? (lang === 'ar' ? 'جاري الحذف...' : 'Deleting...') : (lang === 'ar' ? 'حذف نهائي' : 'Delete Record')}</span>

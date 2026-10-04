@@ -1174,19 +1174,25 @@ export async function adminDeleteMortalityRecord(authHeader: string | undefined,
   try {
     const { db } = requireAdminServices();
     const patientRef = db.collection('patients').doc(patientId);
-    const snap = await patientRef.get();
-    if (!snap.exists) {
+    const archiveRef = db.collection('archivedPatients').doc(patientId);
+    const [patSnap, archSnap] = await Promise.all([patientRef.get(), archiveRef.get()]);
+
+    if (!patSnap.exists && !archSnap.exists) {
       return { success: false, message: 'سجل المريض غير موجود في قاعدة البيانات.' };
     }
 
-    const patientData = snap.data();
+    const patientData = (archSnap.exists ? archSnap.data() : patSnap.data()) || {};
     const isMortality = (patientData?.patientStatus === 'EXPIRED_MORTALITY') || 
-                        (patientData?.currentStatus === 'EXPIRED');
+                        (patientData?.currentStatus === 'EXPIRED') ||
+                        !!patientData?.mortalityRecord;
     if (!isMortality) {
       return { success: false, message: 'فشلت العملية. لا يمكن حذف هذا السجل لأنه ليس حالة وفاة مؤكدة.' };
     }
 
-    await patientRef.delete();
+    await Promise.all([
+      patientRef.delete().catch(() => {}),
+      archiveRef.delete().catch(() => {}),
+    ]);
 
     const collectionsToClean = [
       'medical_records',
@@ -1241,6 +1247,237 @@ export async function adminDeleteMortalityRecord(authHeader: string | undefined,
     };
   } catch (err: any) {
     return { success: false, message: err?.message || 'فشلت عملية حذف سجل المريض المتوفى.' };
+  }
+}
+
+/**
+ * Permanently deletes any patient record from the archive (archivedPatients & patients)
+ * Authorized for System Administrators only.
+ */
+export async function adminDeleteArchivedPatient(authHeader: string | undefined, patientId: string): Promise<AdminOpResult> {
+  const authCheck = await verifyAdminCallerToken(authHeader);
+  if (!authCheck.isAdmin) {
+    return { success: false, message: authCheck.error || 'غير مصرح: حذف ملفات الأرشيف متاح حصرياً لمدير النظام (ADMIN).' };
+  }
+
+  if (!patientId) {
+    return { success: false, message: 'معرف المريض مطلوب.' };
+  }
+
+  try {
+    const { db } = requireAdminServices();
+    const patientRef = db.collection('patients').doc(patientId);
+    const archiveRef = db.collection('archivedPatients').doc(patientId);
+    const [patSnap, archSnap] = await Promise.all([patientRef.get(), archiveRef.get()]);
+
+    if (!patSnap.exists && !archSnap.exists) {
+      return { success: false, message: 'سجل المريض غير موجود في الأرشيف أو قاعدة البيانات.' };
+    }
+
+    const patientData = (archSnap.exists ? archSnap.data() : patSnap.data()) || {};
+
+    await Promise.all([
+      patientRef.delete().catch(() => {}),
+      archiveRef.delete().catch(() => {}),
+    ]);
+
+    const collectionsToClean = [
+      'medical_records',
+      'clinicalNotes',
+      'vitals',
+      'ventilators',
+      'infusionPumps',
+      'infusion_pumps',
+      'fluidBalances',
+      'fluidBalances24H',
+      'statLabs',
+      'investigations',
+      'transfusions',
+      'patientAntibiotics',
+      'sbarHandovers',
+      'handovers',
+      'addendums',
+      'dispositionRecords',
+      'notifications',
+      'episodes',
+      'transfers'
+    ];
+
+    for (const colName of collectionsToClean) {
+      try {
+        const subSnap = await db.collection(colName).where('patientId', '==', patientId).get();
+        if (!subSnap.empty) {
+          const batch = db.batch();
+          subSnap.forEach((docSnap) => batch.delete(docSnap.ref));
+          await batch.commit();
+        }
+      } catch (colErr) {
+        console.warn(`Error cleaning collection ${colName} for archived patient ${patientId}:`, colErr);
+      }
+    }
+
+    const auditId = `audit_delete_archive_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    await db.collection('auditLogs').doc(auditId).set({
+      id: auditId,
+      timestamp: new Date().toISOString(),
+      eventType: 'ARCHIVED_PATIENT_DELETED_PERMANENTLY',
+      performedByUid: authCheck.callerUid,
+      targetPatientId: patientId,
+      patientMrn: patientData?.mrn,
+      description: `Archived patient dossier for ${patientData?.fullNameEn || patientData?.fullNameAr || patientId} (MRN: ${patientData?.mrn}) permanently deleted by ADMIN.`,
+      isImmutable: true,
+    });
+
+    return {
+      success: true,
+      message: 'تم حذف ملف المريض وكافة سجلاته نهائياً من الأرشيف بنجاح.',
+    };
+  } catch (err: any) {
+    return { success: false, message: err?.message || 'فشلت عملية حذف ملف المريض من الأرشيف.' };
+  }
+}
+
+/**
+ * Complete Server-Side SSOT Cloud Purge:
+ * Permanently deletes all active & archived patients, clinical records, telemetry, beds, and chat messages.
+ * Re-seeds clean vacant beds, initializes clean general chat channel, and broadcasts lastCloudResetAt.
+ * Strictly restricted to System Administrators.
+ */
+export async function adminCloudPurgeSweep(authHeader?: string): Promise<{ success: boolean; message: string; details?: any }> {
+  const authCheck = await verifyAdminCallerToken(authHeader);
+  if (!authCheck.isAdmin) {
+    return { success: false, message: authCheck.error || 'غير مصرح: إجراء تصفير وحذف السحابة متاح حصرياً لمدير النظام (ADMIN).' };
+  }
+
+  try {
+    const { db } = requireAdminServices();
+    const nowIso = new Date().toISOString();
+
+    const collectionsToClear = [
+      'patients',
+      'archivedPatients',
+      'archived_patients',
+      'archive',
+      'beds',
+      'dispositionRecords',
+      'episodes',
+      'transfers',
+      'operations',
+      'vitals',
+      'clinicalNotes',
+      'sbarHandovers',
+      'handovers',
+      'ventilators',
+      'infusionPumps',
+      'infusion_pumps',
+      'fluidBalances',
+      'fluidBalances24H',
+      'fluid_balances',
+      'statLabs',
+      'patientAntibiotics',
+      'medical_records',
+      'investigations',
+      'labResults',
+      'transfusions',
+      'addendums',
+      'notifications',
+      'chats',
+      'chatMessages',
+      'chat_messages',
+      'messages',
+      'hospital_chat'
+    ];
+
+    let totalDeletedDocs = 0;
+
+    for (const colName of collectionsToClear) {
+      try {
+        const snap = await db.collection(colName).get();
+        if (!snap.empty) {
+          const batch = db.batch();
+          snap.forEach((docSnap) => {
+            batch.delete(docSnap.ref);
+            totalDeletedDocs++;
+          });
+          await batch.commit();
+        }
+      } catch (err) {
+        console.warn(`[Cloud Purge] Error clearing ${colName}:`, err);
+      }
+    }
+
+    // Re-seed 6 clean vacant beds
+    const bedIds = ['01', '02', '03', '04', '05', '06'];
+    const bedBatch = db.batch();
+    for (const bId of bedIds) {
+      const bRef = db.collection('beds').doc(bId);
+      bedBatch.set(bRef, {
+        id: bId,
+        bedNumber: bId,
+        unitId: 'MICU-MAIN',
+        status: bId === '06' ? 'MAINTENANCE' : 'VACANT',
+        isOccupied: false,
+        currentPatientId: null,
+        activePatientId: null,
+        isolationType: 'STANDARD',
+        updatedAt: nowIso,
+      });
+    }
+    await bedBatch.commit();
+
+    // Re-initialize clean dept_general chat
+    await db.collection('chats').doc('dept_general').set({
+      id: 'dept_general',
+      type: 'DEPARTMENT',
+      name: 'MICU Central Coordination',
+      participantUids: [],
+      department: 'ALL',
+      lastMessage: 'Channel initialized for secure clinical communications.',
+      lastMessageAt: nowIso,
+      lastMessageSenderName: 'System',
+      unreadCounts: {},
+      createdAt: nowIso,
+      createdByUid: authCheck.callerUid || 'system',
+    });
+
+    // Broadcast lastCloudResetAt in settings/system_config and system_settings/system_config
+    const resetMeta = {
+      lastCloudResetAt: nowIso,
+      lastCloudResetBy: authCheck.callerUid || 'admin',
+      lastUpdated: nowIso,
+    };
+    await db.collection('settings').doc('system_config').set(resetMeta, { merge: true }).catch(() => {});
+    await db.collection('system_settings').doc('system_config').set(resetMeta, { merge: true }).catch(() => {});
+
+    // Record audit log
+    const auditId = `audit_cloud_purge_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    await db.collection('auditLogs').doc(auditId).set({
+      id: auditId,
+      timestamp: nowIso,
+      eventType: 'SYSTEM_CLOUD_PURGE_AND_RESET',
+      performedBy: {
+        uid: authCheck.callerUid || 'admin',
+        email: 'admin',
+        role: 'ADMIN'
+      },
+      description: `Complete system cloud purge executed by admin. Cleared ${totalDeletedDocs} documents across collections. Reset beds and clinical chat.`,
+      targetPatientMrn: 'SYSTEM_ALL'
+    }).catch(() => {});
+
+    return {
+      success: true,
+      message: 'تم تصفير وحذف كافة السجلات الطبية والأرشيف والدردشة سحابياً وإعادة تشغيل المنظومة بنجاح.',
+      details: {
+        totalDeletedDocs,
+        lastCloudResetAt: nowIso
+      }
+    };
+  } catch (err: any) {
+    console.error('[Cloud Purge] Fatal error:', err);
+    return {
+      success: false,
+      message: err?.message || 'حدث خطأ أثناء تنفيذ الحذف السحابي الشامل.'
+    };
   }
 }
 

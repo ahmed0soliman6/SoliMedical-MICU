@@ -576,6 +576,8 @@ import {
   adminArchivePatient,
   adminArchiveSweep,
   adminDeleteMortalityRecord,
+  adminDeleteArchivedPatient,
+  adminCloudPurgeSweep,
   adminMortalityAutoPurgeSweep,
   runAdminDiagnosticCheck,
   adminBroadcastFcmPush,
@@ -823,6 +825,32 @@ app.post('/api/admin/mortality/delete', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Missing patientId in request body.' });
     }
     const result = await adminDeleteMortalityRecord(authHeader, patientId);
+    return res.status(result.success ? 200 : 403).json(result);
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err?.message || 'Internal server error.' });
+  }
+});
+
+// Delete Individual Archived Patient Endpoint (Server-Side SSOT)
+app.post('/api/admin/archive/delete-patient', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const { patientId } = req.body;
+    if (!patientId) {
+      return res.status(400).json({ success: false, message: 'Missing patientId in request body.' });
+    }
+    const result = await adminDeleteArchivedPatient(authHeader, patientId);
+    return res.status(result.success ? 200 : 403).json(result);
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err?.message || 'Internal server error.' });
+  }
+});
+
+// Complete Cloud Purge & Reset Endpoint (Server-Side SSOT)
+app.post('/api/admin/cloud-purge', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const result = await adminCloudPurgeSweep(authHeader);
     return res.status(result.success ? 200 : 403).json(result);
   } catch (err: any) {
     return res.status(500).json({ success: false, message: err?.message || 'Internal server error.' });

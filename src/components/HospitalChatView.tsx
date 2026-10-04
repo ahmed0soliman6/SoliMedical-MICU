@@ -140,21 +140,26 @@ export const HospitalChatView: React.FC = () => {
   };
 
   const handleDeleteConversation = async (chatId: string) => {
-    if (!chatId || chatId === 'dept_general') return;
-    const confirmMsg = lang === 'ar'
-      ? 'هل أنت متأكد من حذف هذه المحادثة بالكامل؟ لا يمكن التراجع عن هذا الإجراء.'
-      : 'Are you sure you want to delete this entire conversation? This action cannot be undone.';
+    if (!chatId) return;
+    const isGeneral = chatId === 'dept_general';
+    const confirmMsg = isGeneral
+      ? (lang === 'ar' ? 'هل أنت متأكد من تفريغ كافة رسائل القناة العامة؟ سيتم حذف جميع الرسائل السريرية بالقناة نهائياً.' : 'Are you sure you want to clear all messages in the general channel? This will permanently delete all messages.')
+      : (lang === 'ar' ? 'هل أنت متأكد من حذف هذه المحادثة بالكامل؟ لا يمكن التراجع عن هذا الإجراء.' : 'Are you sure you want to delete this entire conversation? This action cannot be undone.');
     if (!window.confirm(confirmMsg)) return;
 
     try {
       await deleteChatConversation(chatId);
-      setChats(prev => prev.filter(c => c.id !== chatId));
-      if (activeChatId === chatId) {
-        setActiveChatId('dept_general');
+      if (!isGeneral) {
+        setChats(prev => prev.filter(c => c.id !== chatId));
+        if (activeChatId === chatId) {
+          setActiveChatId('dept_general');
+        }
+      } else {
+        setMessages([]);
       }
     } catch (err: any) {
-      console.warn('Failed to delete conversation:', err);
-      window.alert(lang === 'ar' ? 'تعذر حذف المحادثة، تحقق من الصلاحيات' : 'Failed to delete conversation.');
+      console.warn('Failed to delete/clear conversation:', err);
+      window.alert(lang === 'ar' ? 'تعذر مسح رسائل المحادثة، تحقق من الصلاحيات' : 'Failed to clear conversation.');
     }
   };
 
@@ -470,6 +475,19 @@ export const HospitalChatView: React.FC = () => {
                   <span className="hidden sm:inline">{lang === 'ar' ? 'حذف المحادثة' : 'Delete Chat'}</span>
                 </button>
               </>
+            )}
+
+            {/* If in General department chat, allow Admin to clear channel messages */}
+            {activeChat?.id === 'dept_general' && (currentUser?.role === 'ADMIN' || currentUser?.isSuperAdmin === true || (currentUser?.role as any) === 'admin') && (
+              <button
+                type="button"
+                onClick={() => handleDeleteConversation('dept_general')}
+                className="px-2.5 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/30 flex items-center gap-1.5 text-xs font-bold transition-colors cursor-pointer"
+                title={lang === 'ar' ? 'تفريغ رسائل القناة العامة بالكامل (خاص بمدير النظام)' : 'Clear General Channel Messages (Admin)'}
+              >
+                <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                <span className="hidden sm:inline">{lang === 'ar' ? 'تفريغ الرسائل' : 'Clear Messages'}</span>
+              </button>
             )}
 
             {/* Three-line menu button to open staff/users list */}

@@ -1196,16 +1196,25 @@ export function subscribeToRealtimeFirestore(
         }
 
         if (change.type === 'removed') {
-          // Do NOT invent DISCHARGED / EXPIRED / TRANSFERRED status.
-          // Simply remove the bed association locally.
           const removedPatientId = change.doc.id;
-          const localPatient = await db.patients.get(removedPatientId);
-
-          if (localPatient) {
-            await db.patients.put({
-              ...localPatient,
-              currentBedId: null,
-            });
+          try {
+            const archCheck = await getDoc(doc(firestore, 'archivedPatients', removedPatientId)).catch(() => null);
+            if (!archCheck || !archCheck.exists()) {
+              // Completely deleted from cloud: purge from local Dexie!
+              await db.patients.delete(removedPatientId);
+            } else {
+              // Patient was archived/discharged: preserve in local cache with bed unassigned
+              const localPatient = await db.patients.get(removedPatientId);
+              if (localPatient) {
+                await db.patients.put({
+                  ...localPatient,
+                  currentBedId: null,
+                  archiveStatus: 'ARCHIVED',
+                });
+              }
+            }
+          } catch {
+            await db.patients.delete(removedPatientId).catch(() => {});
           }
         }
       }
@@ -2761,6 +2770,57 @@ export async function deleteInvestigationFromCloud(invId: string): Promise<void>
 }
 
 /**
+ * Reconciles multi-device cloud reset signal.
+ * When an admin performs a cloud purge on any device, all connected devices
+ * and browser tabs automatically wipe local Dexie IndexedDB and refresh cleanly.
+ */
+export async function reconcileCloudReset(data: any): Promise<void> {
+  const resetAt = data?.lastCloudResetAt;
+  if (!resetAt || typeof window === 'undefined') return;
+
+  const localResetAt = localStorage.getItem('soli_last_cloud_reset_at');
+  if (!localResetAt || new Date(resetAt).getTime() > new Date(localResetAt).getTime()) {
+    console.log('[System] Cloud Reset detected from Firestore:', resetAt, 'Previous local:', localResetAt);
+    localStorage.setItem('soli_last_cloud_reset_at', resetAt);
+    try {
+      await Promise.all([
+        db.beds.clear(),
+        db.patients.clear(),
+        db.vitals.clear(),
+        db.ventilators.clear(),
+        db.infusionPumps.clear(),
+        db.fluidBalances.clear(),
+        db.statLabs.clear(),
+        db.transfusions.clear(),
+        db.sbarHandovers.clear(),
+        db.clinicalNotes.clear(),
+        db.addendums.clear(),
+        db.auditLogs.clear(),
+        db.labResults.clear(),
+        db.investigations.clear(),
+        db.patientAntibiotics.clear(),
+      ]);
+
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && (k.startsWith('soli_chat_read_') || k.startsWith('soli_chat_') || k.startsWith('soli_archive_'))) {
+          keysToRemove.push(k);
+        }
+      }
+      keysToRemove.forEach(k => localStorage.removeItem(k));
+    } catch (e) {
+      console.warn('[System] Error wiping local Dexie tables on cloud reset broadcast:', e);
+    }
+
+    try {
+      window.dispatchEvent(new Event('icu-data-updated'));
+      window.dispatchEvent(new Event('soli-cloud-purged'));
+    } catch {}
+  }
+}
+
+/**
  * Single-document Real-Time Listener for unified System Settings
  * Quota cost: 1 read upon initial connection, 0 reads unless an admin updates settings.
  */
@@ -2770,7 +2830,9 @@ export function subscribeToSystemSettings(onSettingsChange: (settings: SystemSet
   
   const primaryUnsub = onSnapshot(docRef, (docSnap) => {
     if (docSnap.exists()) {
-      onSettingsChange(docSnap.data() as SystemSettings);
+      const data = docSnap.data();
+      reconcileCloudReset(data);
+      onSettingsChange(data as SystemSettings);
     }
   }, (err) => {
     handleFirestoreError(err, OperationType.GET, 'settings/system_config');
@@ -2779,7 +2841,9 @@ export function subscribeToSystemSettings(onSettingsChange: (settings: SystemSet
       const fallbackRef = doc(firestore, 'system_settings', 'system_config');
       fallbackUnsub = onSnapshot(fallbackRef, (fbSnap) => {
         if (fbSnap.exists()) {
-          onSettingsChange(fbSnap.data() as SystemSettings);
+          const data = fbSnap.data();
+          reconcileCloudReset(data);
+          onSettingsChange(data as SystemSettings);
         }
       }, (fbErr) => {
         handleFirestoreError(fbErr, OperationType.GET, 'system_settings/system_config');
@@ -2949,7 +3013,29 @@ export async function clearLocalBrowserDataAndSyncFromCloud(): Promise<{ success
  */
 export async function clearAllCloudAndLocalDataAndReset(): Promise<{ success: boolean; message: string }> {
   try {
-    // 1. Clear local IndexedDB tables
+    const nowIso = new Date().toISOString();
+
+    // 1. Invoke Server-Side SSOT Cloud Purge via Firebase Admin SDK if token is available
+    const userToken = auth.currentUser ? await auth.currentUser.getIdToken().catch(() => null) : null;
+    if (userToken) {
+      try {
+        const resp = await fetch('/api/admin/cloud-purge', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${userToken}`
+          }
+        });
+        const json = await resp.json().catch(() => null);
+        if (json?.success) {
+          console.log('[System] Server-side cloud purge completed successfully:', json.details);
+        }
+      } catch (srvErr) {
+        console.warn('[System] Server cloud purge endpoint attempt failed, executing client fallback:', srvErr);
+      }
+    }
+
+    // 2. Clear local IndexedDB tables
     await Promise.all([
       db.beds.clear(),
       db.patients.clear(),
@@ -2968,7 +3054,7 @@ export async function clearAllCloudAndLocalDataAndReset(): Promise<{ success: bo
       db.patientAntibiotics.clear(),
     ]);
 
-    // 2. Clear Firestore Cloud Collections completely (including patients archive & hospital chat)
+    // 3. Clear Firestore Cloud Collections directly from client SDK as redundancy
     const collectionsToClear = [
       'beds',
       'patients',
@@ -2999,7 +3085,6 @@ export async function clearAllCloudAndLocalDataAndReset(): Promise<{ success: bo
       'labResults',
       'transfusions',
       'addendums',
-      'auditLogs',
       'transfers',
       'operations',
       'notifications'
@@ -3015,7 +3100,7 @@ export async function clearAllCloudAndLocalDataAndReset(): Promise<{ success: bo
       }
     }
 
-    // Re-initialize clean default general department chat
+    // 4. Re-initialize clean default general department chat
     try {
       await setDoc(doc(firestore, 'chats', 'dept_general'), {
         id: 'dept_general',
@@ -3024,19 +3109,33 @@ export async function clearAllCloudAndLocalDataAndReset(): Promise<{ success: bo
         participantUids: [],
         department: 'ALL',
         lastMessage: 'Channel initialized for secure clinical communications.',
-        lastMessageAt: new Date().toISOString(),
+        lastMessageAt: nowIso,
         lastMessageSenderName: 'System',
         unreadCounts: {},
-        createdAt: new Date().toISOString(),
+        createdAt: nowIso,
         createdByUid: 'system',
       });
     } catch (chatInitErr) {
       console.warn('Notice re-initializing general department chat:', chatInitErr);
     }
 
-    // Clear local chat/archive cache keys in browser localStorage
+    // 5. Broadcast Cloud Reset Timestamp to all connected accounts and devices
+    try {
+      const resetMeta = {
+        lastCloudResetAt: nowIso,
+        lastCloudResetBy: auth.currentUser?.uid || 'admin',
+        lastUpdated: nowIso,
+      };
+      await setDoc(doc(firestore, 'settings', 'system_config'), resetMeta, { merge: true }).catch(() => {});
+      await setDoc(doc(firestore, 'system_settings', 'system_config'), resetMeta, { merge: true }).catch(() => {});
+    } catch (broadcastErr) {
+      console.warn('Notice broadcasting cloud reset timestamp:', broadcastErr);
+    }
+
+    // 6. Clear local chat/archive cache keys in browser localStorage
     if (typeof window !== 'undefined') {
       try {
+        localStorage.setItem('soli_last_cloud_reset_at', nowIso);
         const keysToRemove: string[] = [];
         for (let i = 0; i < localStorage.length; i++) {
           const key = localStorage.key(i);
