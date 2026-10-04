@@ -54,6 +54,8 @@ export interface PatientCandidateMatch {
   gender?: string;
   age?: number;
   bloodType?: string;
+  status?: string;
+  primaryDiagnosis?: string;
   lastAdmissionDate?: string | number;
   lastDiagnosis?: string;
   allergies?: string[];
@@ -62,7 +64,8 @@ export interface PatientCandidateMatch {
 }
 
 /**
- * Searches for existing registered patients by MRN or (Normalized Name + Last 4 digits of National ID).
+ * Searches for existing registered patients by MRN or (Normalized Name + Last 4 digits of National ID) or Normalized Name.
+ * Caps cloud queries to strictly 2 targeted queries with limit(5) on patients and archivedPatients.
  * Never performs destructive or automatic merges; returns candidates for clinician confirmation.
  */
 export async function searchExistingPatients(
@@ -74,8 +77,15 @@ export async function searchExistingPatients(
   const cleanMrn = inputMrn ? toEnglishDigits(inputMrn).trim() : '';
   const last4 = extractLast4(inputNationalId);
   const normalizedName = normalizeArabicName(inputName);
+  const nameParts = normalizedName.split(/\s+/).filter((p) => p.length >= 2);
 
-  const queryAndAdd = async (collName: string, qField: string, qValue: any, matchType: 'MRN_EXACT' | 'NAME_AND_NATIONAL_ID_EXACT', compoundCheck?: { field: string; value: any }) => {
+  const queryAndAdd = async (
+    collName: string, 
+    qField: string, 
+    qValue: any, 
+    matchType: 'MRN_EXACT' | 'NAME_AND_NATIONAL_ID_EXACT' | 'NAME_PARTIAL', 
+    compoundCheck?: { field: string; value: any }
+  ) => {
     try {
       let q;
       if (compoundCheck) {
@@ -99,12 +109,16 @@ export async function searchExistingPatients(
         if (!matches.some((m) => m.patientId === pId)) {
           matches.push({
             patientId: pId,
-            mrn: data.mrn,
-            fullNameAr: data.fullNameAr || data.fullName,
-            fullNameEn: data.fullNameEn,
-            nationalIdLast4: data.nationalIdLast4 || '',
+            mrn: data.mrn || '',
+            fullNameAr: data.fullNameAr || data.fullName || '',
+            fullNameEn: data.fullNameEn || '',
+            nationalIdLast4: data.nationalIdLast4 || extractLast4(data.nationalId) || '',
             gender: data.gender,
+            age: data.age,
             bloodType: data.bloodGroup || data.bloodType,
+            status: data.patientStatus || data.status || (collName === 'archivedPatients' ? 'ARCHIVED' : 'ACTIVE_ICU'),
+            primaryDiagnosis: data.primaryDiagnosisAr || data.primaryDiagnosisEn || data.lastDiagnosis || '',
+            lastAdmissionDate: data.admissionDate || data.lastAdmissionDate,
             allergies: data.allergiesSummary || (data.allergies && Array.isArray(data.allergies) ? data.allergies.map((a: any) => typeof a === 'string' ? a : a.allergen) : []),
             chronicDiseases: data.chronicConditionsSummary || (data.chronicDiseases && (typeof data.chronicDiseases === 'string' ? [data.chronicDiseases] : data.chronicDiseases)) || [],
             matchType,
@@ -116,62 +130,72 @@ export async function searchExistingPatients(
     }
   };
 
-  // 1. Exact MRN Search (Highest Priority)
+  // 1. Exact MRN Search (Highest Priority) - strictly 2 queries max limit(5)
   if (cleanMrn) {
     await queryAndAdd(COLLECTIONS.PATIENTS, 'mrn', cleanMrn, 'MRN_EXACT');
     await queryAndAdd('archivedPatients', 'mrn', cleanMrn, 'MRN_EXACT');
   }
 
-  // 2. Strict Compound Match (Normalized Full Name + Last 4 digits ID)
-  if (normalizedName && last4 && last4.length === 4) {
+  // 2. Strict Compound Match (Normalized Full Name + Last 4 digits ID) - strictly 2 queries max limit(5)
+  if (matches.length === 0 && normalizedName && last4 && last4.length === 4) {
     await queryAndAdd(COLLECTIONS.PATIENTS, 'normalizedFullName', normalizedName, 'NAME_AND_NATIONAL_ID_EXACT', { field: 'nationalIdLast4', value: last4 });
     await queryAndAdd('archivedPatients', 'normalizedFullName', normalizedName, 'NAME_AND_NATIONAL_ID_EXACT', { field: 'nationalIdLast4', value: last4 });
   }
 
-  // 3. Fallback search on local Dexie cache if online search returned no hits or was offline
-  if (matches.length === 0) {
-    try {
-      const localPatients = await db.patients.toArray();
-      for (const p of localPatients) {
-        const pNorm = normalizeArabicName(p.fullNameAr || p.fullNameEn);
-        const pLast4 = extractLast4(p.nationalId);
-        const pMrn = toEnglishDigits(p.mrn).trim();
+  // 3. Name-based Search (when at least 2 name parts or length >= 5) - strictly 2 queries max limit(5)
+  if (matches.length === 0 && (nameParts.length >= 2 || normalizedName.length >= 5)) {
+    await queryAndAdd(COLLECTIONS.PATIENTS, 'normalizedFullName', normalizedName, 'NAME_PARTIAL');
+    await queryAndAdd('archivedPatients', 'normalizedFullName', normalizedName, 'NAME_PARTIAL');
+  }
 
-        if (cleanMrn && pMrn === cleanMrn) {
-          matches.push({
-            patientId: p.id,
-            mrn: p.mrn,
-            fullNameAr: p.fullNameAr || p.fullNameEn,
-            fullNameEn: p.fullNameEn,
-            nationalIdLast4: pLast4,
-            gender: p.gender,
-            age: p.age,
-            bloodType: p.bloodType,
-            lastAdmissionDate: p.admissionDate,
-            lastDiagnosis: p.primaryDiagnosisAr || p.primaryDiagnosisEn,
-            allergies: p.allergies?.map((a) => a.allergen),
-            matchType: 'MRN_EXACT',
-          });
-        } else if (normalizedName && last4 && pNorm === normalizedName && pLast4 === last4) {
-          matches.push({
-            patientId: p.id,
-            mrn: p.mrn,
-            fullNameAr: p.fullNameAr || p.fullNameEn,
-            fullNameEn: p.fullNameEn,
-            nationalIdLast4: pLast4,
-            gender: p.gender,
-            age: p.age,
-            bloodType: p.bloodType,
-            lastAdmissionDate: p.admissionDate,
-            lastDiagnosis: p.primaryDiagnosisAr || p.primaryDiagnosisEn,
-            allergies: p.allergies?.map((a) => a.allergen),
-            matchType: 'NAME_AND_NATIONAL_ID_EXACT',
-          });
-        }
+  // 4. Fallback & complement search on local Dexie cache (Zero cloud quota cost)
+  try {
+    const localPatients = await db.patients.toArray();
+    for (const p of localPatients) {
+      const pId = p.id;
+      if (matches.some((m) => m.patientId === pId)) continue;
+      const pNorm = normalizeArabicName(p.fullNameAr || p.fullNameEn);
+      const pLast4 = extractLast4(p.nationalId) || (p as any).nationalIdLast4 || '';
+      const pMrn = toEnglishDigits(p.mrn).trim();
+
+      let isMatch = false;
+      let mType: 'MRN_EXACT' | 'NAME_AND_NATIONAL_ID_EXACT' | 'NAME_PARTIAL' = 'NAME_PARTIAL';
+
+      if (cleanMrn && pMrn && pMrn === cleanMrn) {
+        isMatch = true;
+        mType = 'MRN_EXACT';
+      } else if (normalizedName && last4 && pNorm === normalizedName && pLast4 === last4) {
+        isMatch = true;
+        mType = 'NAME_AND_NATIONAL_ID_EXACT';
+      } else if (normalizedName && pNorm && pNorm === normalizedName) {
+        isMatch = true;
+        mType = 'NAME_PARTIAL';
+      } else if (nameParts.length >= 2 && pNorm && (pNorm.includes(normalizedName) || normalizedName.includes(pNorm))) {
+        isMatch = true;
+        mType = 'NAME_PARTIAL';
       }
-    } catch (err) {
-      console.warn('Local Dexie candidate search warning:', err);
+
+      if (isMatch) {
+        matches.push({
+          patientId: p.id,
+          mrn: p.mrn || '',
+          fullNameAr: p.fullNameAr || p.fullNameEn || '',
+          fullNameEn: p.fullNameEn,
+          nationalIdLast4: pLast4,
+          gender: p.gender,
+          age: p.age,
+          bloodType: p.bloodType,
+          status: p.patientStatus || (p as any).status || (p.archiveStatus === 'ARCHIVED' ? 'ARCHIVED' : 'ACTIVE_ICU'),
+          primaryDiagnosis: p.primaryDiagnosisAr || p.primaryDiagnosisEn,
+          lastAdmissionDate: p.admissionDate,
+          lastDiagnosis: p.primaryDiagnosisAr || p.primaryDiagnosisEn,
+          allergies: p.allergies?.map((a) => typeof a === 'string' ? a : a.allergen),
+          matchType: mType,
+        });
+      }
     }
+  } catch (err) {
+    console.warn('Local Dexie candidate search warning:', err);
   }
 
   return matches;

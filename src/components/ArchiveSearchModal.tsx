@@ -5,7 +5,7 @@ import {
   Trash2,
   Loader2
 } from 'lucide-react';
-import { collection, getDocs, onSnapshot, doc, deleteDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, deleteDoc } from 'firebase/firestore';
 import { PatientDossier, BedNumber } from '../types/schema.ts';
 import { db } from '../db/icuSyncDb.ts';
 import { firestore } from '../services/firebase.ts';
@@ -160,21 +160,7 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
       setFilterType(initialFilterType);
     }
 
-    // 1. Subscribe to real-time changes in archivedPatients while modal is open
-    const unsubArchive = onSnapshot(collection(firestore, 'archivedPatients'), () => {
-      loadPatients();
-    }, (err) => {
-      console.warn('Real-time archivedPatients subscription notice:', err);
-    });
-
-    // 2. Subscribe to real-time changes in patients while modal is open
-    const unsubPatients = onSnapshot(collection(firestore, 'patients'), () => {
-      loadPatients();
-    }, (err) => {
-      console.warn('Real-time patients subscription notice:', err);
-    });
-
-    // 3. Listen to local broadcast sync events
+    // Listen to local broadcast sync events (zero cloud quota cost)
     const handleSyncEvent = () => {
       loadPatients();
     };
@@ -182,8 +168,6 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
     window.addEventListener('soli-cloud-purged', handleSyncEvent);
 
     return () => {
-      unsubArchive();
-      unsubPatients();
       window.removeEventListener('icu-data-updated', handleSyncEvent);
       window.removeEventListener('soli-cloud-purged', handleSyncEvent);
     };

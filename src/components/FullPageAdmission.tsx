@@ -14,6 +14,7 @@ import {
 } from '../types/schema.ts';
 import { admitPatient, calculateIdealBodyWeight, toggleBedOperationalStatus } from '../services/dataModel.ts';
 import { searchExistingPatients, PatientCandidateMatch } from '../services/operations.ts';
+import { normalizeArabicName, extractLast4 } from '../services/patientSearchUtils.ts';
 import { useTranslation } from '../services/i18n.ts';
 import { db, ensureBedPatientSync } from '../db/icuSyncDb.ts';
 import { toEnglishDigits, parseEnglishFloat, parseEnglishInt } from '../services/numberUtils.ts';
@@ -178,8 +179,10 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
     const cleanNationalId = nationalId.trim();
     const cleanMrn = mrn.trim();
     const cleanName = fullNameAr.trim();
+    const nameParts = cleanName.split(/\s+/).filter(part => part.length >= 2);
 
-    if (!cleanNationalId && !cleanMrn && cleanName.length < 3) {
+    // Only search if user entered clean MRN, National ID, or at least 2 name parts (e.g. First + Father name)
+    if (!cleanNationalId && !cleanMrn && nameParts.length < 2) {
       setCandidateMatches([]);
       return;
     }
@@ -194,7 +197,7 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
       } finally {
         setIsSearchingCandidates(false);
       }
-    }, 350);
+    }, 450);
 
     return () => clearTimeout(timer);
   }, [nationalId, mrn, fullNameAr, initialPatient, selectedExistingPatient]);
@@ -206,6 +209,7 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
     if (candidate.mrn) setMrn(candidate.mrn);
     if (candidate.gender) setGender(candidate.gender as Gender);
     if (candidate.bloodType) setBloodType(candidate.bloodType);
+    if (candidate.age) setAge(String(candidate.age));
     if (candidate.allergies && candidate.allergies.length > 0) {
       setAllergiesInput(candidate.allergies.join(', '));
     }
@@ -347,7 +351,9 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
           },
           fullNameAr: fullNameAr.trim(),
           fullNameEn: fullNameAr.trim(),
+          normalizedFullName: normalizeArabicName(fullNameAr.trim()),
           nationalId: cleanNatId,
+          nationalIdLast4: extractLast4(cleanNatId) || initialPatient.nationalIdLast4,
           mrn: toEnglishDigits(mrn.trim() || initialPatient.mrn),
           age: parsedAge,
           gender: gender || Gender.UNSPECIFIED,
