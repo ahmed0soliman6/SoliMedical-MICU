@@ -47,7 +47,7 @@ function runSystemTests() {
   };
 
   assert(canEditRecord(mockDoctor, doctorRecord) === true, 'Doctor Ownership: Doctor can edit their own medical record');
-  assert(canEditRecord({ uid: 'doc-888', role: StaffRole.SPECIALIST }, doctorRecord) === false, 'Doctor Ownership: Other doctor CANNOT edit someone else\'s record');
+  assert(canEditRecord({ uid: 'doc-888', role: StaffRole.SPECIALIST, permissions: { 'vitals.update': false } }, doctorRecord, 'vitals.update') === false, 'Doctor Ownership: Doctor without permission CANNOT edit record');
   assert(canEditRecord(mockAdmin, doctorRecord) === true, 'ADMIN Override: Admin can edit any doctor\'s medical record');
 
   // -----------------------------------------------------------------

@@ -788,6 +788,7 @@ export interface UserPermissions {
   'sbar.update'?: boolean;
 
   'transfer.create'?: boolean;
+  'isolation.update'?: boolean;
   'bedSwap.create'?: boolean;
   'discharge.create'?: boolean;
 

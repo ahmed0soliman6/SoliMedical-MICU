@@ -46,7 +46,7 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
   initialFilterType = 'ALL',
 }) => {
   const { lang, isRTL } = useTranslation();
-  const { currentUser, user, token } = useAuth();
+  const { currentUser, user, token, hasPermission } = useAuth();
   const [searchTerm, setSearchTerm] = useState<string>(initialSearchTerm);
   const [allPatients, setAllPatients] = useState<PatientDossier[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -55,6 +55,13 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
 
   const effectiveUser = currentUser || user;
   const isAdmin = canDeleteMortalityRecord(effectiveUser);
+  const canViewArchive = Boolean(
+    isAdmin ||
+    hasPermission?.('archive.view') ||
+    (effectiveUser?.permissions as any)?.['archive.view'] === true ||
+    hasPermission?.('patients.view') ||
+    (effectiveUser?.permissions as any)?.['patients.view'] === true
+  );
 
   const loadPatients = useCallback(async () => {
     setIsLoading(true);
@@ -251,6 +258,36 @@ export const ArchiveSearchModal: React.FC<ArchiveSearchModalProps> = ({
     if (filterType === 'ARCHIVED') return isArchived;
     return true;
   });
+
+  if (!isOpen) return null;
+
+  if (!canViewArchive) {
+    return (
+      <div className="w-full space-y-4 animate-in fade-in duration-300" dir={isRTL ? 'rtl' : 'ltr'}>
+        <div className="w-full max-w-xl mx-auto bg-white dark:bg-[#0c1426] border border-amber-300 dark:border-amber-800/60 rounded-3xl p-6 sm:p-8 text-center space-y-4 shadow-xl mt-8">
+          <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto text-amber-500">
+            <X className="w-7 h-7" />
+          </div>
+          <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">
+            {lang === 'ar' ? 'صلاحية الأرشيف غير مفعّلة' : 'Archive Access Restricted'}
+          </h2>
+          <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300">
+            {lang === 'ar'
+              ? 'عذراً، يتطلب استعراض وبحث أرشيف المرضى صلاحية استعراض الأرشيف (archive.view) أو حساب مدير النظام.'
+              : 'Access Denied: Viewing patient archive requires (archive.view) permission or Admin role.'}
+          </p>
+          <div className="pt-2">
+            <button
+              onClick={onClose}
+              className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-teal-300 font-bold text-xs transition-colors cursor-pointer"
+            >
+              {lang === 'ar' ? 'العودة للوحة الأسِرّة' : 'Return to Bed Matrix'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full space-y-4 animate-in fade-in duration-300" dir={isRTL ? 'rtl' : 'ltr'}>

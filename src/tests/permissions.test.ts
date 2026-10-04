@@ -194,18 +194,24 @@ console.log('--- RUNNING FINAL COMPREHENSIVE SECURITY & PERMISSIONS TEST SUITE -
   console.log('✓ F. owner can UPDATE own record only passed');
 }
 
-// Test G: owner can DELETE own record if type allows
+// Test G: owner without medicalRecords.delete CANNOT delete own record; with medicalRecords.delete CAN delete
 {
-  const ownerDoc: UserContextForPermission = {
+  const ownerDocWithoutPerm: UserContextForPermission = {
     uid: 'doc-owner',
     role: StaffRole.RESIDENT
+  };
+  const ownerDocWithPerm: UserContextForPermission = {
+    uid: 'doc-owner',
+    role: StaffRole.RESIDENT,
+    permissions: { 'medicalRecords.delete': true }
   };
   const ownNote = {
     authorId: 'doc-owner',
     authorName: 'Dr. Owner'
   };
-  assert.equal(canDeleteClinicalNote(ownerDoc, ownNote), true, 'G: Owner CAN delete own note');
-  console.log('✓ G. owner can DELETE own record passed');
+  assert.equal(canDeleteClinicalNote(ownerDocWithoutPerm, ownNote), false, 'G: Owner without medicalRecords.delete CANNOT delete own note');
+  assert.equal(canDeleteClinicalNote(ownerDocWithPerm, ownNote), true, 'G: Owner with medicalRecords.delete CAN delete own note');
+  console.log('✓ G. strict medicalRecords.delete permission enforcement on delete passed');
 }
 
 // Test H: another doctor = CAN update medical records in ICU, but CANNOT delete

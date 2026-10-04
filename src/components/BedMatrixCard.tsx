@@ -4,11 +4,13 @@ import {
   PatientDossier, 
   BedStatus, 
   BedNumber,
-  IntakePathway
+  IntakePathway,
+  StaffRole
 } from '../types/schema.ts';
 import { db } from '../db/icuSyncDb.ts';
 import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { useTranslation } from '../services/i18n.ts';
+import { useAuth } from '../services/AuthContext.tsx';
 import { Stethoscope, UserCheck, Activity, Wrench, ShieldAlert } from 'lucide-react';
 
 interface BedMatrixCardProps {
@@ -49,6 +51,23 @@ export const BedMatrixCard: React.FC<BedMatrixCardProps> = ({
 }) => {
   const { lang } = useTranslation();
   const { settings } = useSystemSettings();
+  const { currentUser, hasPermission } = useAuth();
+  
+  const isAdmin = Boolean(
+    currentUser?.role === StaffRole.ADMIN ||
+    currentUser?.isSuperAdmin === true ||
+    (currentUser?.role as any) === 'ADMIN'
+  );
+  const canAdmitPatient = Boolean(
+    isAdmin ||
+    hasPermission?.('patients.create') ||
+    (currentUser?.permissions as any)?.['patients.create'] === true
+  );
+  const canViewPatients = Boolean(
+    isAdmin ||
+    hasPermission?.('patients.view') ||
+    (currentUser?.permissions as any)?.['patients.view'] === true
+  );
   
   // Direct primary source from patient
   const directDoctor = getValidDoctorName(patient?.attendingPhysician);
@@ -179,7 +198,7 @@ export const BedMatrixCard: React.FC<BedMatrixCardProps> = ({
   }, [patient?.id, patient?.attendingPhysician?.name, patient?.attendingPhysician, lang]);
 
   const handleClick = () => {
-    if (isOccupied || isTransferPending || isUnavailable || isDecontaminating || isIsolation) {
+    if (isOccupied || isTransferPending || isUnavailable || isDecontaminating || isIsolation || !canAdmitPatient) {
       onSelectBed(bed.bedNumber);
     } else {
       onAdmitToBed(bed.bedNumber);
@@ -187,13 +206,17 @@ export const BedMatrixCard: React.FC<BedMatrixCardProps> = ({
   };
 
   const patientName = patient
-    ? (lang === 'ar' ? (patient.fullNameAr || patient.fullNameEn) : (patient.fullNameEn || patient.fullNameAr))
+    ? (canViewPatients
+        ? (lang === 'ar' ? (patient.fullNameAr || patient.fullNameEn) : (patient.fullNameEn || patient.fullNameAr))
+        : (lang === 'ar' ? `مريض سرير ${bed.bedNumber}` : `Patient Bed ${bed.bedNumber}`))
     : '';
 
   const diagnosisText = patient
-    ? (lang === 'ar' 
-        ? (patient.primaryDiagnosisAr || patient.primaryDiagnosisEn) 
-        : (patient.primaryDiagnosisEn || patient.primaryDiagnosisAr))
+    ? (canViewPatients
+        ? (lang === 'ar' 
+            ? (patient.primaryDiagnosisAr || patient.primaryDiagnosisEn) 
+            : (patient.primaryDiagnosisEn || patient.primaryDiagnosisAr))
+        : (lang === 'ar' ? 'ملف سري' : 'Confidential'))
     : '';
 
   return (
@@ -330,6 +353,13 @@ export const BedMatrixCard: React.FC<BedMatrixCardProps> = ({
           <div className="text-xs font-semibold text-red-600 dark:text-red-400 flex items-center gap-1.5">
             <Wrench className="w-3.5 h-3.5 shrink-0" />
             <span>{lang === 'ar' ? 'خارج الخدمة حالياً (صيانة / تعقيم)' : 'Out of Service (Maintenance)'}</span>
+          </div>
+        ) : !canAdmitPatient ? (
+          <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center justify-between">
+            <span>{lang === 'ar' ? 'سرير شاغر جاهز للاستقبال' : 'Vacant Bed (Ready)'}</span>
+            <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
+              {lang === 'ar' ? 'يتطلب صلاحية patients.create' : 'Requires patients.create'}
+            </span>
           </div>
         ) : (
           <div className="text-xs font-semibold text-teal-600 dark:text-teal-500/80">

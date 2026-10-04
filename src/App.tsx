@@ -10,7 +10,7 @@ import {
   BedStatus,
   StaffRole
 } from './types/schema.ts';
-import { UserPlus } from 'lucide-react';
+import { UserPlus, Bed, ShieldAlert } from 'lucide-react';
 import { Header } from './components/Header.tsx';
 import { Sidebar } from './components/Sidebar.tsx';
 import { SoliLogo } from './components/SoliLogo.tsx';
@@ -107,16 +107,29 @@ export default function App() {
   const hasSettingsView = hasPermission('settings.view') || (currentUser?.permissions as any)?.['settings.view'] === true;
   const canAccessSystemSettings = isAdmin || hasSettingsUpdate || (hasSettingsView && settings.features.enableSystemSettingsPage !== false);
 
+  const canViewPatients = isAdmin || hasPermission('patients.view') || (currentUser?.permissions as any)?.['patients.view'] === true;
+  const canAdmitPatient = isAdmin || hasPermission('patients.create') || (currentUser?.permissions as any)?.['patients.create'] === true;
+  const canViewArchive = isAdmin || hasPermission('archive.view') || (currentUser?.permissions as any)?.['archive.view'] === true || hasPermission('patients.view') || (currentUser?.permissions as any)?.['patients.view'] === true;
+  const canViewUsers = isAdmin || hasPermission('users.view') || (currentUser?.permissions as any)?.['users.view'] === true;
+  const canViewChat = isAdmin || hasPermission('chat.view') || (currentUser?.permissions as any)?.['chat.view'] === true;
+
   // Robust persistent navigation state across reloads
   const [activeTab, setActiveTab] = useState<NavigationTab>(() => getInitialNavigationState().tab);
   const [selectedBedNumber, setSelectedBedNumber] = useState<BedNumber | null>(() => getInitialNavigationState().bed);
 
-  // Prevent unauthorized direct access to settings
+  // Prevent unauthorized direct access to settings, search, users, chat
   useEffect(() => {
-    if (activeTab === 'settings' && !canAccessSystemSettings && isAuthenticated && !isAuthLoading) {
+    if (!isAuthenticated || isAuthLoading) return;
+    if (activeTab === 'settings' && !canAccessSystemSettings) {
+      setActiveTab('beds');
+    } else if (activeTab === 'search' && !canViewArchive) {
+      setActiveTab('beds');
+    } else if (activeTab === 'users' && !canViewUsers) {
+      setActiveTab('beds');
+    } else if (activeTab === 'chat' && !canViewChat) {
       setActiveTab('beds');
     }
-  }, [activeTab, canAccessSystemSettings, isAuthenticated, isAuthLoading]);
+  }, [activeTab, canAccessSystemSettings, canViewArchive, canViewUsers, canViewChat, isAuthenticated, isAuthLoading]);
 
   // Sync navigation state with localStorage and URL hash on changes
   useEffect(() => {
@@ -270,6 +283,14 @@ export default function App() {
 
   // Smart admission with automatic vacant bed detection
   const handleSmartAdmission = useCallback(() => {
+    if (!canAdmitPatient) {
+      alert(
+        lang === 'ar' 
+          ? '⚠️ تنبيه: يتطلب تسجيل وتنويم مريض جديد صلاحية إدخال وتنويم مريض (patients.create) أو حساب مدير النظام.'
+          : '⚠️ Access Denied: Admitting a new patient requires (patients.create) permission or Admin role.'
+      );
+      return;
+    }
     const vacantBed = beds.find(b => (b.status === BedStatus.VACANT || b.status === BedStatus.DECONTAMINATING) && !b.currentPatientId);
     if (vacantBed) {
       setSelectedBedNumber(vacantBed.bedNumber as BedNumber);
@@ -280,7 +301,7 @@ export default function App() {
           : '⚠️ Clinical Alert: All 6 ICU beds are currently occupied. Please discharge or transfer a patient to make a bed available.'
       );
     }
-  }, [beds, lang]);
+  }, [beds, lang, canAdmitPatient]);
 
   // Load local Dexie data into state
   const reloadData = useCallback(async () => {
@@ -615,48 +636,73 @@ export default function App() {
             /* activeTab === 'beds' */
             selectedBedNumber && selectedBed ? (
               selectedPatient ? (
-                /* Bedside Deep Dive Flowsheet */
-                <BedsideFlowsheet
-                  key={`bed-${selectedBed.bedNumber}-${selectedPatient.id}`}
-                  bed={selectedBed}
-                  patient={selectedPatient}
-                  allBeds={beds}
-                  allPatients={patients}
-                  onSelectBed={(bedNum) => setSelectedBedNumber(bedNum)}
-                  onBack={() => setSelectedBedNumber(null)}
-                  onOpenAddVitals={() => {
-                    setVitalsTarget({
-                      bedNumber: selectedBed.bedNumber,
-                      patientId: selectedPatient.id,
-                      patientName: selectedPatient.fullNameAr,
-                    });
-                    setIsQuickVitalsOpen(true);
-                  }}
-                  onOpenAddClinicalNote={() => {
-                    setClinicalNoteTarget({
-                      bedNumber: selectedBed.bedNumber,
-                      patientId: selectedPatient.id,
-                      patientName: selectedPatient.fullNameAr,
-                    });
-                    setIsClinicalNoteOpen(true);
-                  }}
-                  onOpenAddAddendum={(noteId, author) => {
-                    setAddendumTarget({ noteId, patientId: selectedPatient.id, author });
-                    setIsAddendumOpen(true);
-                  }}
-                  onOpenSbarSign={() => {
-                    setSbarTarget({
-                      bedNumber: selectedBed.bedNumber,
-                      patientId: selectedPatient.id,
-                      patientName: selectedPatient.fullNameAr,
-                      diagnosis: selectedPatient.primaryDiagnosisAr || selectedPatient.primaryDiagnosisEn,
-                      codeStatus: selectedPatient.codeStatus,
-                    });
-                    setIsSbarModalOpen(true);
-                  }}
-                  onDataUpdated={reloadData}
-                />
-              ) : (
+                !canViewPatients ? (
+                  /* Patient File Confidential Notice */
+                  <div className="bg-[#0a1224] border border-amber-900/50 rounded-3xl p-6 sm:p-8 max-w-xl mx-auto text-center space-y-4 animate-in fade-in duration-200 mt-8 shadow-xl">
+                    <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto text-amber-400">
+                      <ShieldAlert className="w-7 h-7" />
+                    </div>
+                    <h2 className="text-lg sm:text-xl font-bold text-white">
+                      {lang === 'ar' ? `السرير ${selectedBed.bedNumber} - ملف المريض سري` : `Bed ${selectedBed.bedNumber} - Patient Dossier Locked`}
+                    </h2>
+                    <p className="text-xs sm:text-sm text-slate-300">
+                      {lang === 'ar'
+                        ? 'عذراً، يتطلب استعراض ومتابعة الملف السريري للمريض صلاحية استعراض المرضى (patients.view) أو حساب مدير النظام.'
+                        : 'Access Denied: Viewing patient clinical file requires (patients.view) permission or Admin role.'}
+                    </p>
+                    <div className="pt-2">
+                      <button
+                        onClick={() => setSelectedBedNumber(null)}
+                        className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-teal-300 font-bold text-xs transition-colors cursor-pointer"
+                      >
+                        {lang === 'ar' ? 'العودة للوحة الأسِرّة' : 'Return to Bed Matrix'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  /* Bedside Deep Dive Flowsheet */
+                  <BedsideFlowsheet
+                    key={`bed-${selectedBed.bedNumber}-${selectedPatient.id}`}
+                    bed={selectedBed}
+                    patient={selectedPatient}
+                    allBeds={beds}
+                    allPatients={patients}
+                    onSelectBed={(bedNum) => setSelectedBedNumber(bedNum)}
+                    onBack={() => setSelectedBedNumber(null)}
+                    onOpenAddVitals={() => {
+                      setVitalsTarget({
+                        bedNumber: selectedBed.bedNumber,
+                        patientId: selectedPatient.id,
+                        patientName: selectedPatient.fullNameAr,
+                      });
+                      setIsQuickVitalsOpen(true);
+                    }}
+                    onOpenAddClinicalNote={() => {
+                      setClinicalNoteTarget({
+                        bedNumber: selectedBed.bedNumber,
+                        patientId: selectedPatient.id,
+                        patientName: selectedPatient.fullNameAr,
+                      });
+                      setIsClinicalNoteOpen(true);
+                    }}
+                    onOpenAddAddendum={(noteId, author) => {
+                      setAddendumTarget({ noteId, patientId: selectedPatient.id, author });
+                      setIsAddendumOpen(true);
+                    }}
+                    onOpenSbarSign={() => {
+                      setSbarTarget({
+                        bedNumber: selectedBed.bedNumber,
+                        patientId: selectedPatient.id,
+                        patientName: selectedPatient.fullNameAr,
+                        diagnosis: selectedPatient.primaryDiagnosisAr || selectedPatient.primaryDiagnosisEn,
+                        codeStatus: selectedPatient.codeStatus,
+                      });
+                      setIsSbarModalOpen(true);
+                    }}
+                    onDataUpdated={reloadData}
+                  />
+                )
+              ) : canAdmitPatient ? (
                 /* Full-Page Bed Vacant Direct Admission Screen */
                 <FullPageAdmission
                   key={`vacant-${selectedBedNumber}`}
@@ -668,6 +714,29 @@ export default function App() {
                     reloadData();
                   }}
                 />
+              ) : (
+                /* Vacant Bed No Admission Permission Notice */
+                <div className="bg-[#0a1224] border border-slate-800 rounded-3xl p-6 sm:p-8 max-w-xl mx-auto text-center space-y-4 animate-in fade-in duration-200 mt-8 shadow-xl">
+                  <div className="w-14 h-14 rounded-2xl bg-teal-500/10 border border-teal-500/30 flex items-center justify-center mx-auto text-teal-400">
+                    <Bed className="w-7 h-7" />
+                  </div>
+                  <h2 className="text-lg sm:text-xl font-bold text-white">
+                    {lang === 'ar' ? `السرير ${selectedBedNumber} شاغر` : `Bed ${selectedBedNumber} is Vacant`}
+                  </h2>
+                  <p className="text-xs sm:text-sm text-slate-300">
+                    {lang === 'ar'
+                      ? 'السرير نظيف وجاهز لاستقبال مريض جديد. لا تملك صلاحية إدخال وتنويم مريض (patients.create).'
+                      : 'Bed is clean and ready. You do not have permission to admit new patients (patients.create).'}
+                  </p>
+                  <div className="pt-2">
+                    <button
+                      onClick={() => setSelectedBedNumber(null)}
+                      className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-teal-300 font-bold text-xs transition-colors cursor-pointer"
+                    >
+                      {lang === 'ar' ? 'العودة للوحة الأسِرّة' : 'Return to Bed Matrix'}
+                    </button>
+                  </div>
+                </div>
               )
             ) : (
               /* 6-Bed Matrix Grid (Central Station Overview) */

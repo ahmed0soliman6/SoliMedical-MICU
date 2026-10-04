@@ -390,6 +390,7 @@ const PERMISSION_GROUPS: PermissionCategory[] = [
       { key: 'patients.update', label: { ar: 'تعديل وتحديث ملف المريض', en: 'Update Patient (patients.update)' } },
       { key: 'archive.view', label: { ar: 'استعراض الأرشيف وسجلات التخريج', en: 'View Archive (archive.view)' } },
       { key: 'transfer.create', label: { ar: 'نقل مريض لسرير آخر', en: 'Transfer Patient (transfer.create)' } },
+      { key: 'isolation.update', label: { ar: 'عزل مريض وتدابير مكافحة العدوى', en: 'Isolate Patient & Infection Control (isolation.update)' } },
       { key: 'bedSwap.create', label: { ar: 'تبديل أسرّة بين مريضين', en: 'Swap Beds (bedSwap.create)' } },
       { key: 'discharge.create', label: { ar: 'تخريج المريض من العناية', en: 'Discharge Patient (discharge.create)' } },
     ]

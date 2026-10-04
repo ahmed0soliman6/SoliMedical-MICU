@@ -64,6 +64,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const hasSettingsUpdate = hasPermission('settings.update') || (currentUser?.permissions as any)?.['settings.update'] === true;
   const hasSettingsView = hasPermission('settings.view') || (currentUser?.permissions as any)?.['settings.view'] === true;
   const canAccessSystemSettings = isAdmin || hasSettingsUpdate || (hasSettingsView && settings.features.enableSystemSettingsPage !== false);
+  
+  const canViewPatients = isAdmin || hasPermission('patients.view') || (currentUser?.permissions as any)?.['patients.view'] === true;
+  const canAdmitPatient = isAdmin || hasPermission('patients.create') || (currentUser?.permissions as any)?.['patients.create'] === true;
+  const canViewArchive = isAdmin || hasPermission('archive.view') || (currentUser?.permissions as any)?.['archive.view'] === true;
+  const canViewChat = isAdmin || hasPermission('chat.view') || (currentUser?.permissions as any)?.['chat.view'] === true;
+  const canViewUsers = isAdmin || hasPermission('users.view') || (currentUser?.permissions as any)?.['users.view'] === true;
 
   const [showChangePassModal, setShowChangePassModal] = useState(false);
 
@@ -146,7 +152,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
             const isSelected = activeTab === 'beds' && selectedBedNumber === b.bedNumber;
 
             const displayName = patient 
-              ? (lang === 'ar' ? (patient.fullNameAr || patient.fullNameEn) : (patient.fullNameEn || patient.fullNameAr))
+              ? (canViewPatients
+                  ? (lang === 'ar' ? (patient.fullNameAr || patient.fullNameEn) : (patient.fullNameEn || patient.fullNameAr))
+                  : (lang === 'ar' ? `مريض سرير ${b.bedNumber}` : `Patient Bed ${b.bedNumber}`))
               : (b.status === 'ISOLATION' 
                 ? (lang === 'ar' ? 'عزل (شاغر)' : 'Isolation (Vacant)')
                 : b.status === 'UNAVAILABLE' 
@@ -182,7 +190,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         {/* 2. Patient Admission STAT */}
-        {settings.features.enableAdmissions !== false && (
+        {settings.features.enableAdmissions !== false && canAdmitPatient && (
           <button
             onClick={() => {
               onClose();
@@ -203,7 +211,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
 
         {/* 3. Patient Archive Search */}
-        {settings.features.enableArchiveSearch && (
+        {settings.features.enableArchiveSearch && canViewArchive && (
           <button
             onClick={() => handleSelectTab('search')}
             className={`w-full flex items-center justify-between p-3 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
@@ -223,7 +231,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
 
         {/* 4. Staff RBAC & User Management */}
-        {hasPermission('users.view') && onOpenUserManagement && (
+        {canViewUsers && onOpenUserManagement && (
           <button
             onClick={() => handleSelectTab('users')}
             className={`w-full flex items-center justify-between p-3 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
@@ -243,7 +251,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
 
         {/* 5. Hospital Clinical Chat */}
-        {settings.features.enableClinicalChat !== false && (
+        {settings.features.enableClinicalChat !== false && canViewChat && (
           <button
             onClick={() => handleSelectTab('chat')}
             className={`w-full flex items-center justify-between p-3 rounded-xl text-xs font-semibold transition-all cursor-pointer ${

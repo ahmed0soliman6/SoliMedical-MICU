@@ -270,6 +270,40 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
     hasPermission?.('discharge.create') ||
     currentUser?.permissions?.['discharge.create'] === true
   );
+
+  const canTransfer = Boolean(
+    !readOnly && (
+      isAdminUser ||
+      hasPermission?.('transfer.create') ||
+      (currentUser?.permissions as any)?.['transfer.create'] === true
+    )
+  );
+
+  const canSwap = Boolean(
+    !readOnly && (
+      isAdminUser ||
+      hasPermission?.('bedSwap.create') ||
+      (currentUser?.permissions as any)?.['bedSwap.create'] === true
+    )
+  );
+
+  const canIsolate = Boolean(
+    !readOnly && (
+      isAdminUser ||
+      hasPermission?.('isolation.update') ||
+      (currentUser?.permissions as any)?.['isolation.update'] === true ||
+      hasPermission?.('beds.update') ||
+      (currentUser?.permissions as any)?.['beds.update'] === true
+    )
+  );
+
+  const canUpdatePatient = Boolean(
+    !readOnly && (
+      isAdminUser ||
+      hasPermission?.('patients.update') ||
+      (currentUser?.permissions as any)?.['patients.update'] === true
+    )
+  );
   
   const [activeTab, setActiveTab] = useState<'all' | 'paperFlowsheet' | 'labs' | 'antibiotics' | 'investigations' | 'vitals' | 'vent' | 'pumps' | 'fluids' | 'sbar' | 'notes' | 'disposition' | 'labTemplates'>(() => {
     try {
@@ -1305,30 +1339,19 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
         {!isPatientCardCollapsed && (
           <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-800/80 animate-in fade-in duration-200">
             {/* Action Buttons: Transfer, Swap, Isolation - Unified Row */}
-            <div className="flex items-center justify-end gap-1.5 flex-wrap w-full">
-              {settings.features.enableBedTransferAndSwap !== false && (
-                <>
-                  <button
-                    onClick={() => setIsTransferModalOpen(true)}
-                    className="flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-xl bg-blue-500/15 hover:bg-blue-500/25 text-blue-700 dark:text-blue-300 border border-blue-500/30 text-[10px] xs:text-[11px] sm:text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer text-center min-w-0"
-                    title={lang === 'ar' ? 'نقل المريض لسرير شاغر' : 'Transfer patient to vacant bed'}
-                  >
-                    <ArrowRightLeft className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
-                    <span className="truncate">{lang === 'ar' ? 'نقل المريض' : 'Transfer'}</span>
-                  </button>
-
-                  <button
-                    onClick={() => setIsSwapModalOpen(true)}
-                    className="flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 text-purple-700 dark:text-purple-300 border border-purple-500/30 text-[10px] xs:text-[11px] sm:text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer text-center min-w-0"
-                    title={lang === 'ar' ? 'تبديل سريرين ومشغولين' : 'Swap beds'}
-                  >
-                    <Layers className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400 shrink-0" />
-                    <span className="truncate">{lang === 'ar' ? 'تبديل سريرين' : 'Swap Beds'}</span>
-                  </button>
-                </>
+            <div className="flex items-center justify-end gap-2 flex-wrap w-full">
+              {settings.features.enableBedTransferAndSwap !== false && canTransfer && (
+                <button
+                  onClick={() => setIsTransferModalOpen(true)}
+                  className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-500/15 hover:bg-blue-500/25 text-blue-700 dark:text-blue-300 border border-blue-500/30 text-[10px] xs:text-[11px] sm:text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer text-center min-w-0"
+                  title={lang === 'ar' ? 'نقل المريض لسرير آخر شاغر' : 'Transfer patient to vacant bed'}
+                >
+                  <ArrowRightLeft className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+                  <span className="truncate">{lang === 'ar' ? 'نقل مريض لسرير آخر' : 'Transfer Patient'}</span>
+                </button>
               )}
 
-              {settings.features.enableBedIsolationControls !== false && (() => {
+              {settings.features.enableBedIsolationControls !== false && canIsolate && (() => {
                 const isCurrentlyIsolated = !!(
                   (bed && (bed.status === BedStatus.ISOLATION || bed.status === 'ISOLATION' || bed.isolation?.isIsolated)) ||
                   (patient?.isolationPrecautions &&
@@ -1339,7 +1362,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                 return (
                   <button
                     onClick={() => setIsIsolationModalOpen(true)}
-                    className={`flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-[10px] xs:text-[11px] sm:text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer text-center min-w-0 ${
+                    className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl border text-[10px] xs:text-[11px] sm:text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer text-center min-w-0 ${
                       isCurrentlyIsolated
                         ? 'bg-teal-500/15 hover:bg-teal-500/25 text-teal-700 dark:text-teal-300 border-teal-500/40 shadow-teal-500/10'
                         : 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-700 dark:text-amber-300 border-amber-500/30'
@@ -1357,12 +1380,23 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                     )}
                     <span className="truncate whitespace-nowrap">
                       {isCurrentlyIsolated
-                        ? (lang === 'ar' ? 'إنهاء العزل' : 'End Isolation')
-                        : (lang === 'ar' ? 'عزل' : 'Isolation')}
+                        ? (lang === 'ar' ? 'إنهاء عزل المريض' : 'End Isolation')
+                        : (lang === 'ar' ? 'عزل مريض' : 'Isolate Patient')}
                     </span>
                   </button>
                 );
               })()}
+
+              {settings.features.enableBedTransferAndSwap !== false && canSwap && (
+                <button
+                  onClick={() => setIsSwapModalOpen(true)}
+                  className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 text-purple-700 dark:text-purple-300 border border-purple-500/30 text-[10px] xs:text-[11px] sm:text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer text-center min-w-0"
+                  title={lang === 'ar' ? 'تبديل سريرين ومشغولين' : 'Swap beds'}
+                >
+                  <Layers className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400 shrink-0" />
+                  <span className="truncate">{lang === 'ar' ? 'تبديل سريرين' : 'Swap Beds'}</span>
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -1497,7 +1531,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                     </span>
 
                     {/* Edit Button - ONLY visible when expanded */}
-                    {!isDemographicsCardCollapsed && !readOnly && (
+                    {!isDemographicsCardCollapsed && !readOnly && canUpdatePatient && (
                       <button
                         type="button"
                         onClick={(e) => {
