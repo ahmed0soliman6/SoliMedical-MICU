@@ -234,34 +234,50 @@ export async function admitPatient(input: DirectAdmissionInput): Promise<{ patie
     clinicalNote: a.clinicalNote,
   }));
 
-  const previousVisits = existingPatientDoc?.pastVisits || [];
+  const previousVisits = Array.isArray(existingPatientDoc?.pastVisits) ? [...existingPatientDoc.pastVisits] : [];
   if (existingPatientDoc && existingPatientDoc.patientStatus !== 'ACTIVE_ICU') {
-    const lastVisitId = `visit-${Date.now()}`;
+    const lastVisitId = `visit-${Date.now()}-${previousVisits.length + 1}`;
     const previousVisitRecord = {
       id: lastVisitId,
       admissionDate: existingPatientDoc.admissionDate || existingPatientDoc.createdAt || nowIso,
-      dischargeDate: existingPatientDoc.updatedAt || nowIso,
-      primaryDiagnosis: existingPatientDoc.primaryDiagnosisEn || 'Previous ICU Stay',
+      dischargeDate: existingPatientDoc.dischargeDate || existingPatientDoc.updatedAt || nowIso,
+      dischargeDisposition: existingPatientDoc.dischargeDisposition || 'DISCHARGE_HOME',
+      primaryDiagnosis: existingPatientDoc.primaryDiagnosisAr || existingPatientDoc.primaryDiagnosisEn || 'Previous ICU Stay',
       outcome: 'RESTORED_TO_ACTIVE',
       attendingPhysicianName: existingPatientDoc.attendingPhysician?.name || 'Unknown'
     };
     previousVisits.push(previousVisitRecord);
   }
 
+  // Preserve permanent dossier attributes while strictly omitting previous stay completion fields
+  const permanentDossier = existingPatientDoc ? {
+    mrn: existingPatientDoc.mrn,
+    nationalId: existingPatientDoc.nationalId,
+    nationalIdLast4: existingPatientDoc.nationalIdLast4,
+    nationalIdHash: existingPatientDoc.nationalIdHash,
+    bloodType: existingPatientDoc.bloodType || existingPatientDoc.bloodGroup,
+    gender: existingPatientDoc.gender,
+    age: existingPatientDoc.age,
+    microbiologyHistory: existingPatientDoc.microbiologyHistory || [],
+    chronicDiseases: existingPatientDoc.chronicDiseases || '',
+    pastVisits: previousVisits,
+    createdAt: existingPatientDoc.createdAt,
+  } : {};
+
   const newPatient: PatientDossier = {
-    ...existingPatientDoc, // Retain existing patient historical attributes
+    ...permanentDossier,
     id: patientId,
     unitId: input.unitId || existingPatientDoc?.unitId || 'MICU-MAIN',
-    mrn: toEnglishDigits(input.mrn),
+    mrn: toEnglishDigits(input.mrn || existingPatientDoc?.mrn || ''),
     nationalId: input.nationalId ? toEnglishDigits(input.nationalId) : (existingPatientDoc?.nationalId || undefined),
     nationalIdLast4: last4 || existingPatientDoc?.nationalIdLast4,
     nationalIdHash: idHash || existingPatientDoc?.nationalIdHash,
     normalizedFullName: normalizedName || existingPatientDoc?.normalizedFullName,
     fullNameEn: input.fullNameEn,
     fullNameAr: input.fullNameAr,
-    age: input.age,
-    gender: input.gender,
-    bloodType: input.bloodType,
+    age: input.age ?? existingPatientDoc?.age ?? 0,
+    gender: input.gender || existingPatientDoc?.gender || Gender.UNSPECIFIED,
+    bloodType: input.bloodType || existingPatientDoc?.bloodType,
     weightKg: input.weightKg,
     heightCm: input.heightCm,
     idealBodyWeightKg: idealWeight,
@@ -280,11 +296,15 @@ export async function admitPatient(input: DirectAdmissionInput): Promise<{ patie
     attendingPhysician: input.attendingDoctor,
     primaryNurse: input.assignedNurse,
     isolationPrecautions: input.isolationPrecautions || [],
-    history: input.history || '',
+    history: input.history || existingPatientDoc?.history || '',
     presentingComplaint: input.presentingComplaint || '',
-    chronicDiseases: input.chronicDiseases || '',
+    chronicDiseases: input.chronicDiseases || existingPatientDoc?.chronicDiseases || '',
     createdAt: existingPatientDoc?.createdAt || nowIso,
     updatedAt: nowIso,
+    // Explicitly unset previous discharge & mortality flags
+    dischargeDate: undefined,
+    mortalityRecord: undefined,
+    isArchived: false,
   };
 
   let vitalsRecord: TelemetryVitals | undefined;
@@ -366,7 +386,7 @@ export async function admitPatient(input: DirectAdmissionInput): Promise<{ patie
       }
 
       const patientRef = doc(firestore, 'patients', patientId);
-      transaction.set(patientRef, sanitizeForFirestore(newPatient), { merge: true });
+      transaction.set(patientRef, sanitizeForFirestore(newPatient));
 
       // Ensure we delete any archived copy if they are being readmitted/restored
       const archivedRef = doc(firestore, 'archivedPatients', patientId);
@@ -379,7 +399,12 @@ export async function admitPatient(input: DirectAdmissionInput): Promise<{ patie
       );
 
       const cleanBedUpdate = {
+        id: input.targetBed,
+        bedNumber: input.targetBed,
+        unitId: input.unitId || 'MICU-MAIN',
         activePatientId: patientId,
+        currentPatientId: patientId,
+        isOccupied: true,
         status: hasActiveIsolation ? 'ISOLATION' : 'OCCUPIED',
         isolation: hasActiveIsolation
           ? {
@@ -390,6 +415,7 @@ export async function admitPatient(input: DirectAdmissionInput): Promise<{ patie
             }
           : { isIsolated: false, precautions: [] },
         lastTelemetryPingUtc: nowIso,
+        updatedAt: nowIso,
       };
       transaction.set(bedRef, sanitizeForFirestore(cleanBedUpdate), { merge: true });
 
@@ -451,6 +477,12 @@ export async function admitPatient(input: DirectAdmissionInput): Promise<{ patie
 
     await db.auditLogs.put(auditLog);
   });
+
+  // Reconcile and trigger instant UI update across all components
+  await ensureBedPatientSync({ syncToCloud: false });
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('icu-data-updated'));
+  }
 
   // [FCM Event Trigger]: Broadcast 'ADMISSION' push notification immediately after successful cloud sync
   if (isOnline) {

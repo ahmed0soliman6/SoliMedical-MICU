@@ -106,6 +106,19 @@ export async function searchExistingPatients(
       snap.forEach((d) => {
         const data = d.data() as any;
         const pId = data.patientId || data.id || d.id;
+
+        // STRICT CLINICAL SAFETY: Deceased patients must NEVER be proposed for readmission
+        const isDeceased = 
+          data.patientStatus === 'EXPIRED_MORTALITY' ||
+          data.status === 'EXPIRED_MORTALITY' ||
+          data.currentStatus === 'EXPIRED_MORTALITY' ||
+          data.dispositionType === 'EXPIRED_MORTALITY' ||
+          data.mortalityRecord !== undefined ||
+          data.isDeceased === true ||
+          data.deceasedDate !== undefined;
+
+        if (isDeceased) return;
+
         if (!matches.some((m) => m.patientId === pId)) {
           matches.push({
             patientId: pId,
@@ -154,6 +167,19 @@ export async function searchExistingPatients(
     for (const p of localPatients) {
       const pId = p.id;
       if (matches.some((m) => m.patientId === pId)) continue;
+
+      // Filter out deceased patients locally
+      const isDeceased = 
+        p.patientStatus === 'EXPIRED_MORTALITY' ||
+        (p as any).status === 'EXPIRED_MORTALITY' ||
+        (p as any).currentStatus === 'EXPIRED_MORTALITY' ||
+        (p as any).dispositionType === 'EXPIRED_MORTALITY' ||
+        p.mortalityRecord !== undefined ||
+        (p as any).isDeceased === true ||
+        (p as any).deceasedDate !== undefined;
+
+      if (isDeceased) continue;
+
       const pNorm = normalizeArabicName(p.fullNameAr || p.fullNameEn);
       const pLast4 = extractLast4(p.nationalId) || (p as any).nationalIdLast4 || '';
       const pMrn = toEnglishDigits(p.mrn).trim();
