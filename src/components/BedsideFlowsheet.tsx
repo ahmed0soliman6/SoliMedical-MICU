@@ -619,14 +619,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
 
   const canDeleteVital = (vital: TelemetryVitals) => {
     if (!currentUser || readOnly) return false;
-    const isAdmin = currentUser.role === StaffRole.ADMIN || currentUser.role === 'ADMIN' || currentUser.role === 'SUPER_ADMIN' || currentUser.isSuperAdmin === true;
-    const hasDeletePermission = hasPermission?.('medicalRecords.delete') || (currentUser.permissions as any)?.['medicalRecords.delete'] === true;
-    
-    // 1. Admin or User with 'medicalRecords.delete' permission can delete ANY vital
-    if (isAdmin || hasDeletePermission) return true;
-
-    // 2. Otherwise only the author/owner can delete their own vital
-    return isVitalAuthor(vital);
+    return canDeleteRecord(currentUser, vital, 'vitals');
   };
 
   const handleDeleteVital = async (e: React.MouseEvent, targetVital: TelemetryVitals) => {

@@ -1611,7 +1611,7 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                             </button>
                           )}
 
-                          {canDeleteMedicalRecords && (
+                          {canDeleteRecord(activeUser, abx, 'vitals') && (
                             <button
                               onClick={() => handleDelete(abx)}
                               className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-400 border border-slate-700 hover:border-rose-800 text-[11px] transition-all cursor-pointer"

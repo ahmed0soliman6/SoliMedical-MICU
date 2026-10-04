@@ -401,19 +401,29 @@ const PERMISSION_GROUPS: PermissionCategory[] = [
       { key: 'vitals.view', label: { ar: 'استعراض العلامات الحيوية والمضخات', en: 'View Vitals (vitals.view)' } },
       { key: 'vitals.create', label: { ar: 'توثيق قراءات حيوية ومضخات جديدة', en: 'Record Vitals (vitals.create)' } },
       { key: 'vitals.update', label: { ar: 'تعديل العلامات الحيوية والمضخات', en: 'Update Vitals (vitals.update)' } },
+      { key: 'vitals.deleteOwn', label: { ar: 'حذف سجلاتي (العلامات والمضخات)', en: 'Delete Own Vitals (vitals.deleteOwn)' } },
+
       { key: 'labs.view', label: { ar: 'استعراض نتائج التحاليل المخبرية', en: 'View Labs (labs.view)' } },
       { key: 'labs.create', label: { ar: 'توثيق وتسجيل نتائج تحاليل', en: 'Record Labs (labs.create)' } },
       { key: 'labs.update', label: { ar: 'تعديل نتائج التحاليل', en: 'Update Labs (labs.update)' } },
+      { key: 'labs.deleteOwn', label: { ar: 'حذف سجلاتي (التحاليل)', en: 'Delete Own Labs (labs.deleteOwn)' } },
+
       { key: 'investigations.view', label: { ar: 'استعراض الأشعة والفحوصات', en: 'View Investigations (investigations.view)' } },
       { key: 'investigations.create', label: { ar: 'توثيق أشعة وفحوصات', en: 'Record Investigations (investigations.create)' } },
       { key: 'investigations.update', label: { ar: 'تعديل الأشعة والفحوصات', en: 'Update Investigations (investigations.update)' } },
+      { key: 'investigations.deleteOwn', label: { ar: 'حذف سجلاتي (الأشعة والفحوصات)', en: 'Delete Own Investigations (investigations.deleteOwn)' } },
+
       { key: 'clinicalNotes.view', label: { ar: 'استعراض الملاحظات السريرية', en: 'View Clinical Notes (clinicalNotes.view)' } },
       { key: 'clinicalNotes.create', label: { ar: 'كتابة وتوثيق ملاحظات طبية', en: 'Sign Clinical Notes (clinicalNotes.create)' } },
       { key: 'clinicalNotes.update', label: { ar: 'إضافة ملاحق غير قابلة للحذف', en: 'Add Note Addendum (clinicalNotes.update)' } },
+      { key: 'clinicalNotes.deleteOwn', label: { ar: 'حذف سجلاتي (الملاحظات الطبية)', en: 'Delete Own Notes (clinicalNotes.deleteOwn)' } },
+
       { key: 'sbar.view', label: { ar: 'استعراض تقارير التسليم SBAR', en: 'View SBAR Handover (sbar.view)' } },
       { key: 'sbar.create', label: { ar: 'إنشاء تقرير تسليم مناوبة SBAR', en: 'Create SBAR Handover (sbar.create)' } },
       { key: 'sbar.update', label: { ar: 'اعتماد وتوقيع تقرير SBAR', en: 'Sign SBAR Handover (sbar.update)' } },
-      { key: 'medicalRecords.delete', label: { ar: 'حذف السجلات الطبية (الملاحظات، العلامات الحيوية، المضخات، التنفس، السوائل، التحاليل، الأشعة والفحوصات، المضادات، نقل الدم، وتقارير SBAR)', en: 'Delete Medical Records Across Clinical Cards (medicalRecords.delete)' } },
+      { key: 'handovers.deleteOwn', label: { ar: 'حذف سجلاتي (تقارير التسليم SBAR)', en: 'Delete Own SBAR (handovers.deleteOwn)' } },
+
+      { key: 'medicalRecords.delete', label: { ar: 'حذف السجلات الطبية (الملاحظات، العلامات الحيوية، المضخات...) - حذف شامل لأي سجل', en: 'Delete Any Medical Record Across Cards (medicalRecords.delete)' } },
     ]
   },
   {
@@ -675,15 +685,20 @@ const PERMISSION_GROUPS: PermissionCategory[] = [
                           {group.permissions.filter(p => !!formPermissions[p.key]).length} / {group.permissions.length}
                         </span>
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                      <div className={`grid gap-2 ${gIdx === 1 ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-4' : 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3'}`}>
                         {group.permissions.map((p) => {
                           const isChecked = !!formPermissions[p.key];
+                          const isFullWidth = p.key === 'medicalRecords.delete' || p.key === 'medicalRecords.deleteAny';
                           return (
                             <label
                               key={p.key}
                               className={`p-2 rounded-xl border flex items-center justify-between cursor-pointer transition-colors text-[11px] ${
+                                isFullWidth ? 'col-span-1 sm:col-span-2 md:col-span-4 font-bold border-red-900/50 my-1' : ''
+                              } ${
                                 isChecked 
-                                  ? 'bg-teal-950/40 border-teal-800/60 text-teal-200' 
+                                  ? isFullWidth
+                                    ? 'bg-red-950/40 border-red-700/80 text-red-200'
+                                    : 'bg-teal-950/40 border-teal-800/60 text-teal-200' 
                                   : 'bg-[#070d1a] border-slate-800/80 text-slate-400 hover:border-slate-700'
                               }`}
                             >
@@ -693,7 +708,17 @@ const PERMISSION_GROUPS: PermissionCategory[] = [
                               <input
                                 type="checkbox"
                                 checked={isChecked}
-                                onChange={(e) => setFormPermissions({ ...formPermissions, [p.key]: e.target.checked })}
+                                onChange={(e) => {
+                                  const updated = { ...formPermissions, [p.key]: e.target.checked };
+                                  if (p.key === 'handovers.deleteOwn') {
+                                    updated['sbar.deleteOwn'] = e.target.checked;
+                                  } else if (p.key === 'sbar.deleteOwn') {
+                                    updated['handovers.deleteOwn'] = e.target.checked;
+                                  } else if (p.key === 'medicalRecords.delete') {
+                                    updated['medicalRecords.deleteAny'] = e.target.checked;
+                                  }
+                                  setFormPermissions(updated);
+                                }}
                                 className="w-4 h-4 rounded text-teal-500 focus:ring-teal-400 bg-slate-900 border-slate-700"
                               />
                             </label>

@@ -169,7 +169,7 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
 
   const canCreateInvestigations = Boolean(!readOnly && (isAdminUser || hasPermission?.('investigations.create') || (currentUser?.permissions as any)?.['investigations.create'] === true));
   const canUpdateInvestigations = Boolean(!readOnly && (isAdminUser || hasPermission?.('investigations.update') || (currentUser?.permissions as any)?.['investigations.update'] === true));
-  const canDeleteInvestigations = Boolean(isAdminUser || hasPermission?.('medicalRecords.delete') || (currentUser?.permissions as any)?.['medicalRecords.delete'] === true);
+  const canDeleteInvestigations = Boolean(isAdminUser || hasPermission?.('medicalRecords.delete') || (currentUser?.permissions as any)?.['medicalRecords.delete'] === true || (currentUser?.permissions as any)?.['medicalRecords.deleteAny'] === true || (currentUser?.permissions as any)?.['investigations.deleteOwn'] === true);
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isAiScanModalOpen, setIsAiScanModalOpen] = useState(false);
@@ -304,7 +304,7 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
   };
 
   const handleDelete = async (inv: InvestigationItem) => {
-    if (!canDeleteRecord(currentUser, inv)) {
+    if (!canDeleteRecord(currentUser, inv, 'investigations')) {
       alert(lang === 'ar' ? 'غير مصرح: حذف السجلات الطبية يتطلب صلاحيات إدارية خاصة.' : 'Unauthorized: Deleting medical records requires special administrative permissions.');
       return;
     }
@@ -631,7 +631,7 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
                                   </button>
                                 )}
 
-                                {canDeleteInvestigations && (
+                                {canDeleteRecord(currentUser, inv, 'investigations') && (
                                   <button
                                     type="button"
                                     onClick={(e) => { e.stopPropagation(); handleDelete(inv); }}

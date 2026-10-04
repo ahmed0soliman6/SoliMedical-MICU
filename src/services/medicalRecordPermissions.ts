@@ -10,119 +10,142 @@ export interface UserContextForPermission {
 }
 
 export interface RecordOwnershipContext {
+  id?: string;
+  createdBy?: string;
   createdByUid?: string;
   doctorId?: string;
   authorId?: string;
+  authorUid?: string;
   authorStaffId?: string;
   recordedByStaffId?: string;
   userId?: string;
   transferredBy?: string;
   createdAt?: number | string;
+  recordedBy?: {
+    staffId?: string;
+    name?: string;
+  };
+  authorName?: string;
 }
 
+export type CategoryPermissionKey = 'vitals' | 'labs' | 'investigations' | 'clinicalNotes' | 'handovers' | 'sbar';
+
 /**
- * Validates if a user is authorized to edit a specific medical record.
- * ICU Standard Rules (Request #9):
- * 1. ADMIN (or Super Admin) can edit ALL records.
- * 2. Clinicians / Doctors with access to clinical records can edit/update records created by other doctors.
- * 3. Creator fields (createdByUid, doctorId, authorId, createdAt) are preserved via preserveRecordOwnership.
- * 4. Fails closed if user context is missing.
+ * Validates if a user is authorized to edit/update a specific medical record.
  */
 export function canEditRecord(
   user: UserContextForPermission | any | null | undefined,
-  _record?: RecordOwnershipContext | null | undefined,
-  requiredPermission?: string
+  record?: RecordOwnershipContext | any | null | undefined,
+  categoryKey: CategoryPermissionKey = 'vitals'
 ): boolean {
   if (!user || !user.uid) return false;
 
   if (
     user.role === StaffRole.ADMIN ||
     user.role === 'ADMIN' ||
+    user.role === 'admin' ||
     user.role === 'SUPER_ADMIN' ||
-    user.isSuperAdmin === true
+    user.isSuperAdmin === true ||
+    user.permissions?.['admin'] === true
   ) {
     return true;
   }
 
-  if (requiredPermission) {
-    return user.permissions?.[requiredPermission] === true;
-  }
+  const updateKey = categoryKey === 'sbar' ? 'sbar.update' : `${categoryKey}.update`;
+  const altKey = categoryKey === 'handovers' ? 'sbar.update' : (categoryKey === 'sbar' ? 'handovers.update' : undefined);
 
-  return true;
+  return Boolean(
+    user.permissions?.[updateKey] === true ||
+    (altKey && user.permissions?.[altKey] === true) ||
+    user.permissions?.[`${categoryKey}.create`] === true
+  );
 }
 
 /**
- * Validates if a user is authorized to delete a record.
- * Rules:
- * 1. ADMIN (or Super Admin) can delete ALL records.
- * 2. User with explicit 'medicalRecords.delete' permission can delete ALL records.
+ * Validates if a user is authorized to delete a specific medical record.
+ * Supports two tiers of deletion authority:
+ * 1. Level 2 (Universal Delete Any): Admin / Super Admin OR medicalRecords.delete / medicalRecords.deleteAny
+ * 2. Level 1 (Delete Own Records): <categoryKey>.deleteOwn AND record creator matches current user
  */
-export function canDeleteRecord(
+export const canDeleteMedicalRecord = (
   user: UserContextForPermission | any | null | undefined,
-  _record?: RecordOwnershipContext | RecordOwnershipContext[] | any | null | undefined
-): boolean {
+  record?: RecordOwnershipContext | any | null | undefined,
+  categoryKey: CategoryPermissionKey = 'vitals'
+): boolean => {
   if (!user || !user.uid) return false;
 
-  // 1. ADMIN / Super Admin can delete all records
+  // 1. Level 2 (Delete Any) or Admin Tier
   if (
     user.role === StaffRole.ADMIN ||
     user.role === 'ADMIN' ||
+    user.role === 'admin' ||
     user.role === 'SUPER_ADMIN' ||
-    user.isSuperAdmin === true
-  ) {
-    return true;
-  }
-
-  // 2. User has explicit permission to delete medical records (can delete any record)
-  if (
+    user.isSuperAdmin === true ||
+    user.permissions?.['admin'] === true ||
     user.permissions?.['medicalRecords.delete'] === true ||
-    user.permissions?.['vitals.delete'] === true ||
-    user.permissions?.['labs.delete'] === true ||
-    user.permissions?.['investigations.delete'] === true
+    user.permissions?.['medicalRecords.deleteAny'] === true
   ) {
     return true;
   }
 
-  return false;
+  if (!record) return false;
+
+  // 2. Level 1 (Delete Own Records)
+  const permKey = categoryKey === 'sbar' ? 'sbar.deleteOwn' : `${categoryKey}.deleteOwn`;
+  const altKey = categoryKey === 'handovers' ? 'sbar.deleteOwn' : (categoryKey === 'sbar' ? 'handovers.deleteOwn' : undefined);
+
+  const hasOwnDeletePermission = Boolean(
+    user.permissions?.[permKey] === true ||
+    (altKey && user.permissions?.[altKey] === true) ||
+    user.permissions?.[`${categoryKey}.delete`] === true
+  );
+
+  if (!hasOwnDeletePermission) return false;
+
+  const recordCreator =
+    record.createdBy ||
+    record.createdByUid ||
+    record.authorId ||
+    record.authorUid ||
+    record.userId ||
+    record.doctorId ||
+    record.authorStaffId ||
+    record.recordedByStaffId ||
+    record.recordedBy?.staffId;
+
+  const isCreator = Boolean(
+    (recordCreator && (recordCreator === user.uid || recordCreator === `staff-${user.uid}`)) ||
+    (user.badgeId && recordCreator && (recordCreator === user.badgeId || recordCreator === `staff-${user.badgeId}`)) ||
+    (user.nameAr && record.authorName && record.authorName === user.nameAr) ||
+    (user.nameEn && record.authorName && record.authorName === user.nameEn) ||
+    (user.displayName && record.authorName && record.authorName === user.displayName)
+  );
+
+  return isCreator;
+};
+
+/**
+ * Validates if a user is authorized to delete a record.
+ */
+export function canDeleteRecord(
+  user: UserContextForPermission | any | null | undefined,
+  record?: RecordOwnershipContext | RecordOwnershipContext[] | any | null | undefined,
+  categoryKey: CategoryPermissionKey = 'vitals'
+): boolean {
+  if (Array.isArray(record)) {
+    return record.every(r => canDeleteMedicalRecord(user, r, categoryKey));
+  }
+  return canDeleteMedicalRecord(user, record, categoryKey);
 }
 
 /**
  * Validates if a user is authorized to delete a clinical progress note or consultation note.
- * Rules:
- * 1. ADMIN (or Super Admin) can delete any clinical note.
- * 2. User granted deletion permission by Admin ('medicalRecords.delete' or 'clinicalNotes.delete').
  */
 export function canDeleteClinicalNote(
   user: UserContextForPermission | any | null | undefined,
-  _note?: {
-    authorId?: string;
-    authorStaffId?: string;
-    authorName?: string;
-    createdByUid?: string;
-    authorRole?: string;
-  } | null | undefined
+  note?: RecordOwnershipContext | any | null | undefined
 ): boolean {
-  if (!user || !user.uid) return false;
-
-  // 1. Admin / Super Admin has universal delete authority
-  if (
-    user.role === StaffRole.ADMIN ||
-    user.role === 'ADMIN' ||
-    user.role === 'SUPER_ADMIN' ||
-    user.isSuperAdmin === true
-  ) {
-    return true;
-  }
-
-  // 2. User with explicit delete permission granted by Admin
-  if (
-    user.permissions?.['medicalRecords.delete'] === true ||
-    user.permissions?.['clinicalNotes.delete'] === true
-  ) {
-    return true;
-  }
-
-  return false;
+  return canDeleteMedicalRecord(user, note, 'clinicalNotes');
 }
 
 /**

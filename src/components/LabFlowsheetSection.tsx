@@ -303,7 +303,7 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
 
   const canCreateLabs = Boolean(!readOnly && (isAdminUser || hasPermission?.('labs.create') || (currentUser?.permissions as any)?.['labs.create'] === true));
   const canUpdateLabs = Boolean(!readOnly && (isAdminUser || hasPermission?.('labs.update') || (currentUser?.permissions as any)?.['labs.update'] === true));
-  const canDeleteLabs = Boolean(isAdminUser || hasPermission?.('medicalRecords.delete') || (currentUser?.permissions as any)?.['medicalRecords.delete'] === true);
+  const canDeleteLabs = Boolean(isAdminUser || hasPermission?.('medicalRecords.delete') || (currentUser?.permissions as any)?.['medicalRecords.delete'] === true || (currentUser?.permissions as any)?.['medicalRecords.deleteAny'] === true || (currentUser?.permissions as any)?.['labs.deleteOwn'] === true);
 
   const dynamicPresets = React.useMemo(() => {
     if (settings.labCategories && settings.labCategories.length > 0) {

@@ -770,22 +770,28 @@ export interface UserPermissions {
   'vitals.view'?: boolean;
   'vitals.create'?: boolean;
   'vitals.update'?: boolean;
+  'vitals.deleteOwn'?: boolean;
 
   'labs.view'?: boolean;
   'labs.create'?: boolean;
   'labs.update'?: boolean;
+  'labs.deleteOwn'?: boolean;
 
   'investigations.view'?: boolean;
   'investigations.create'?: boolean;
   'investigations.update'?: boolean;
+  'investigations.deleteOwn'?: boolean;
 
   'clinicalNotes.view'?: boolean;
   'clinicalNotes.create'?: boolean;
   'clinicalNotes.update'?: boolean;
+  'clinicalNotes.deleteOwn'?: boolean;
 
   'sbar.view'?: boolean;
   'sbar.create'?: boolean;
   'sbar.update'?: boolean;
+  'sbar.deleteOwn'?: boolean;
+  'handovers.deleteOwn'?: boolean;
 
   'transfer.create'?: boolean;
   'isolation.update'?: boolean;
@@ -810,6 +816,7 @@ export interface UserPermissions {
 
   'audit.view'?: boolean;
   'medicalRecords.delete'?: boolean;
+  'medicalRecords.deleteAny'?: boolean;
 }
 
 export type CanonicalRole = 'ADMIN' | 'CONSULTANT' | 'DOCTOR' | 'NURSE';
