@@ -142,38 +142,87 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
   const { currentUser, hasPermission } = useAuth();
   const { triggerNotification } = useAppNotifications();
 
-  const canViewVitals = Boolean(
+  const isAdminUser = Boolean(
     currentUser?.role === StaffRole.ADMIN ||
     currentUser?.role === 'ADMIN' ||
     currentUser?.role === 'SUPER_ADMIN' ||
-    currentUser?.isSuperAdmin === true ||
+    currentUser?.isSuperAdmin === true
+  );
+
+  const canViewVitals = Boolean(
+    isAdminUser ||
     hasPermission?.('vitals.view') ||
     (currentUser?.permissions as any)?.['vitals.view'] === true
   );
 
   const canCreateVitals = Boolean(
     !readOnly && (
-      currentUser?.role === StaffRole.ADMIN ||
-      currentUser?.role === 'ADMIN' ||
-      currentUser?.role === 'SUPER_ADMIN' ||
-      currentUser?.isSuperAdmin === true ||
+      isAdminUser ||
       hasPermission?.('vitals.create') ||
       (currentUser?.permissions as any)?.['vitals.create'] === true
     )
   );
 
+  const canViewLabs = Boolean(
+    isAdminUser ||
+    hasPermission?.('labs.view') ||
+    (currentUser?.permissions as any)?.['labs.view'] === true
+  );
+
+  const canCreateLabs = Boolean(
+    !readOnly && (
+      isAdminUser ||
+      hasPermission?.('labs.create') ||
+      (currentUser?.permissions as any)?.['labs.create'] === true
+    )
+  );
+
+  const canViewInvestigations = Boolean(
+    isAdminUser ||
+    hasPermission?.('investigations.view') ||
+    (currentUser?.permissions as any)?.['investigations.view'] === true
+  );
+
+  const canCreateInvestigations = Boolean(
+    !readOnly && (
+      isAdminUser ||
+      hasPermission?.('investigations.create') ||
+      (currentUser?.permissions as any)?.['investigations.create'] === true
+    )
+  );
+
+  const canViewSbar = Boolean(
+    isAdminUser ||
+    hasPermission?.('sbar.view') ||
+    (currentUser?.permissions as any)?.['sbar.view'] === true
+  );
+
+  const canCreateSbar = Boolean(
+    !readOnly && (
+      isAdminUser ||
+      hasPermission?.('sbar.create') ||
+      (currentUser?.permissions as any)?.['sbar.create'] === true
+    )
+  );
+
+  const canViewNotes = Boolean(
+    isAdminUser ||
+    hasPermission?.('clinicalNotes.view') ||
+    (currentUser?.permissions as any)?.['clinicalNotes.view'] === true
+  );
+
+  const canCreateNotes = Boolean(
+    !readOnly && (
+      isAdminUser ||
+      hasPermission?.('clinicalNotes.create') ||
+      (currentUser?.permissions as any)?.['clinicalNotes.create'] === true
+    )
+  );
+
   const canDischarge = Boolean(
-    currentUser?.role === StaffRole.ADMIN ||
-    currentUser?.isSuperAdmin === true ||
-    (currentUser?.role as any) === 'ADMIN' ||
+    isAdminUser ||
     hasPermission?.('discharge.create') ||
-    currentUser?.permissions?.['discharge.create'] === true ||
-    currentUser?.role === StaffRole.CONSULTANT ||
-    currentUser?.role === StaffRole.SPECIALIST ||
-    currentUser?.role === StaffRole.RESIDENT ||
-    (currentUser?.role as any) === 'DOCTOR' ||
-    (currentUser?.role as any) === 'PHYSICIAN' ||
-    (currentUser?.role as any) === 'CONSULTANT'
+    currentUser?.permissions?.['discharge.create'] === true
   );
   
   const [activeTab, setActiveTab] = useState<'all' | 'paperFlowsheet' | 'labs' | 'antibiotics' | 'investigations' | 'vitals' | 'vent' | 'pumps' | 'fluids' | 'sbar' | 'notes' | 'disposition' | 'labTemplates'>(() => {
