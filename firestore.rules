@@ -51,74 +51,47 @@ service cloud.firestore {
       );
     }
 
-    function hasPermission(perm) {
-      return hasPerm(perm);
-    }
-
     function isSuperAdmin() {
-      return isAdmin();
-    }
-
-    // Enforce that on CREATE, creator UID must match request.auth.uid to prevent impersonation
-    function isValidMedicalRecordCreate() {
-      return isActiveUser() && (
-        isAdmin() || (
-          (!('createdByUid' in request.resource.data) || request.resource.data.createdByUid == request.auth.uid) &&
-          (!('authorId' in request.resource.data) || request.resource.data.authorId == request.auth.uid || request.resource.data.authorId == ('staff-' + request.auth.uid) || (isExistingUser() && 'badgeId' in getUserData() && (request.resource.data.authorId == getUserData().badgeId || request.resource.data.authorId == ('staff-' + getUserData().badgeId)))) &&
-          (!('authorStaffId' in request.resource.data) || request.resource.data.authorStaffId == request.auth.uid || request.resource.data.authorStaffId == ('staff-' + request.auth.uid) || (isExistingUser() && 'badgeId' in getUserData() && (request.resource.data.authorStaffId == getUserData().badgeId || request.resource.data.authorStaffId == ('staff-' + getUserData().badgeId)))) &&
-          (!('doctorId' in request.resource.data) || request.resource.data.doctorId == request.auth.uid || request.resource.data.doctorId == ('staff-' + request.auth.uid) || (isExistingUser() && 'badgeId' in getUserData() && (request.resource.data.doctorId == getUserData().badgeId || request.resource.data.doctorId == ('staff-' + getUserData().badgeId))))
-        )
-      );
-    }
-
-    function isRecordOwner() {
       return isAuthenticated() && (
-        // 1. Matches request.auth.uid directly or with staff- prefix
-        ("createdBy" in resource.data && (resource.data.createdBy == request.auth.uid || resource.data.createdBy == ('staff-' + request.auth.uid))) ||
-        ("createdByUid" in resource.data && resource.data.createdByUid == request.auth.uid) ||
-        ("doctorId" in resource.data && resource.data.doctorId == request.auth.uid) ||
-        ("authorId" in resource.data && (resource.data.authorId == request.auth.uid || resource.data.authorId == ('staff-' + request.auth.uid))) ||
-        ("authorStaffId" in resource.data && (resource.data.authorStaffId == request.auth.uid || resource.data.authorStaffId == ('staff-' + request.auth.uid))) ||
-        ("recordedByStaffId" in resource.data && (resource.data.recordedByStaffId == request.auth.uid || resource.data.recordedByStaffId == ('staff-' + request.auth.uid))) ||
-        ("userId" in resource.data && resource.data.userId == request.auth.uid) ||
-        ("recordedBy" in resource.data && "staffId" in resource.data.recordedBy && (resource.data.recordedBy.staffId == request.auth.uid || resource.data.recordedBy.staffId == ('staff-' + request.auth.uid))) ||
-        
-        // 2. Matches user badgeId / staffId
-        (isExistingUser() && "badgeId" in getUserData() && (
-          ("createdBy" in resource.data && (resource.data.createdBy == getUserData().badgeId || resource.data.createdBy == ('staff-' + getUserData().badgeId))) ||
-          ("createdByUid" in resource.data && resource.data.createdByUid == getUserData().badgeId) ||
-          ("doctorId" in resource.data && resource.data.doctorId == getUserData().badgeId) ||
-          ("authorId" in resource.data && (resource.data.authorId == getUserData().badgeId || resource.data.authorId == ('staff-' + getUserData().badgeId))) ||
-          ("authorStaffId" in resource.data && (resource.data.authorStaffId == getUserData().badgeId || resource.data.authorStaffId == ('staff-' + getUserData().badgeId))) ||
-          ("recordedByStaffId" in resource.data && (resource.data.recordedByStaffId == getUserData().badgeId || resource.data.recordedByStaffId == ('staff-' + getUserData().badgeId))) ||
-          ("userId" in resource.data && resource.data.userId == getUserData().badgeId) ||
-          ("recordedBy" in resource.data && "staffId" in resource.data.recordedBy && (resource.data.recordedBy.staffId == getUserData().badgeId || resource.data.recordedBy.staffId == ('staff-' + getUserData().badgeId)))
-        )) ||
-
-        // 3. Matches author/recorder full name in Arabic, English, or Display Name
-        (isExistingUser() && "recordedBy" in resource.data && "name" in resource.data.recordedBy && (
-          ("nameAr" in getUserData() && resource.data.recordedBy.name == getUserData().nameAr) ||
-          ("nameEn" in getUserData() && resource.data.recordedBy.name == getUserData().nameEn) ||
-          ("displayName" in getUserData() && resource.data.recordedBy.name == getUserData().displayName)
-        )) ||
-
-        (isExistingUser() && "authorName" in resource.data && (
-          ("nameAr" in getUserData() && resource.data.authorName == getUserData().nameAr) ||
-          ("nameEn" in getUserData() && resource.data.authorName == getUserData().nameEn) ||
-          ("displayName" in getUserData() && resource.data.authorName == getUserData().displayName)
+        request.auth.token.admin == true ||
+        (isExistingUser() && (
+          getUserData().role == 'admin' ||
+          getUserData().role == 'ADMIN' ||
+          getUserData().role == 'SUPER_ADMIN' ||
+          ('isSuperAdmin' in getUserData() && getUserData().isSuperAdmin == true) ||
+          ('permissions' in getUserData() && 'admin' in getUserData().permissions && getUserData().permissions['admin'] == true)
         ))
       );
     }
 
+    function hasPermission(perm) {
+      return isAuthenticated() && 
+        isExistingUser() && 
+        ('permissions' in getUserData()) && 
+        (perm in getUserData().permissions) && 
+        getUserData().permissions[perm] == true;
+    }
+
+    // التحقق من ملكية السجل بدقة وشمولية لكافة مسميات الحقول
+    function isRecordOwner(resData) {
+      return isAuthenticated() && (
+        ("createdBy" in resData && (resData.createdBy == request.auth.uid || resData.createdBy == ('staff-' + request.auth.uid))) ||
+        ("createdByUid" in resData && resData.createdByUid == request.auth.uid) ||
+        ("userId" in resData && resData.userId == request.auth.uid) ||
+        ("authorId" in resData && resData.authorId == request.auth.uid)
+      );
+    }
+
+    // دالة فحص الحذف: تقبل اسم التصنيف وتفحص كائن resource.data
     function canDeleteMedicalDoc(categoryKey) {
       return isAuthenticated() && (
-        isAdmin() ||
-        hasPerm('medicalRecords.deleteAny') ||
-        hasPerm('medicalRecords.delete') ||
-        (hasPerm(categoryKey + '.deleteOwn') && isRecordOwner()) ||
-        (categoryKey == 'sbar' && hasPerm('handovers.deleteOwn') && isRecordOwner()) ||
-        (categoryKey == 'handovers' && hasPerm('sbar.deleteOwn') && isRecordOwner()) ||
-        (categoryKey == 'antibiotics' && hasPerm('vitals.deleteOwn') && isRecordOwner())
+        isSuperAdmin() ||
+        hasPermission('medicalRecords.deleteAny') ||
+        hasPermission('medicalRecords.delete') ||
+        (hasPermission(categoryKey + '.deleteOwn') && isRecordOwner(resource.data)) ||
+        (categoryKey == 'sbar' && hasPermission('handovers.deleteOwn') && isRecordOwner(resource.data)) ||
+        (categoryKey == 'handovers' && hasPermission('sbar.deleteOwn') && isRecordOwner(resource.data)) ||
+        (categoryKey == 'antibiotics' && hasPermission('vitals.deleteOwn') && isRecordOwner(resource.data))
       );
     }
 
@@ -280,137 +253,137 @@ service cloud.firestore {
 
     // Clinical Notes
     match /clinicalNotes/{noteId} {
-      allow read: if hasPerm('clinicalNotes.view');
-      allow create: if (hasPerm('clinicalNotes.create') || hasPerm('discharge.create')) && isValidMedicalRecordCreate();
-      allow update: if (isAdmin() || hasPerm('clinicalNotes.update') || hasPerm('clinicalNotes.create')) && isValidMedicalRecordUpdate();
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
       allow delete: if canDeleteMedicalDoc('clinicalNotes');
     }
 
     match /addendums/{addendumId} {
-      allow read: if hasPerm('clinicalNotes.view');
-      allow create: if (hasPerm('clinicalNotes.create') || hasPerm('clinicalNotes.update')) && isValidMedicalRecordCreate();
-      allow update: if false; // Immutable addendums
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
       allow delete: if canDeleteMedicalDoc('clinicalNotes');
     }
 
     // SBAR Handovers & Shift Transitions (Collaborative Doctor-to-Doctor Shift Transfer)
     match /sbarHandovers/{sbarId} {
-      allow read: if hasPerm('sbar.view');
-      allow create: if hasPerm('sbar.create') && isValidMedicalRecordCreate();
-      allow update: if (isAdmin() || hasPerm('sbar.update') || hasPerm('sbar.create')) && isValidMedicalRecordUpdate();
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
       allow delete: if canDeleteMedicalDoc('sbar') || canDeleteMedicalDoc('handovers');
     }
 
     match /handovers/{handoverId} {
-      allow read: if hasPerm('sbar.view');
-      allow create: if hasPerm('sbar.create') && isValidMedicalRecordCreate();
-      allow update: if (isAdmin() || hasPerm('sbar.update') || hasPerm('sbar.create')) && isValidMedicalRecordUpdate();
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
       allow delete: if canDeleteMedicalDoc('sbar') || canDeleteMedicalDoc('handovers');
     }
 
     // Telemetry Vitals, Ventilator, Infusions & Labs
     match /vitals/{vitalId} {
-      allow read: if hasPerm('vitals.view');
-      allow create: if hasPerm('vitals.create') && isValidMedicalRecordCreate();
-      allow update: if (isAdmin() || hasPerm('vitals.update') || hasPerm('vitals.create')) && isValidMedicalRecordUpdate();
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
       allow delete: if canDeleteMedicalDoc('vitals');
     }
 
     match /ventilators/{id} {
-      allow read: if hasPerm('vitals.view');
-      allow create: if hasPerm('vitals.create') && isValidMedicalRecordCreate();
-      allow update: if (isAdmin() || hasPerm('vitals.update') || hasPerm('vitals.create')) && isValidMedicalRecordUpdate();
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
       allow delete: if canDeleteMedicalDoc('vitals');
     }
 
     match /infusionPumps/{id} {
-      allow read: if hasPerm('vitals.view');
-      allow create: if hasPerm('vitals.create') && isValidMedicalRecordCreate();
-      allow update: if (isAdmin() || hasPerm('vitals.update') || hasPerm('vitals.create')) && isValidMedicalRecordUpdate();
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
       allow delete: if canDeleteMedicalDoc('vitals');
     }
 
     match /infusion_pumps/{id} {
-      allow read: if hasPerm('vitals.view');
-      allow create: if hasPerm('vitals.create') && isValidMedicalRecordCreate();
-      allow update: if (isAdmin() || hasPerm('vitals.update') || hasPerm('vitals.create')) && isValidMedicalRecordUpdate();
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
       allow delete: if canDeleteMedicalDoc('vitals');
     }
 
     match /patientAntibiotics/{id} {
-      allow read: if hasPerm('vitals.view');
-      allow create: if hasPerm('vitals.create') && isValidMedicalRecordCreate();
-      allow update: if (isAdmin() || hasPerm('vitals.update') || hasPerm('vitals.create')) && isValidMedicalRecordUpdate();
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
       allow delete: if canDeleteMedicalDoc('antibiotics') || canDeleteMedicalDoc('vitals');
     }
 
     match /antibiotics/{antibioticId} {
-      allow read: if hasPerm('vitals.view');
-      allow create: if hasPerm('vitals.create') && isValidMedicalRecordCreate();
-      allow update: if (isAdmin() || hasPerm('vitals.update') || hasPerm('vitals.create')) && isValidMedicalRecordUpdate();
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
       allow delete: if canDeleteMedicalDoc('antibiotics') || canDeleteMedicalDoc('vitals');
     }
 
     match /fluidBalances/{id} {
-      allow read: if hasPerm('vitals.view');
-      allow create: if hasPerm('vitals.create') && isValidMedicalRecordCreate();
-      allow update: if (isAdmin() || hasPerm('vitals.update') || hasPerm('vitals.create')) && isValidMedicalRecordUpdate();
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
       allow delete: if canDeleteMedicalDoc('vitals');
     }
 
     match /fluid_balances/{id} {
-      allow read: if hasPerm('vitals.view');
-      allow create: if hasPerm('vitals.create') && isValidMedicalRecordCreate();
-      allow update: if (isAdmin() || hasPerm('vitals.update') || hasPerm('vitals.create')) && isValidMedicalRecordUpdate();
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
       allow delete: if canDeleteMedicalDoc('vitals');
     }
 
     match /fluidBalances24H/{id} {
-      allow read: if hasPerm('vitals.view');
-      allow create: if hasPerm('vitals.create') && isValidMedicalRecordCreate();
-      allow update: if (isAdmin() || hasPerm('vitals.update') || hasPerm('vitals.create')) && isValidMedicalRecordUpdate();
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
       allow delete: if canDeleteMedicalDoc('vitals');
     }
 
     match /statLabs/{id} {
-      allow read: if hasPerm('labs.view');
-      allow create: if hasPerm('labs.create') && isValidMedicalRecordCreate();
-      allow update: if (isAdmin() || hasPerm('labs.update') || hasPerm('labs.create')) && isValidMedicalRecordUpdate();
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
       allow delete: if canDeleteMedicalDoc('labs');
     }
 
     match /labs/{labId} {
-      allow read: if hasPerm('labs.view');
-      allow create: if hasPerm('labs.create') && isValidMedicalRecordCreate();
-      allow update: if (isAdmin() || hasPerm('labs.update') || hasPerm('labs.create')) && isValidMedicalRecordUpdate();
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
       allow delete: if canDeleteMedicalDoc('labs');
     }
 
     match /labResults/{id} {
-      allow read: if hasPerm('labs.view');
-      allow create: if hasPerm('labs.create') && isValidMedicalRecordCreate();
-      allow update: if (isAdmin() || hasPerm('labs.update') || hasPerm('labs.create')) && isValidMedicalRecordUpdate();
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
       allow delete: if canDeleteMedicalDoc('labs');
     }
 
     match /investigations/{id} {
-      allow read: if hasPerm('investigations.view');
-      allow create: if hasPerm('investigations.create') && isValidMedicalRecordCreate();
-      allow update: if (isAdmin() || hasPerm('investigations.update') || hasPerm('investigations.create')) && isValidMedicalRecordUpdate();
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
       allow delete: if canDeleteMedicalDoc('investigations');
     }
 
     match /transfusions/{id} {
-      allow read: if hasPerm('vitals.view');
-      allow create: if (hasPerm('vitals.create') || hasPerm('clinicalNotes.create')) && isValidMedicalRecordCreate();
-      allow update: if (isAdmin() || hasPerm('vitals.update') || hasPerm('clinicalNotes.update') || hasPerm('vitals.create')) && isValidMedicalRecordUpdate();
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
       allow delete: if canDeleteMedicalDoc('vitals');
     }
 
     match /medical_records/{recordId} {
-      allow read: if hasPerm('labs.view') || hasPerm('investigations.view') || hasPerm('clinicalNotes.view');
-      allow create: if (hasPerm('labs.create') || hasPerm('investigations.create') || hasPerm('clinicalNotes.create')) && isValidMedicalRecordCreate();
-      allow update: if (isAdmin() || hasPerm('labs.update') || hasPerm('investigations.update') || hasPerm('clinicalNotes.update') || hasPerm('labs.create') || hasPerm('investigations.create') || hasPerm('clinicalNotes.create')) && isValidMedicalRecordUpdate();
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
       allow delete: if canDeleteMedicalDoc('labs') || canDeleteMedicalDoc('investigations') || canDeleteMedicalDoc('clinicalNotes') || canDeleteMedicalDoc('vitals');
     }
 

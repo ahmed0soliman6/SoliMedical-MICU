@@ -165,7 +165,9 @@ export interface LabResultItem {
   createdBy?: string;
   createdByUid?: string;
   authorId?: string;
+  authorName?: string;
   userId?: string;
+  createdAt?: string;
 }
 
 export interface InvestigationItem {
@@ -183,7 +185,9 @@ export interface InvestigationItem {
   createdBy?: string;
   createdByUid?: string;
   authorId?: string;
+  authorName?: string;
   userId?: string;
+  createdAt?: string;
   lastModifiedByName?: string;
   lastModifiedByStaffId?: string;
   lastModifiedAt?: string;
@@ -374,6 +378,13 @@ export interface TelemetryVitals {
     role: StaffRole;
   };
   clinicalNotes?: string;
+  createdBy?: string;
+  createdByUid?: string;
+  authorId?: string;
+  authorName?: string;
+  userId?: string;
+  createdAt?: string;
+  recordedByStaffId?: string;
 }
 
 export interface VentilatorHistoryEntry {

@@ -540,7 +540,9 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
         createdBy: auth.currentUser?.uid || currentUser?.uid,
         createdByUid: auth.currentUser?.uid || currentUser?.uid,
         userId: auth.currentUser?.uid || currentUser?.uid,
-        authorId: auth.currentUser?.uid || currentUser?.badgeId || currentUser?.uid,
+        authorId: auth.currentUser?.uid || currentUser?.uid,
+        authorName: userDisplay,
+        createdAt: new Date().toISOString(),
       };
 
       // 1. Write to local Dexie table
@@ -584,7 +586,9 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
         createdBy: auth.currentUser?.uid || currentUser?.uid,
         createdByUid: auth.currentUser?.uid || currentUser?.uid,
         userId: auth.currentUser?.uid || currentUser?.uid,
-        authorId: auth.currentUser?.uid || currentUser?.badgeId || currentUser?.uid,
+        authorId: auth.currentUser?.uid || currentUser?.uid,
+        authorName: userDisplay,
+        createdAt: new Date().toISOString(),
       };
 
       await db.labResults.put(newRecord);

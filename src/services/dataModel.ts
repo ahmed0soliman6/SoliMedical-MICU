@@ -543,9 +543,11 @@ export async function addTimestampedVitals(input: AddVitalsInput): Promise<Telem
     createdBy: auth.currentUser?.uid || currentUserUid || input.recordedBy?.staffId,
     createdByUid: auth.currentUser?.uid || currentUserUid || input.recordedBy?.staffId,
     userId: auth.currentUser?.uid || currentUserUid || input.recordedBy?.staffId,
-    authorId: currentUserUid ? (currentUserUid.startsWith('staff-') ? currentUserUid : `staff-${currentUserUid}`) : input.recordedBy?.staffId,
+    authorId: auth.currentUser?.uid || currentUserUid || input.recordedBy?.staffId,
+    authorName: input.recordedBy?.name || auth.currentUser?.displayName,
     authorStaffId: input.recordedBy?.staffId || currentUserUid,
     recordedByStaffId: input.recordedBy?.staffId || currentUserUid,
+    createdAt: nowIso,
   } as any;
 
   await db.transaction('rw', [db.vitals, db.beds, db.auditLogs], async () => {

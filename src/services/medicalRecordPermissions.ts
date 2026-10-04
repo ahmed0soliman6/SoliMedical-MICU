@@ -130,20 +130,24 @@ export const canDeleteMedicalRecord = (
 
   if (!hasOwnDeletePermission) return false;
 
-  const recordCreator =
-    record.createdBy ||
-    record.createdByUid ||
-    record.authorId ||
-    record.authorUid ||
-    record.userId ||
-    record.doctorId ||
-    record.authorStaffId ||
-    record.recordedByStaffId ||
-    record.recordedBy?.staffId;
-
   const isCreator = Boolean(
-    (recordCreator && (recordCreator === user.uid || recordCreator === `staff-${user.uid}`)) ||
-    (user.badgeId && recordCreator && (recordCreator === user.badgeId || recordCreator === `staff-${user.badgeId}`)) ||
+    (record.createdBy && (record.createdBy === user.uid || record.createdBy === `staff-${user.uid}`)) ||
+    (record.createdByUid && (record.createdByUid === user.uid || record.createdByUid === `staff-${user.uid}`)) ||
+    (record.authorId && (record.authorId === user.uid || record.authorId === `staff-${user.uid}`)) ||
+    (record.userId && (record.userId === user.uid || record.userId === `staff-${user.uid}`)) ||
+    (record.doctorId && (record.doctorId === user.uid || record.doctorId === `staff-${user.uid}`)) ||
+    (record.authorStaffId && (record.authorStaffId === user.uid || record.authorStaffId === `staff-${user.uid}`)) ||
+    (record.recordedByStaffId && (record.recordedByStaffId === user.uid || record.recordedByStaffId === `staff-${user.uid}`)) ||
+    (record.recordedBy?.staffId && (record.recordedBy.staffId === user.uid || record.recordedBy.staffId === `staff-${user.uid}`)) ||
+    (user.badgeId && (
+      record.createdBy === user.badgeId ||
+      record.createdByUid === user.badgeId ||
+      record.authorId === user.badgeId ||
+      record.userId === user.badgeId ||
+      record.authorStaffId === user.badgeId ||
+      record.recordedByStaffId === user.badgeId ||
+      record.recordedBy?.staffId === user.badgeId
+    )) ||
     (user.nameAr && record.authorName && record.authorName === user.nameAr) ||
     (user.nameEn && record.authorName && record.authorName === user.nameEn) ||
     (user.displayName && record.authorName && record.authorName === user.displayName)

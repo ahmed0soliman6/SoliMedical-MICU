@@ -6,7 +6,7 @@ import { useTranslation } from '../services/i18n.ts';
 import { parseEnglishFloat, parseEnglishInt, toEnglishDigits } from '../services/numberUtils.ts';
 import { useAuth } from '../services/AuthContext.tsx';
 import { db } from '../db/icuSyncDb.ts';
-import { syncVitalsToCloud } from '../services/firebase.ts';
+import { syncVitalsToCloud, auth } from '../services/firebase.ts';
 
 interface AddVitalsModalProps {
   isOpen: boolean;
@@ -150,10 +150,11 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
             name: userDisplay,
             role: userRole,
           },
-          createdBy: (vitalsToEdit as any).createdBy || (vitalsToEdit as any).createdByUid || currentUser?.uid,
-          createdByUid: (vitalsToEdit as any).createdByUid || (vitalsToEdit as any).createdBy || currentUser?.uid,
-          userId: (vitalsToEdit as any).userId || (vitalsToEdit as any).createdBy || currentUser?.uid,
-          authorId: (vitalsToEdit as any).authorId || currentUser?.uid,
+          createdBy: (vitalsToEdit as any).createdBy || auth.currentUser?.uid || currentUser?.uid,
+          createdByUid: (vitalsToEdit as any).createdByUid || auth.currentUser?.uid || currentUser?.uid,
+          userId: (vitalsToEdit as any).userId || auth.currentUser?.uid || currentUser?.uid,
+          authorId: (vitalsToEdit as any).authorId || auth.currentUser?.uid || currentUser?.uid,
+          authorName: userDisplay,
         } as any;
         await db.vitals.put(updatedVitals);
         await syncVitalsToCloud(updatedVitals);

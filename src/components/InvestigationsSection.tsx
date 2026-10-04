@@ -27,7 +27,7 @@ import { useTranslation } from '../services/i18n.ts';
 import { useAuth } from '../services/AuthContext.tsx';
 import { useSystemSettings } from '../services/SettingsContext.tsx';
 import { db } from '../db/icuSyncDb.ts';
-import { syncInvestigationToCloud, deleteInvestigationFromCloud, fetchFullCategoryFromCloud, hasMoreCategoryData } from '../services/firebase.ts';
+import { syncInvestigationToCloud, deleteInvestigationFromCloud, fetchFullCategoryFromCloud, hasMoreCategoryData, auth } from '../services/firebase.ts';
 import { AiInvestigationScannerModal } from './AiInvestigationScannerModal.tsx';
 import { canDeleteRecord } from '../services/medicalRecordPermissions.ts';
 import { useLockBodyScroll } from '../hooks/useLockBodyScroll.ts';
@@ -237,7 +237,8 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
 
   const handleDirectSaveFromAi = async (data: Omit<InvestigationItem, 'id'>) => {
     const invId = `inv-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
-    const userDisplay = currentUser?.nameAr || currentUser?.nameEn || currentUser?.email || 'الطبيب المناوب';
+    const userDisplay = currentUser?.nameAr || currentUser?.nameEn || currentUser?.displayName || 'الطبيب المناوب';
+    const nowIso = new Date().toISOString();
     const newRecord: InvestigationItem = {
       ...data,
       id: invId,
@@ -245,10 +246,12 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
       bedNumber,
       recordedByName: `${userDisplay} (AI OCR)`,
       recordedByStaffId: currentUser?.badgeId || currentUser?.uid,
-      createdBy: currentUser?.uid,
-      createdByUid: currentUser?.uid,
-      userId: currentUser?.uid,
-      authorId: currentUser?.badgeId || currentUser?.uid,
+      createdBy: auth.currentUser?.uid || currentUser?.uid,
+      createdByUid: auth.currentUser?.uid || currentUser?.uid,
+      authorId: auth.currentUser?.uid || currentUser?.uid,
+      authorName: userDisplay,
+      userId: auth.currentUser?.uid || currentUser?.uid,
+      createdAt: nowIso,
     };
 
     // 1. Dexie local database
@@ -353,6 +356,7 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
       } else {
         // Add new record
         const invId = `inv-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+        const nowIso = new Date().toISOString();
         const newRecord: InvestigationItem = {
           id: invId,
           patientId,
@@ -365,10 +369,12 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
           notes: notes.trim() || undefined,
           recordedByName: userDisplay,
           recordedByStaffId: currentUser?.badgeId || currentUser?.uid,
-          createdBy: currentUser?.uid,
-          createdByUid: currentUser?.uid,
-          userId: currentUser?.uid,
-          authorId: currentUser?.badgeId || currentUser?.uid,
+          createdBy: auth.currentUser?.uid || currentUser?.uid,
+          createdByUid: auth.currentUser?.uid || currentUser?.uid,
+          authorId: auth.currentUser?.uid || currentUser?.uid,
+          authorName: userDisplay,
+          userId: auth.currentUser?.uid || currentUser?.uid,
+          createdAt: nowIso,
         };
 
         // 1. Dexie local database

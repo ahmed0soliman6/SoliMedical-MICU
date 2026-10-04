@@ -1562,16 +1562,11 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
           if (change.type === 'added' || change.type === 'modified') {
             await putFn(change.doc.data() as T);
           } else if (change.type === 'removed') {
-            // Intentional no-op: a document leaving the live "top N" query
-            // window (because a newer record pushed it out) also fires
-            // 'removed'. This is NOT evidence of actual deletion and must
-            // never trigger a cloud read to check — Dexie intentionally
-            // keeps the record. Real deletions are handled directly by the
-            // delete button's own code path (deleteXFromCloud functions),
-            // not detected here. Adding a getDoc() read here previously
-            // caused one extra Firestore read per new record created, for
-            // every client with this listener open — a confirmed quota
-            // regression. Do not reintroduce it.
+            // If the query result has fewer docs than the limit window, the document
+            // was deleted from Firestore (not pushed out by newer records). Remove from Dexie.
+            if (_deleteFn && snap.docs.length < limitCount) {
+              await _deleteFn(change.doc.id);
+            }
           }
         }
 
@@ -1616,16 +1611,9 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
               if (change.type === 'added' || change.type === 'modified') {
                 await putFn(change.doc.data() as T);
               } else if (change.type === 'removed') {
-                // Intentional no-op: a document leaving the live "top N" query
-                // window (because a newer record pushed it out) also fires
-                // 'removed'. This is NOT evidence of actual deletion and must
-                // never trigger a cloud read to check — Dexie intentionally
-                // keeps the record. Real deletions are handled directly by the
-                // delete button's own code path (deleteXFromCloud functions),
-                // not detected here. Adding a getDoc() read here previously
-                // caused one extra Firestore read per new record created, for
-                // every client with this listener open — a confirmed quota
-                // regression. Do not reintroduce it.
+                if (_deleteFn) {
+                  await _deleteFn(change.doc.id);
+                }
               }
             }
             notify();
