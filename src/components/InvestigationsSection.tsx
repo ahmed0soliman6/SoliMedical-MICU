@@ -22,7 +22,7 @@ import {
   Tag,
   Download
 } from 'lucide-react';
-import { InvestigationItem } from '../types/schema.ts';
+import { InvestigationItem, StaffRole } from '../types/schema.ts';
 import { useTranslation } from '../services/i18n.ts';
 import { useAuth } from '../services/AuthContext.tsx';
 import { useSystemSettings } from '../services/SettingsContext.tsx';
@@ -157,8 +157,19 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
   readOnly = false,
 }) => {
   const { lang, isRTL } = useTranslation();
-  const { currentUser } = useAuth();
+  const { currentUser, hasPermission } = useAuth();
   const { settings } = useSystemSettings();
+
+  const isAdminUser = Boolean(
+    currentUser?.role === StaffRole.ADMIN ||
+    currentUser?.role === 'ADMIN' ||
+    currentUser?.role === 'SUPER_ADMIN' ||
+    currentUser?.isSuperAdmin === true
+  );
+
+  const canCreateInvestigations = Boolean(!readOnly && (isAdminUser || hasPermission?.('investigations.create') || (currentUser?.permissions as any)?.['investigations.create'] === true));
+  const canUpdateInvestigations = Boolean(!readOnly && (isAdminUser || hasPermission?.('investigations.update') || (currentUser?.permissions as any)?.['investigations.update'] === true));
+  const canDeleteInvestigations = Boolean(isAdminUser || hasPermission?.('medicalRecords.delete') || (currentUser?.permissions as any)?.['medicalRecords.delete'] === true);
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isAiScanModalOpen, setIsAiScanModalOpen] = useState(false);
@@ -379,7 +390,7 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
       {/* Sleek Action Bar inside Card */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 p-2.5 bg-[#070c18] rounded-xl border border-slate-800/80">
         <div className="flex items-center gap-2 flex-wrap">
-          {!readOnly && (
+          {!readOnly && canCreateInvestigations && (
             <button
               type="button"
               onClick={() => handleOpenAddModal('Chest X-Ray')}
@@ -390,7 +401,7 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
             </button>
           )}
 
-          {settings.features.enableAiInvestigationScanner !== false && !readOnly && (
+          {settings.features.enableAiInvestigationScanner !== false && !readOnly && canCreateInvestigations && (
             <button
               type="button"
               onClick={() => setIsAiScanModalOpen(true)}
@@ -421,15 +432,17 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
               : 'No radiology or investigations recorded for this patient.'}
           </p>
           <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
-            <button
-              type="button"
-              onClick={() => setIsAiScanModalOpen(true)}
-              className="px-3.5 py-1.5 text-xs font-bold rounded-xl bg-teal-50 dark:bg-teal-500/20 hover:bg-teal-100 dark:hover:bg-teal-500/30 text-teal-800 dark:text-teal-300 border border-teal-300 dark:border-teal-500/40 transition-all cursor-pointer flex items-center gap-1.5"
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>{lang === 'ar' ? 'المسح الضوئي الذكي بالذكاء الاصطناعي' : 'AI Smart Scan Report'}</span>
-            </button>
-            {MODALITY_PRESETS.slice(0, 5).map(m => (
+            {canCreateInvestigations && (
+              <button
+                type="button"
+                onClick={() => setIsAiScanModalOpen(true)}
+                className="px-3.5 py-1.5 text-xs font-bold rounded-xl bg-teal-50 dark:bg-teal-500/20 hover:bg-teal-100 dark:hover:bg-teal-500/30 text-teal-800 dark:text-teal-300 border border-teal-300 dark:border-teal-500/40 transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>{lang === 'ar' ? 'المسح الضوئي الذكي بالذكاء الاصطناعي' : 'AI Smart Scan Report'}</span>
+              </button>
+            )}
+            {canCreateInvestigations && MODALITY_PRESETS.slice(0, 5).map(m => (
               <button
                 key={m.id}
                 type="button"
@@ -606,17 +619,19 @@ export const InvestigationsSection: React.FC<InvestigationsSectionProps> = ({
                           <div className="flex items-center justify-end gap-2">
                             {!readOnly && (
                               <>
-                                <button
-                                  type="button"
-                                  onClick={(e) => { e.stopPropagation(); handleOpenEditModal(inv); }}
-                                  className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-teal-800 dark:text-teal-300 hover:text-slate-900 dark:hover:text-white border border-slate-300 dark:border-slate-700/80 transition-all cursor-pointer shadow-sm active:scale-95"
-                                  title={lang === 'ar' ? 'تعديل التقرير والفحص' : 'Edit Report & Details'}
-                                >
-                                  <Pencil className="w-3 h-3" />
-                                  <span>{lang === 'ar' ? 'تعديل' : 'Edit'}</span>
-                                </button>
+                                {canUpdateInvestigations && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); handleOpenEditModal(inv); }}
+                                    className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-teal-800 dark:text-teal-300 hover:text-slate-900 dark:hover:text-white border border-slate-300 dark:border-slate-700/80 transition-all cursor-pointer shadow-sm active:scale-95"
+                                    title={lang === 'ar' ? 'تعديل التقرير والفحص' : 'Edit Report & Details'}
+                                  >
+                                    <Pencil className="w-3 h-3" />
+                                    <span>{lang === 'ar' ? 'تعديل' : 'Edit'}</span>
+                                  </button>
+                                )}
 
-                                {canDeleteRecord(currentUser, inv) && (
+                                {canDeleteInvestigations && (
                                   <button
                                     type="button"
                                     onClick={(e) => { e.stopPropagation(); handleDelete(inv); }}

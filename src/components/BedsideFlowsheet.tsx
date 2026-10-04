@@ -163,6 +163,14 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
     )
   );
 
+  const canUpdateVitals = Boolean(
+    !readOnly && (
+      isAdminUser ||
+      hasPermission?.('vitals.update') ||
+      (currentUser?.permissions as any)?.['vitals.update'] === true
+    )
+  );
+
   const canViewLabs = Boolean(
     isAdminUser ||
     hasPermission?.('labs.view') ||
@@ -174,6 +182,14 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       isAdminUser ||
       hasPermission?.('labs.create') ||
       (currentUser?.permissions as any)?.['labs.create'] === true
+    )
+  );
+
+  const canUpdateLabs = Boolean(
+    !readOnly && (
+      isAdminUser ||
+      hasPermission?.('labs.update') ||
+      (currentUser?.permissions as any)?.['labs.update'] === true
     )
   );
 
@@ -191,6 +207,14 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
     )
   );
 
+  const canUpdateInvestigations = Boolean(
+    !readOnly && (
+      isAdminUser ||
+      hasPermission?.('investigations.update') ||
+      (currentUser?.permissions as any)?.['investigations.update'] === true
+    )
+  );
+
   const canViewSbar = Boolean(
     isAdminUser ||
     hasPermission?.('sbar.view') ||
@@ -202,6 +226,14 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       isAdminUser ||
       hasPermission?.('sbar.create') ||
       (currentUser?.permissions as any)?.['sbar.create'] === true
+    )
+  );
+
+  const canUpdateSbar = Boolean(
+    !readOnly && (
+      isAdminUser ||
+      hasPermission?.('sbar.update') ||
+      (currentUser?.permissions as any)?.['sbar.update'] === true
     )
   );
 
@@ -217,6 +249,20 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       hasPermission?.('clinicalNotes.create') ||
       (currentUser?.permissions as any)?.['clinicalNotes.create'] === true
     )
+  );
+
+  const canUpdateNotes = Boolean(
+    !readOnly && (
+      isAdminUser ||
+      hasPermission?.('clinicalNotes.update') ||
+      (currentUser?.permissions as any)?.['clinicalNotes.update'] === true
+    )
+  );
+
+  const canDeleteMedicalRecords = Boolean(
+    isAdminUser ||
+    hasPermission?.('medicalRecords.delete') ||
+    (currentUser?.permissions as any)?.['medicalRecords.delete'] === true
   );
 
   const canDischarge = Boolean(
@@ -1342,25 +1388,25 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
               id: 'labs', 
               label: lang === 'ar' ? `التحاليل والجدول اليومي (${labResults.length})` : `Daily Lab Flowsheet (${labResults.length})`, 
               icon: FlaskConical, 
-              enabled: settings.features.enableLabFlowsheet !== false 
+              enabled: settings.features.enableLabFlowsheet !== false && canViewLabs
             },
             { 
               id: 'antibiotics', 
               label: lang === 'ar' ? `المضادات الحيوية (${antibioticsList.filter(a => a.status === 'ACTIVE').length})` : `Antibiotics & Regimens (${antibioticsList.filter(a => a.status === 'ACTIVE').length})`, 
               icon: Pill, 
-              enabled: settings.features.enableAntibioticsCard !== false 
+              enabled: settings.features.enableAntibioticsCard !== false && canViewVitals
             },
             { 
               id: 'investigations', 
               label: lang === 'ar' ? `الفحوصات والأشعات (${investigations.length})` : `Radiology & Investigations (${investigations.length})`, 
               icon: Microscope, 
-              enabled: settings.features.enableInvestigations !== false 
+              enabled: settings.features.enableInvestigations !== false && canViewInvestigations
             },
             { 
               id: 'pumps', 
               label: lang === 'ar' ? 'مضخات المحاليل (Infusion Pumps)' : 'Infusion Pumps', 
               icon: Droplet, 
-              enabled: settings.features.enableInfusionPumps !== false 
+              enabled: settings.features.enableInfusionPumps !== false && canViewVitals
             },
             { 
               id: 'vitals', 
@@ -1372,31 +1418,31 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
               id: 'vent', 
               label: lang === 'ar' ? 'التنفس الصناعي (Vent & ABG)' : 'Ventilator & ABG', 
               icon: Wind, 
-              enabled: settings.features.enableVentilatorParameters !== false 
+              enabled: settings.features.enableVentilatorParameters !== false && canViewVitals
             },
             { 
               id: 'fluids', 
               label: lang === 'ar' ? 'ميزان السوائل ونقل الدم (Fluids & MTP)' : '24h Fluid Balance & MTP', 
               icon: Scale, 
-              enabled: settings.features.enableFluidBalance !== false 
+              enabled: settings.features.enableFluidBalance !== false && canViewVitals
             },
             { 
               id: 'sbar', 
               label: lang === 'ar' ? `تسليم المناوبة SBAR (${sbarList.length})` : `SBAR Handovers (${sbarList.length})`, 
               icon: ShieldCheck, 
-              enabled: settings.features.enableSbarHandover !== false 
+              enabled: settings.features.enableSbarHandover !== false && canViewSbar
             },
             { 
               id: 'notes', 
               label: lang === 'ar' ? `الملاحظات المشفرة (${notesList.length})` : `Clinical Notes (${notesList.length})`, 
               icon: FileText, 
-              enabled: settings.features.enableClinicalNotes !== false 
+              enabled: settings.features.enableClinicalNotes !== false && canViewNotes
             },
             { 
               id: 'disposition', 
               label: lang === 'ar' ? 'إنهاء الإقامة / النقل (Disposition)' : 'ICU Disposition & Discharge', 
               icon: ExternalLink, 
-              enabled: true 
+              enabled: canDischarge || isAdminUser 
             },
           ].filter(t => t.enabled).map((tab) => {
             const Icon = tab.icon;
@@ -1994,7 +2040,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
         </div>
       )}
 
-      {activeTab === 'paperFlowsheet' && (
+      {activeTab === 'paperFlowsheet' && canViewLabs && (
         <div className="space-y-4 animate-in fade-in duration-300">
           {/* Interactive Labs Grid Table (التحاليل الطبية المتسلسلة التراكمية) */}
           <div 
@@ -2354,7 +2400,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
           {/* Connected Support Equipment & Bedside Systems (الأجهزة الموصلة والمضخات وميزان السوائل) */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {/* Ventilator connectivity status */}
-            {cardsConfig.showVentilatorCard && (
+            {cardsConfig.showVentilatorCard && canViewVitals && (
               <div 
                 data-expanded={!isPaperVentCardCollapsed ? "true" : "false"}
                 className="icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-3 flex flex-col justify-between border transition-all"
@@ -2569,7 +2615,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
             )}
 
             {/* Infusion lines connectivity status */}
-            {cardsConfig.showInfusionPumpsCard && (
+            {cardsConfig.showInfusionPumpsCard && canViewVitals && (
               <div 
                 data-expanded={!isPaperPumpsCardCollapsed ? "true" : "false"}
                 className="icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-3 flex flex-col justify-between border transition-all"
@@ -2734,7 +2780,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
             )}
 
             {/* Daily Fluid balances */}
-            {cardsConfig.showFluidBalanceCard && (
+            {cardsConfig.showFluidBalanceCard && canViewVitals && (
               <div 
                 data-expanded={!isPaperFluidsCardCollapsed ? "true" : "false"}
                 className="icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-3 flex flex-col justify-between border transition-all"
@@ -3035,7 +3081,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       )}
 
       {/* Tab: Daily Lab Flowsheet with Interactive Trend History (HG 5 > 7 > 8.5 > 8) */}
-      {(activeTab === 'labs' || (activeTab === 'all' && settings.features.enableLabFlowsheet !== false)) && (
+      {(activeTab === 'labs' || (activeTab === 'all' && settings.features.enableLabFlowsheet !== false)) && canViewLabs && (
         <div 
           data-expanded={!isPaperLabsCardCollapsed ? "true" : "false"}
           className="icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-4 border transition-all"
@@ -3093,7 +3139,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       )}
 
       {/* Tab: Patient Antibiotics & Antimicrobial Therapy (Rendered right after Labs card) */}
-      {(activeTab === 'antibiotics' || activeTab === 'all') && (cardsConfig.showAntibioticsCard !== false) && (settings.features.enableAntibioticsCard !== false) && (
+      {(activeTab === 'antibiotics' || activeTab === 'all') && (cardsConfig.showAntibioticsCard !== false) && (settings.features.enableAntibioticsCard !== false) && canViewVitals && (
         <AntibioticsSection
           patient={patient}
           bed={bed}
@@ -3110,7 +3156,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       )}
 
       {/* Tab: Investigations, Radiology & POCUS Studies */}
-      {(activeTab === 'investigations' || (activeTab === 'all' && settings.features.enableInvestigations !== false)) && (
+      {(activeTab === 'investigations' || (activeTab === 'all' && settings.features.enableInvestigations !== false)) && canViewInvestigations && (
         <div 
           id="patient-investigations-card" 
           data-expanded={!isPaperInvestigationsCardCollapsed ? "true" : "false"}
@@ -3174,7 +3220,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       )}
 
       {/* Tab 3: Infusion Pumps */}
-      {(activeTab === 'pumps' || (activeTab === 'all' && settings.features.enableInfusionPumps !== false)) && (
+      {(activeTab === 'pumps' || (activeTab === 'all' && settings.features.enableInfusionPumps !== false)) && canViewVitals && (
         <div 
           data-expanded={!isPaperPumpsCardCollapsed ? "true" : "false"}
           className="icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-4 border transition-all"
@@ -3370,7 +3416,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       )}
 
       {/* Tab 2: Ventilator & ABG */}
-      {(activeTab === 'vent' || (activeTab === 'all' && settings.features.enableVentilatorParameters !== false)) && (
+      {(activeTab === 'vent' || (activeTab === 'all' && settings.features.enableVentilatorParameters !== false)) && canViewVitals && (
         <div 
           data-expanded={!isPaperVentCardCollapsed ? "true" : "false"}
           className="icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-4 border transition-all"
@@ -3634,7 +3680,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       )}
 
       {/* Tab 4: Fluids & MTP */}
-      {(activeTab === 'fluids' || (activeTab === 'all' && settings.features.enableFluidBalance !== false)) && (
+      {(activeTab === 'fluids' || (activeTab === 'all' && settings.features.enableFluidBalance !== false)) && canViewVitals && (
         <div 
           data-expanded={!isPaperFluidsCardCollapsed ? "true" : "false"}
           className="icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-4 border transition-all"
@@ -3969,7 +4015,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       )}
 
       {/* Tab 5: SBAR Handovers */}
-      {(activeTab === 'sbar' || (activeTab === 'all' && settings.features.enableSbarHandover !== false)) && (
+      {(activeTab === 'sbar' || (activeTab === 'all' && settings.features.enableSbarHandover !== false)) && canViewSbar && (
         <div 
           data-expanded={!isPaperSbarCardCollapsed ? "true" : "false"}
           className="icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-4 border transition-all"
@@ -4045,17 +4091,19 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                             </span>
                           </button>
                         )}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedTemplateSbar(null);
-                            setIsBedsideSbarModalOpen(true);
-                          }}
-                          className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-slate-950 font-black text-xs shadow-md shadow-teal-500/20 active:scale-95 cursor-pointer transition-all"
-                        >
-                          <Plus className="w-4 h-4 text-slate-950 shrink-0" />
-                          <span>{lang === 'ar' ? 'تسليم مناوبة جديد SBAR' : 'New SBAR Handover'}</span>
-                        </button>
+                        {canCreateSbar && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedTemplateSbar(null);
+                              setIsBedsideSbarModalOpen(true);
+                            }}
+                            className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-slate-950 font-black text-xs shadow-md shadow-teal-500/20 active:scale-95 cursor-pointer transition-all"
+                          >
+                            <Plus className="w-4 h-4 text-slate-950 shrink-0" />
+                            <span>{lang === 'ar' ? 'تسليم مناوبة جديد SBAR' : 'New SBAR Handover'}</span>
+                          </button>
+                        )}
                       </>
                     );
                   })()}
@@ -4224,7 +4272,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       )}
 
       {/* Tab 6: Clinical Notes & SHA-256 Addendums */}
-      {(activeTab === 'notes' || (activeTab === 'all' && settings.features.enableClinicalNotes !== false)) && (
+      {(activeTab === 'notes' || (activeTab === 'all' && settings.features.enableClinicalNotes !== false)) && canViewNotes && (
         <div 
           data-expanded={!isPaperNotesCardCollapsed ? "true" : "false"}
           className="icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-4 border transition-all"
@@ -4247,7 +4295,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {onOpenAddClinicalNote && !isPaperNotesCardCollapsed && !readOnly && (
+              {onOpenAddClinicalNote && !isPaperNotesCardCollapsed && !readOnly && canCreateNotes && (
                 <button
                   type="button"
                   onClick={(e) => {
@@ -4361,7 +4409,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                           </div>
 
                           <div className="flex items-center gap-2 shrink-0">
-                            {!readOnly && (
+                            {!readOnly && (canUpdateNotes || canCreateNotes) && (
                               isConsultation && !hasReply ? (
                                 <button
                                   onClick={(e) => {
@@ -4500,7 +4548,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       )}
 
       {/* Tab 7: Disposition */}
-      {(activeTab === 'disposition' || activeTab === 'all') && !readOnly && (
+      {(activeTab === 'disposition' || activeTab === 'all') && !readOnly && (canDischarge || isAdminUser) && (
         <div 
           data-expanded={!isPaperDispCardCollapsed ? "true" : "false"}
           className="icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-4 border transition-all"

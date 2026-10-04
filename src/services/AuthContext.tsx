@@ -124,10 +124,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           if (resolvedUser && resolvedUser.isActive !== false && resolvedUser.active !== false) {
             resolvedUser.uid = fbUser.uid;
-            resolvedUser.permissions = {
-              ...getDefaultPermissionsForRole(resolvedUser.role as StaffRole),
-              ...(resolvedUser.permissions || {})
-            };
+            resolvedUser.permissions = resolvedUser.permissions && Object.keys(resolvedUser.permissions).length > 0
+              ? resolvedUser.permissions
+              : getDefaultPermissionsForRole(resolvedUser.role as StaffRole);
             setCurrentUser(resolvedUser);
             localStorage.setItem('soli_icu_active_user', JSON.stringify(resolvedUser));
             // Keep local Dexie cache synchronized with Firestore SSOT
@@ -182,10 +181,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         activeUserUnsub = onSnapshot(userDocRef, (docSnap) => {
           if (docSnap.exists()) {
             const u = docSnap.data() as IcuUser;
-            u.permissions = {
-              ...getDefaultPermissionsForRole(u.role as StaffRole),
-              ...(u.permissions || {})
-            };
+            u.permissions = u.permissions && Object.keys(u.permissions).length > 0
+              ? u.permissions
+              : getDefaultPermissionsForRole(u.role as StaffRole);
             if (u.isActive === false || u.active === false) {
               firebaseSignOut(auth).catch(() => {});
               setCurrentUser(null);

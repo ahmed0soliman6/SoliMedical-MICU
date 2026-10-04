@@ -291,8 +291,19 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
   readOnly = false,
 }) => {
   const { lang, isRTL } = useTranslation();
-  const { currentUser } = useAuth();
+  const { currentUser, hasPermission } = useAuth();
   const { settings } = useSystemSettings();
+
+  const isAdminUser = Boolean(
+    currentUser?.role === StaffRole.ADMIN ||
+    currentUser?.role === 'ADMIN' ||
+    currentUser?.role === 'SUPER_ADMIN' ||
+    currentUser?.isSuperAdmin === true
+  );
+
+  const canCreateLabs = Boolean(!readOnly && (isAdminUser || hasPermission?.('labs.create') || (currentUser?.permissions as any)?.['labs.create'] === true));
+  const canUpdateLabs = Boolean(!readOnly && (isAdminUser || hasPermission?.('labs.update') || (currentUser?.permissions as any)?.['labs.update'] === true));
+  const canDeleteLabs = Boolean(isAdminUser || hasPermission?.('medicalRecords.delete') || (currentUser?.permissions as any)?.['medicalRecords.delete'] === true);
 
   const dynamicPresets = React.useMemo(() => {
     if (settings.labCategories && settings.labCategories.length > 0) {
@@ -677,7 +688,7 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
             </h3>
 
             {/* زر إضافة تحليل جديد بجوار سجل التحاليل لتقليل المساحة الرأسية */}
-            {!readOnly && (
+            {!readOnly && canCreateLabs && (
               <button
                 type="button"
                 onClick={() => {
@@ -696,7 +707,7 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
           </div>
         </div>
 
-        {settings.features.enableAiLabScanner && !readOnly && (
+        {settings.features.enableAiLabScanner && !readOnly && canCreateLabs && (
           <div className="flex items-center gap-1 bg-slate-900/80 p-1 rounded-xl border border-slate-800 overflow-x-auto max-w-full">
             <button
               type="button"
@@ -1151,27 +1162,31 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
 
               {!readOnly && (
                 <div className="flex items-center gap-2 flex-wrap">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      handleOpenAddForTest(selectedTestName);
-                    }}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shrink-0"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>{lang === 'ar' ? 'إضافة قراءة جديدة' : 'Add Reading'}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      triggerDeleteLabType(selectedTestName);
-                    }}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-95 shrink-0"
-                    title={lang === 'ar' ? 'حذف هذا التحليل بالكامل' : 'Delete this lab type completely'}
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>{lang === 'ar' ? 'حذف بالكامل' : 'Delete All'}</span>
-                  </button>
+                  {canCreateLabs && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleOpenAddForTest(selectedTestName);
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shrink-0"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>{lang === 'ar' ? 'إضافة قراءة جديدة' : 'Add Reading'}</span>
+                    </button>
+                  )}
+                  {canDeleteLabs && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        triggerDeleteLabType(selectedTestName);
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-95 shrink-0"
+                      title={lang === 'ar' ? 'حذف هذا التحليل بالكامل' : 'Delete this lab type completely'}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>{lang === 'ar' ? 'حذف بالكامل' : 'Delete All'}</span>
+                    </button>
+                  )}
                 </div>
               )}
               <div className="flex items-center gap-2 ml-auto rtl:ml-0 rtl:mr-auto">
@@ -1291,7 +1306,7 @@ export const LabFlowsheetSection: React.FC<LabFlowsheetSectionProps> = ({
                                   {lang === 'ar' ? 'إلغاء' : 'Cancel'}
                                 </button>
                               </div>
-                            ) : isOwner ? (
+                            ) : (isOwner || canUpdateLabs) ? (
                               <button
                                 type="button"
                                 onClick={() => triggerEditRecord(rec)}

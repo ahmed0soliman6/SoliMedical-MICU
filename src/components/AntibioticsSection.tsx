@@ -27,7 +27,7 @@ import {
   Check,
   Download
 } from 'lucide-react';
-import { PatientAntibiotic, PatientDossier, BedRecord, BedNumber, LabResultItem, Gender } from '../types/schema.ts';
+import { PatientAntibiotic, PatientDossier, BedRecord, BedNumber, LabResultItem, Gender, StaffRole } from '../types/schema.ts';
 import { AntibioticPreset, SystemSettings } from '../types/settings.ts';
 import { useTranslation } from '../services/i18n.ts';
 import { useAuth } from '../services/AuthContext.tsx';
@@ -785,8 +785,19 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
   readOnly = false,
 }) => {
   const { lang, isRTL } = useTranslation();
-  const { currentUser: authUser, user: authContextUser } = useAuth();
+  const { currentUser: authUser, user: authContextUser, hasPermission } = useAuth();
   const activeUser = currentUser || authUser || authContextUser;
+
+  const isAdminUser = Boolean(
+    activeUser?.role === StaffRole.ADMIN ||
+    activeUser?.role === 'ADMIN' ||
+    activeUser?.role === 'SUPER_ADMIN' ||
+    (activeUser as any)?.isSuperAdmin === true
+  );
+
+  const canCreateVitals = Boolean(!readOnly && (isAdminUser || hasPermission?.('vitals.create') || (activeUser?.permissions as any)?.['vitals.create'] === true));
+  const canUpdateVitals = Boolean(!readOnly && (isAdminUser || hasPermission?.('vitals.update') || (activeUser?.permissions as any)?.['vitals.update'] === true));
+  const canDeleteMedicalRecords = Boolean(isAdminUser || hasPermission?.('medicalRecords.delete') || (activeUser?.permissions as any)?.['medicalRecords.delete'] === true);
   const [isCollapsed, setIsCollapsed] = useState(true);
   const [activeFilter, setActiveFilter] = useState<'ALL' | 'ACTIVE' | 'COMPLETED_DISCONTINUED'>('ACTIVE');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -1340,7 +1351,7 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
             </div>
           </div>
           {/* Quick Presets Bar (Fast 1-click prescribing from unit library) */}
-          {presetsList.length > 0 && (
+          {presetsList.length > 0 && canCreateVitals && (
             <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-2.5 flex items-center gap-2 overflow-x-auto text-xs">
               <span className="text-slate-400 font-bold text-[11px] whitespace-nowrap flex items-center gap-1">
                 <Sparkles className="w-3.5 h-3.5 text-amber-400" />
@@ -1373,13 +1384,15 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                   ? 'يمكنك إضافة مضاد حيوي للمريض لتتبع الجرعات، التعديل الكلوي، ومدة العلاج ومستويات TDM.'
                   : 'Start tracking antimicrobial courses, day-of-therapy counters, and renal dosing adjustments.'}
               </p>
-              <button
-                onClick={() => handleOpenAddModal()}
-                className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition-all shadow-md cursor-pointer"
-              >
-                <Plus className="w-4 h-4" />
-                <span>{lang === 'ar' ? 'إضافة أول مضاد حيوي للمريض' : 'Prescribe Antibiotic'}</span>
-              </button>
+              {canCreateVitals && (
+                <button
+                  onClick={() => handleOpenAddModal()}
+                  className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition-all shadow-md cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>{lang === 'ar' ? 'إضافة أول مضاد حيوي للمريض' : 'Prescribe Antibiotic'}</span>
+                </button>
+              )}
             </div>
           ) : (
             <div className="space-y-3">
@@ -1558,7 +1571,7 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
 
                       {!readOnly && (
                         <div className="flex items-center gap-1">
-                          {isActive && (
+                          {isActive && canUpdateVitals && (
                             <>
                               <button
                                 onClick={() => handleUpdateStatus(abx, 'PAUSED')}
@@ -1578,7 +1591,7 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                             </>
                           )}
 
-                          {isPaused && (
+                          {isPaused && canUpdateVitals && (
                             <button
                               onClick={() => handleUpdateStatus(abx, 'ACTIVE')}
                               className="px-2 py-1 rounded-lg bg-emerald-900/50 text-emerald-300 border border-emerald-700 text-[11px] transition-all cursor-pointer flex items-center gap-1"
@@ -1588,21 +1601,25 @@ export const AntibioticsSection: React.FC<AntibioticsSectionProps> = ({
                             </button>
                           )}
 
-                          <button
-                            onClick={() => handleOpenEditModal(abx)}
-                            className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[11px] transition-all cursor-pointer flex items-center gap-1"
-                            title={lang === 'ar' ? 'تعديل' : 'Edit'}
-                          >
-                            <Edit3 className="w-3.5 h-3.5" />
-                          </button>
+                          {canUpdateVitals && (
+                            <button
+                              onClick={() => handleOpenEditModal(abx)}
+                              className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[11px] transition-all cursor-pointer flex items-center gap-1"
+                              title={lang === 'ar' ? 'تعديل' : 'Edit'}
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
 
-                          <button
-                            onClick={() => handleDelete(abx)}
-                            className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-400 border border-slate-700 hover:border-rose-800 text-[11px] transition-all cursor-pointer"
-                            title={lang === 'ar' ? 'حذف' : 'Delete'}
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          {canDeleteMedicalRecords && (
+                            <button
+                              onClick={() => handleDelete(abx)}
+                              className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-400 border border-slate-700 hover:border-rose-800 text-[11px] transition-all cursor-pointer"
+                              title={lang === 'ar' ? 'حذف' : 'Delete'}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
