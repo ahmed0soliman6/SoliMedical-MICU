@@ -1522,21 +1522,16 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
           if (change.type === 'added' || change.type === 'modified') {
             await putFn(change.doc.data() as T);
           } else if (change.type === 'removed') {
-            try {
-              const docRef = doc(firestore, colName, change.doc.id);
-              const docSnap = await getDoc(docRef);
-              if (!docSnap.exists()) {
-                if (_deleteFn) {
-                  await _deleteFn(change.doc.id);
-                } else if (colName in db && typeof (db as any)[colName]?.delete === 'function') {
-                  await (db as any)[colName].delete(change.doc.id);
-                }
-              }
-            } catch {
-              if (_deleteFn) {
-                await _deleteFn(change.doc.id).catch(() => {});
-              }
-            }
+            // Intentional no-op: a document leaving the live "top N" query
+            // window (because a newer record pushed it out) also fires
+            // 'removed'. This is NOT evidence of actual deletion and must
+            // never trigger a cloud read to check — Dexie intentionally
+            // keeps the record. Real deletions are handled directly by the
+            // delete button's own code path (deleteXFromCloud functions),
+            // not detected here. Adding a getDoc() read here previously
+            // caused one extra Firestore read per new record created, for
+            // every client with this listener open — a confirmed quota
+            // regression. Do not reintroduce it.
           }
         }
 
@@ -1581,21 +1576,16 @@ export function subscribeToActivePatientFlowsheet(patientId: string, onUpdate?: 
               if (change.type === 'added' || change.type === 'modified') {
                 await putFn(change.doc.data() as T);
               } else if (change.type === 'removed') {
-                try {
-                  const docRef = doc(firestore, colName, change.doc.id);
-                  const docSnap = await getDoc(docRef);
-                  if (!docSnap.exists()) {
-                    if (_deleteFn) {
-                      await _deleteFn(change.doc.id);
-                    } else if (colName in db && typeof (db as any)[colName]?.delete === 'function') {
-                      await (db as any)[colName].delete(change.doc.id);
-                    }
-                  }
-                } catch {
-                  if (_deleteFn) {
-                    await _deleteFn(change.doc.id).catch(() => {});
-                  }
-                }
+                // Intentional no-op: a document leaving the live "top N" query
+                // window (because a newer record pushed it out) also fires
+                // 'removed'. This is NOT evidence of actual deletion and must
+                // never trigger a cloud read to check — Dexie intentionally
+                // keeps the record. Real deletions are handled directly by the
+                // delete button's own code path (deleteXFromCloud functions),
+                // not detected here. Adding a getDoc() read here previously
+                // caused one extra Firestore read per new record created, for
+                // every client with this listener open — a confirmed quota
+                // regression. Do not reintroduce it.
               }
             }
             notify();

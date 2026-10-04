@@ -47,13 +47,6 @@ service cloud.firestore {
           'permissions' in getUserData() &&
           perm in getUserData().permissions &&
           getUserData().permissions[perm] == true
-        ) || (
-          'role' in getUserData() && (
-            (getUserData().role in ['ADMIN', 'CONSULTANT', 'SPECIALIST', 'DOCTOR', 'PHYSICIAN', 'RESIDENT'] &&
-             perm in ['patients.view', 'patients.create', 'patients.update', 'beds.view', 'beds.update', 'archive.view', 'vitals.view', 'vitals.create', 'vitals.update', 'labs.view', 'labs.create', 'labs.update', 'investigations.view', 'investigations.create', 'investigations.update', 'clinicalNotes.view', 'clinicalNotes.create', 'clinicalNotes.update', 'sbar.view', 'sbar.create', 'sbar.update', 'transfer.create', 'bedSwap.create', 'discharge.create', 'chat.view', 'chat.create', 'audit.view']) ||
-            (getUserData().role in ['LEAD_RN', 'BEDSIDE_RN', 'NURSE'] &&
-             perm in ['patients.view', 'beds.view', 'archive.view', 'vitals.view', 'vitals.create', 'vitals.update', 'labs.view', 'labs.create', 'labs.update', 'investigations.view', 'investigations.create', 'investigations.update', 'clinicalNotes.view', 'clinicalNotes.create', 'clinicalNotes.update', 'sbar.view', 'sbar.create', 'sbar.update', 'chat.view', 'chat.create'])
-          )
         )
       );
     }
