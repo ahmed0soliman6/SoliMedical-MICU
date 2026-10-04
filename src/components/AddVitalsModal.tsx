@@ -104,6 +104,20 @@ export const AddVitalsModal: React.FC<AddVitalsModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const isAdmin = currentUser?.role === StaffRole.ADMIN || currentUser?.role === 'ADMIN' || currentUser?.role === 'SUPER_ADMIN' || currentUser?.isSuperAdmin === true;
+    const canCreateVitals = isAdmin || (currentUser?.permissions as any)?.['vitals.create'] === true;
+    const canUpdateVitals = isAdmin || (currentUser?.permissions as any)?.['vitals.update'] === true;
+
+    if (vitalsToEdit && !canUpdateVitals) {
+      alert(lang === 'ar' ? 'عفواً، ليس لديك صلاحية تعديل العلامات الحيوية (vitals.update).' : 'Unauthorized: You do not have permission to update vitals.');
+      return;
+    }
+    if (!vitalsToEdit && !canCreateVitals) {
+      alert(lang === 'ar' ? 'عفواً، ليس لديك صلاحية توثيق قراءات حيوية جديدة (vitals.create).' : 'Unauthorized: You do not have permission to record vitals.');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const userDisplay = currentUser?.nameAr || currentUser?.nameEn || currentUser?.displayName || currentUser?.email || (lang === 'ar' ? 'تمريض العناية المركزة' : 'ICU Staff RN');

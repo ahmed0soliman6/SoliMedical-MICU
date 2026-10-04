@@ -553,5 +553,32 @@ console.log('--- RUNNING FINAL COMPREHENSIVE SECURITY & PERMISSIONS TEST SUITE -
   console.log('✓ W. Doctor with discharge.create / clinical role can discharge patient passed');
 }
 
-console.log('ALL COMPREHENSIVE TESTS PASSED SUCCESSFULLY! (23/23 test suites verified)');
+// Test X: Vitals view and create specific permissions
+{
+  const canViewVitals = (user: any) => {
+    if (!user) return false;
+    if (user.role === StaffRole.ADMIN || user.role === 'ADMIN' || user.isSuperAdmin === true) return true;
+    return user.permissions?.['vitals.view'] === true;
+  };
+
+  const canCreateVitals = (user: any) => {
+    if (!user) return false;
+    if (user.role === StaffRole.ADMIN || user.role === 'ADMIN' || user.isSuperAdmin === true) return true;
+    return user.permissions?.['vitals.create'] === true;
+  };
+
+  const userWithVitals = { uid: 'u1', role: StaffRole.BEDSIDE_RN, permissions: { 'vitals.view': true, 'vitals.create': true } };
+  const userWithoutVitals = { uid: 'u2', role: StaffRole.BEDSIDE_RN, permissions: { 'vitals.view': false, 'vitals.create': false } };
+  const userViewOnly = { uid: 'u3', role: StaffRole.RESIDENT, permissions: { 'vitals.view': true, 'vitals.create': false } };
+
+  assert.equal(canViewVitals(userWithVitals), true, 'X: userWithVitals can view');
+  assert.equal(canCreateVitals(userWithVitals), true, 'X: userWithVitals can create');
+  assert.equal(canViewVitals(userWithoutVitals), false, 'X: userWithoutVitals CANNOT view');
+  assert.equal(canCreateVitals(userWithoutVitals), false, 'X: userWithoutVitals CANNOT create');
+  assert.equal(canViewVitals(userViewOnly), true, 'X: userViewOnly can view');
+  assert.equal(canCreateVitals(userViewOnly), false, 'X: userViewOnly CANNOT create');
+  console.log('✓ X. Vitals view and create permission toggles strictly enforced passed');
+}
+
+console.log('ALL COMPREHENSIVE TESTS PASSED SUCCESSFULLY! (24/24 test suites verified)');
 

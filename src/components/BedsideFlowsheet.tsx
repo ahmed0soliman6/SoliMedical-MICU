@@ -142,6 +142,26 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
   const { currentUser, hasPermission } = useAuth();
   const { triggerNotification } = useAppNotifications();
 
+  const canViewVitals = Boolean(
+    currentUser?.role === StaffRole.ADMIN ||
+    currentUser?.role === 'ADMIN' ||
+    currentUser?.role === 'SUPER_ADMIN' ||
+    currentUser?.isSuperAdmin === true ||
+    hasPermission?.('vitals.view') ||
+    (currentUser?.permissions as any)?.['vitals.view'] === true
+  );
+
+  const canCreateVitals = Boolean(
+    !readOnly && (
+      currentUser?.role === StaffRole.ADMIN ||
+      currentUser?.role === 'ADMIN' ||
+      currentUser?.role === 'SUPER_ADMIN' ||
+      currentUser?.isSuperAdmin === true ||
+      hasPermission?.('vitals.create') ||
+      (currentUser?.permissions as any)?.['vitals.create'] === true
+    )
+  );
+
   const canDischarge = Boolean(
     currentUser?.role === StaffRole.ADMIN ||
     currentUser?.isSuperAdmin === true ||
@@ -1297,7 +1317,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
               id: 'vitals', 
               label: lang === 'ar' ? 'العلامات الحيوية (Vitals)' : 'Vitals & Telemetry', 
               icon: Activity, 
-              enabled: settings.features.enableTelemetryVitals !== false 
+              enabled: settings.features.enableTelemetryVitals !== false && canViewVitals
             },
             { 
               id: 'vent', 
@@ -1670,7 +1690,19 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
       )}
 
       {/* Tab 1: Continuous Vitals & Telemetry (Top Section after Patient Data) */}
-      {(activeTab === 'vitals' || (activeTab === 'all' && settings.features.enableTelemetryVitals !== false) || activeTab === 'paperFlowsheet') && (
+      {activeTab === 'vitals' && !canViewVitals && (
+        <div className="rounded-2xl p-8 text-center bg-slate-900/60 border border-slate-800 space-y-2">
+          <Activity className="w-10 h-10 text-amber-400 mx-auto" />
+          <h4 className="text-white font-bold text-base">
+            {lang === 'ar' ? 'غير مصرح باستعراض العلامات الحيوية' : 'Unauthorized to View Vitals'}
+          </h4>
+          <p className="text-slate-400 text-xs">
+            {lang === 'ar' ? 'تم تعطيل صلاحية استعراض العلامات الحيوية (vitals.view) لهذا الحساب من قبل مدير النظام.' : 'The permission to view vitals (vitals.view) is disabled for this account.'}
+          </p>
+        </div>
+      )}
+
+      {(activeTab === 'vitals' || (activeTab === 'all' && settings.features.enableTelemetryVitals !== false) || activeTab === 'paperFlowsheet') && canViewVitals && (
         <div 
           data-expanded={!isPaperVitalsCardCollapsed ? "true" : "false"}
           className="icu-collapsible-section rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-4 border transition-all"
@@ -1778,7 +1810,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                     <Clock className="w-4 h-4 text-teal-400" />
                     <span>{lang === 'ar' ? 'سجل العلامات الحيوية التاريخية (Telemetry Trajectory)' : 'Telemetry History Trajectory'}</span>
                   </h3>
-                  {!readOnly && (
+                  {!readOnly && canCreateVitals && (
                     <button
                       onClick={onOpenAddVitals}
                       className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shadow-md shadow-teal-500/20 border-2 border-teal-300 dark:border-teal-400/90 ring-2 ring-teal-500/40 hover:ring-teal-400/60 hover:scale-[1.02] active:scale-95 transition-all cursor-pointer"
