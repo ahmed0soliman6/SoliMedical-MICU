@@ -613,8 +613,8 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
     const isAdmin = currentUser.role === StaffRole.ADMIN || currentUser.role === 'ADMIN' || currentUser.role === 'SUPER_ADMIN' || currentUser.isSuperAdmin === true;
     const hasUpdatePermission = hasPermission?.('vitals.update') || (currentUser.permissions as any)?.['vitals.update'] === true;
     if (isAdmin) return true;
-    if (isVitalAuthor(vital)) return true;
-    return Boolean(hasUpdatePermission);
+    if (isVitalAuthor(vital) && hasUpdatePermission) return true;
+    return false;
   };
 
   const canDeleteVital = (vital: TelemetryVitals) => {
