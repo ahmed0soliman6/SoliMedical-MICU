@@ -2680,7 +2680,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
                     </div>
                     <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                       <span className="text-[10px] font-mono text-slate-400 bg-slate-900/60 px-2 py-0.5 rounded border border-slate-800 font-bold">
-                        {pumps.length} {lang === 'ar' ? 'نشط' : 'active'}
+                        {pumps.filter(p => p.status === PumpStatus.RUNNING).length} {lang === 'ar' ? 'نشط' : 'active'}
                       </span>
 
                       <button
@@ -3286,7 +3286,7 @@ export const BedsideFlowsheet: React.FC<BedsideFlowsheetProps> = ({
             </div>
             <div className="flex items-center gap-2">
               <span className="text-xs text-slate-400 font-mono hidden sm:inline">
-                {pumps.length} {lang === 'ar' ? 'قنوات نشطة' : 'Active Channels'}
+                {pumps.filter(p => p.status === PumpStatus.RUNNING).length} {lang === 'ar' ? 'قنوات جارية / نشطة' : 'Active Channels'}
               </span>
               <button
                 type="button"

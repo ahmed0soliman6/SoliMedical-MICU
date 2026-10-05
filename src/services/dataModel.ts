@@ -18,7 +18,7 @@ import {
   sanitizeForFirestore,
   auth,
 } from './firebase.ts';
-import { runTransaction, doc, collection, query, where, getDocs, deleteDoc } from 'firebase/firestore';
+import { runTransaction, doc, collection, query, where, getDocs, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import {
   BedNumber,
   BedStatus,
@@ -26,7 +26,9 @@ import {
   PatientDossier,
   TelemetryVitals,
   VentilatorParameters,
+  VentilatorMode,
   InfusionPumpLine,
+  PumpStatus,
   FluidBalance24H,
   StatLabPanel,
   SbarHandoverReport,
@@ -43,6 +45,7 @@ import {
   AllergyRecord,
   MicrobiologyRecord,
   AllergySeverity,
+  PatientAntibiotic,
 } from '../types/schema.ts';
 
 // -------------------------------------------------------------
@@ -158,7 +161,34 @@ export async function admitPatient(input: DirectAdmissionInput): Promise<{ patie
   const normalizedName = normalizeArabicName(input.fullNameAr || input.fullNameEn);
   const idHash = input.nationalId ? await computeSha256Hash(input.nationalId) : undefined;
 
-  if (isOnline) {
+  // 1.A Direct existingPatientId lookup (Highest precision for candidate restore)
+  if (input.existingPatientId) {
+    if (isOnline) {
+      try {
+        const pSnap = await getDoc(doc(firestore, 'patients', input.existingPatientId));
+        if (pSnap.exists()) {
+          existingPatientDoc = pSnap.data();
+        } else {
+          const aSnap = await getDoc(doc(firestore, 'archivedPatients', input.existingPatientId));
+          if (aSnap.exists()) {
+            existingPatientDoc = aSnap.data();
+          }
+        }
+      } catch (err) {
+        console.warn('Direct existingPatientId cloud check notice:', err);
+      }
+    }
+    if (!existingPatientDoc) {
+      try {
+        existingPatientDoc = await db.patients.get(input.existingPatientId);
+      } catch (err) {
+        console.warn('Direct existingPatientId local check notice:', err);
+      }
+    }
+  }
+
+  // 1.B Query search if not found directly
+  if (!existingPatientDoc && isOnline) {
     try {
       if (searchMrn) {
         // Check in active patients
@@ -1179,18 +1209,104 @@ export async function dischargeOrTransferPatient(input: DispositionInput): Promi
     }
   }
 
+  // Disposition of bedside devices & active medications (Stop pumps, Standby ventilator, Close fluid balance, Complete antibiotics)
+  const activePumps = await db.infusionPumps.where('patientId').equals(input.patientId).toArray();
+  const stoppedPumps: InfusionPumpLine[] = activePumps.map(pump => ({
+    ...pump,
+    status: PumpStatus.STOPPED,
+    currentRate: 0,
+    flowRateMlPerHour: 0,
+    notes: `Stopped upon discharge/transfer (${input.dispositionType}) at ${nowIso}`,
+  }));
+
+  const vents = await db.ventilators.where('patientId').equals(input.patientId).toArray();
+  const standbyVents: VentilatorParameters[] = vents.map(vent => ({
+    ...vent,
+    mode: VentilatorMode.ROOM_AIR,
+    isActive: false,
+    alarms: [],
+  }));
+
+  const fluids = await db.fluidBalances.where('patientId').equals(input.patientId).toArray();
+  const closedFluids: FluidBalance24H[] = fluids.map(fb => ({
+    ...fb,
+    isClosed: true,
+    closedAt: nowIso,
+  }));
+
+  const abxList = await db.patientAntibiotics.where('patientId').equals(input.patientId).toArray();
+  const completedAbxList: PatientAntibiotic[] = abxList.map(abx => {
+    if (abx.status === 'ACTIVE') {
+      return {
+        ...abx,
+        status: 'COMPLETED',
+        endDate: nowIso.split('T')[0],
+      };
+    }
+    return abx;
+  });
+
   // --- SOURCE OF TRUTH #2: DEXIE SYNC LOCAL AFTER TRANSACTION ---
   await db.transaction('rw', [
     db.beds,
     db.patients,
     db.clinicalNotes,
     db.auditLogs,
+    db.infusionPumps,
+    db.ventilators,
+    db.fluidBalances,
+    db.patientAntibiotics,
   ], async () => {
     await db.patients.update(input.patientId, updatedPatientFields);
     await db.beds.update(input.bedNumber, updatedBedFields);
     await db.clinicalNotes.put(summaryNote);
     await db.auditLogs.put(auditLog);
+
+    if (stoppedPumps.length > 0) {
+      await db.infusionPumps.bulkPut(stoppedPumps);
+    }
+    if (standbyVents.length > 0) {
+      await db.ventilators.bulkPut(standbyVents);
+    }
+    if (closedFluids.length > 0) {
+      await db.fluidBalances.bulkPut(closedFluids);
+    }
+    if (completedAbxList.length > 0) {
+      await db.patientAntibiotics.bulkPut(completedAbxList);
+    }
   });
+
+  // Cloud sync for modified device & medication states
+  if (isOnline) {
+    for (const p of stoppedPumps) {
+      try {
+        await setDoc(doc(firestore, 'infusionPumps', p.id), sanitizeForFirestore(p), { merge: true });
+      } catch (e) {
+        console.warn('Cloud pump stop sync notice:', e);
+      }
+    }
+    for (const v of standbyVents) {
+      try {
+        await setDoc(doc(firestore, 'ventilators', v.id), sanitizeForFirestore(v), { merge: true });
+      } catch (e) {
+        console.warn('Cloud vent standby sync notice:', e);
+      }
+    }
+    for (const f of closedFluids) {
+      try {
+        await setDoc(doc(firestore, 'fluidBalances', f.id), sanitizeForFirestore(f), { merge: true });
+      } catch (e) {
+        console.warn('Cloud fluid close sync notice:', e);
+      }
+    }
+    for (const a of completedAbxList) {
+      try {
+        await setDoc(doc(firestore, 'patientAntibiotics', a.id), sanitizeForFirestore(a), { merge: true });
+      } catch (e) {
+        console.warn('Cloud abx complete sync notice:', e);
+      }
+    }
+  }
 
   await ensureBedPatientSync();
   if (typeof window !== 'undefined') {

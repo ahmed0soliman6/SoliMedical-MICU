@@ -210,6 +210,10 @@ export const FullPageAdmission: React.FC<FullPageAdmissionProps> = ({
     if (candidate.gender) setGender(candidate.gender as Gender);
     if (candidate.bloodType) setBloodType(candidate.bloodType);
     if (candidate.age) setAge(String(candidate.age));
+    if (candidate.primaryDiagnosis) {
+      setPrimaryDiagnosisAr(candidate.primaryDiagnosis);
+      setPrimaryDiagnosisEn(candidate.primaryDiagnosis);
+    }
     if (candidate.allergies && candidate.allergies.length > 0) {
       setAllergiesInput(candidate.allergies.join(', '));
     }
