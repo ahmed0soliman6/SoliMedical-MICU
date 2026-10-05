@@ -113,9 +113,9 @@ export async function searchExistingPatients(
           data.status === 'EXPIRED_MORTALITY' ||
           data.currentStatus === 'EXPIRED_MORTALITY' ||
           data.dispositionType === 'EXPIRED_MORTALITY' ||
-          data.mortalityRecord !== undefined ||
+          Boolean(data.mortalityRecord) ||
           data.isDeceased === true ||
-          data.deceasedDate !== undefined;
+          Boolean(data.deceasedDate);
 
         if (isDeceased) return;
 
@@ -174,9 +174,9 @@ export async function searchExistingPatients(
         (p as any).status === 'EXPIRED_MORTALITY' ||
         (p as any).currentStatus === 'EXPIRED_MORTALITY' ||
         (p as any).dispositionType === 'EXPIRED_MORTALITY' ||
-        p.mortalityRecord !== undefined ||
+        Boolean(p.mortalityRecord) ||
         (p as any).isDeceased === true ||
-        (p as any).deceasedDate !== undefined;
+        Boolean((p as any).deceasedDate);
 
       if (isDeceased) continue;
 
